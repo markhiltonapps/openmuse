@@ -4,6 +4,7 @@ import { EventType, type RunAgentInput } from "@ag-ui/core";
 import { defineTool } from "@copilotkit/runtime/v2";
 import { z } from "zod";
 import type { AgentTask } from "../../../../packages/domain/src/agent.ts";
+import { memorySuggestionSchema } from "../../../../packages/domain/src/agent.ts";
 import { emailDraftSchema, eventDraftSchema } from "../../../../packages/domain/src/index.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
@@ -242,6 +243,12 @@ export async function executeModelTask(
         outcome = { status: "waiting_approval", actionId: action.id };
         return { status: "waiting_approval", actionId: action.id };
       },
+    ),
+    tool(
+      "suggest_memory",
+      "Suggest a lasting preference or fact for the person to keep (not used until kept)",
+      memorySuggestionSchema,
+      async (args) => service.suggestMemory(owner, args, task.title),
     ),
     tool(
       "ask_user",

@@ -103,6 +103,17 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     if (!memory) throw new AppError("Memory not found", 404);
     return c.json(memory);
   });
+  app.post("/memory-suggestions/:id", async (c) => {
+    const body = z
+      .object({
+        action: z.enum(["keep", "dismiss"]),
+        text: z.string().trim().min(1).max(500).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(
+      await service.decideMemory(c.get("owner"), c.req.param("id"), body.action, body.text),
+    );
+  });
   app.post("/memories/:id/forget", async (c) => {
     if (!(await service.db.take(c.get("owner"), "memories", c.req.param("id"))))
       throw new AppError("Memory not found", 404);

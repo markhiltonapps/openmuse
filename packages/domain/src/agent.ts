@@ -97,6 +97,19 @@ export interface AgentMemory {
   source: string;
   createdAt: string;
 }
+/** A fact the agent noticed; used only after the person keeps it. */
+export interface MemorySuggestion {
+  id: string;
+  text: string;
+  reason: string;
+  source: string;
+  createdAt: string;
+  status: "pending" | "kept" | "dismissed";
+}
+export const memorySuggestionSchema = z.object({
+  text: z.string().trim().min(3).max(500),
+  reason: z.string().trim().max(300).default(""),
+});
 export interface AgentArtifact {
   id: string;
   taskId: string;
@@ -126,6 +139,8 @@ export interface AgentWorkspace {
   monitors: Monitor[];
   ideas: Idea[];
   memories: AgentMemory[];
+  /** Pending suggestions only. */
+  memorySuggestions: MemorySuggestion[];
   artifacts: AgentArtifact[];
   notifications: AgentNotification[];
   identity: AgentIdentity;

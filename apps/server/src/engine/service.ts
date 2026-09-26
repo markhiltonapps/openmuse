@@ -12,7 +12,9 @@ import {
   type Goal,
   goalInputSchema,
   type Idea,
+  type MemorySuggestion,
   type Monitor,
+  memorySuggestionSchema,
   monitorInputSchema,
   type RunEvent,
 } from "../../../../packages/domain/src/agent.ts";
@@ -126,17 +128,27 @@ export class AgentService {
   }
   async snapshot(owner: string): Promise<AgentWorkspace> {
     await this.ensure(owner);
-    const [tasks, goals, monitors, ideas, memories, artifacts, notifications, identity] =
-      await Promise.all([
-        this.db.list<AgentTask>(owner, "tasks"),
-        this.db.list<Goal>(owner, "goals"),
-        this.db.list<Monitor>(owner, "monitors"),
-        this.db.list<Idea>(owner, "ideas"),
-        this.db.list<AgentMemory>(owner, "memories"),
-        this.db.list<AgentArtifact>(owner, "agent-artifacts"),
-        this.db.list<AgentNotification>(owner, "notifications"),
-        this.db.get<AgentIdentity>(owner, "agent-settings", "identity"),
-      ]);
+    const [
+      tasks,
+      goals,
+      monitors,
+      ideas,
+      memories,
+      artifacts,
+      notifications,
+      identity,
+      suggestions,
+    ] = await Promise.all([
+      this.db.list<AgentTask>(owner, "tasks"),
+      this.db.list<Goal>(owner, "goals"),
+      this.db.list<Monitor>(owner, "monitors"),
+      this.db.list<Idea>(owner, "ideas"),
+      this.db.list<AgentMemory>(owner, "memories"),
+      this.db.list<AgentArtifact>(owner, "agent-artifacts"),
+      this.db.list<AgentNotification>(owner, "notifications"),
+      this.db.get<AgentIdentity>(owner, "agent-settings", "identity"),
+      this.db.list<MemorySuggestion>(owner, "memory-suggestions"),
+    ]);
     const heartbeat = await this.db.get<{ lastTickAt: string }>("system", "worker-status", "tasks");
     return {
       tasks,
@@ -144,6 +156,7 @@ export class AgentService {
       monitors,
       ideas,
       memories,
+      memorySuggestions: suggestions.filter((s) => s.status === "pending"),
       artifacts,
       notifications,
       identity: identity ?? { name: "OpenMuse", tone: "warm" },
@@ -668,6 +681,57 @@ export class AgentService {
       read: false,
     };
     await this.db.insertIfAbsent(owner, "notifications", value);
+  }
+  /** Saves a fact the agent noticed for the person to keep or dismiss; never used until kept. */
+  async suggestMemory(owner: string, raw: unknown, source: string) {
+    const input = memorySuggestionSchema.parse(raw);
+    const normal = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+    const memories = await this.db.list<AgentMemory>(owner, "memories");
+    if (memories.some((m) => normal(m.text) === normal(input.text)))
+      return { status: "already_remembered" };
+    const id = hash(`memory-suggestion:${normal(input.text)}`);
+    const suggestion: MemorySuggestion = {
+      id,
+      text: input.text,
+      reason: input.reason,
+      source,
+      createdAt: date(),
+      status: "pending",
+    };
+    const saved = await this.db.insertIfAbsent(owner, "memory-suggestions", suggestion);
+    if (saved)
+      await this.notify(owner, "Something to remember?", input.text, undefined, `memory:${id}`);
+    return { status: saved ? "suggested" : "already_suggested", id };
+  }
+  async decideMemory(owner: string, id: string, action: "keep" | "dismiss", text?: string) {
+    const suggestion = await this.db.compareAndSwap<MemorySuggestion>(
+      owner,
+      "memory-suggestions",
+      id,
+      { status: "pending" },
+      { status: action === "keep" ? "kept" : "dismissed" },
+    );
+    if (!suggestion) throw new AppError("This suggestion was already handled", 409);
+    if (action === "keep")
+      await this.db.put(owner, "memories", {
+        id: randomUUID(),
+        text: text?.trim() || suggestion.text,
+        source: `Suggested from ${suggestion.source}`,
+        createdAt: date(),
+      } satisfies AgentMemory);
+    return suggestion;
+  }
+  /** Kept memories for prompts, newest first and bounded. */
+  async memoryContext(owner: string) {
+    const memories = await this.db.list<AgentMemory>(owner, "memories");
+    const texts: string[] = [];
+    let size = 0;
+    for (const memory of memories.sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+      size += memory.text.length;
+      if (size > 6000) break;
+      texts.push(memory.text);
+    }
+    return texts;
   }
   mailEvidence(mail: Mail): Evidence {
     return { id: mail.id, kind: "mail", title: mail.subject, excerpt: mail.body.slice(0, 400) };

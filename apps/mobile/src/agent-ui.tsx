@@ -30,6 +30,7 @@ import type {
   Evidence,
   Goal,
   Idea,
+  MemorySuggestion,
   Monitor,
   RunEvent,
 } from "../../../packages/domain/src/agent";
@@ -1753,7 +1754,11 @@ export function AppsScreen() {
           ))}
       </Card>
       <Button onPress={() => setSettings(!settings)}>
-        {settings ? "Close agent settings" : "Personality & memory"}
+        {settings
+          ? "Close agent settings"
+          : data?.memorySuggestions.length
+            ? `Personality & memory · ${data.memorySuggestions.length} to review`
+            : "Personality & memory"}
       </Button>
       {settings && (
         <>
@@ -1807,6 +1812,15 @@ export function AppsScreen() {
           <Card style={{ gap: 12 }}>
             <SectionHeading title="Memory" />
             <Text style={s.muted}>Context you can inspect, correct or forget.</Text>
+            {!!data?.memorySuggestions.length && (
+              <>
+                <Text style={s.label}>Suggested from your conversations</Text>
+                {data.memorySuggestions.map((item) => (
+                  <SuggestionRow key={item.id} suggestion={item} />
+                ))}
+                <View style={s.divider} />
+              </>
+            )}
             {data?.memories.map((item) => (
               <MemoryRow key={item.id} memory={item} />
             ))}
@@ -1828,6 +1842,64 @@ export function AppsScreen() {
           </Card>
         </>
       )}
+      <ErrorNotice error={error} />
+    </View>
+  );
+}
+function SuggestionRow({ suggestion }: { suggestion: MemorySuggestion }) {
+  const { mutate } = useAgentWorkspace();
+  const [text, setText] = useState(suggestion.text);
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function decide(action: "keep" | "dismiss") {
+    setBusy(true);
+    setError("");
+    try {
+      await mutate(`/memory-suggestions/${suggestion.id}`, {
+        action,
+        ...(action === "keep" ? { text: text.trim() } : {}),
+      });
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <View
+      style={{
+        gap: 8,
+        padding: 14,
+        borderRadius: 16,
+        backgroundColor: colors.lavender,
+      }}
+    >
+      {editing ? (
+        <Field label="Memory" value={text} onChangeText={setText} />
+      ) : (
+        <Text style={s.text}>{suggestion.text}</Text>
+      )}
+      {!!suggestion.reason && <Text style={s.small}>{suggestion.reason}</Text>}
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        <Button
+          small
+          primary
+          busy={busy}
+          disabled={!text.trim()}
+          onPress={() => void decide("keep")}
+        >
+          Keep
+        </Button>
+        {!editing && (
+          <Button small disabled={busy} onPress={() => setEditing(true)}>
+            Edit
+          </Button>
+        )}
+        <Button small disabled={busy} onPress={() => void decide("dismiss")}>
+          Dismiss
+        </Button>
+      </View>
       <ErrorNotice error={error} />
     </View>
   );
