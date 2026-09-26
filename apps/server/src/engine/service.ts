@@ -16,7 +16,10 @@ import {
   type Monitor,
   memorySuggestionSchema,
   monitorInputSchema,
+  type Routine,
   type RunEvent,
+  routineInputSchema,
+  timeZoneSchema,
 } from "../../../../packages/domain/src/agent.ts";
 import type {
   ActionProposal,
@@ -37,6 +40,7 @@ import { backgroundFailure } from "../log.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
+import { nextRun, routinePrompt } from "./routines.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -84,6 +88,7 @@ export class AgentService {
         await this.publishOutcome(owner, value);
       for (const { owner, value } of await this.db.scan<Monitor>("monitors"))
         await this.activateMonitor(owner, value);
+      await this.runDueRoutines();
       for (const { owner, value } of await this.db.scan<Idea>("ideas"))
         if (
           value.status === "accepted" &&
@@ -138,6 +143,7 @@ export class AgentService {
       notifications,
       identity,
       suggestions,
+      routines,
     ] = await Promise.all([
       this.db.list<AgentTask>(owner, "tasks"),
       this.db.list<Goal>(owner, "goals"),
@@ -148,6 +154,7 @@ export class AgentService {
       this.db.list<AgentNotification>(owner, "notifications"),
       this.db.get<AgentIdentity>(owner, "agent-settings", "identity"),
       this.db.list<MemorySuggestion>(owner, "memory-suggestions"),
+      this.db.list<Routine>(owner, "routines"),
     ]);
     const heartbeat = await this.db.get<{ lastTickAt: string }>("system", "worker-status", "tasks");
     return {
@@ -157,6 +164,7 @@ export class AgentService {
       ideas,
       memories,
       memorySuggestions: suggestions.filter((s) => s.status === "pending"),
+      routines: routines.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       artifacts,
       notifications,
       identity: identity ?? { name: "OpenMuse", tone: "warm" },
@@ -681,6 +689,94 @@ export class AgentService {
       read: false,
     };
     await this.db.insertIfAbsent(owner, "notifications", value);
+  }
+  async timeZone(owner: string) {
+    const settings = await this.db.get<{ timeZone?: string }>(
+      owner,
+      "agent-settings",
+      "preferences",
+    );
+    return settings?.timeZone ?? "UTC";
+  }
+  async setTimeZone(owner: string, raw: unknown) {
+    const timeZone = timeZoneSchema.parse(raw);
+    await this.db.put(owner, "agent-settings", { id: "preferences", timeZone });
+    return { timeZone };
+  }
+  async createRoutine(owner: string, raw: unknown, idempotencyKey?: string) {
+    const input = routineInputSchema.parse(raw);
+    if ((await this.db.list<Routine>(owner, "routines")).length >= 30)
+      throw new AppError("Remove a routine before adding more", 409);
+    const timeZone = input.timeZone ?? (await this.timeZone(owner));
+    const routine: Routine = {
+      id: idempotencyKey ? hash(`routine:${idempotencyKey}`) : randomUUID(),
+      title: input.title,
+      prompt: input.prompt,
+      time: input.time,
+      days: input.days,
+      timeZone,
+      enabled: input.enabled,
+      nextRunAt: nextRun({ ...input, timeZone }),
+      createdAt: date(),
+    };
+    return (await this.db.insertIfAbsent(owner, "routines", routine)) ?? routine;
+  }
+  async updateRoutine(owner: string, id: string, raw: unknown) {
+    const current = await this.db.get<Routine>(owner, "routines", id);
+    if (!current) throw new AppError("Routine not found", 404);
+    const input = routineInputSchema.parse({ ...current, ...(raw as object) });
+    const timeZone = input.timeZone ?? current.timeZone;
+    return this.db.put(owner, "routines", {
+      ...current,
+      ...input,
+      timeZone,
+      nextRunAt: nextRun({ ...input, timeZone }),
+    } satisfies Routine);
+  }
+  async deleteRoutine(owner: string, id: string) {
+    if (!(await this.db.take(owner, "routines", id))) throw new AppError("Routine not found", 404);
+    return { ok: true };
+  }
+  /** Starts one run; scheduled runs pass the occurrence they claimed so a run starts once. */
+  async runRoutine(owner: string, id: string, occurrence = date()) {
+    const routine = await this.db.get<Routine>(owner, "routines", id);
+    if (!routine) throw new AppError("Routine not found", 404);
+    const day = new Intl.DateTimeFormat("en-US", {
+      timeZone: routine.timeZone,
+      month: "short",
+      day: "numeric",
+    }).format(new Date(occurrence));
+    const task = await this.createTask(
+      owner,
+      { kind: "agent", title: `${routine.title} · ${day}`, prompt: routinePrompt(routine) },
+      `routine:${routine.id}:${occurrence}`,
+    );
+    await this.db.compareAndSwap<Routine>(
+      owner,
+      "routines",
+      id,
+      {},
+      { lastRunAt: occurrence, lastTaskId: task.id },
+    );
+    return task;
+  }
+  /** Claims each due occurrence once (compare-and-swap on nextRunAt), then starts its run. */
+  async runDueRoutines(now = Date.now()) {
+    for (const { owner, value } of await this.db.scan<Routine>("routines")) {
+      if (!value.enabled || Date.parse(value.nextRunAt) > now) continue;
+      const claimed = await this.db.compareAndSwap<Routine>(
+        owner,
+        "routines",
+        value.id,
+        { nextRunAt: value.nextRunAt },
+        { nextRunAt: nextRun(value, now) },
+      );
+      // A run missed by more than a day (server down) is skipped rather than replayed.
+      if (!claimed || now - Date.parse(value.nextRunAt) > 24 * 60 * 60 * 1000) continue;
+      await this.runRoutine(owner, value.id, value.nextRunAt).catch((error) =>
+        backgroundFailure("routine run", error),
+      );
+    }
   }
   /** Saves a fact the agent noticed for the person to keep or dismiss; never used until kept. */
   async suggestMemory(owner: string, raw: unknown, source: string) {

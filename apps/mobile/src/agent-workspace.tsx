@@ -42,6 +42,11 @@ export function AgentWorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [api]);
   useEffect(() => {
+    // Routines run in the person's local time.
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timeZone) void api.request("/api/agent/timezone", { timeZone }).catch(() => undefined);
+  }, [api]);
+  useEffect(() => {
     const visible = () =>
       AppState.currentState !== "background" &&
       AppState.currentState !== "inactive" &&

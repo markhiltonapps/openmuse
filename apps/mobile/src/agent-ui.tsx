@@ -32,6 +32,7 @@ import type {
   Idea,
   MemorySuggestion,
   Monitor,
+  Routine,
   RunEvent,
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
@@ -1136,6 +1137,213 @@ function IdeaCard({ idea }: { idea: Idea }) {
     </View>
   );
 }
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function scheduleLabel(r: Pick<Routine, "time" | "days">) {
+  const days = [...r.days].sort().join(",");
+  const when =
+    days === "0,1,2,3,4,5,6"
+      ? "Every day"
+      : days === "1,2,3,4,5"
+        ? "Weekdays"
+        : days === "0,6"
+          ? "Weekends"
+          : r.days.map((d) => DAY_NAMES[d]).join(", ");
+  return `${when} at ${r.time}`;
+}
+const MORNING_BRIEF = {
+  title: "Morning brief",
+  prompt:
+    "Give me a brief for today: my calendar, important unread email, anything waiting on me, and progress on my goals.",
+  time: "07:30",
+  days: [1, 2, 3, 4, 5],
+};
+const ROUTINE_TEMPLATES = [
+  MORNING_BRIEF,
+  {
+    title: "Inbox check",
+    prompt:
+      "Check my inbox for anything urgent or needing a reply today. List each with the sender, why it matters and a suggested next step.",
+    time: "16:30",
+    days: [1, 2, 3, 4, 5],
+  },
+  {
+    title: "Follow-ups",
+    prompt:
+      "Find emails I sent in the last week that have not received a reply and suggest short follow-ups for the important ones.",
+    time: "15:00",
+    days: [5],
+  },
+  {
+    title: "Weekly goal check-in",
+    prompt:
+      "Review my goals and milestones. Summarize progress this week and suggest the three most useful next steps.",
+    time: "18:00",
+    days: [0],
+  },
+];
+/** Recurring jobs; each run is a normal task in Activity with a notification when done. */
+function RoutinesSection({ routines }: { routines: Routine[] }) {
+  const { mutate } = useAgentWorkspace();
+  const [draft, setDraft] = useState<(typeof ROUTINE_TEMPLATES)[number]>();
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  async function run(key: string, path: string, body: unknown = {}) {
+    setBusy(key);
+    setError("");
+    try {
+      await mutate(path, body);
+      return true;
+    } catch (e) {
+      setError(errorText(e));
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+  const timeValid = !!draft && /^([01]\d|2[0-3]):[0-5]\d$/.test(draft.time);
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={[s.between, { marginBottom: 5 }]}>
+        <View style={[s.row, { gap: 10 }]}>
+          <View
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              borderWidth: 5,
+              borderColor: "#EDE7FB",
+              backgroundColor: "#8C6BE0",
+            }}
+          />
+          <Text style={[s.heading, { color: "#6E4FC4" }]}>Routines</Text>
+        </View>
+        {!draft && (
+          <Button small icon={Plus} onPress={() => setDraft({ ...MORNING_BRIEF })}>
+            Add
+          </Button>
+        )}
+      </View>
+      {routines.map((r) => (
+        <View
+          key={r.id}
+          style={{ gap: 8, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line }}
+        >
+          <Text style={s.text}>{r.title}</Text>
+          <Text style={s.muted}>
+            {r.enabled ? scheduleLabel(r) : "Paused"}
+            {r.lastRunAt ? ` · last ran ${stamp(r.lastRunAt)}` : ""}
+          </Text>
+          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+            <Button
+              small
+              busy={busy === `run:${r.id}`}
+              disabled={!!busy}
+              onPress={() => void run(`run:${r.id}`, `/routines/${r.id}/run`)}
+            >
+              Run now
+            </Button>
+            <Button
+              small
+              busy={busy === `toggle:${r.id}`}
+              disabled={!!busy}
+              onPress={() =>
+                void run(`toggle:${r.id}`, `/routines/${r.id}`, { enabled: !r.enabled })
+              }
+            >
+              {r.enabled ? "Pause" : "Resume"}
+            </Button>
+            <Button
+              small
+              busy={busy === `delete:${r.id}`}
+              disabled={!!busy}
+              onPress={() => void run(`delete:${r.id}`, `/routines/${r.id}/delete`)}
+            >
+              Remove
+            </Button>
+          </View>
+        </View>
+      ))}
+      {!routines.length && !draft && (
+        <Text style={[s.muted, { paddingVertical: 10 }]}>
+          A morning brief, an afternoon inbox check, Friday follow-ups.
+        </Text>
+      )}
+      {draft && (
+        <Card style={{ gap: 12 }}>
+          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+            {ROUTINE_TEMPLATES.map((t) => (
+              <Button
+                key={t.title}
+                small
+                primary={draft.title === t.title}
+                onPress={() => setDraft({ ...t })}
+              >
+                {t.title}
+              </Button>
+            ))}
+          </View>
+          <Field
+            label="Name"
+            value={draft.title}
+            onChangeText={(title) => setDraft({ ...draft, title })}
+          />
+          <Field
+            label="What should it do?"
+            value={draft.prompt}
+            onChangeText={(prompt) => setDraft({ ...draft, prompt })}
+            multiline
+          />
+          <Field
+            label="Time (24-hour, your time zone)"
+            value={draft.time}
+            onChangeText={(time) => setDraft({ ...draft, time })}
+            placeholder="07:30"
+          />
+          <View style={[s.row, { gap: 6, flexWrap: "wrap" }]}>
+            {DAY_NAMES.map((name, day) => (
+              <Button
+                key={name}
+                small
+                primary={draft.days.includes(day)}
+                onPress={() =>
+                  setDraft({
+                    ...draft,
+                    days: draft.days.includes(day)
+                      ? draft.days.filter((d) => d !== day)
+                      : [...draft.days, day],
+                  })
+                }
+              >
+                {name}
+              </Button>
+            ))}
+          </View>
+          <View style={[s.row, { gap: 8 }]}>
+            <Button
+              primary
+              busy={busy === "create"}
+              disabled={
+                !timeValid || !draft.days.length || !draft.title.trim() || !draft.prompt.trim()
+              }
+              onPress={() =>
+                void run("create", "/routines", {
+                  ...draft,
+                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                }).then((ok) => ok && setDraft(undefined))
+              }
+            >
+              Save routine
+            </Button>
+            <Button disabled={!!busy} onPress={() => setDraft(undefined)}>
+              Cancel
+            </Button>
+          </View>
+        </Card>
+      )}
+      <ErrorNotice error={error} />
+    </View>
+  );
+}
 export function GoalsScreen() {
   const { data } = useAgentWorkspace();
   const [adding, setAdding] = useState<string>();
@@ -1148,6 +1356,8 @@ export function GoalsScreen() {
   return (
     <View style={{ gap: 22 }}>
       <AgentStatus />
+      <RoutinesSection routines={data?.routines || []} />
+      <View style={{ height: 1, backgroundColor: colors.line }} />
       <View style={{ gap: 8 }}>
         <View style={[s.between, { marginBottom: 5 }]}>
           <View style={[s.row, { gap: 10 }]}>

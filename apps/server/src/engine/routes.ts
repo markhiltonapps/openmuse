@@ -103,6 +103,22 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     if (!memory) throw new AppError("Memory not found", 404);
     return c.json(memory);
   });
+  app.post("/timezone", async (c) => {
+    const body = z.object({ timeZone: z.string() }).parse(await c.req.json());
+    return c.json(await service.setTimeZone(c.get("owner"), body.timeZone));
+  });
+  app.post("/routines", async (c) =>
+    c.json(await service.createRoutine(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/routines/:id", async (c) =>
+    c.json(await service.updateRoutine(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.post("/routines/:id/run", async (c) =>
+    c.json(await service.runRoutine(c.get("owner"), c.req.param("id")), 201),
+  );
+  app.post("/routines/:id/delete", async (c) =>
+    c.json(await service.deleteRoutine(c.get("owner"), c.req.param("id"))),
+  );
   app.post("/memory-suggestions/:id", async (c) => {
     const body = z
       .object({

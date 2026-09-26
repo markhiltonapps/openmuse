@@ -110,6 +110,46 @@ export const memorySuggestionSchema = z.object({
   text: z.string().trim().min(3).max(500),
   reason: z.string().trim().max(300).default(""),
 });
+/** A recurring job: each run becomes an ordinary task in Activity. */
+export interface Routine {
+  id: string;
+  title: string;
+  prompt: string;
+  /** Local time of day, HH:MM (24-hour). */
+  time: string;
+  /** Days it runs, 0 = Sunday. */
+  days: number[];
+  timeZone: string;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunAt?: string;
+  lastTaskId?: string;
+  createdAt: string;
+}
+const validTimeZone = (value: string) => {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+};
+export const timeZoneSchema = z.string().trim().min(1).max(80).refine(validTimeZone, {
+  message: "Unknown time zone",
+});
+export const routineInputSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  prompt: z.string().trim().min(1).max(4000),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a 24-hour time like 07:30"),
+  days: z
+    .array(z.number().int().min(0).max(6))
+    .min(1)
+    .max(7)
+    .transform((days) => [...new Set(days)].sort())
+    .default([0, 1, 2, 3, 4, 5, 6]),
+  timeZone: timeZoneSchema.optional(),
+  enabled: z.boolean().default(true),
+});
 export interface AgentArtifact {
   id: string;
   taskId: string;
@@ -141,6 +181,7 @@ export interface AgentWorkspace {
   memories: AgentMemory[];
   /** Pending suggestions only. */
   memorySuggestions: MemorySuggestion[];
+  routines: Routine[];
   artifacts: AgentArtifact[];
   notifications: AgentNotification[];
   identity: AgentIdentity;
