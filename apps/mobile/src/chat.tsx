@@ -7,7 +7,17 @@ import {
   useRenderTool,
   useRenderToolCall,
 } from "@copilotkit/react-native/headless";
-import { ArrowDown, ArrowUp, FileText, Mic, RotateCcw, Square, X } from "lucide-react-native";
+import {
+  ArrowDown,
+  ArrowUp,
+  AudioLines,
+  FileText,
+  Mic,
+  RotateCcw,
+  Square,
+  Volume2,
+  X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   KeyboardAvoidingView,
@@ -31,6 +41,7 @@ import { MailToolCard } from "./mail-tool-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { primeSpeech, speak, speechAvailable, stopSpeaking, voiceSettings } from "./voice";
 import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
 
@@ -197,6 +208,54 @@ export function ChatScreen({
       },
     );
   };
+  // Voice mode: listen, send what was said, read the reply aloud, then listen again.
+  const [voiceMode, setVoiceMode] = useState(false);
+  const voiceModeRef = useRef(false);
+  const [speakingId, setSpeakingId] = useState<string>();
+  const sendSpoken = useRef<(text: string) => void>(() => undefined);
+  const endVoiceMode = useCallback(() => {
+    voiceModeRef.current = false;
+    setVoiceMode(false);
+    stopListening.current?.();
+    stopSpeaking();
+  }, []);
+  const listenForTurn = useCallback(() => {
+    if (!voiceModeRef.current) return;
+    let heard = false;
+    setListening(true);
+    stopListening.current = dictate(
+      (text) => {
+        heard = true;
+        sendSpoken.current(text);
+      },
+      (message) => {
+        setListening(false);
+        if (message) setError(message);
+        // Silence ends voice mode instead of listening forever.
+        if (!heard && voiceModeRef.current) endVoiceMode();
+      },
+    );
+  }, [endVoiceMode]);
+  const readAloud = useCallback(async (id: string, text: string) => {
+    setSpeakingId(id);
+    await speak(text);
+    setSpeakingId((current) => (current === id ? undefined : current));
+  }, []);
+  const replied = useRef<(id: string, text: string) => void>(() => undefined);
+  replied.current = (id, text) => {
+    if (!voiceModeRef.current && !voiceSettings().readAloud) return;
+    void readAloud(id, text).then(listenForTurn);
+  };
+  useEffect(() => endVoiceMode, [endVoiceMode]);
+  const toggleVoiceMode = () => {
+    if (voiceModeRef.current) return endVoiceMode();
+    primeSpeech();
+    stopSpeaking();
+    stopListening.current?.();
+    voiceModeRef.current = true;
+    setVoiceMode(true);
+    listenForTurn();
+  };
   const [focused, setFocused] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const [showResults, setShowResults] = useState(false);
@@ -266,12 +325,19 @@ export function ChatScreen({
       setBusy(true);
       setError("");
       if (message) agent.addMessage({ id: message.id, role: "user", content: message.text });
+      const before = agent.messages.length;
       try {
         await runConversationTurn(
           agentId,
           () => copilotkit.runAgent({ agent }),
           (onError) => copilotkit.subscribe({ onError }),
         );
+        const reply = agent.messages
+          .slice(before)
+          .reverse()
+          .find((m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim());
+        if (reply) replied.current(reply.id, String(reply.content));
+        else if (voiceModeRef.current) listenForTurn();
         await Promise.all([refresh(), refreshAgent()]);
       } finally {
         try {
@@ -287,7 +353,18 @@ export function ChatScreen({
         }
       }
     },
-    [agent, agentId, copilotkit, isReady, loaded, refresh, refreshAgent, saveHistory, queue],
+    [
+      agent,
+      agentId,
+      copilotkit,
+      isReady,
+      loaded,
+      refresh,
+      refreshAgent,
+      saveHistory,
+      queue,
+      listenForTurn,
+    ],
   );
   const flush = useCallback(() => {
     if (!loaded || !isReady || runLock.current || agent.isRunning) return;
@@ -302,6 +379,9 @@ export function ChatScreen({
     },
     [queue, flush],
   );
+  sendSpoken.current = (text) => {
+    if (loaded && isReady) enqueue(text);
+  };
   useEffect(() => {
     if (!busy && !agent.isRunning && outbox.pending.length) flush();
   }, [busy, agent.isRunning, outbox.pending.length, flush]);
@@ -315,12 +395,14 @@ export function ChatScreen({
         if (event.context?.agentId && event.context.agentId !== agentId) return;
         const failure = event.error instanceof Error ? event.error : new Error(String(event.error));
         setError(failure.message);
+        endVoiceMode();
       },
     });
     return () => subscription.unsubscribe();
-  }, [copilotkit, agentId, queue]);
+  }, [copilotkit, agentId, endVoiceMode]);
   async function stop() {
     queue.pause();
+    endVoiceMode();
     try {
       await copilotkit.stopAgent({ agent });
     } catch (e) {
@@ -330,6 +412,8 @@ export function ChatScreen({
   function send() {
     const text = draft.trim();
     if (!text || !isReady || !loaded) return;
+    primeSpeech();
+    stopSpeaking();
     // A new submission can continue after Stop; held follow-ups still need explicit resume.
     if (!busy && !agent.isRunning && !saveError && !queue.getSnapshot().pending.length)
       queue.resume();
@@ -457,6 +541,27 @@ export function ChatScreen({
                       <AssistantResponse content={text} />
                     )}
                   </View>
+                )}
+                {!user && !!text && speechAvailable() && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={speakingId === message.id ? "Stop reading" : "Read aloud"}
+                    hitSlop={8}
+                    onPress={() => {
+                      if (speakingId === message.id) {
+                        stopSpeaking();
+                        setSpeakingId(undefined);
+                      } else void readAloud(message.id, text);
+                    }}
+                    style={[s.row, { gap: 5, alignSelf: "flex-start", paddingHorizontal: 6 }]}
+                  >
+                    {speakingId === message.id ? (
+                      <Square size={12} fill={colors.muted} strokeWidth={0} />
+                    ) : (
+                      <Volume2 size={14} color={colors.muted} />
+                    )}
+                    <Text style={s.small}>{speakingId === message.id ? "Stop" : "Listen"}</Text>
+                  </Pressable>
                 )}
                 <BrowserRunContext
                   value={{
@@ -633,6 +738,36 @@ export function ChatScreen({
             )}
           </View>
         )}
+        {voiceMode && (
+          <View
+            accessibilityLiveRegion="polite"
+            style={[
+              s.row,
+              {
+                gap: 10,
+                marginBottom: 10,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                borderRadius: 20,
+                backgroundColor: colors.lavender,
+              },
+            ]}
+          >
+            <AudioLines size={18} color={colors.text} />
+            <Text style={[s.text, { flex: 1 }]}>
+              {listening
+                ? "Listening…"
+                : speakingId
+                  ? "Speaking…"
+                  : replying
+                    ? "Thinking…"
+                    : "Voice mode"}
+            </Text>
+            <Button small onPress={endVoiceMode}>
+              End
+            </Button>
+          </View>
+        )}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15 }}>
             <Text style={s.heading}>Add a document</Text>
@@ -780,7 +915,29 @@ export function ChatScreen({
                   : undefined
               }
             />
-            {dictationAvailable() && !replying && (
+            {dictationAvailable() && speechAvailable() && !draft.trim() && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={voiceMode ? "End voice conversation" : "Talk with your agent"}
+                accessibilityState={{ selected: voiceMode }}
+                onPress={toggleVoiceMode}
+                style={({ pressed }) => ({
+                  width: 44,
+                  height: 44,
+                  borderRadius: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: voiceMode
+                    ? colors.lavender
+                    : pressed
+                      ? colors.sky
+                      : "transparent",
+                })}
+              >
+                <AudioLines size={22} color={voiceMode ? colors.text : "#6F777C"} />
+              </Pressable>
+            )}
+            {dictationAvailable() && !replying && !voiceMode && (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
