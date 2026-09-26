@@ -72,7 +72,8 @@ export async function createApp(
       const problem = await spending.check(owner, input.data.amountUsd);
       if (problem) throw new AppError(problem, 409);
     },
-    execute: async (owner, input, connectionId, targetVersion) => {
+    execute: async (owner, input, connectionId, targetVersion): Promise<string> => {
+      if (input.kind === "agent_email.send") return inbox.send(owner, input.data);
       if (input.kind !== "app.action")
         return workspace.execute(owner, input, connectionId, targetVersion);
       if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
@@ -101,6 +102,7 @@ export async function createApp(
         })
       : undefined);
   const inbox = new AgentInbox(db, config, agent, accounts);
+  if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const threads = options.intelligence ?? intelligence;
   const runtime = makeRuntime(config, agent, auth, intelligence);

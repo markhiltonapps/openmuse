@@ -95,10 +95,11 @@ test("approved senders hand the agent work; everyone else is held", async () => 
   const task = await db.get<AgentTask>("local-user", "tasks", owner.taskId ?? "");
   assert.equal(task?.title, "Email: Book the dentist");
   assert.match(task?.prompt ?? "", /Please find a dentist appointment next week\./);
-  assert.match(task?.prompt ?? "", /Attachments \(not opened\): insurance\.pdf/);
+  assert.match(task?.prompt ?? "", /Attachments: insurance\.pdf \(not opened\)/);
   assert.match(task?.prompt ?? "", /untrusted/);
   assert.equal((await deliver("em_owner")).status, "duplicate");
-  assert.deepEqual(fetched, ["em_owner"]);
+  // The email, then its attachment list; a duplicate delivery fetches nothing more.
+  assert.deepEqual(fetched, ["em_owner", "attachments"]);
 
   assert.equal((await deliver("em_stranger")).status, "held");
   assert.equal((await deliver("em_spoofed")).status, "held");

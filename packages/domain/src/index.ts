@@ -130,8 +130,28 @@ export const appActionSchema = z.object({
     .record(z.string(), z.unknown())
     .refine((value) => JSON.stringify(value).length <= 100000, "Action details are too large"),
 });
+/** An email the agent sends from its own address (for example a reply to mail sent to it). */
+export const agentEmailSchema = z.object({
+  /** The agent's address it goes out from; checked against the account when it is sent. */
+  from: z.email(),
+  to: z.array(z.email()).min(1).max(10),
+  subject: z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .refine((s) => !/[\r\n]/.test(s), "Subject must be a single line"),
+  body: z.string().min(1).max(20000),
+  /** Message-ID of the email being answered, so it threads as a reply. */
+  inReplyTo: z
+    .string()
+    .max(998)
+    .refine((s) => !/[\r\n]/.test(s), "Invalid message reference")
+    .optional(),
+});
 export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email.send"), data: emailDraftSchema }),
+  z.object({ kind: z.literal("agent_email.send"), data: agentEmailSchema }),
   z.object({ kind: z.literal("app.action"), data: appActionSchema }),
   z.object({ kind: z.literal("calendar.create"), data: eventDraftSchema }),
   z.object({
@@ -146,6 +166,7 @@ export const proposalSchema = z.discriminatedUnion("kind", [
 export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type EventDraft = z.infer<typeof eventDraftSchema>;
 export type AppAction = z.infer<typeof appActionSchema>;
+export type AgentEmail = z.infer<typeof agentEmailSchema>;
 export type ProposalInput = z.infer<typeof proposalSchema>;
 export interface ActionProposal {
   target?: CalendarEvent;

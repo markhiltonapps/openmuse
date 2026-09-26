@@ -28,7 +28,7 @@ import type {
   Mail,
   ProposalInput,
 } from "../../../../packages/domain/src/index.ts";
-import type { ActionService } from "../actions.ts";
+import { type ActionService, usesGoogle } from "../actions.ts";
 import type { AppConnector } from "../apps.ts";
 import type { BrowserService } from "../browser.ts";
 import { ComputerService } from "../computer.ts";
@@ -691,6 +691,8 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** The agent's own email address; set when agent email is configured. */
+  mail?: { address(owner: string): Promise<string | undefined> };
   /** Lets tests stand in for the Anthropic API when designing avatars. */
   avatarFetcher?: typeof fetch;
   /** Web search for current information; set when a search provider is configured. */
@@ -887,7 +889,7 @@ export class AgentService {
     context: TaskContext,
   ) {
     await context.guard();
-    if (input.kind !== "app.action") {
+    if (usesGoogle(input.kind)) {
       const connection = await this.workspace.connection(owner);
       if (connection?.id !== task.state.connectionId)
         throw new AppError(

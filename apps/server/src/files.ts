@@ -47,6 +47,10 @@ export class Files {
     await this.db.put(owner, "files", artifact);
     return this.signed(owner, artifact);
   }
+  /** Whether a file with this name and type can be saved to Files. */
+  accepts(name: string, type = "") {
+    return /pdf/i.test(type) || /\.pdf$/i.test(name);
+  }
   signed(owner: string, file: Artifact): Artifact {
     return { ...file, url: this.auth.sign(owner, `/api/files/${file.id}/content`) };
   }

@@ -586,7 +586,8 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       setBusy(false);
     }
   }
-  const email = action.kind === "email.send";
+  const agentMail = action.kind === "agent_email.send";
+  const email = action.kind === "email.send" || agentMail;
   const app = action.kind === "app.action";
   return (
     <Sheet
@@ -611,7 +612,11 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         </Chip>
       </View>
       <Card style={{ gap: 13 }}>
-        {!app && <ReviewLine label="Account" value={action.account || w.profile.email} />}
+        {agentMail ? (
+          <ReviewLine label="From" value={`${String(d.from || "")} (your agent)`} />
+        ) : (
+          !app && <ReviewLine label="Account" value={action.account || w.profile.email} />
+        )}
         {app ? (
           <>
             <ReviewLine label="App" value={String(d.app || "")} />
@@ -642,16 +647,25 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         ) : email ? (
           <>
             <ReviewLine label="To" value={arrayText(d.to)} />
-            <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
-            <ReviewLine label="Bcc" value={arrayText(d.bcc) || "None"} />
+            {!agentMail && (
+              <>
+                <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
+                <ReviewLine label="Bcc" value={arrayText(d.bcc) || "None"} />
+              </>
+            )}
             <ReviewLine label="Subject" value={String(d.subject || "")} />
+            {agentMail && !!d.inReplyTo && (
+              <ReviewLine label="Sent as" value="A reply in the same thread" />
+            )}
             <View style={s.divider} />
             <Text selectable style={[s.text, { lineHeight: 25 }]}>
               {String(d.body || "")}
             </Text>
             <View style={s.divider} />
             <Text style={s.label}>Attachments</Text>
-            {Array.isArray(d.attachmentIds) && d.attachmentIds.length ? (
+            {agentMail ? (
+              <Text style={s.muted}>No attachments</Text>
+            ) : Array.isArray(d.attachmentIds) && d.attachmentIds.length ? (
               d.attachmentIds.map((id) => {
                 const file = w.files.find((f) => f.id === id);
                 return (
@@ -735,7 +749,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
                       ? "Approve & send"
                       : "Approve change"}
             </Button>
-            {action.kind !== "calendar.delete" && !app && (
+            {action.kind !== "calendar.delete" && !app && !agentMail && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
                 Edit details
               </Button>

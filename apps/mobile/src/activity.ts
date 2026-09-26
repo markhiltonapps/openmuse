@@ -74,6 +74,8 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
           ? `Searching your email for ${quoted(args.query)}…`
           : "Checking your email…",
       };
+    case "email_from_agent":
+      return { kind: "mail", label: "Writing an email for you to review…" };
     case "read_mail_thread":
       return { kind: "mail", label: "Reading an email…" };
     case "find_app_actions":

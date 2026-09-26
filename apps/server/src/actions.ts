@@ -8,7 +8,9 @@ import {
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 
-const usesGoogle = (kind: ProposalInput["kind"]) => kind !== "app.action";
+/** Gmail and Calendar actions run through the Google account; the others don't. */
+export const usesGoogle = (kind: ProposalInput["kind"]) =>
+  kind !== "app.action" && kind !== "agent_email.send";
 
 interface Options {
   execute: (
@@ -71,9 +73,11 @@ export class ActionService {
           : input.data.summary
         : input.kind === "email.send"
           ? `Send “${input.data.subject}”`
-          : input.kind === "calendar.delete"
-            ? `Delete ${input.data.title}`
-            : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
+          : input.kind === "agent_email.send"
+            ? `Email ${input.data.to[0]} from your agent: “${input.data.subject}”`
+            : input.kind === "calendar.delete"
+              ? `Delete ${input.data.title}`
+              : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
     const createdAt = new Date(this.now()).toISOString();
     const proposal: ActionProposal = {
       id,
