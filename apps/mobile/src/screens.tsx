@@ -1170,6 +1170,118 @@ export function ActivityScreen() {
     </View>
   );
 }
+const quickApps = [
+  { slug: "outlook", name: "Outlook" },
+  { slug: "slack", name: "Slack" },
+  { slug: "notion", name: "Notion" },
+  { slug: "hubspot", name: "HubSpot" },
+  { slug: "github", name: "GitHub" },
+  { slug: "googledrive", name: "Google Drive" },
+];
+interface AppsState {
+  configured: boolean;
+  apps: { app: string; name: string; connected: boolean }[];
+}
+/** Third-party apps connected through the server's app connector (Composio). */
+function MoreApps() {
+  const { api, notify } = useWorkspace();
+  const [state, setState] = useState<AppsState>();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function load() {
+    setError("");
+    try {
+      setState(await api.request<AppsState>("/api/apps"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  async function connect(app: string, label: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.request<{ connected: boolean; url?: string }>("/api/apps/connect", {
+        app,
+      });
+      if (result.url) {
+        await Linking.openURL(result.url);
+        notify(`Finish signing in to ${label}, then tap Refresh.`);
+      } else notify(`${label} is already connected.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!state) return error ? <ErrorNotice error={error} /> : null;
+  if (!state.configured)
+    return (
+      <Text style={[s.small, { marginLeft: 12 }]}>
+        Add a Composio API key to the server to connect Outlook, Slack, Notion and 1,000+ more apps.
+      </Text>
+    );
+  const connected = state.apps.filter((a) => a.connected);
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={[s.small, { marginLeft: 12 }]}>More apps</Text>
+      <Card style={{ gap: 12 }}>
+        {connected.length ? (
+          <View style={[s.row, { gap: 7, flexWrap: "wrap" }]}>
+            {connected.map((a) => (
+              <Chip key={a.app} tint={colors.green}>
+                {a.name}
+              </Chip>
+            ))}
+          </View>
+        ) : (
+          <Text style={s.text}>No apps connected yet.</Text>
+        )}
+        <Text style={s.muted}>
+          Connect an app once and your assistant can use it for everyone who signs in here. Anything
+          that sends, creates, changes or deletes waits for approval in Activity.
+        </Text>
+        <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+          {quickApps.map((a) => (
+            <Button key={a.slug} small disabled={busy} onPress={() => void connect(a.slug, a.name)}>
+              {a.name}
+            </Button>
+          ))}
+        </View>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Another app, e.g. Salesforce"
+          placeholderTextColor={colors.muted}
+          accessibilityLabel="App to connect"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={s.input}
+        />
+        <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+          <Button
+            small
+            primary
+            icon={Link2}
+            busy={busy}
+            disabled={!name.trim()}
+            onPress={() => void connect(name, name.trim())}
+          >
+            Connect
+          </Button>
+          <Button small icon={ArrowDownToLine} disabled={busy} onPress={() => void load()}>
+            Refresh
+          </Button>
+        </View>
+        <ErrorNotice error={error} />
+      </Card>
+    </View>
+  );
+}
 export function ConnectionsScreen({ query = "" }: { query?: string }) {
   const { workspace: w, api, refresh, notify, open } = useWorkspace();
   const [selected, setSelected] = useState<string>();
@@ -1305,6 +1417,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
           </View>
         );
       })}
+      {!query && <MoreApps />}
       {!rows.length && <Text style={s.muted}>No matching connectors.</Text>}
       {selected && (
         <Sheet

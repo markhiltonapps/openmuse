@@ -587,6 +587,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
     }
   }
   const email = action.kind === "email.send";
+  const app = action.kind === "app.action";
   return (
     <Sheet
       title={pending ? "One last look" : action.title}
@@ -610,8 +611,32 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         </Chip>
       </View>
       <Card style={{ gap: 13 }}>
-        <ReviewLine label="Account" value={action.account || w.profile.email} />
-        {email ? (
+        {!app && <ReviewLine label="Account" value={action.account || w.profile.email} />}
+        {app ? (
+          <>
+            <ReviewLine label="App" value={String(d.app || "")} />
+            <ReviewLine label="Action" value={String(d.tool || "")} />
+            <ReviewLine label="What will happen" value={String(d.summary || "")} />
+            <View style={s.divider} />
+            <Text style={s.label}>Exact details sent</Text>
+            <Text
+              selectable
+              style={[
+                s.text,
+                {
+                  fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                  fontSize: 12,
+                  lineHeight: 19,
+                },
+              ]}
+            >
+              {JSON.stringify(d.arguments ?? {}, null, 2)}
+            </Text>
+            <Text style={s.small}>
+              Only these details are sent. Depending on the action, the app may notify other people.
+            </Text>
+          </>
+        ) : email ? (
           <>
             <ReviewLine label="To" value={arrayText(d.to)} />
             <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
@@ -697,13 +722,15 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           </Text>
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
             <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
-              {w.mode === "sample"
-                ? "Approve locally"
-                : email
-                  ? "Approve & send"
-                  : "Approve change"}
+              {app
+                ? "Approve & run"
+                : w.mode === "sample"
+                  ? "Approve locally"
+                  : email
+                    ? "Approve & send"
+                    : "Approve change"}
             </Button>
-            {action.kind !== "calendar.delete" && (
+            {action.kind !== "calendar.delete" && !app && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
                 Edit details
               </Button>

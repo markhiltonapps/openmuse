@@ -49,6 +49,9 @@ export interface Config {
   computerEnabled?: boolean;
   computerImage?: string;
   computerDeploymentId?: string;
+  composioApiKey?: string;
+  composioUserId?: string;
+  composioBaseUrl?: string;
   allowedOrigins: string[];
 }
 
@@ -115,6 +118,9 @@ export function readConfig(): Config {
     computerEnabled: process.env.COMPUTER_ENABLED === "true",
     computerImage: process.env.COMPUTER_IMAGE ?? "openmuse-computer:local",
     computerDeploymentId: process.env.COMPUTER_DEPLOYMENT_ID,
+    composioApiKey: process.env.COMPOSIO_API_KEY?.trim() || undefined,
+    composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
+    composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,
     allowedOrigins: (
       process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
     ).split(","),

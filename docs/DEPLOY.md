@@ -21,6 +21,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `TOKEN_ENCRYPTION_KEY` | `openssl rand -base64 32` |
 | `PUBLIC_API_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
 | `ALLOWED_ORIGINS` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` |
+| `COMPOSIO_API_KEY` | Optional. Connects Outlook, Slack, Notion and 1,000+ more apps through Composio |
 
 The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
 
@@ -29,7 +30,9 @@ The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and C
 - Dockerfile path `infra/web.Dockerfile`, health check path `/`, `PORT=8080` and domain target port `8080`. Caddy serves the export on `PORT`.
 - Set `EXPO_PUBLIC_API_URL` to `https://${{api.RAILWAY_PUBLIC_DOMAIN}}`. It is compiled into the bundle, so redeploy the web service after the API domain changes.
 
-Open the web domain and sign in with `OPENMUSE_ACCESS_KEY`.
+Open the web domain and sign in with `OPENMUSE_ACCESS_KEY`. Each device stays signed in for 30 days after its last use. To sign in without typing, open `https://<web domain>/#key=<OPENMUSE_ACCESS_KEY>`; the key is removed from the address bar immediately. Changing `OPENMUSE_ACCESS_KEY` signs every device out.
+
+With `COMPOSIO_API_KEY` set, the API logs `Connected apps ready (Composio)` at startup. Connect apps under **Apps & settings → More apps** or by asking in chat.
 
 ## Build locally
 

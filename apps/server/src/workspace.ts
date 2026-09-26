@@ -328,6 +328,7 @@ export class WorkspaceService {
     };
   }
   async prepare(owner: string, input: ProposalInput, connectionId?: string) {
+    if (input.kind === "app.action") return { input };
     if (input.kind === "email.send") {
       for (const id of input.data.attachmentIds) await this.files.get(owner, id);
       return { input };
@@ -352,6 +353,8 @@ export class WorkspaceService {
     connectionId?: string,
     targetVersion?: string,
   ): Promise<string> {
+    if (input.kind === "app.action")
+      throw new AppError("Connected-app actions run through the app connector", 500);
     if (this.config.mode === "sample") {
       if (input.kind === "email.send") {
         const id = randomUUID();

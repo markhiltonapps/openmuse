@@ -114,8 +114,23 @@ export const eventDraftSchema = z
       ctx.addIssue({ code: "custom", message: "Invalid time zone", path: ["timeZone"] });
     }
   });
+/** One action in a connected third-party app, run through the app connector after review. */
+export const appActionSchema = z.object({
+  app: z.string().trim().min(1).max(100),
+  tool: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .regex(/^[A-Za-z0-9_.-]+$/, "Unknown action"),
+  summary: z.string().trim().min(1).max(500),
+  arguments: z
+    .record(z.string(), z.unknown())
+    .refine((value) => JSON.stringify(value).length <= 100000, "Action details are too large"),
+});
 export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email.send"), data: emailDraftSchema }),
+  z.object({ kind: z.literal("app.action"), data: appActionSchema }),
   z.object({ kind: z.literal("calendar.create"), data: eventDraftSchema }),
   z.object({
     kind: z.literal("calendar.update"),
@@ -128,6 +143,7 @@ export const proposalSchema = z.discriminatedUnion("kind", [
 ]);
 export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type EventDraft = z.infer<typeof eventDraftSchema>;
+export type AppAction = z.infer<typeof appActionSchema>;
 export type ProposalInput = z.infer<typeof proposalSchema>;
 export interface ActionProposal {
   target?: CalendarEvent;

@@ -32,12 +32,13 @@ import {
   IdeasScreen,
 } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
-import { API_URL, createSession, MuseApi } from "./src/api";
+import { API_URL, checkSession, createSession, MuseApi, onSignedOut } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
+import { clearSession, linkAccessKey, loadSession, saveSession } from "./src/session-store";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
@@ -76,6 +77,7 @@ export default function App() {
     setError("");
     try {
       const session = await createSession(key);
+      await saveSession(session.token);
       setToken(session.token);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -84,8 +86,28 @@ export default function App() {
     }
   }, []);
   useEffect(() => {
-    void connect();
+    void (async () => {
+      const linked = linkAccessKey();
+      if (linked) return connect(linked);
+      const saved = await loadSession();
+      if (saved && (await checkSession(saved))) {
+        setToken(saved);
+        setBusy(false);
+        return;
+      }
+      if (saved) await clearSession();
+      await connect();
+    })();
   }, [connect]);
+  useEffect(
+    () =>
+      onSignedOut(() => {
+        void clearSession();
+        setToken("");
+        setError("Your sign-in ended. Enter the access key again.");
+      }),
+    [],
+  );
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />

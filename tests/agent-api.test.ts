@@ -323,16 +323,24 @@ test("live mode rejects sample sources and hides the fixture mutation endpoint",
     mode: "live",
     accessKey: "a-private-test-key-with-enough-characters",
   });
+  // Sign-ins are bound to the access key, so this server needs its own.
+  const signIn = await live.app.request("/api/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accessKey: "a-private-test-key-with-enough-characters" }),
+  });
+  const { token: liveToken } = await signIn.json();
+  const liveHeaders = { ...headers(), Authorization: `Bearer ${liveToken}` };
   try {
     const response = await live.app.request("/api/agent/sample-page", {
       method: "POST",
-      headers: headers(),
+      headers: liveHeaders,
       body: JSON.stringify({ text: "Changed" }),
     });
     assert.equal(response.status, 404);
     const monitor = await live.app.request("/api/agent/monitors", {
       method: "POST",
-      headers: headers(),
+      headers: liveHeaders,
       body: JSON.stringify({ title: "Forbidden fixture", url: "sample://availability" }),
     });
     assert.equal(monitor.status, 422);

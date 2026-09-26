@@ -8,6 +8,8 @@ import {
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 
+const usesGoogle = (kind: ProposalInput["kind"]) => kind !== "app.action";
+
 interface Options {
   execute: (
     owner: string,
@@ -51,17 +53,25 @@ export class ActionService {
       if (existing) return existing;
     }
     const parsed = proposalSchema.parse(raw);
-    const connection = await this.options.connection?.(owner);
-    if (this.options.connection && !connection)
+    // Connected-app actions run through the app connector, not the Google account.
+    const google = usesGoogle(parsed.kind);
+    const connection = google ? await this.options.connection?.(owner) : undefined;
+    if (google && this.options.connection && !connection)
       throw new AppError("Connect Google before preparing an action", 409);
-    const prepared = await this.options.prepare?.(owner, parsed, connection?.id);
+    const prepared = google
+      ? await this.options.prepare?.(owner, parsed, connection?.id)
+      : undefined;
     const input = proposalSchema.parse(prepared?.input ?? parsed);
     const title =
-      input.kind === "email.send"
-        ? `Send “${input.data.subject}”`
-        : input.kind === "calendar.delete"
-          ? `Delete ${input.data.title}`
-          : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
+      input.kind === "app.action"
+        ? input.data.summary.length > 120
+          ? `${input.data.summary.slice(0, 119)}…`
+          : input.data.summary
+        : input.kind === "email.send"
+          ? `Send “${input.data.subject}”`
+          : input.kind === "calendar.delete"
+            ? `Delete ${input.data.title}`
+            : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
     const createdAt = new Date(this.now()).toISOString();
     const proposal: ActionProposal = {
       id,
@@ -133,9 +143,10 @@ export class ActionService {
       }
       throw new AppError("This review expired. Create a fresh proposal.", 409);
     }
-    if (decision === "approve" && !(await this.options.connected(owner)))
+    const google = usesGoogle(proposal.kind);
+    if (decision === "approve" && google && !(await this.options.connected(owner)))
       throw new AppError("Google is disconnected. Reconnect before approving this action.", 409);
-    if (decision === "approve" && this.options.connection) {
+    if (decision === "approve" && google && this.options.connection) {
       const connection = await this.options.connection(owner);
       if (
         !connection ||

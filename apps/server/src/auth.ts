@@ -6,6 +6,14 @@ import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
+/** Sign-ins last 30 days and renew while in use, so a device stays signed in. */
+export const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
+interface Session {
+  owner: string;
+  expiresAt: number;
+  /** Digest of the access key that created it; changing the key signs every device out. */
+  key?: string;
+}
 export class Auth {
   constructor(
     private readonly db: Store,
@@ -24,19 +32,25 @@ export class Auth {
     await this.db.put("system", "sessions", {
       id: digest(token).toString("hex"),
       owner: "local-user",
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      expiresAt: Date.now() + SESSION_TTL,
+      key: this.keyDigest(),
     });
     return { token, mode: this.config.mode };
   }
+  private keyDigest() {
+    return this.config.accessKey
+      ? digest(`openmuse-session:${this.config.accessKey}`).toString("hex")
+      : undefined;
+  }
   async owner(authorization?: string) {
     if (!authorization?.startsWith("Bearer ")) throw new AppError("Sign in to OpenMuse", 401);
-    const session = await this.db.get<{ owner: string; expiresAt: number }>(
-      "system",
-      "sessions",
-      digest(authorization.slice(7)).toString("hex"),
-    );
-    if (!session || session.expiresAt < Date.now())
+    const id = digest(authorization.slice(7)).toString("hex");
+    const session = await this.db.get<Session>("system", "sessions", id);
+    const now = Date.now();
+    if (!session || session.expiresAt < now || session.key !== this.keyDigest())
       throw new AppError("Session expired. Sign in again.", 401);
+    if (session.expiresAt - now < SESSION_TTL / 2)
+      await this.db.put("system", "sessions", { ...session, id, expiresAt: now + SESSION_TTL });
     return session.owner;
   }
   sign(owner: string, path: string) {

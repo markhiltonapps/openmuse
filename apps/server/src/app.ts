@@ -8,6 +8,7 @@ import { z } from "zod";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
+import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { createAuth } from "./auth.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
@@ -24,23 +25,44 @@ import { WorkspaceService } from "./workspace.ts";
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner } = {},
+  options: { docker?: DockerRunner; apps?: AppConnector } = {},
 ) {
   assertApiDeploymentConfig(config);
   const auth = await createAuth(db, config),
     files = new Files(db, config, auth),
     google = new GoogleAuth(db, config),
     workspace = new WorkspaceService(db, config, files, google);
+  let apps = options.apps;
+  if (!apps && config.composioApiKey) {
+    const composio = new ComposioConnector(db, {
+      ...config,
+      composioApiKey: config.composioApiKey,
+    });
+    void composio.check().then(
+      () => console.log("Connected apps ready (Composio)"),
+      (error) =>
+        console.warn(
+          `Connected apps unavailable: ${error instanceof Error ? error.message : "check failed"}`,
+        ),
+    );
+    apps = composio;
+  }
   const actions = new ActionService(db, {
-    execute: (owner, input, connectionId, targetVersion) =>
-      workspace.execute(owner, input, connectionId, targetVersion),
+    execute: async (owner, input, connectionId, targetVersion) => {
+      if (input.kind !== "app.action")
+        return workspace.execute(owner, input, connectionId, targetVersion);
+      if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
+      const data = await apps.execute(owner, input.data.tool, input.data.arguments);
+      const detail = data === undefined ? "" : JSON.stringify(data).slice(0, 300);
+      return `Done in ${input.data.app} · ${input.data.tool}${detail ? ` · ${detail}` : ""}`;
+    },
     prepare: (owner, input, connectionId) => workspace.prepare(owner, input, connectionId),
     connected: (owner) => workspace.connected(owner),
     connection: (owner) => workspace.connection(owner),
   });
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
-  const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
+  const agent = new AgentService(db, config, workspace, files, actions, browser, computer, apps);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
@@ -135,6 +157,7 @@ export async function createApp(
     c.set("owner", owner);
     await next();
   });
+  app.get("/api/session", (c) => c.json({ mode: config.mode }));
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
@@ -176,6 +199,20 @@ export async function createApp(
     return c.json(
       await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision),
     );
+  });
+  app.get("/api/apps", async (c) =>
+    c.json(
+      apps
+        ? { configured: true, apps: await apps.connections(c.get("owner")) }
+        : { configured: false, apps: [] },
+    ),
+  );
+  app.post("/api/apps/connect", async (c) => {
+    if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
+    const { app: slug } = z
+      .object({ app: z.string().trim().min(1).max(100) })
+      .parse(await c.req.json());
+    return c.json(await apps.connect(c.get("owner"), slug));
   });
   app.get("/api/drafts", async (c) => c.json(await db.list(c.get("owner"), "drafts")));
   app.post("/api/drafts", async (c) => {
