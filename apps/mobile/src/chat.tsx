@@ -32,6 +32,7 @@ import { z } from "zod";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AssistantResponse } from "./assistant-response";
+import { setChatBusy } from "./avatar";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
@@ -437,6 +438,11 @@ export function ChatScreen({
   );
   const visible = messages.filter((m) => m.role === "user" || m.role === "assistant");
   const replying = busy || agent.isRunning;
+  useEffect(() => {
+    if (!active) return;
+    setChatBusy(replying);
+    return () => setChatBusy(false);
+  }, [active, replying]);
   return (
     <View style={{ flex: 1 }}>
       <ScrollView

@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
-import type {
-  AgentIdentity,
-  AgentMemory,
-  AgentNotification,
+import {
+  type AgentIdentity,
+  type AgentMemory,
+  type AgentNotification,
+  type AvatarImage,
+  avatarCharacters,
+  avatarColors,
 } from "../../../../packages/domain/src/agent.ts";
+import { designAvatar } from "../avatar-designer.ts";
 import { AppError } from "../errors.ts";
 import type { AgentService } from "./service.ts";
 
@@ -140,11 +144,17 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       .object({
         name: z.string().trim().min(1).max(80),
         tone: z.enum(["warm", "concise", "thoughtful"]),
-        avatar: z.enum(["sky", "sand", "lilac"]).optional(),
+        avatar: z.enum(avatarColors).optional(),
+        character: z.enum(avatarCharacters).optional(),
         showChatUpdates: z.boolean().optional(),
       })
       .parse(await c.req.json());
     const owner = c.get("owner");
+    if (
+      body.character === "custom" &&
+      !(await service.db.get(owner, "agent-settings", "avatar-image"))
+    )
+      throw new AppError("Upload or design your own avatar first", 409);
     await service.ensure(owner);
     const identity = await service.db.compareAndSwap<AgentIdentity>(
       owner,
@@ -155,6 +165,68 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     );
     if (!identity) throw new AppError("Agent identity changed; refresh and try again", 409);
     return c.json(identity);
+  });
+  // A person's own avatar lives apart from the identity so every workspace poll stays small.
+  app.get("/avatar-image", async (c) => {
+    const image = await service.db.get<AvatarImage>(
+      c.get("owner"),
+      "agent-settings",
+      "avatar-image",
+    );
+    return c.json({ image, designAvailable: Boolean(designer()) });
+  });
+  const saveAvatar = async (owner: string, kind: AvatarImage["kind"], data: string) => {
+    const updatedAt = new Date().toISOString();
+    await service.ensure(owner);
+    await service.db.put(owner, "agent-settings", {
+      id: "avatar-image",
+      kind,
+      data,
+      updatedAt,
+    } satisfies AvatarImage);
+    return service.db.compareAndSwap<AgentIdentity>(
+      owner,
+      "agent-settings",
+      "identity",
+      {},
+      {
+        character: "custom",
+        avatarImageVersion: updatedAt,
+      },
+    );
+  };
+  app.post("/avatar-image", async (c) => {
+    const { data } = z
+      .object({
+        data: z
+          .string()
+          .max(400_000, "Choose a smaller picture")
+          .regex(
+            /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/,
+            "Choose a PNG, JPEG or WebP picture",
+          ),
+      })
+      .parse(await c.req.json());
+    return c.json(await saveAvatar(c.get("owner"), "photo", data));
+  });
+  const designer = () => {
+    const apiKey = service.config.anthropicApiKey;
+    if (!apiKey || service.config.agentBackend !== "model") return undefined;
+    const configured = /^anthropic[/:](.+)$/.exec(service.config.model ?? "")?.[1];
+    return { apiKey, model: process.env.AVATAR_MODEL?.trim() || configured || "claude-sonnet-5" };
+  };
+  app.post("/avatar-design", async (c) => {
+    const { description } = z
+      .object({ description: z.string().trim().min(3).max(300) })
+      .parse(await c.req.json());
+    const options = designer();
+    if (!options) throw new AppError("Designing avatars needs an Anthropic API key", 409);
+    const svg = await designAvatar(description, {
+      ...options,
+      baseUrl: process.env.ANTHROPIC_BASE_URL,
+      fetcher: service.avatarFetcher,
+    });
+    return c.json(await saveAvatar(c.get("owner"), "svg", svg));
   });
   app.get("/notifications", async (c) =>
     c.json((await service.snapshot(c.get("owner"))).notifications),

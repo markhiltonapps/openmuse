@@ -118,3 +118,41 @@ export function takeSharedText() {
   if (text) window.history.replaceState(null, "", window.location.pathname + window.location.hash);
   return text.slice(0, 4000);
 }
+
+/** Lets the person choose a picture; returns it as a small square JPEG data URL. */
+export function pickImage(size = 256): Promise<string | undefined> {
+  if (!web()) return Promise.resolve(undefined);
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return resolve(undefined);
+      try {
+        const bitmap = await createImageBitmap(file);
+        const side = Math.min(bitmap.width, bitmap.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("no canvas");
+        context.drawImage(
+          bitmap,
+          (bitmap.width - side) / 2,
+          (bitmap.height - side) / 2,
+          side,
+          side,
+          0,
+          0,
+          size,
+          size,
+        );
+        resolve(canvas.toDataURL("image/jpeg", 0.86));
+      } catch {
+        reject(new Error("That picture couldn't be opened. Try a JPEG or PNG."));
+      }
+    };
+    input.click();
+  });
+}

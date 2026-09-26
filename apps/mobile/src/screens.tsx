@@ -39,6 +39,7 @@ import type {
   EmailDraft,
 } from "../../../packages/domain/src";
 import { API_URL } from "./api";
+import { Mascot } from "./avatar";
 import { localDateTime, zonedInstant } from "./date-time";
 import {
   Button,
@@ -50,7 +51,6 @@ import {
   ErrorNotice,
   IconButton,
   LinkRow,
-  Mascot,
   relativeDate,
   resultSummary,
   SectionHeading,

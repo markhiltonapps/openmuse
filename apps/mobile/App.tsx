@@ -12,7 +12,7 @@ import {
   SquareCheck,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -41,6 +41,7 @@ import {
   redeemSignInLink,
   serverInfo,
 } from "./src/api";
+import { AgentAvatar, Mascot, type Mood, useChatBusy } from "./src/avatar";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
@@ -55,7 +56,7 @@ import {
 } from "./src/session-store";
 import { SignInCard } from "./src/sign-in";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
-import { Button, colors, ErrorNotice, IconButton, Mascot, s } from "./src/ui";
+import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
 import { registerServiceWorker } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
@@ -298,6 +299,29 @@ function WorkspaceShell({
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
     ) || data?.tasks.find((task) => task.status === "running");
   const agentName = data?.identity.name || "OpenMuse";
+  const chatBusy = useChatBusy();
+  // A task that newly succeeds gets a short celebration.
+  const [celebrating, setCelebrating] = useState(false);
+  const succeeded = useRef<Set<string>>(undefined);
+  const celebration = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    if (!data) return;
+    const done = new Set(data.tasks.filter((t) => t.status === "succeeded").map((t) => t.id));
+    const fresh = succeeded.current && [...done].some((id) => !succeeded.current?.has(id));
+    succeeded.current = done;
+    if (!fresh) return;
+    setCelebrating(true);
+    clearTimeout(celebration.current);
+    celebration.current = setTimeout(() => setCelebrating(false), 2400);
+  }, [data]);
+  useEffect(() => () => clearTimeout(celebration.current), []);
+  const mood: Mood = celebrating
+    ? "celebrate"
+    : activeTask && activeTask.status !== "running"
+      ? "attention"
+      : activeTask || chatBusy
+        ? "working"
+        : "idle";
   const status = activeTask
     ? activeTask.status === "waiting_approval"
       ? `Ready to review · ${activeTask.title}`
@@ -356,7 +380,7 @@ function WorkspaceShell({
                   opacity: pressed ? 0.65 : 1,
                 })}
               >
-                <Mascot size={desktop ? 58 : 49} variant={data?.identity.avatar} />
+                <AgentAvatar size={desktop ? 58 : 49} mood={mood} />
                 <Text
                   style={{
                     fontSize: 16,

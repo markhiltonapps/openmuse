@@ -691,6 +691,8 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** Lets tests stand in for the Anthropic API when designing avatars. */
+  avatarFetcher?: typeof fetch;
   /** Web search for current information; set when a search provider is configured. */
   search?: WebSearch;
   /** Purchase guardrails for connected-app actions. */

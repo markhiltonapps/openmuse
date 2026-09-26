@@ -167,11 +167,33 @@ export interface AgentNotification {
   createdAt: string;
   read: boolean;
 }
+export const avatarCharacters = [
+  "capybara",
+  "fox",
+  "cat",
+  "panda",
+  "owl",
+  "robot",
+  "spark",
+  "custom",
+] as const;
+export const avatarColors = ["sky", "sand", "lilac", "mint", "peach"] as const;
 export interface AgentIdentity {
   name: string;
   tone: "warm" | "concise" | "thoughtful";
-  avatar?: "sky" | "sand" | "lilac";
+  /** Background color behind the avatar. */
+  avatar?: (typeof avatarColors)[number];
+  character?: (typeof avatarCharacters)[number];
+  /** Changes whenever a custom picture or design is saved. */
+  avatarImageVersion?: string;
   showChatUpdates?: boolean;
+}
+/** A person's own avatar: an uploaded photo (data URL) or a designed SVG. */
+export interface AvatarImage {
+  id: "avatar-image";
+  kind: "photo" | "svg";
+  data: string;
+  updatedAt: string;
 }
 export interface AgentWorkspace {
   tasks: AgentTask[];

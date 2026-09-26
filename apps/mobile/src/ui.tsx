@@ -2,7 +2,6 @@ import { ArrowUpRight, Check, ChevronRight, type LucideIcon, X } from "lucide-re
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -397,41 +396,6 @@ export function LinkRow({
       </View>
       <ChevronRight size={15} color={colors.muted} />
     </Pressable>
-  );
-}
-/** OpenMuse's original capybara, shared by every assistant surface. */
-export function Mascot({
-  size = 42,
-  variant = "sky",
-}: {
-  size?: number;
-  variant?: "sky" | "sand" | "lilac";
-}) {
-  const palette = {
-    sky: "#ECF5FA",
-    sand: "#FAF0DF",
-    lilac: "#F1ECF9",
-  }[variant];
-  return (
-    <View accessibilityLabel="OpenMuse capybara" style={{ width: size, height: size }}>
-      <View
-        style={{
-          position: "absolute",
-          top: size * 0.15,
-          left: size * 0.12,
-          width: size * 0.76,
-          height: size * 0.76,
-          borderRadius: size,
-          backgroundColor: palette,
-        }}
-      />
-      <Image
-        source={require("../assets/capybara.png")}
-        resizeMode="contain"
-        style={{ width: size, height: size }}
-        accessible={false}
-      />
-    </View>
   );
 }
 export function dateLabel(value: string, options?: Intl.DateTimeFormatOptions) {

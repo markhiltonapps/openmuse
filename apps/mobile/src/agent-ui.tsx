@@ -37,6 +37,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { AvatarPicker } from "./avatar-settings";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import {
   Button,
@@ -48,7 +49,6 @@ import {
   ErrorNotice,
   Field,
   LinkRow,
-  Mascot,
   resultSummary,
   SectionHeading,
   Sheet,
@@ -1883,6 +1883,7 @@ export function AppsScreen() {
   const [name, setName] = useState(data?.identity.name || "OpenMuse");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
+  const [character, setCharacter] = useState(data?.identity.character || "capybara");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
   const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
@@ -1892,12 +1893,15 @@ export function AppsScreen() {
       setName(data.identity.name);
       setTone(data.identity.tone);
       setAvatar(data.identity.avatar || "sky");
+      setCharacter(data.identity.character || "capybara");
       setShowChatUpdates(data.identity.showChatUpdates !== false);
     }
   }, [
     data?.identity.name,
     data?.identity.tone,
     data?.identity.avatar,
+    data?.identity.character,
+    data?.identity.avatarImageVersion,
     data?.identity.showChatUpdates,
   ]);
   async function save(path: string, body: unknown) {
@@ -1983,24 +1987,12 @@ export function AppsScreen() {
         <>
           <Card style={{ gap: 10 }}>
             <SectionHeading title="Your agent" />
-            <View style={[s.row, { gap: 16, justifyContent: "center", marginBottom: 12 }]}>
-              {(["sky", "sand", "lilac"] as const).map((item) => (
-                <Pressable
-                  key={item}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${statusLabel(item)} avatar`}
-                  accessibilityState={{ checked: avatar === item }}
-                  onPress={() => setAvatar(item)}
-                  style={{
-                    padding: 7,
-                    borderRadius: 24,
-                    backgroundColor: avatar === item ? colors.sky : colors.canvas,
-                  }}
-                >
-                  <Mascot size={62} variant={item} />
-                </Pressable>
-              ))}
-            </View>
+            <AvatarPicker
+              character={character}
+              color={avatar}
+              onCharacter={setCharacter}
+              onColor={setAvatar}
+            />
             <Field label="Name" value={name} onChangeText={setName} />
             <View style={[s.row, { gap: 8 }]}>
               {(["warm", "concise", "thoughtful"] as const).map((item) => (
@@ -2022,7 +2014,13 @@ export function AppsScreen() {
               busy={busy}
               disabled={!name.trim()}
               onPress={() =>
-                void save("/identity", { name: name.trim(), tone, avatar, showChatUpdates })
+                void save("/identity", {
+                  name: name.trim(),
+                  tone,
+                  avatar,
+                  character,
+                  showChatUpdates,
+                })
               }
             >
               Save preferences
