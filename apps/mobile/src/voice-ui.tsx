@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Button, Card, CheckRow, colors, SectionHeading, s } from "./ui";
+import { Button, Card, CheckRow, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import {
   listVoices,
   primeSpeech,
@@ -11,7 +11,7 @@ import {
   useVoiceSettings,
   type VoiceOption,
 } from "./voice";
-import { dictationAvailable, isIos } from "./web-app";
+import { dictationAvailable, isIos, microphones } from "./web-app";
 
 const SPEEDS = [
   { label: "Slower", rate: 0.85 },
@@ -24,10 +24,21 @@ export function VoiceCard({ name }: { name: string }) {
   const settings = useVoiceSettings();
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [showAll, setShowAll] = useState(false);
+  const [mics, setMics] = useState<{ id: string; name: string; named: boolean }[]>([]);
+  const [micError, setMicError] = useState("");
   useEffect(() => {
     void listVoices().then(setVoices);
+    if (dictationAvailable()) void microphones().then(setMics, () => undefined);
     return () => stopSpeaking();
   }, []);
+  async function showMicrophones() {
+    setMicError("");
+    try {
+      setMics(await microphones(true));
+    } catch {
+      setMicError("Allow microphone access in your browser to choose one.");
+    }
+  }
   if (!speechAvailable()) return null;
   const chosen = voices.find((v) => v.id === settings.voice) ?? voices[0];
   const preview = (voice?: string, rate?: number) => {
@@ -107,6 +118,53 @@ export function VoiceCard({ name }: { name: string }) {
           )}
         </>
       )}
+      {dictationAvailable() && (
+        <>
+          <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>Microphone</Text>
+          {[{ id: "", name: "Device default", named: true }, ...mics].map((mic) => (
+            <Pressable
+              key={mic.id || "default"}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: (settings.microphone ?? "") === mic.id }}
+              onPress={() => updateVoiceSettings({ microphone: mic.id || undefined })}
+              style={({ pressed }) => [
+                s.row,
+                {
+                  paddingVertical: 9,
+                  paddingHorizontal: 12,
+                  borderRadius: 14,
+                  backgroundColor:
+                    (settings.microphone ?? "") === mic.id
+                      ? colors.sky
+                      : pressed
+                        ? "#F3F5F6"
+                        : "transparent",
+                },
+              ]}
+            >
+              <Text style={[s.text, { flex: 1 }]} numberOfLines={1}>
+                {mic.name}
+              </Text>
+            </Pressable>
+          ))}
+          {!mics.some((mic) => mic.named) && (
+            <Button small onPress={() => void showMicrophones()}>
+              Show my microphones
+            </Button>
+          )}
+          <ErrorNotice error={micError} />
+          <Text style={s.small}>
+            If this browser can't switch microphones for voice input, it uses the device default
+            {isIos() ? "." : " (on Windows: Settings → System → Sound → Input)."}
+          </Text>
+        </>
+      )}
+      <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>Speaker</Text>
+      <Text style={s.small}>
+        {isIos()
+          ? "Replies play through the iPhone's current audio output, such as its speaker, AirPods or a car."
+          : "Browsers play spoken replies through the device's default speaker. On Windows, pick it in Settings → System → Sound → Output, or give your browser its own speaker under Volume mixer."}
+      </Text>
       <Text style={s.small}>
         {isIos()
           ? "Voices come from this iPhone. For more natural ones, download an Enhanced or Premium voice in Settings → Accessibility → Spoken Content → Voices."

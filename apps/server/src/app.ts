@@ -30,7 +30,13 @@ import { WorkspaceService } from "./workspace.ts";
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; apps?: AppConnector; mailer?: Mailer; search?: WebSearch } = {},
+  options: {
+    docker?: DockerRunner;
+    apps?: AppConnector;
+    mailer?: Mailer;
+    search?: WebSearch;
+    intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread">;
+  } = {},
 ) {
   assertApiDeploymentConfig(config);
   const auth = await createAuth(db, config);
@@ -96,6 +102,7 @@ export async function createApp(
       : undefined);
   const inbox = new AgentInbox(db, config, agent, accounts);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
+  const threads = options.intelligence ?? intelligence;
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
@@ -357,7 +364,7 @@ export async function createApp(
     const main = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
     if (!main) throw new AppError("Main conversation could not be loaded", 503);
     try {
-      await intelligence.getOrCreateThread({
+      await threads.getOrCreateThread({
         threadId: main.threadId,
         userId: owner,
         agentId: "default",
@@ -369,6 +376,22 @@ export async function createApp(
       );
     }
     return c.json({ threadId: main.threadId, existing: true });
+  });
+  // Starts the main chat over; the old conversation is deleted.
+  app.post("/api/main-thread/reset", async (c) => {
+    const owner = c.get("owner");
+    const old = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
+    await db.put(owner, "conversation-settings", {
+      id: "main",
+      threadId: randomUUID(),
+      existing: false,
+    });
+    await db.put(owner, "conversations", { id: "default", messages: [] });
+    if (old)
+      await threads
+        .deleteThread({ threadId: old.threadId, userId: owner, agentId: "default" })
+        .catch(() => console.warn("[OpenMuse] Could not delete the previous main conversation"));
+    return c.json({ ok: true });
   });
   app.get("/api/conversation", async (c) =>
     c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),

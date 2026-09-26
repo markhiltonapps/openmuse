@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import type { MuseApi } from "./api";
+import { mergeTranscripts } from "./transcript";
 
 // Browser-only features of the installed web app: service worker, push, dictation and sharing.
 const web = () => Platform.OS === "web" && typeof window !== "undefined";
@@ -64,7 +65,8 @@ type Recognition = {
   onresult: (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
   onend: () => void;
   onerror: (event: { error: string }) => void;
-  start(): void;
+  /** Recent Chrome accepts a microphone track; other browsers ignore it and use the default. */
+  start(source?: MediaStreamTrack): void;
   stop(): void;
 };
 function recognizer(): (new () => Recognition) | undefined {
@@ -73,10 +75,14 @@ function recognizer(): (new () => Recognition) | undefined {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => Recognition) | undefined;
 }
 export const dictationAvailable = () => Boolean(recognizer());
-/** Starts dictation; returns a function that stops it. */
+/**
+ * Starts dictation and hands over the whole phrase once, when the person stops talking.
+ * Returns a function that stops listening.
+ */
 export function dictate(
   onText: (text: string) => void,
   onEnd: (error?: string) => void,
+  microphone?: string,
 ): () => void {
   const Recognizer = recognizer();
   if (!Recognizer) {
@@ -87,24 +93,87 @@ export function dictate(
   recognition.lang = navigator.language || "en-US";
   recognition.interimResults = false;
   recognition.continuous = false;
-  recognition.onresult = (event) => {
-    const text = Array.from(event.results)
-      .map((result) => result[0]?.transcript ?? "")
-      .join(" ")
-      .trim();
-    if (text) onText(text);
+  let transcript = "";
+  let error: string | undefined;
+  let track: MediaStreamTrack | undefined;
+  let finished = false;
+  let stopped = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    track?.stop();
+    if (transcript) onText(transcript);
+    onEnd(error);
   };
-  recognition.onerror = (event) =>
-    onEnd(
+  recognition.onresult = (event) => {
+    transcript = mergeTranscripts(
+      Array.from(event.results, (result) => result[0]?.transcript ?? ""),
+    );
+  };
+  recognition.onerror = (event) => {
+    error =
       event.error === "not-allowed"
         ? "Allow microphone access to use voice input."
-        : event.error === "no-speech"
+        : event.error === "no-speech" || event.error === "aborted"
           ? undefined
-          : "Voice input stopped.",
-    );
-  recognition.onend = () => onEnd();
-  recognition.start();
-  return () => recognition.stop();
+          : "Voice input stopped.";
+    finish();
+  };
+  recognition.onend = finish;
+  void (async () => {
+    if (microphone && navigator.mediaDevices?.getUserMedia)
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: microphone } },
+        });
+        track = stream.getAudioTracks()[0];
+      } catch {
+        track = undefined;
+      }
+    if (stopped) return finish();
+    try {
+      if (track) recognition.start(track);
+      else recognition.start();
+    } catch {
+      track?.stop();
+      track = undefined;
+      try {
+        recognition.start();
+      } catch {
+        error = "Voice input stopped.";
+        finish();
+      }
+    }
+  })();
+  return () => {
+    stopped = true;
+    try {
+      recognition.stop();
+    } catch {
+      finish();
+    }
+  };
+}
+
+/** Microphones this browser can use; names appear once microphone access is allowed. */
+export async function microphones(askPermission = false) {
+  if (!web() || !navigator.mediaDevices?.enumerateDevices) return [];
+  if (askPermission) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    for (const track of stream.getTracks()) track.stop();
+  }
+  return (await navigator.mediaDevices.enumerateDevices())
+    .filter(
+      (device) =>
+        device.kind === "audioinput" &&
+        device.deviceId !== "default" &&
+        device.deviceId !== "communications",
+    )
+    .map((device, index) => ({
+      id: device.deviceId,
+      name: device.label || `Microphone ${index + 1}`,
+      named: Boolean(device.label),
+    }));
 }
 
 /** Text shared to the installed app from another app (Android share sheet). */

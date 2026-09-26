@@ -9,6 +9,8 @@ export interface VoiceSettings {
   /** voiceURI of the chosen voice; the best-sounding local voice when unset. */
   voice?: string;
   rate: number;
+  /** deviceId of the chosen microphone; the device default when unset. */
+  microphone?: string;
 }
 export interface VoiceOption {
   id: string;
@@ -30,6 +32,7 @@ function load(): VoiceSettings {
     return {
       readAloud: saved.readAloud === true,
       voice: typeof saved.voice === "string" ? saved.voice : undefined,
+      microphone: typeof saved.microphone === "string" ? saved.microphone : undefined,
       rate: typeof saved.rate === "number" && saved.rate >= 0.5 && saved.rate <= 2 ? saved.rate : 1,
     };
   } catch {

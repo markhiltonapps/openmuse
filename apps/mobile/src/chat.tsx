@@ -188,7 +188,7 @@ export function ChatScreen({
 }) {
   const { api, workspace: w, refresh, navigate } = useWorkspace();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
-  const { enabled: richThreads, mainId, claimPrompt } = useMuseThread();
+  const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
   const selection = thread || { id: "local", existing: false };
   const threadId = richThreads ? selection.id : "local-main";
   const agentId = `openmuse-${threadId}`;
@@ -207,6 +207,7 @@ export function ChatScreen({
         setListening(false);
         if (message) setError(message);
       },
+      voiceSettings().microphone,
     );
   };
   // Voice mode: listen, send what was said, read the reply aloud, then listen again.
@@ -235,6 +236,7 @@ export function ChatScreen({
         // Silence ends voice mode instead of listening forever.
         if (!heard && voiceModeRef.current) endVoiceMode();
       },
+      voiceSettings().microphone,
     );
   }, [endVoiceMode]);
   const readAloud = useCallback(async (id: string, text: string) => {
@@ -313,7 +315,17 @@ export function ChatScreen({
       replay.unsubscribe();
       if (richThreads) void agent.detachActiveRun().catch(() => {});
     };
-  }, [agent, agentId, api, copilotkit, isReady, historyAttempt, richThreads, selection.existing]);
+  }, [
+    agent,
+    agentId,
+    api,
+    copilotkit,
+    isReady,
+    historyAttempt,
+    richThreads,
+    selection.existing,
+    resets,
+  ]);
   const saveHistory = useCallback(async () => {
     if (!richThreads) await api.request("/api/conversation", { messages: agent.messages }, "PUT");
     setSaveError("");

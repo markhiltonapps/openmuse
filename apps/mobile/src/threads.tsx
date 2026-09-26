@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Settings2,
+  Trash2,
 } from "lucide-react-native";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
@@ -32,6 +33,12 @@ const ThreadContext = createContext<{
   retry: () => void;
   select: (selection: Selection) => void;
   start: () => void;
+  /** Drops a deleted side chat, returning to the main chat if it was open. */
+  forget: (id: string) => void;
+  /** Deletes the main chat's history and starts it fresh. */
+  resetMain: () => Promise<void>;
+  /** Changes when the main chat is cleared, so an open chat reloads. */
+  resets: number;
   claimPrompt: (id: number) => boolean;
 } | null>(null);
 export function ThreadsProvider({ children }: { children: ReactNode }) {
@@ -44,6 +51,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [resets, setResets] = useState(0);
   useEffect(() => {
     if (!enabled) return;
     let active = true;
@@ -88,6 +96,16 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         selection,
         select,
         start: () => select({ id: newThreadId(), existing: false }),
+        forget: (id) => {
+          setVisited((items) => items.filter((item) => item.id !== id));
+          if (selection.id === id) setSelection({ id: mainId, existing: true });
+        },
+        resetMain: async () => {
+          await api.request("/api/main-thread/reset", {});
+          setAttempt((n) => n + 1);
+          setResets((n) => n + 1);
+        },
+        resets,
       }}
     >
       {children}
@@ -110,8 +128,43 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     retry,
     select,
     start,
+    forget,
+    resetMain,
   } = useMuseThread();
-  const { workspace, open, navigate, refresh } = useWorkspace();
+  const { workspace, open, navigate, refresh, notify } = useWorkspace();
+  const [confirming, setConfirming] = useState<string>();
+  const [deleting, setDeleting] = useState(false);
+  async function remove(id: string) {
+    setDeleting(true);
+    setError("");
+    try {
+      if (id === "main") await resetMain();
+      else {
+        await threads.deleteThread(id);
+        forget(id);
+      }
+      setConfirming(undefined);
+      notify(id === "main" ? "Main chat cleared." : "Conversation deleted.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+  const confirmDelete = (id: string, what: string) =>
+    confirming === id ? (
+      <View style={{ gap: 8 }}>
+        <Text style={s.small}>{what} This can't be undone.</Text>
+        <View style={[s.row, { gap: 8 }]}>
+          <Button small onPress={() => setConfirming(undefined)}>
+            Cancel
+          </Button>
+          <Button small danger icon={Trash2} busy={deleting} onPress={() => void remove(id)}>
+            Delete
+          </Button>
+        </View>
+      </View>
+    ) : null;
   const threads = useThreads({ agentId: "default", enabled, includeArchived: true, limit: 20 });
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState("");
@@ -157,6 +210,16 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                 onClose();
               }}
             />
+            {confirmDelete("main", "Delete everything in your main chat and start it fresh?") ?? (
+              <Button
+                small
+                icon={Trash2}
+                style={{ alignSelf: "flex-start" }}
+                onPress={() => setConfirming("main")}
+              >
+                Clear main chat
+              </Button>
+            )}
             <Button
               primary
               icon={Plus}
@@ -257,7 +320,17 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                     >
                       {thread.archived ? "Restore" : "Archive"}
                     </Button>
+                    <Button
+                      small
+                      danger
+                      icon={Trash2}
+                      disabled={threads.isMutating}
+                      onPress={() => setConfirming(thread.id)}
+                    >
+                      Delete
+                    </Button>
                   </View>
+                  {confirmDelete(thread.id, `Delete “${thread.name || "Untitled conversation"}”?`)}
                 </View>
               ))}
             {!threads.isLoading &&
@@ -295,6 +368,16 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             <Text style={s.muted}>
               Your conversation is saved in this workspace. You can manage connections in Apps.
             </Text>
+            {confirmDelete("main", "Delete this conversation and start fresh?") ?? (
+              <Button
+                small
+                icon={Trash2}
+                style={{ alignSelf: "flex-start" }}
+                onPress={() => setConfirming("main")}
+              >
+                Clear chat
+              </Button>
+            )}
           </>
         )}
         <View style={s.divider} />
