@@ -52,6 +52,10 @@ export interface Config {
   composioApiKey?: string;
   composioUserId?: string;
   composioBaseUrl?: string;
+  resendApiKey?: string;
+  resendWebhookSecret?: string;
+  agentEmail?: string;
+  agentEmailAllowedSenders?: string[];
   allowedOrigins: string[];
 }
 
@@ -121,6 +125,12 @@ export function readConfig(): Config {
     composioApiKey: process.env.COMPOSIO_API_KEY?.trim() || undefined,
     composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
     composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,
+    resendApiKey: process.env.RESEND_API_KEY?.trim() || undefined,
+    resendWebhookSecret: process.env.RESEND_WEBHOOK_SECRET?.trim() || undefined,
+    agentEmail: process.env.AGENT_EMAIL?.trim() || undefined,
+    agentEmailAllowedSenders: process.env.AGENT_EMAIL_ALLOWED_SENDERS?.split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     allowedOrigins: (
       process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
     ).split(","),

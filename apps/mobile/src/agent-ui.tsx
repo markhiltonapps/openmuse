@@ -1964,6 +1964,7 @@ export function AppsScreen() {
             />
           ))}
       </Card>
+      <AgentEmailCard />
       <PhoneAppCard />
       <Button onPress={() => setSettings(!settings)}>
         {settings
@@ -2056,6 +2057,91 @@ export function AppsScreen() {
       )}
       <ErrorNotice error={error} />
     </View>
+  );
+}
+interface AgentEmailSettings {
+  configured: boolean;
+  address?: string;
+  allowedSenders: string[];
+  recent: {
+    id: string;
+    from: string;
+    subject: string;
+    receivedAt: string;
+    status: "task" | "held";
+    reason?: string;
+  }[];
+}
+/** The agent's own address: approved senders forward or send work to it. */
+function AgentEmailCard() {
+  const { api, notify } = useWorkspace();
+  const [settings, setSettings] = useState<AgentEmailSettings>();
+  const [senders, setSenders] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    void api.request<AgentEmailSettings>("/api/agent-email").then(
+      (value) => {
+        setSettings(value);
+        setSenders(value.allowedSenders.join(", "));
+      },
+      () => undefined,
+    );
+  }, [api]);
+  if (!settings?.configured || !settings.address) return null;
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      const value = await api.request<AgentEmailSettings>("/api/agent-email", {
+        allowedSenders: senders
+          .split(/[\s,;]+/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+      });
+      setSettings(value);
+      setSenders(value.allowedSenders.join(", "));
+      notify("Approved senders saved.");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card style={{ gap: 12 }}>
+      <SectionHeading title="Agent email" />
+      <Text selectable style={s.heading}>
+        {settings.address}
+      </Text>
+      <Text style={s.muted}>
+        Send or forward email to this address to hand your agent work: a bill to pay, a trip
+        confirmation to organize, a thread to follow up on. Only approved senders can give it work;
+        anything else is held.
+      </Text>
+      <Field
+        label="Approved senders"
+        value={senders}
+        onChangeText={setSenders}
+        placeholder="you@example.com, partner@example.com"
+        autoCapitalize="none"
+      />
+      <Button busy={busy} onPress={() => void save()}>
+        Save approved senders
+      </Button>
+      {settings.recent.map((email) => (
+        <View key={email.id} style={{ gap: 2 }}>
+          <Text style={s.text} numberOfLines={1}>
+            {email.subject}
+          </Text>
+          <Text style={s.small}>
+            {email.from} · {stamp(email.receivedAt)} ·{" "}
+            {email.status === "task" ? "Sent to Activity" : `Held: ${email.reason ?? ""}`}
+          </Text>
+        </View>
+      ))}
+      <ErrorNotice error={error} />
+    </Card>
   );
 }
 /** Home-screen install and push notifications for the web app. */

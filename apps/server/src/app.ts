@@ -20,6 +20,7 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { AgentInbox } from "./inbound.ts";
 import { PushService } from "./push.ts";
 import { WorkspaceService } from "./workspace.ts";
 
@@ -66,6 +67,7 @@ export async function createApp(
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer, apps);
   const push = await PushService.create(db, config);
   agent.push = push;
+  const inbox = new AgentInbox(db, config, agent);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
@@ -137,6 +139,16 @@ export async function createApp(
     if (config.mode === "sample") await agent.refreshIdeas("local-user");
     return c.json(session);
   });
+  // Resend calls this directly; the Svix signature, not a session, authenticates it.
+  app.post("/api/inbound/resend", async (c) =>
+    c.json(
+      await inbox.receive(await c.req.text(), {
+        id: c.req.header("svix-id"),
+        timestamp: c.req.header("svix-timestamp"),
+        signature: c.req.header("svix-signature"),
+      }),
+    ),
+  );
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
       return c.html("<h1>Google connection cancelled</h1><p>You can return to OpenMuse.</p>", 400);
@@ -203,6 +215,10 @@ export async function createApp(
       await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision),
     );
   });
+  app.get("/api/agent-email", async (c) => c.json(await inbox.settings(c.get("owner"))));
+  app.post("/api/agent-email", async (c) =>
+    c.json(await inbox.updateSettings(c.get("owner"), await c.req.json())),
+  );
   app.get("/api/push/key", (c) => c.json({ publicKey: push.publicKey }));
   app.post("/api/push/subscribe", async (c) =>
     c.json(await push.subscribe(c.get("owner"), await c.req.json())),
