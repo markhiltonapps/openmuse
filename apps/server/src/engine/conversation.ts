@@ -234,8 +234,16 @@ export class ConversationAgent extends AbstractAgent {
     const apps = this.service.apps;
     if (apps)
       tools.push(
-        ...appToolSpecs(apps, this.owner, (data) =>
-          this.service.actions.propose(this.owner, { kind: "app.action", data }, key("app", data)),
+        ...appToolSpecs(
+          apps,
+          this.owner,
+          (data) =>
+            this.service.actions.propose(
+              this.owner,
+              { kind: "app.action", data },
+              key("app", data),
+            ),
+          this.service.spending,
         ).map((spec) =>
           defineTool({
             ...spec,

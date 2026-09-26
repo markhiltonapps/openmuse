@@ -27,6 +27,8 @@ interface Options {
     targetVersion?: string;
   }>;
   connected: (owner: string) => Promise<boolean>;
+  /** Last check before an approved action runs; throws to refuse it. */
+  authorize?: (owner: string, input: ProposalInput) => Promise<void>;
   connection?: (owner: string) => Promise<{ id: string; account: string } | null>;
   now?: () => number;
 }
@@ -158,6 +160,11 @@ export class ActionService {
           409,
         );
     }
+    if (decision === "approve" && this.options.authorize)
+      await this.options.authorize(
+        owner,
+        proposalSchema.parse({ kind: proposal.kind, data: proposal.data }),
+      );
     const claimed = await this.db.claim<ActionProposal>(
       owner,
       id,

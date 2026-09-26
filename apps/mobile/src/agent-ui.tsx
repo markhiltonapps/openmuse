@@ -1964,6 +1964,7 @@ export function AppsScreen() {
             />
           ))}
       </Card>
+      <SpendingCard />
       <AgentEmailCard />
       <PhoneAppCard />
       <Button onPress={() => setSettings(!settings)}>
@@ -2057,6 +2058,82 @@ export function AppsScreen() {
       )}
       <ErrorNotice error={error} />
     </View>
+  );
+}
+interface SpendingSettings {
+  enabled: boolean;
+  perPurchaseLimit: number;
+  monthlyLimit: number;
+  spentThisMonth: number;
+}
+/** Purchase guardrails: off by default, capped per purchase and per month. */
+function SpendingCard() {
+  const { api, notify } = useWorkspace();
+  const [settings, setSettings] = useState<SpendingSettings>();
+  const [perPurchase, setPerPurchase] = useState("");
+  const [monthly, setMonthly] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const apply = (value: SpendingSettings) => {
+    setSettings(value);
+    setPerPurchase(String(value.perPurchaseLimit));
+    setMonthly(String(value.monthlyLimit));
+  };
+  useEffect(() => {
+    void api.request<SpendingSettings>("/api/spending").then(apply, () => undefined);
+  }, [api]);
+  if (!settings) return null;
+  async function save(enabled: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      apply(
+        await api.request<SpendingSettings>("/api/spending", {
+          enabled,
+          perPurchaseLimit: Number(perPurchase),
+          monthlyLimit: Number(monthly),
+        }),
+      );
+      notify(enabled ? "Spending settings saved." : "Purchases are off.");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const valid = Number(perPurchase) > 0 && Number(monthly) > 0;
+  return (
+    <Card style={{ gap: 12 }}>
+      <SectionHeading title="Spending" />
+      <Text style={s.muted}>
+        {settings.enabled
+          ? `Purchases through connected apps are on. Each one waits for your approval. $${settings.spentThisMonth.toFixed(2)} of $${settings.monthlyLimit.toFixed(2)} used this month.`
+          : "Purchases are off. Turn them on to let your agent prepare orders and payments in connected apps, each waiting for your approval."}
+      </Text>
+      <Field
+        label="Most for one purchase (USD)"
+        value={perPurchase}
+        onChangeText={setPerPurchase}
+        keyboardType="decimal-pad"
+      />
+      <Field
+        label="Most per month (USD)"
+        value={monthly}
+        onChangeText={setMonthly}
+        keyboardType="decimal-pad"
+      />
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        <Button primary busy={busy} disabled={!valid} onPress={() => void save(true)}>
+          {settings.enabled ? "Save limits" : "Turn on purchases"}
+        </Button>
+        {settings.enabled && (
+          <Button disabled={busy || !valid} onPress={() => void save(false)}>
+            Turn off purchases
+          </Button>
+        )}
+      </View>
+      <ErrorNotice error={error} />
+    </Card>
   );
 }
 interface AgentEmailSettings {

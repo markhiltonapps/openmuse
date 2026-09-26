@@ -617,6 +617,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
             <ReviewLine label="App" value={String(d.app || "")} />
             <ReviewLine label="Action" value={String(d.tool || "")} />
             <ReviewLine label="What will happen" value={String(d.summary || "")} />
+            {typeof d.amountUsd === "number" && (
+              <ReviewLine label="Amount" value={`$${d.amountUsd.toFixed(2)} (USD)`} />
+            )}
             <View style={s.divider} />
             <Text style={s.label}>Exact details sent</Text>
             <Text
@@ -722,13 +725,15 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           </Text>
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
             <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
-              {app
-                ? "Approve & run"
-                : w.mode === "sample"
-                  ? "Approve locally"
-                  : email
-                    ? "Approve & send"
-                    : "Approve change"}
+              {app && typeof d.amountUsd === "number"
+                ? `Approve purchase · $${d.amountUsd.toFixed(2)}`
+                : app
+                  ? "Approve & run"
+                  : w.mode === "sample"
+                    ? "Approve locally"
+                    : email
+                      ? "Approve & send"
+                      : "Approve change"}
             </Button>
             {action.kind !== "calendar.delete" && !app && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>

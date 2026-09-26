@@ -283,12 +283,17 @@ export async function executeModelTask(
   ];
   if (service.apps)
     tools.push(
-      ...appToolSpecs(service.apps, owner, async (data) => {
-        const key = createHash("sha256").update(JSON.stringify(data)).digest("hex");
-        const action = await service.prepare(owner, task, { kind: "app.action", data }, key, ctx);
-        outcome = { status: "waiting_approval", actionId: action.id };
-        return action;
-      }).map(
+      ...appToolSpecs(
+        service.apps,
+        owner,
+        async (data) => {
+          const key = createHash("sha256").update(JSON.stringify(data)).digest("hex");
+          const action = await service.prepare(owner, task, { kind: "app.action", data }, key, ctx);
+          outcome = { status: "waiting_approval", actionId: action.id };
+          return action;
+        },
+        service.spending,
+      ).map(
         (spec) =>
           tool(
             spec.name,

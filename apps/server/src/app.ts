@@ -22,6 +22,7 @@ import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { AgentInbox } from "./inbound.ts";
 import { PushService } from "./push.ts";
+import { isPurchase, SpendingService } from "./spending.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -49,12 +50,20 @@ export async function createApp(
     );
     apps = composio;
   }
+  const spending = new SpendingService(db);
   const actions = new ActionService(db, {
+    authorize: async (owner, input) => {
+      if (input.kind !== "app.action" || !isPurchase(input.data.tool)) return;
+      const problem = await spending.check(owner, input.data.amountUsd);
+      if (problem) throw new AppError(problem, 409);
+    },
     execute: async (owner, input, connectionId, targetVersion) => {
       if (input.kind !== "app.action")
         return workspace.execute(owner, input, connectionId, targetVersion);
       if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
       const data = await apps.execute(owner, input.data.tool, input.data.arguments);
+      if (isPurchase(input.data.tool) && input.data.amountUsd)
+        await spending.record(owner, "", input.data.amountUsd);
       const detail = data === undefined ? "" : JSON.stringify(data).slice(0, 300);
       return `Done in ${input.data.app} · ${input.data.tool}${detail ? ` · ${detail}` : ""}`;
     },
@@ -67,6 +76,7 @@ export async function createApp(
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer, apps);
   const push = await PushService.create(db, config);
   agent.push = push;
+  agent.spending = spending;
   const inbox = new AgentInbox(db, config, agent);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, intelligence);
@@ -215,6 +225,10 @@ export async function createApp(
       await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision),
     );
   });
+  app.get("/api/spending", async (c) => c.json(await spending.settings(c.get("owner"))));
+  app.post("/api/spending", async (c) =>
+    c.json(await spending.update(c.get("owner"), await c.req.json())),
+  );
   app.get("/api/agent-email", async (c) => c.json(await inbox.settings(c.get("owner"))));
   app.post("/api/agent-email", async (c) =>
     c.json(await inbox.updateSettings(c.get("owner"), await c.req.json())),

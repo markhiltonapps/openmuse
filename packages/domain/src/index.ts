@@ -124,6 +124,8 @@ export const appActionSchema = z.object({
     .max(200)
     .regex(/^[A-Za-z0-9_.-]+$/, "Unknown action"),
   summary: z.string().trim().min(1).max(500),
+  /** Purchase total in US dollars, checked against the spending limits. */
+  amountUsd: z.number().positive().max(1000000).optional(),
   arguments: z
     .record(z.string(), z.unknown())
     .refine((value) => JSON.stringify(value).length <= 100000, "Action details are too large"),

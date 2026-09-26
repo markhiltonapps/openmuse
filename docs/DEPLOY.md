@@ -1,6 +1,6 @@
 # Deploy to Railway
 
-OpenMuse runs as two Railway services built from this repository: the API (with its task worker) and the static web client. The browser worker and Linux computer are not covered here.
+OpenMuse runs as three Railway services built from this repository: the API (with its task worker), the static web client, and the agent browser. The Linux computer is not covered here.
 
 A reachable deployment must use the live workspace. The sample workspace has no sign-in and refuses a non-loopback `HOST`.
 
@@ -22,8 +22,23 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `PUBLIC_API_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
 | `ALLOWED_ORIGINS` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` |
 | `COMPOSIO_API_KEY` | Optional. Connects Outlook, Slack, Notion and 1,000+ more apps through Composio |
+| `BROWSER_WORKER_URL` | `http://${{browser.RAILWAY_PRIVATE_DOMAIN}}:8790` |
+| `WORKER_TOKEN` | Same random 32+ character secret as the browser service |
+| `RESEND_API_KEY` | Optional. Reads email sent to the agent's address |
+| `RESEND_WEBHOOK_SECRET` | Signing secret of the Resend `email.received` webhook pointing at `PUBLIC_API_URL` + `/api/inbound/resend` |
+| `AGENT_EMAIL` | The agent's address, e.g. `muse@<id>.resend.app` or an address on a receiving domain |
+| `AGENT_EMAIL_ALLOWED_SENDERS` | Comma-separated senders who may hand the agent work; editable later in Apps |
 
 The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
+
+Web push keys are generated on first start and kept in `/data/vapid.json`; set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` to supply your own.
+
+## Browser service
+
+- Root directory `apps/worker` (its own Dockerfile), health check path `/health`, watch path `/apps/worker/**`, no public domain.
+- Volume mounted at `/data` for browser profiles and downloads.
+- Variables: `WORKER_TOKEN` (shared with the API), `WORKER_HOST=::` (listen on the private network), `PORT=8790`, and `RAILWAY_RUN_UID=0` so the image's non-root user can write the root-owned volume.
+- The API logs `Agent browser reachable` at startup when the private network path works.
 
 ## Web service
 
@@ -33,6 +48,10 @@ The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and C
 Open the web domain and sign in with `OPENMUSE_ACCESS_KEY`. Each device stays signed in for 30 days after its last use. To sign in without typing, open `https://<web domain>/#key=<OPENMUSE_ACCESS_KEY>`; the key is removed from the address bar immediately. Changing `OPENMUSE_ACCESS_KEY` signs every device out.
 
 With `COMPOSIO_API_KEY` set, the API logs `Connected apps ready (Composio)` at startup. Connect apps under **Apps & settings → More apps** or by asking in chat.
+
+The web client installs to a phone's home screen. On iPhone, notifications need the installed app (Share → Add to Home Screen). Store builds use `apps/mobile/eas.json` with an Apple Developer or Google Play account: `npx eas-cli build --platform ios --profile production`.
+
+Purchases through connected apps are off until enabled under **Apps → Spending**, then capped per purchase and per month, and every purchase waits for approval.
 
 ## Build locally
 

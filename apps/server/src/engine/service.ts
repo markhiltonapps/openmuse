@@ -679,6 +679,8 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** Purchase guardrails for connected-app actions. */
+  spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
   /** Phone and browser notifications; set when web push is available. */
   push?: {
     notify(owner: string, message: { title: string; body: string; tag?: string }): Promise<void>;
