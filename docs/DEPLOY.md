@@ -6,7 +6,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 
 ## API service
 
-- Config file: `infra/railway/api.json` (builds `infra/api.Dockerfile`, health check `/api/health`).
+- Dockerfile path `infra/api.Dockerfile`, health check path `/api/health`, domain target port `8787`.
 - Volume mounted at `/data`. It holds PGlite, documents and the session signing key. Run a single replica: PGlite cannot be shared between processes.
 - Generate a Railway domain before setting the variables below.
 
@@ -22,11 +22,11 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `PUBLIC_API_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
 | `ALLOWED_ORIGINS` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` |
 
-The image sets `HOST=0.0.0.0` and `DATA_DIR=/data`; Railway supplies `PORT`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
+The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
 
 ## Web service
 
-- Config file: `infra/railway/web.json` (builds `infra/web.Dockerfile`, served by Caddy on `PORT`).
+- Dockerfile path `infra/web.Dockerfile`, health check path `/`, `PORT=8080` and domain target port `8080`. Caddy serves the export on `PORT`.
 - Set `EXPO_PUBLIC_API_URL` to `https://${{api.RAILWAY_PUBLIC_DOMAIN}}`. It is compiled into the bundle, so redeploy the web service after the API domain changes.
 
 Open the web domain and sign in with `OPENMUSE_ACCESS_KEY`.
