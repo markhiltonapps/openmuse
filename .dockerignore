@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.expo
+.git
+.github
+.openmuse
+.env
+.env.*
+!.env.example
+assets
+apps/mobile/ios
+apps/mobile/android
