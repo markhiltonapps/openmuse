@@ -530,3 +530,22 @@ test("egress proxy blocks HTTP and CONNECT traffic to local network destinations
     await proxy.close();
   }
 });
+
+test("the agent is told when a site sends it to a different page", async () => {
+  const { redirectNotice } = await import("../apps/server/src/browser.ts");
+  assert.deepEqual(redirectNotice("https://example.com/a/b", "https://www.example.com/a/b/"), {});
+  assert.deepEqual(redirectNotice("http://Example.com/Page", "https://example.com/page"), {});
+  assert.deepEqual(
+    redirectNotice("https://example.com/news", "https://example.com/news/today"),
+    {},
+  );
+  assert.equal(
+    redirectNotice("https://example.com/account", "https://example.com/login?next=/account")
+      .redirected,
+    true,
+  );
+  assert.equal(redirectNotice("https://example.com/a", "https://example.com/ab").redirected, true);
+  const moved = redirectNotice("https://neato.example/beta-1/frontline", "https://neato.example/");
+  assert.equal(moved.redirected, true);
+  assert.match(moved.notice ?? "", /sent the browser to https:\/\/neato\.example\/ instead of/);
+});

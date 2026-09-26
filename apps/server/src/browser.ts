@@ -159,7 +159,8 @@ export class BrowserService {
     const id = existingId ?? (await this.create(owner, url)).id;
     return this.serial(id, async () => {
       if (existingId) await this.openOwned(owner, id, url);
-      return { sessionId: id, ...(await this.readOwned(owner, id)) };
+      const page = await this.readOwned(owner, id);
+      return { sessionId: id, ...page, ...redirectNotice(url, page.url) };
     });
   }
   async observeForThread(owner: string, threadId: string, url: string, signal?: AbortSignal) {
@@ -193,6 +194,7 @@ export class BrowserService {
         ...page,
         text: page.text.slice(0, 30_000),
         truncated: page.truncated || page.text.length > 30_000,
+        ...redirectNotice(url, page.url),
       };
     });
   }
@@ -254,4 +256,27 @@ export class BrowserService {
   console(owner: string, id: string) {
     return browserConsole(this.auth.sign(owner, `/api/browsers/${id}/preview`));
   }
+}
+
+const pageKey = (value: string) => {
+  try {
+    const url = new URL(value);
+    return `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/+$/, "")}/`.toLowerCase();
+  } catch {
+    return value;
+  }
+};
+/**
+ * When a site sends the browser somewhere other than the requested page (often because the page
+ * is private, unpublished or needs a sign-in), the agent must say so rather than describe the
+ * page it landed on as if it were the one asked for.
+ */
+export function redirectNotice(requested: string, landed?: string) {
+  // Landing on the same page or deeper inside it (/article → /article/final) is fine.
+  if (!landed || pageKey(landed).startsWith(pageKey(requested))) return {};
+  return {
+    requestedUrl: requested,
+    redirected: true,
+    notice: `The site sent the browser to ${landed} instead of ${requested}. The requested page may be private, unpublished, moved or need a sign-in. Tell the person this first, and only describe the page actually shown as that page. They can use Take control on the browser card to sign in.`,
+  };
 }
