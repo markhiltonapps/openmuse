@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Artifact } from "../../../packages/domain/src/index.ts";
-import { fillPdf, inspectPdf } from "../../../packages/integrations/src/pdf.ts";
+import { fillPdf, inspectPdf, pdfPageText } from "../../../packages/integrations/src/pdf.ts";
 import type { Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
@@ -61,6 +61,45 @@ export class Files {
   async bytes(owner: string, id: string) {
     await this.get(owner, id);
     return readFile(join(this.config.dataDir, "files", `${id}.pdf`));
+  }
+  /** Page text, extracted once and kept next to the PDF. */
+  async pages(owner: string, id: string): Promise<string[]> {
+    await this.get(owner, id);
+    const cache = join(this.config.dataDir, "files", `${id}.text.json`);
+    try {
+      return JSON.parse(await readFile(cache, "utf8")) as string[];
+    } catch {
+      const pages = await pdfPageText(await this.bytes(owner, id));
+      await writeFile(cache, JSON.stringify(pages), { mode: 0o600 }).catch(() => undefined);
+      return pages;
+    }
+  }
+  /** Text from `fromPage` on, as much as fits in `maxChars`, with page markers. */
+  async read(owner: string, id: string, fromPage = 1, maxChars = 30000) {
+    const file = await this.get(owner, id);
+    const pages = await this.pages(owner, id);
+    const start = Math.min(Math.max(1, Math.floor(fromPage)), Math.max(1, pages.length));
+    let text = "";
+    let toPage = start - 1;
+    for (let page = start; page <= pages.length; page++) {
+      const chunk = `--- Page ${page} ---\n${pages[page - 1] ?? ""}\n`;
+      if (text && text.length + chunk.length > maxChars) break;
+      text += chunk.slice(0, maxChars - text.length);
+      toPage = page;
+    }
+    return {
+      id: file.id,
+      name: file.name,
+      pageCount: pages.length,
+      fromPage: start,
+      toPage,
+      text: pages.some((page) => page.trim())
+        ? text
+        : "This PDF has no text layer; it may be a scanned image, which can't be read yet.",
+      ...(toPage < pages.length
+        ? { more: `Read again from page ${toPage + 1} for the rest.` }
+        : {}),
+    };
   }
   async fill(owner: string, id: string, values: Record<string, string | boolean>) {
     const file = await this.get(owner, id);

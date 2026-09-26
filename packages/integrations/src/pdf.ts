@@ -90,6 +90,26 @@ function inspectField(field: PDFField): PdfInspection["fields"][number] {
   return { name, value, type: "unsupported" };
 }
 
+/** The text on each page. Scanned pages without a text layer come back empty. */
+export async function pdfPageText(bytes: Uint8Array): Promise<string[]> {
+  return pdfOperation(async () => {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    // pdf.js may transfer the buffer it is given, so it gets a copy.
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    try {
+      const { text } = await extractText(pdf, { mergePages: false });
+      return text.map((page) =>
+        page
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim(),
+      );
+    } finally {
+      await pdf.loadingTask.destroy();
+    }
+  }, "Could not read the text in this PDF");
+}
+
 export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
   return pdfOperation(async () => {
     const doc = await loadPdf(bytes);

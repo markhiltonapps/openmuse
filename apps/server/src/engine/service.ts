@@ -209,6 +209,11 @@ export class AgentService {
   }
   async createTask(owner: string, raw: unknown, idempotencyKey?: string, held = false) {
     const input = createTaskSchema.parse(raw);
+    if (input.kind === "monitor" && !held)
+      throw new AppError(
+        "To watch a web page, create a watch; for recurring checks of email or apps, create a routine",
+        422,
+      );
     if (input.goalId && !(await this.db.get(owner, "goals", input.goalId)))
       throw new AppError("Goal not found", 404);
     const id = idempotencyKey ? hash(`task:${idempotencyKey}`) : randomUUID();
@@ -1170,7 +1175,13 @@ export class AgentService {
     ctx: TaskContext,
   ): Promise<Partial<AgentTask>> {
     const monitor = await this.db.get<Monitor>(owner, "monitors", String(task.input.monitorId));
-    if (!monitor) throw new Error("Monitor not found");
+    // A watch without its page record can never run; stop instead of retrying.
+    if (!monitor)
+      return {
+        status: "failed",
+        error:
+          "This watch has no web page to check. For a recurring check of email or apps, ask for a routine.",
+      };
     if (monitor.status !== "active")
       return { status: monitor.status === "paused" ? "paused" : "cancelled" };
     let observation: { url: string; title: string; text: string; sessionId?: string };
