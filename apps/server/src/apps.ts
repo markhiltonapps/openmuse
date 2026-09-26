@@ -18,6 +18,8 @@ export interface AppConnection {
   app: string;
   name: string;
   connected: boolean;
+  logo?: string;
+  description?: string;
 }
 export interface AppSearch {
   tools: AppTool[];
@@ -31,7 +33,30 @@ export interface AppConnector {
   execute(owner: string, slug: string, args: Record<string, unknown>): Promise<unknown>;
   connect(owner: string, app: string): Promise<{ connected: boolean; url?: string }>;
   connections(owner: string): Promise<AppConnection[]>;
+  /** Browse apps with logos and connection status; featured apps when there is no search. */
+  directory(owner: string, search?: string): Promise<AppConnection[]>;
+  disconnect(owner: string, app: string): Promise<void>;
 }
+
+/** Apps shown before the person searches, in this order. */
+export const FEATURED_APPS = [
+  "outlook",
+  "gmail",
+  "googlecalendar",
+  "slack",
+  "notion",
+  "googledrive",
+  "github",
+  "hubspot",
+  "linear",
+  "asana",
+  "trello",
+  "dropbox",
+  "zoom",
+  "salesforce",
+  "shopify",
+  "airtable",
+];
 
 const READ_VERBS =
   /^(GET|LIST|SEARCH|FETCH|FIND|READ|RETRIEVE|QUERY|COUNT|DESCRIBE|LOOKUP|VIEW|CHECK)$/;
@@ -63,6 +88,20 @@ class ComposioError extends AppError {
   }
 }
 
+interface Toolkit {
+  name: string;
+  slug: string;
+  meta?: { logo?: string; description?: string };
+  connected_account: { id?: string; status: string } | null;
+}
+const toConnection = (item: Toolkit): AppConnection => ({
+  app: item.slug,
+  name: item.name,
+  connected: item.connected_account?.status?.toUpperCase() === "ACTIVE",
+  logo: item.meta?.logo?.startsWith("https://") ? item.meta.logo : undefined,
+  description: item.meta?.description?.slice(0, 200),
+});
+
 interface ToolResponse {
   slug: string;
   name: string;
@@ -91,7 +130,7 @@ export class ComposioConnector implements AppConnector {
     return this.config.composioUserId ?? `openmuse-${owner}`;
   }
   private async request<T>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     body?: unknown,
     options: { write?: boolean } = {},
@@ -239,20 +278,39 @@ export class ComposioConnector implements AppConnector {
     );
     return { connected: false, url: link.redirect_url };
   }
-  async connections(owner: string): Promise<AppConnection[]> {
+  private async toolkits(owner: string, query: Record<string, string>) {
     const list = await this.inSession(owner, (session) =>
-      this.request<{
-        items: { name: string; slug: string; connected_account: { status: string } | null }[];
-      }>(
+      this.request<{ items: Toolkit[] }>(
         "GET",
-        `/api/v3.1/tool_router/session/${encodeURIComponent(session)}/toolkits?is_connected=true&limit=50`,
+        `/api/v3.1/tool_router/session/${encodeURIComponent(session)}/toolkits?${new URLSearchParams({ limit: "50", ...query })}`,
       ),
     );
-    return list.items.map((item) => ({
-      app: item.slug,
-      name: item.name,
-      connected: item.connected_account?.status?.toUpperCase() === "ACTIVE",
-    }));
+    return list.items;
+  }
+  async connections(owner: string): Promise<AppConnection[]> {
+    return (await this.toolkits(owner, { is_connected: "true" })).map(toConnection);
+  }
+  async directory(owner: string, search?: string): Promise<AppConnection[]> {
+    const term = search?.trim().slice(0, 100);
+    if (term) return (await this.toolkits(owner, { search: term })).map(toConnection);
+    const [featured, connected] = await Promise.all([
+      this.toolkits(owner, { toolkits: FEATURED_APPS.join(",") }),
+      this.toolkits(owner, { is_connected: "true" }),
+    ]);
+    const bySlug = new Map([...featured, ...connected].map((item) => [item.slug, item]));
+    const order = [...new Set([...connected.map((c) => c.slug), ...FEATURED_APPS])];
+    return order.flatMap((slug) => {
+      const item = bySlug.get(slug);
+      return item ? [toConnection(item)] : [];
+    });
+  }
+  async disconnect(owner: string, app: string) {
+    const slug = app.trim().toLowerCase();
+    const account = (await this.toolkits(owner, { is_connected: "true" })).find(
+      (item) => item.slug === slug,
+    )?.connected_account;
+    if (!account?.id) return;
+    await this.request("DELETE", `/api/v3.1/connected_accounts/${encodeURIComponent(account.id)}`);
   }
 }
 

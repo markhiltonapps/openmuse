@@ -1170,52 +1170,57 @@ export function ActivityScreen() {
     </View>
   );
 }
-const quickApps = [
-  { slug: "outlook", name: "Outlook" },
-  { slug: "slack", name: "Slack" },
-  { slug: "notion", name: "Notion" },
-  { slug: "hubspot", name: "HubSpot" },
-  { slug: "github", name: "GitHub" },
-  { slug: "googledrive", name: "Google Drive" },
-];
-interface AppsState {
-  configured: boolean;
-  apps: { app: string; name: string; connected: boolean }[];
+interface DirectoryApp {
+  app: string;
+  name: string;
+  connected: boolean;
+  logo?: string;
+  description?: string;
 }
 /** Third-party apps connected through the server's app connector (Composio). */
 function MoreApps() {
   const { api, notify } = useWorkspace();
-  const [state, setState] = useState<AppsState>();
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<{ configured: boolean; apps: DirectoryApp[] }>();
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  async function load() {
+  async function load(term = search) {
     setError("");
     try {
-      setState(await api.request<AppsState>("/api/apps"));
+      setState(
+        await api.request(
+          `/api/apps/directory${term.trim() ? `?q=${encodeURIComponent(term.trim())}` : ""}`,
+        ),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
   useEffect(() => {
-    void load();
+    void load("");
   }, []);
-  async function connect(app: string, label: string) {
-    setBusy(true);
+  async function act(app: DirectoryApp, action: "connect" | "disconnect") {
+    setBusy(app.app);
     setError("");
     try {
-      const result = await api.request<{ connected: boolean; url?: string }>("/api/apps/connect", {
-        app,
-      });
-      if (result.url) {
-        await Linking.openURL(result.url);
-        notify(`Finish signing in to ${label}, then tap Refresh.`);
-      } else notify(`${label} is already connected.`);
+      if (action === "disconnect") {
+        await api.request("/api/apps/disconnect", { app: app.app });
+        notify(`${app.name} disconnected.`);
+      } else {
+        const result = await api.request<{ connected: boolean; url?: string }>(
+          "/api/apps/connect",
+          { app: app.app },
+        );
+        if (result.url) {
+          await Linking.openURL(result.url);
+          notify(`Finish signing in to ${app.name}, then tap Refresh.`);
+        } else notify(`${app.name} is already connected.`);
+      }
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
   if (!state) return error ? <ErrorNotice error={error} /> : null;
@@ -1225,58 +1230,88 @@ function MoreApps() {
         Add a Composio API key to the server to connect Outlook, Slack, Notion and 1,000+ more apps.
       </Text>
     );
-  const connected = state.apps.filter((a) => a.connected);
   return (
     <View style={{ gap: 8 }}>
       <Text style={[s.small, { marginLeft: 12 }]}>More apps</Text>
       <Card style={{ gap: 12 }}>
-        {connected.length ? (
-          <View style={[s.row, { gap: 7, flexWrap: "wrap" }]}>
-            {connected.map((a) => (
-              <Chip key={a.app} tint={colors.green}>
-                {a.name}
-              </Chip>
-            ))}
-          </View>
-        ) : (
-          <Text style={s.text}>No apps connected yet.</Text>
-        )}
         <Text style={s.muted}>
           Connect an app once and your assistant can use it for everyone who signs in here. Anything
           that sends, creates, changes or deletes waits for approval in Activity.
         </Text>
-        <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-          {quickApps.map((a) => (
-            <Button key={a.slug} small disabled={busy} onPress={() => void connect(a.slug, a.name)}>
-              {a.name}
-            </Button>
-          ))}
-        </View>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="Another app, e.g. Salesforce"
-          placeholderTextColor={colors.muted}
-          accessibilityLabel="App to connect"
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={s.input}
-        />
-        <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-          <Button
-            small
-            primary
-            icon={Link2}
-            busy={busy}
-            disabled={!name.trim()}
-            onPress={() => void connect(name, name.trim())}
-          >
-            Connect
-          </Button>
-          <Button small icon={ArrowDownToLine} disabled={busy} onPress={() => void load()}>
-            Refresh
+        <View style={[s.row, { gap: 8 }]}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            onSubmitEditing={() => void load()}
+            returnKeyType="search"
+            placeholder="Search 1,000+ apps"
+            placeholderTextColor={colors.muted}
+            accessibilityLabel="Search apps"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[s.input, { flex: 1 }]}
+          />
+          <Button small icon={Search} onPress={() => void load()}>
+            Search
           </Button>
         </View>
+        {state.apps.map((app) => (
+          <View key={app.app} style={[s.row, { gap: 12, minHeight: 52 }]}>
+            {app.logo ? (
+              <Image
+                source={{ uri: app.logo }}
+                style={{ width: 30, height: 30, borderRadius: 7 }}
+                accessibilityIgnoresInvertColors
+              />
+            ) : (
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 7,
+                  backgroundColor: colors.lavender,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={s.text}>{app.name.slice(0, 1)}</Text>
+              </View>
+            )}
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={s.text}>{app.name}</Text>
+              {!!app.description && (
+                <Text style={s.small} numberOfLines={1}>
+                  {app.description}
+                </Text>
+              )}
+            </View>
+            {app.connected ? (
+              <Button
+                small
+                busy={busy === app.app}
+                disabled={!!busy}
+                onPress={() => void act(app, "disconnect")}
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                small
+                primary
+                icon={Link2}
+                busy={busy === app.app}
+                disabled={!!busy}
+                onPress={() => void act(app, "connect")}
+              >
+                Connect
+              </Button>
+            )}
+          </View>
+        ))}
+        {!state.apps.length && <Text style={s.muted}>No matching apps.</Text>}
+        <Button small icon={ArrowDownToLine} disabled={!!busy} onPress={() => void load()}>
+          Refresh
+        </Button>
         <ErrorNotice error={error} />
       </Card>
     </View>

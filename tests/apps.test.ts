@@ -39,7 +39,9 @@ const config = (): Config & { composioApiKey: string } => ({
 });
 
 /** A scripted Composio: each path answers from `routes`, and every request is recorded. */
-function fakeComposio(routes: Record<string, (body: unknown) => Response | Promise<Response>>) {
+function fakeComposio(
+  routes: Record<string, (body: unknown, url: URL) => Response | Promise<Response>>,
+) {
   const calls: { method: string; path: string; body: unknown; key: string | null }[] = [];
   const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
     const { pathname, search } = new URL(String(url));
@@ -53,7 +55,7 @@ function fakeComposio(routes: Record<string, (body: unknown) => Response | Promi
     });
     const route = routes[`${method} ${pathname}`];
     if (!route) return Response.json({ error: { message: "Not found" } }, { status: 404 });
-    return route(body);
+    return route(body, new URL(String(url)));
   }) as typeof fetch;
   return { fetcher, calls };
 }
@@ -224,6 +226,11 @@ function fakeApps(overrides: Partial<AppConnector> = {}) {
     },
     connect: async () => ({ connected: false, url: "https://connect.test/outlook" }),
     connections: async () => [{ app: "slack", name: "Slack", connected: true }],
+    directory: async (_owner, search) => [
+      { app: "slack", name: "Slack", connected: true },
+      ...(search ? [] : [{ app: "outlook", name: "Outlook", connected: false }]),
+    ],
+    disconnect: async () => {},
     ...overrides,
   };
   return { apps, executed };
@@ -365,4 +372,54 @@ test("sign-ins renew while used and end when the access key changes", async () =
   assert.ok(renewed && renewed.expiresAt > Date.now() + SESSION_TTL - 60000);
   const rotated = new Auth(db, { ...live, accessKey: "second-access-key-at-least-24-chars" }, "k");
   await assert.rejects(rotated.owner(`Bearer ${token}`), /Session expired/);
+});
+
+test("the app directory lists connected apps first, then featured apps, with safe logos", async () => {
+  const kit = (
+    slug: string,
+    connected: string | null,
+    logo = `https://logos.test/${slug}.png`,
+  ) => ({
+    name: slug.toUpperCase(),
+    slug,
+    meta: { logo, description: `${slug} app` },
+    connected_account: connected ? { id: `ca_${slug}`, status: connected } : null,
+  });
+  const { fetcher, calls } = fakeComposio({
+    "POST /api/v3.1/tool_router/session": () =>
+      Response.json({ session_id: "trs_dir" }, { status: 201 }),
+    "GET /api/v3.1/tool_router/session/trs_dir/toolkits": (_body, url) => {
+      if (url.searchParams.get("is_connected") === "true")
+        return Response.json({ items: [kit("jira", "ACTIVE")] });
+      if (url.searchParams.get("search"))
+        return Response.json({ items: [kit("salesforce", null, "javascript:alert(1)")] });
+      return Response.json({ items: [kit("slack", null), kit("outlook", null)] });
+    },
+    "DELETE /api/v3.1/connected_accounts/ca_jira": () => Response.json({ success: true }),
+  });
+  const connector = new ComposioConnector(db, config(), fetcher);
+  const featured = await connector.directory("dir");
+  assert.deepEqual(
+    featured.map((a) => [a.app, a.connected]),
+    [
+      ["jira", true],
+      ["outlook", false],
+      ["slack", false],
+    ],
+  );
+  assert.equal(featured[0]?.logo, "https://logos.test/jira.png");
+  const found = await connector.directory("dir", "sales");
+  assert.deepEqual(found, [
+    {
+      app: "salesforce",
+      name: "SALESFORCE",
+      connected: false,
+      logo: undefined,
+      description: "salesforce app",
+    },
+  ]);
+  await connector.disconnect("dir", "Jira");
+  assert.ok(
+    calls.some((c) => c.method === "DELETE" && c.path === "/api/v3.1/connected_accounts/ca_jira"),
+  );
 });

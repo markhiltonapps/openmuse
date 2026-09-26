@@ -207,6 +207,21 @@ export async function createApp(
         : { configured: false, apps: [] },
     ),
   );
+  app.get("/api/apps/directory", async (c) => {
+    if (!apps) return c.json({ configured: false, apps: [] });
+    return c.json({
+      configured: true,
+      apps: await apps.directory(c.get("owner"), c.req.query("q")),
+    });
+  });
+  app.post("/api/apps/disconnect", async (c) => {
+    if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
+    const { app: slug } = z
+      .object({ app: z.string().trim().min(1).max(100) })
+      .parse(await c.req.json());
+    await apps.disconnect(c.get("owner"), slug);
+    return c.json({ ok: true });
+  });
   app.post("/api/apps/connect", async (c) => {
     if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
     const { app: slug } = z
