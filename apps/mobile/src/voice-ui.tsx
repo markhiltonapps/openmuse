@@ -54,7 +54,7 @@ export function VoiceCard({ name }: { name: string }) {
       <SectionHeading title="Voice" />
       <Text style={s.muted}>
         {dictationAvailable()
-          ? "Tap the sound-wave button next to the message box to talk with your agent hands-free. Tap Listen under any reply to hear it."
+          ? "Tap the sound-wave button next to the message box to talk with your agent hands-free. Tap Interrupt, or press Esc on a computer, to cut in while it's talking. Tap Listen under any reply to hear it."
           : "Tap Listen under any reply to hear it."}
       </Text>
       <CheckRow

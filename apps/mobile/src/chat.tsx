@@ -222,8 +222,12 @@ export function ChatScreen({
     stopListening.current?.();
     stopSpeaking();
   }, []);
+  // Only one listening turn at a time: an interruption starts one while the speech it cut off
+  // is still winding down.
+  const listeningNow = useRef(false);
   const listenForTurn = useCallback(() => {
-    if (!voiceModeRef.current) return;
+    if (!voiceModeRef.current || listeningNow.current) return;
+    listeningNow.current = true;
     let heard = false;
     setListening(true);
     stopListening.current = dictate(
@@ -232,6 +236,7 @@ export function ChatScreen({
         sendSpoken.current(text);
       },
       (message) => {
+        listeningNow.current = false;
         setListening(false);
         if (message) setError(message);
         // Silence ends voice mode instead of listening forever.
@@ -251,6 +256,24 @@ export function ChatScreen({
     void readAloud(id, text).then(listenForTurn);
   };
   useEffect(() => endVoiceMode, [endVoiceMode]);
+  /** Cuts the agent off mid-sentence; in voice mode it listens to the person right away. */
+  const interrupt = useCallback(() => {
+    stopSpeaking();
+    setSpeakingId(undefined);
+    listenForTurn();
+  }, [listenForTurn]);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !speakingId) return;
+    const onKey = (event: KeyboardEvent) => {
+      const typing = (event.target as HTMLElement | null)?.closest?.("input, textarea");
+      if (event.key === "Escape" || (event.key === " " && !typing)) {
+        event.preventDefault();
+        interrupt();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [speakingId, interrupt]);
   const toggleVoiceMode = () => {
     if (voiceModeRef.current) return endVoiceMode();
     primeSpeech();
@@ -789,6 +812,11 @@ export function ChatScreen({
                     ? "Thinking…"
                     : "Voice mode"}
             </Text>
+            {!!speakingId && (
+              <Button small primary onPress={interrupt}>
+                Interrupt
+              </Button>
+            )}
             <Button small onPress={endVoiceMode}>
               End
             </Button>
