@@ -91,6 +91,7 @@ export class AgentService {
       for (const { owner, value } of await this.db.scan<Monitor>("monitors"))
         await this.activateMonitor(owner, value);
       await this.runDueRoutines();
+      await this.feed?.refreshDue().catch((error) => backgroundFailure("feed refresh", error));
       for (const { owner, value } of await this.db.scan<Idea>("ideas"))
         if (
           value.status === "accepted" &&
@@ -692,6 +693,8 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** The Feed's morning refresh; runs from the maintenance loop. */
+  feed?: { refreshDue(): Promise<void> };
   /** Looks at pictures in Files; set when a vision model is configured. */
   look?: LookAtImage;
   /** The agent's own email address; set when agent email is configured. */

@@ -7,6 +7,7 @@ import {
   type LucideIcon,
   Menu,
   MessageCircle,
+  Newspaper,
   PanelsTopLeft,
   Shapes,
   SquareCheck,
@@ -47,6 +48,7 @@ import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
+import { FeedScreen } from "./src/feed";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import {
   clearSession,
@@ -63,6 +65,7 @@ import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", icon: MessageCircle },
+  { id: "feed", label: "Feed", icon: Newspaper },
   { id: "activity", label: "Activity", icon: PanelsTopLeft },
   { id: "ideas", label: "Ideas", icon: Lightbulb },
   { id: "goals", label: "Goals", icon: SquareCheck },
@@ -70,6 +73,7 @@ const nav: { id: Section; label: string; icon: LucideIcon }[] = [
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   activity: { title: "Activity", subtitle: "Plans, progress, decisions and results." },
+  feed: { title: "Feed", subtitle: "Your day, and what's new on the topics you follow." },
   ideas: { title: "Ideas", subtitle: "Useful next steps, grounded in your world." },
   goals: {
     title: "Goals",
@@ -348,11 +352,13 @@ function WorkspaceShell({
             ? FilesScreen
             : section === "activity"
               ? AgentActivityScreen
-              : section === "ideas"
-                ? IdeasScreen
-                : section === "goals"
-                  ? GoalsScreen
-                  : AppsScreen;
+              : section === "feed"
+                ? FeedScreen
+                : section === "ideas"
+                  ? IdeasScreen
+                  : section === "goals"
+                    ? GoalsScreen
+                    : AppsScreen;
   const utility = ["mail", "calendar", "browser", "files"].includes(section);
   return (
     <>

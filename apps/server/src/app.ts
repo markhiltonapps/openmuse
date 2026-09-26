@@ -19,6 +19,7 @@ import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
+import { FeedService } from "./feed.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { AgentInbox } from "./inbound.ts";
@@ -111,6 +112,8 @@ export async function createApp(
           baseUrl: process.env.ANTHROPIC_BASE_URL,
         })
       : undefined);
+  const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
+  agent.feed = feed;
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
@@ -309,6 +312,11 @@ export async function createApp(
   app.post("/api/spending", async (c) =>
     c.json(await spending.update(c.get("owner"), await c.req.json())),
   );
+  app.get("/api/feed", async (c) => c.json(await feed.get(c.get("owner"))));
+  app.post("/api/feed/topics", async (c) =>
+    c.json(await feed.setTopics(c.get("owner"), await c.req.json())),
+  );
+  app.post("/api/feed/refresh", async (c) => c.json(await feed.refreshNow(c.get("owner"))));
   app.get("/api/agent-email", async (c) => c.json(await inbox.settings(c.get("owner"))));
   app.post("/api/agent-email", async (c) =>
     c.json(await inbox.updateSettings(c.get("owner"), await c.req.json())),

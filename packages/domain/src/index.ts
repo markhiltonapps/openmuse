@@ -4,6 +4,7 @@ export type WorkspaceMode = "sample" | "live";
 export type Section =
   | "today"
   | "chat"
+  | "feed"
   | "mail"
   | "calendar"
   | "browser"
