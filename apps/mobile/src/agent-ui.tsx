@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import type { Artifact, BrowserSession } from "../../../packages/domain/src";
 import type {
@@ -53,6 +53,7 @@ import {
   Sheet,
   s,
 } from "./ui";
+import { disablePush, enablePush, isInstalled, isIos, type PushState, pushState } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 export function statusLabel(value: string) {
@@ -1963,6 +1964,7 @@ export function AppsScreen() {
             />
           ))}
       </Card>
+      <PhoneAppCard />
       <Button onPress={() => setSettings(!settings)}>
         {settings
           ? "Close agent settings"
@@ -2054,6 +2056,61 @@ export function AppsScreen() {
       )}
       <ErrorNotice error={error} />
     </View>
+  );
+}
+/** Home-screen install and push notifications for the web app. */
+function PhoneAppCard() {
+  const { api, notify } = useWorkspace();
+  const [state, setState] = useState<PushState>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (Platform.OS === "web") void pushState().then(setState, () => setState("unsupported"));
+  }, []);
+  if (Platform.OS !== "web" || !state) return null;
+  async function toggle() {
+    setBusy(true);
+    setError("");
+    try {
+      if (state === "on") await disablePush(api);
+      else await enablePush(api);
+      const next = await pushState();
+      setState(next);
+      notify(next === "on" ? "Notifications are on for this device." : "Notifications are off.");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card style={{ gap: 12 }}>
+      <SectionHeading title="Phone app & notifications" />
+      {!isInstalled() && (
+        <Text style={s.muted}>
+          {isIos()
+            ? "Add OpenMuse to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
+            : "Install OpenMuse from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
+        </Text>
+      )}
+      <Text style={s.muted}>
+        {state === "on"
+          ? "This device gets a notification when a routine finishes, a task needs your details, or something is ready for review."
+          : state === "install-first"
+            ? "Notifications work once OpenMuse is on your Home Screen."
+            : state === "blocked"
+              ? "Notifications are blocked for this site. Allow them in your browser settings, then come back."
+              : state === "unsupported"
+                ? "This browser can't show notifications from OpenMuse."
+                : "Get a notification when a routine finishes or something needs your review."}
+      </Text>
+      {(state === "on" || state === "off") && (
+        <Button primary={state === "off"} busy={busy} onPress={() => void toggle()}>
+          {state === "on" ? "Turn off notifications" : "Turn on notifications"}
+        </Button>
+      )}
+      <ErrorNotice error={error} />
+    </Card>
   );
 }
 function SuggestionRow({ suggestion }: { suggestion: MemorySuggestion }) {

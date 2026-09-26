@@ -8,6 +8,10 @@
 	encode zstd gzip
 	@hashed path /_expo/static/*
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	@fresh not path /_expo/static/*
+	header @fresh Cache-Control "no-cache"
+	@manifest path *.webmanifest
+	header @manifest Content-Type "application/manifest+json"
 	try_files {path} /index.html
 	file_server
 }

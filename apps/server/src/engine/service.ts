@@ -679,6 +679,10 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** Phone and browser notifications; set when web push is available. */
+  push?: {
+    notify(owner: string, message: { title: string; body: string; tag?: string }): Promise<void>;
+  };
   async notify(owner: string, title: string, body: string, taskId?: string, key?: string) {
     const value: AgentNotification = {
       id: key ? hash(key) : randomUUID(),
@@ -688,7 +692,10 @@ export class AgentService {
       createdAt: date(),
       read: false,
     };
-    await this.db.insertIfAbsent(owner, "notifications", value);
+    if ((await this.db.insertIfAbsent(owner, "notifications", value)) && this.push)
+      void this.push
+        .notify(owner, { title, body, tag: value.id })
+        .catch((error) => backgroundFailure("push notification", error));
   }
   async timeZone(owner: string) {
     const settings = await this.db.get<{ timeZone?: string }>(

@@ -41,6 +41,7 @@ import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/sc
 import { clearSession, linkAccessKey, loadSession, saveSession } from "./src/session-store";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
+import { registerServiceWorker } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
@@ -85,6 +86,7 @@ export default function App() {
       setBusy(false);
     }
   }, []);
+  useEffect(() => registerServiceWorker(), []);
   useEffect(() => {
     void (async () => {
       const linked = linkAccessKey();

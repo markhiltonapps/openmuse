@@ -20,6 +20,7 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { PushService } from "./push.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -63,6 +64,8 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer, apps);
+  const push = await PushService.create(db, config);
+  agent.push = push;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
@@ -199,6 +202,14 @@ export async function createApp(
     return c.json(
       await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision),
     );
+  });
+  app.get("/api/push/key", (c) => c.json({ publicKey: push.publicKey }));
+  app.post("/api/push/subscribe", async (c) =>
+    c.json(await push.subscribe(c.get("owner"), await c.req.json())),
+  );
+  app.post("/api/push/unsubscribe", async (c) => {
+    const { endpoint } = z.object({ endpoint: z.string().max(2048) }).parse(await c.req.json());
+    return c.json(await push.unsubscribe(c.get("owner"), endpoint));
   });
   app.get("/api/apps", async (c) =>
     c.json(

@@ -7,7 +7,7 @@ import {
   useRenderTool,
   useRenderToolCall,
 } from "@copilotkit/react-native/headless";
-import { ArrowDown, ArrowUp, FileText, RotateCcw, Square, X } from "lucide-react-native";
+import { ArrowDown, ArrowUp, FileText, Mic, RotateCcw, Square, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   KeyboardAvoidingView,
@@ -31,6 +31,7 @@ import { MailToolCard } from "./mail-tool-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 const displayParameters = z.record(z.string(), z.unknown());
@@ -182,7 +183,20 @@ export function ChatScreen({
   const { agent, isReady } = useAgent({ agentId, runtimeAgentId: "default", threadId });
   const { copilotkit } = useCopilotKit();
   const renderToolCall = useRenderToolCall();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(takeSharedText);
+  const [listening, setListening] = useState(false);
+  const stopListening = useRef<() => void>(undefined);
+  const toggleDictation = () => {
+    if (listening) return stopListening.current?.();
+    setListening(true);
+    stopListening.current = dictate(
+      (text) => setDraft((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text)),
+      (message) => {
+        setListening(false);
+        if (message) setError(message);
+      },
+    );
+  };
   const [focused, setFocused] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const [showResults, setShowResults] = useState(false);
@@ -766,6 +780,28 @@ export function ChatScreen({
                   : undefined
               }
             />
+            {dictationAvailable() && !replying && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
+                accessibilityState={{ selected: listening }}
+                onPress={toggleDictation}
+                style={({ pressed }) => ({
+                  width: 44,
+                  height: 44,
+                  borderRadius: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: listening
+                    ? colors.lavender
+                    : pressed
+                      ? colors.sky
+                      : "transparent",
+                })}
+              >
+                <Mic size={22} color={listening ? colors.text : "#6F777C"} />
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}
