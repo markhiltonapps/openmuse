@@ -35,6 +35,7 @@ import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
 import { AppError } from "../errors.ts";
+import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import { backgroundFailure } from "../log.ts";
 import type { WebSearch } from "../web-search.ts";
@@ -691,6 +692,8 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** Looks at pictures in Files; set when a vision model is configured. */
+  look?: LookAtImage;
   /** The agent's own email address; set when agent email is configured. */
   mail?: { address(owner: string): Promise<string | undefined> };
   /** Lets tests stand in for the Anthropic API when designing avatars. */

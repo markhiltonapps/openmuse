@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, Platform, Text, View } from "react-native";
+import { ActivityIndicator, Image, Linking, Platform, ScrollView, Text, View } from "react-native";
 import {
   type ActionProposal,
   type Artifact,
@@ -38,6 +38,7 @@ import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
+import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import PdfReader from "./PdfReader";
 import {
   Button,
@@ -815,25 +816,34 @@ function FileDetail({ file: f }: { file: Artifact }) {
         await Linking.openURL(url);
         return;
       }
-      const target = `${FileSystem.cacheDirectory}${f.id}.pdf`;
+      const target = `${FileSystem.cacheDirectory}${f.id}.${fileExtension(f)}`;
       await FileSystem.downloadAsync(url, target, {
         headers: { Authorization: `Bearer ${api.token}` },
       });
       if (await Sharing.isAvailableAsync())
-        await Sharing.shareAsync(target, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+        await Sharing.shareAsync(target, {
+          mimeType: f.mimeType,
+          ...(isPdf(f) ? { UTI: "com.adobe.pdf" } : {}),
+        });
       else throw new Error("Sharing is not available on this device.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
   return (
-    <Sheet
-      title={f.name}
-      subtitle={`${f.pageCount} pages · ${Math.max(1, Math.round(f.size / 1024))} KB · ${f.source}`}
-      onClose={close}
-      wide
-    >
-      <PdfReader url={url} token={api.token} pageCount={f.pageCount} />
+    <Sheet title={f.name} subtitle={`${fileSummary(f)} · ${f.source}`} onClose={close} wide>
+      {isPicture(f) ? (
+        <Image
+          source={{ uri: url }}
+          resizeMode="contain"
+          accessibilityLabel={f.name}
+          style={{ width: "100%", height: 480, borderRadius: 12, backgroundColor: "#F3F5F6" }}
+        />
+      ) : isPdf(f) ? (
+        <PdfReader url={url} token={api.token} pageCount={f.pageCount} />
+      ) : (
+        <DocumentText id={f.id} />
+      )}
       <View style={[s.row, { gap: 10, marginVertical: 18, flexWrap: "wrap" }]}>
         <Button icon={Download} onPress={() => void share()}>
           {Platform.OS === "web" ? "Open / download" : "Save or share"}
@@ -883,6 +893,35 @@ function FileDetail({ file: f }: { file: Artifact }) {
         {f.parentId ? " · filled copy" : ""}
       </Text>
     </Sheet>
+  );
+}
+/** The text of a Word, Excel, CSV or text file, as the agent reads it. */
+function DocumentText({ id }: { id: string }) {
+  const { api } = useWorkspace();
+  const [text, setText] = useState<string>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    void api.request<{ text: string; more?: string }>(`/api/files/${id}/text`).then(
+      (value) =>
+        setText(
+          value.text.replace(/^--- Page \d+ ---\n/gm, "").trim() + (value.more ? "\n\n…" : ""),
+        ),
+      (e) => setError(e instanceof Error ? e.message : String(e)),
+    );
+  }, [api, id]);
+  return (
+    <Card style={{ maxHeight: 480 }}>
+      <ErrorNotice error={error} />
+      {text === undefined && !error ? (
+        <ActivityIndicator color={colors.blueDark} />
+      ) : (
+        <ScrollView>
+          <Text selectable style={[s.text, { lineHeight: 23 }]}>
+            {text || "This document has no text."}
+          </Text>
+        </ScrollView>
+      )}
+    </Card>
   );
 }
 function BrowserDetail({ initial }: { initial: BrowserSession }) {

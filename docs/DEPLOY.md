@@ -17,6 +17,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `MODEL` | For example `anthropic/claude-sonnet-5` |
 | `ANTHROPIC_API_KEY` | Provider key matching `MODEL` (or `OPENAI_API_KEY` / `GOOGLE_API_KEY`) |
 | `WEB_SEARCH_MODEL` | Optional. With `ANTHROPIC_API_KEY` set, agents search the web through Anthropic's web search tool using this model (default `claude-haiku-4-5-20251001`) |
+| `VISION_MODEL` | Optional. Model that looks at pictures in Files; defaults to the Anthropic model in `MODEL` |
 | `AVATAR_MODEL` | Optional. Model that draws avatars from a description; defaults to the Anthropic model in `MODEL` |
 | `CPK_INTELLIGENCE_API_KEY` | Server-only key from `npx copilotkit@latest project select` |
 | `OPENMUSE_ACCESS_KEY` | Random secret of at least 24 characters, used to sign in |

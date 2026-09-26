@@ -225,3 +225,28 @@ export function pickImage(size = 256): Promise<string | undefined> {
     input.click();
   });
 }
+
+/**
+ * Makes a large photo small enough to upload and to show to the agent: at most 2048 pixels on
+ * its longest side, as a JPEG. Smaller pictures are left as they are.
+ */
+export async function shrinkPicture(file: File): Promise<File> {
+  if (!web() || !file.type.startsWith("image/") || file.type === "image/gif") return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const longest = Math.max(bitmap.width, bitmap.height);
+    if (longest <= 2048 && file.size <= 4 * 1024 * 1024) return file;
+    const scale = Math.min(1, 2048 / longest);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.88),
+    );
+    if (!blob) return file;
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.jpg`, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}

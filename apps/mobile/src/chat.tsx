@@ -842,7 +842,7 @@ export function ChatScreen({
                   />
                 ))
               ) : (
-                <Text style={s.muted}>Import a PDF in Files to use it in a conversation.</Text>
+                <Text style={s.muted}>Add a file in Files to use it in a conversation.</Text>
               )}
             </ScrollView>
             <Button

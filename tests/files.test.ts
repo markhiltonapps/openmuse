@@ -98,3 +98,81 @@ test("monitor tasks come only from watches", async () => {
     /create a routine/,
   );
 });
+
+test("pictures, Word, Excel and text files can be saved and read", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const owner = "mixed";
+  const docx = await server.files.import(
+    owner,
+    "brief.docx",
+    new Uint8Array(await readFile(new URL("./fixtures/brief.docx", import.meta.url))),
+    "Uploaded by you",
+  );
+  assert.equal(
+    docx.mimeType,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  );
+  assert.match(
+    (await server.files.read(owner, docx.id)).text,
+    /Answers calls in under two rings\./,
+  );
+  const xlsx = await server.files.import(
+    owner,
+    "pricing.xlsx",
+    new Uint8Array(await readFile(new URL("./fixtures/pricing.xlsx", import.meta.url))),
+    "Uploaded by you",
+  );
+  assert.match(
+    (await server.files.read(owner, xlsx.id)).text,
+    /Sheet: Pricing\n\nPlan \| Monthly\nStarter \| 49/,
+  );
+  const notes = await server.files.import(
+    owner,
+    "notes.md",
+    new TextEncoder().encode("# Call list\n\nRing Sam."),
+    "Uploaded by you",
+  );
+  assert.equal(notes.mimeType, "text/plain");
+  assert.match((await server.files.read(owner, notes.id)).text, /Ring Sam\./);
+
+  // A tiny PNG: signature plus enough bytes to store.
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+  const picture = await server.files.import(owner, "receipt.png", png, "Uploaded by you");
+  assert.equal(picture.mimeType, "image/png");
+  assert.match((await server.files.read(owner, picture.id)).text, /look_at_image/);
+  assert.deepEqual(new Uint8Array(await server.files.bytes(owner, picture.id)), png);
+  await assert.rejects(server.files.fill(owner, picture.id, {}), /Only PDF forms/);
+
+  // Content decides the type, not the name.
+  await assert.rejects(
+    server.files.import(
+      owner,
+      "fake.pdf",
+      new TextEncoder().encode("not a pdf"),
+      "Uploaded by you",
+    ),
+    /Files can be PDFs, pictures/,
+  );
+  await assert.rejects(
+    server.files.import(owner, "tool.exe", new Uint8Array([0x4d, 0x5a, 0, 0]), "Uploaded by you"),
+    /Files can be/,
+  );
+
+  const questions: string[] = [];
+  const specs = fileToolSpecs(server.files, owner, async (image, question) => {
+    questions.push(`${image.mimeType} ${image.bytes.length} ${question}`);
+    return "A receipt for $12.50 from Luigi's.";
+  }) as unknown as { name: string; execute: (args: unknown) => Promise<unknown> }[];
+  const look = specs.find((s) => s.name === "look_at_image");
+  assert.deepEqual(await look?.execute({ fileId: picture.id, question: "What is the total?" }), {
+    id: picture.id,
+    name: "receipt.png",
+    answer: "A receipt for $12.50 from Luigi's.",
+  });
+  assert.deepEqual(questions, ["image/png 12 What is the total?"]);
+  assert.ok(look);
+  const notPicture = (await look.execute({ fileId: docx.id, question: "What is it?" })) as {
+    error: string;
+  };
+  assert.match(notPicture.error, /isn't a picture/);
+});

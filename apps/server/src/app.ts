@@ -24,6 +24,7 @@ import { GoogleAuth } from "./google-auth.ts";
 import { AgentInbox } from "./inbound.ts";
 import { PushService } from "./push.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
+import { lookAtImage } from "./vision.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
 import { WorkspaceService } from "./workspace.ts";
 
@@ -93,6 +94,15 @@ export async function createApp(
   const push = await PushService.create(db, config);
   agent.push = push;
   agent.spending = spending;
+  if (config.agentBackend === "model" && config.anthropicApiKey) {
+    const apiKey = config.anthropicApiKey;
+    const model =
+      process.env.VISION_MODEL?.trim() ||
+      /^anthropic[/:](.+)$/.exec(config.model ?? "")?.[1] ||
+      "claude-sonnet-5";
+    agent.look = (image, question) =>
+      lookAtImage(image, question, { apiKey, model, baseUrl: process.env.ANTHROPIC_BASE_URL });
+  }
   agent.search =
     options.search ??
     (config.agentBackend === "model" && config.anthropicApiKey
@@ -408,7 +418,7 @@ export async function createApp(
   app.post("/api/files", async (c) => {
     const data = await c.req.parseBody();
     const file = data.file;
-    if (!(file instanceof File)) throw new AppError("Choose a PDF file");
+    if (!(file instanceof File)) throw new AppError("Choose a file");
     return c.json(
       await files.import(
         c.get("owner"),
@@ -421,10 +431,18 @@ export async function createApp(
   });
   app.get("/api/files/:id/content", async (c) => {
     const file = await files.get(c.get("owner"), c.req.param("id"));
-    c.header("Content-Type", "application/pdf");
-    c.header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    // PDFs and pictures open in the browser; Office, CSV and text files download.
+    const inline = /^(application\/pdf|image\/)/.test(file.mimeType);
+    c.header("Content-Type", file.mimeType);
+    c.header(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    );
     return c.body(await files.bytes(c.get("owner"), file.id));
   });
+  app.get("/api/files/:id/text", async (c) =>
+    c.json(await files.read(c.get("owner"), c.req.param("id"), 1, 20000)),
+  );
   app.post("/api/files/:id/fill", async (c) => {
     const body = z
       .object({ fields: z.record(z.string(), z.union([z.string(), z.boolean()])) })

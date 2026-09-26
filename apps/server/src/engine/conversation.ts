@@ -239,7 +239,7 @@ export class ConversationAgent extends AbstractAgent {
     ];
     const apps = this.service.apps;
     tools.push(
-      ...fileToolSpecs(this.service.files, this.owner).map((spec) =>
+      ...fileToolSpecs(this.service.files, this.owner, this.service.look).map((spec) =>
         defineTool({
           ...spec,
           execute: async (args: unknown) => {

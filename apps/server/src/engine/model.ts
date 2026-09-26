@@ -285,7 +285,7 @@ export async function executeModelTask(
     ),
   ];
   tools.push(
-    ...fileToolSpecs(service.files, owner).map(
+    ...fileToolSpecs(service.files, owner, service.look).map(
       (spec) =>
         tool(
           spec.name,

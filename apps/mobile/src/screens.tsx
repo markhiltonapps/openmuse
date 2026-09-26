@@ -41,6 +41,7 @@ import type {
 import { API_URL } from "./api";
 import { Mascot } from "./avatar";
 import { localDateTime, zonedInstant } from "./date-time";
+import { fileLabel, fileSummary, isPicture, PICKER_TYPES } from "./file-kinds";
 import {
   Button,
   Card,
@@ -58,6 +59,7 @@ import {
   s,
   timeLabel,
 } from "./ui";
+import { shrinkPicture } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 function todayDate() {
@@ -932,7 +934,7 @@ export function FilesScreen() {
     setBusy(true);
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
+        type: PICKER_TYPES,
         copyToCacheDirectory: true,
       });
       if (result.canceled) return;
@@ -942,19 +944,20 @@ export function FilesScreen() {
         const form = new FormData();
         if (!file.file)
           throw new Error("The selected file could not be read. Please choose it again.");
-        form.append("file", file.file, file.name);
+        const upload = await shrinkPicture(file.file);
+        form.append("file", upload, upload.name);
         artifact = await api.request<Artifact>("/api/files", form);
       } else {
         const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: "file",
-          mimeType: "application/pdf",
+          mimeType: file.mimeType ?? "application/octet-stream",
           headers: { Authorization: `Bearer ${api.token}` },
         });
         const payload = JSON.parse(result.body);
         if (result.status < 200 || result.status >= 300)
-          throw new Error(payload.error || "Could not import this PDF.");
+          throw new Error(payload.error || "Could not add this file.");
         artifact = payload;
       }
       await refresh();
@@ -972,7 +975,7 @@ export function FilesScreen() {
           Documents, with a little room to work.
         </Text>
         <Button primary icon={Upload} busy={busy} onPress={() => void upload()}>
-          Import PDF
+          Add a file
         </Button>
       </View>
       <ErrorNotice error={error} />
@@ -992,47 +995,53 @@ export function FilesScreen() {
                   alignItems: "center",
                 }}
               >
-                <View
-                  style={{
-                    width: 93,
-                    height: 121,
-                    borderRadius: 5,
-                    backgroundColor: "#FFF",
-                    padding: 14,
-                    transform: [{ rotate: "-4deg" }],
-                    borderWidth: 1,
-                    borderColor: "#DDE3DD",
-                  }}
-                >
-                  <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
-                    <FileText size={13} color={colors.blueDark} />
-                    <Text style={{ fontSize: 7, color: colors.blueDark }}>DOCUMENT</Text>
+                {isPicture(f) ? (
+                  <Image
+                    source={{ uri: api.url(f.url) }}
+                    resizeMode="cover"
+                    accessibilityLabel={f.name}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                  />
+                ) : (
+                  <View
+                    style={{
+                      width: 93,
+                      height: 121,
+                      borderRadius: 5,
+                      backgroundColor: "#FFF",
+                      padding: 14,
+                      transform: [{ rotate: "-4deg" }],
+                      borderWidth: 1,
+                      borderColor: "#DDE3DD",
+                    }}
+                  >
+                    <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
+                      <FileText size={13} color={colors.blueDark} />
+                      <Text style={{ fontSize: 7, color: colors.blueDark }}>DOCUMENT</Text>
+                    </View>
+                    {[100, 75, 90, 95, 60].map((width, i) => (
+                      <View
+                        key={width}
+                        style={{
+                          height: 3,
+                          backgroundColor: i === 0 ? "#A4BED0" : "#E3E7E3",
+                          width: `${width}%`,
+                          marginBottom: 7,
+                          borderRadius: 3,
+                        }}
+                      />
+                    ))}
                   </View>
-                  {[100, 75, 90, 95, 60].map((width, i) => (
-                    <View
-                      key={width}
-                      style={{
-                        height: 3,
-                        backgroundColor: i === 0 ? "#A4BED0" : "#E3E7E3",
-                        width: `${width}%`,
-                        marginBottom: 7,
-                        borderRadius: 3,
-                      }}
-                    />
-                  ))}
-                </View>
+                )}
                 <View style={{ position: "absolute", bottom: 12, right: 14 }}>
-                  <Chip>PDF</Chip>
+                  <Chip>{fileLabel(f)}</Chip>
                 </View>
               </View>
               <View style={{ padding: 21, gap: 6 }}>
                 <Text numberOfLines={1} style={[s.heading, { fontSize: 14 }]}>
                   {f.name}
                 </Text>
-                <Text style={s.small}>
-                  {f.pageCount} {f.pageCount === 1 ? "page" : "pages"} ·{" "}
-                  {Math.max(1, Math.round(f.size / 1024))} KB
-                </Text>
+                <Text style={s.small}>{fileSummary(f)}</Text>
                 <View style={[s.between, { marginTop: 9 }]}>
                   <Chip>{f.source}</Chip>
                   <Text style={s.small}>{dateLabel(f.createdAt)}</Text>
@@ -1047,7 +1056,7 @@ export function FilesScreen() {
           <Empty
             icon={FileText}
             title="Your documents live here"
-            detail="Import a PDF or open a mail attachment to read, fill supported form fields, and share a copy."
+            detail="Add PDFs, photos, Word, Excel or text files, or open a mail attachment. Your agent can read them and look at pictures."
           />
         </Card>
       )}
