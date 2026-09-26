@@ -6,10 +6,11 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
+import { AccountService, type Mailer, ResendMailer } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { type AppConnector, ComposioConnector } from "./apps.ts";
-import { createAuth } from "./auth.ts";
+import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
@@ -28,11 +29,18 @@ import { WorkspaceService } from "./workspace.ts";
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; apps?: AppConnector } = {},
+  options: { docker?: DockerRunner; apps?: AppConnector; mailer?: Mailer } = {},
 ) {
   assertApiDeploymentConfig(config);
-  const auth = await createAuth(db, config),
-    files = new Files(db, config, auth),
+  const auth = await createAuth(db, config);
+  const mailer =
+    options.mailer ??
+    (config.resendApiKey && config.authEmailFrom
+      ? new ResendMailer(config.resendApiKey, config.authEmailFrom)
+      : undefined);
+  const accounts = new AccountService(db, config, auth, mailer);
+  await accounts.bootstrap();
+  const files = new Files(db, config, auth),
     google = new GoogleAuth(db, config),
     workspace = new WorkspaceService(db, config, files, google);
   let apps = options.apps;
@@ -77,7 +85,7 @@ export async function createApp(
   const push = await PushService.create(db, config);
   agent.push = push;
   agent.spending = spending;
-  const inbox = new AgentInbox(db, config, agent);
+  const inbox = new AgentInbox(db, config, agent, accounts);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
@@ -131,6 +139,7 @@ export async function createApp(
       mode: config.mode,
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
+      emailSignIn: accounts.emailSignIn,
     }),
   );
   let loginWindow = 0,
@@ -144,9 +153,26 @@ export async function createApp(
       throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
     const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
     const session = await auth.session(body.accessKey);
-    await workspace.ensureSample("local-user", actions);
-    await agent.ensure("local-user");
-    if (config.mode === "sample") await agent.refreshIdeas("local-user");
+    await workspace.ensureSample(ADMIN_OWNER, actions);
+    await agent.ensure(ADMIN_OWNER);
+    if (config.mode === "sample") await agent.refreshIdeas(ADMIN_OWNER);
+    return c.json(session);
+  });
+  // Email sign-in: the answer is the same whether or not the address has an account.
+  app.post("/api/auth/request", async (c) => {
+    const { email } = z.object({ email: z.email().max(320) }).parse(await c.req.json());
+    return c.json(await accounts.requestLink(email));
+  });
+  app.post("/api/auth/verify", async (c) => {
+    if (Date.now() - loginWindow > 60000) {
+      loginWindow = Date.now();
+      loginAttempts = 0;
+    }
+    if (++loginAttempts > 30)
+      throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
+    const { token } = z.object({ token: z.string().min(20).max(200) }).parse(await c.req.json());
+    const { account, session } = await accounts.verifyLink(token);
+    await agent.ensure(account.id);
     return c.json(session);
   });
   // Resend calls this directly; the Svix signature, not a session, authenticates it.
@@ -183,6 +209,32 @@ export async function createApp(
     await next();
   });
   app.get("/api/session", (c) => c.json({ mode: config.mode }));
+  app.post("/api/auth/signout", async (c) => {
+    await auth.revoke(c.req.header("authorization"));
+    return c.json({ ok: true });
+  });
+  app.get("/api/me", async (c) => {
+    const me = await accounts.me(c.get("owner"));
+    if (!me) throw new AppError("Account not found", 404);
+    return c.json({ ...me, emailSignIn: accounts.emailSignIn });
+  });
+  app.get("/api/accounts", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can manage people", 403);
+    return c.json({ emailSignIn: accounts.emailSignIn, accounts: await accounts.list() });
+  });
+  app.post("/api/accounts", async (c) =>
+    c.json(await accounts.invite(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/accounts/:id/disable", async (c) =>
+    c.json(await accounts.setStatus(c.get("owner"), c.req.param("id"), "disabled")),
+  );
+  app.post("/api/accounts/:id/enable", async (c) =>
+    c.json(await accounts.setStatus(c.get("owner"), c.req.param("id"), "active")),
+  );
+  app.post("/api/accounts/:id/invite", async (c) =>
+    c.json(await accounts.resendInvite(c.get("owner"), c.req.param("id"))),
+  );
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
@@ -431,5 +483,5 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer };
+  return { app, auth, accounts, files, actions, workspace, agent, computer };
 }

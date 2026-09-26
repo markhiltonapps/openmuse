@@ -75,7 +75,9 @@ test("approved senders hand the agent work; everyone else is held", async () => 
     },
   };
   const fetched: string[] = [];
-  const inbox = new AgentInbox(db, config, server.agent, (async (url: string | URL | Request) => {
+  const inbox = new AgentInbox(db, config, server.agent, server.accounts, (async (
+    url: string | URL | Request,
+  ) => {
     const id = String(url).split("/").pop() ?? "";
     fetched.push(id);
     return Response.json(emails[id] ?? {}, { status: emails[id] ? 200 : 404 });

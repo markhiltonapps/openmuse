@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import type { AccountService } from "./accounts.ts";
+import { ADMIN_OWNER } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import type { AgentService } from "./engine/service.ts";
@@ -48,30 +50,65 @@ const eventSchema = z.object({
       email_id: z.string().min(1).max(200),
       from: z.string().max(1000).default(""),
       subject: z.string().max(2000).default(""),
+      to: z.array(z.string().max(1000)).max(100).nullish(),
+      cc: z.array(z.string().max(1000)).max(100).nullish(),
     })
     .optional(),
 });
 const address = (value: string) => (/<([^>]+)>/.exec(value)?.[1] ?? value).trim().toLowerCase();
 
-/** The agent's own email address: approved senders hand it work by sending or forwarding mail. */
+/**
+ * Each person's agent has its own email address: approved senders hand it work by sending or
+ * forwarding mail. The admin keeps AGENT_EMAIL; members get handle@ the same domain.
+ */
 export class AgentInbox {
-  // Inbound mail belongs to the workspace owner; the server has one owner today.
-  readonly owner = "local-user";
   constructor(
     private readonly db: Store,
     private readonly config: Config,
     private readonly agent: AgentService,
+    private readonly accounts?: AccountService,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
   get configured() {
     return Boolean(this.config.resendApiKey && this.config.resendWebhookSecret);
   }
+  /**
+   * The workspace whose address the email was sent to. Mail that reached us through another
+   * address (an alias forwarding here) belongs to the admin; an unused handle belongs to nobody.
+   */
+  private async recipient(to: string[]) {
+    const domain = this.config.agentEmail?.split("@")[1]?.toLowerCase();
+    if (!this.accounts || !domain) return ADMIN_OWNER;
+    const handles = to
+      .map(address)
+      .filter((a) => a.endsWith(`@${domain}`))
+      .map((a) => a.slice(0, -domain.length - 1).split("+")[0] ?? "");
+    if (!handles.length) return ADMIN_OWNER;
+    for (const handle of handles) {
+      const owner = await this.accounts.ownerForHandle(handle);
+      if (owner) return owner;
+    }
+    return undefined;
+  }
   async settings(owner: string) {
     const saved = await this.db.get<EmailSettings>(owner, "agent-settings", "email");
+    const account = await this.accounts?.get(owner);
+    // Members start with only their own sign-in email approved; the admin with the server list.
+    const defaults =
+      owner === ADMIN_OWNER
+        ? (this.config.agentEmailAllowedSenders ?? [])
+        : account
+          ? [account.email]
+          : [];
     return {
       configured: this.configured,
-      address: this.config.agentEmail,
-      allowedSenders: saved?.allowedSenders ?? this.config.agentEmailAllowedSenders ?? [],
+      address:
+        account && this.accounts
+          ? this.accounts.address(account)
+          : owner === ADMIN_OWNER
+            ? this.config.agentEmail
+            : undefined,
+      allowedSenders: saved?.allowedSenders ?? defaults,
       recent: (await this.db.list<InboxEmail>(owner, "agent-inbox"))
         .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
         .slice(0, 10),
@@ -91,11 +128,13 @@ export class AgentInbox {
     const event = eventSchema.parse(JSON.parse(body));
     if (event.type !== "email.received" || !event.data) return { status: "ignored" };
     const { email_id: id } = event.data;
-    if (await this.db.get(this.owner, "agent-inbox", id)) return { status: "duplicate" };
+    const owner = await this.recipient([...(event.data.to ?? []), ...(event.data.cc ?? [])]);
+    if (!owner) return { status: "ignored" };
+    if (await this.db.get(owner, "agent-inbox", id)) return { status: "duplicate" };
     const email = await this.fetchEmail(id);
     const from = address(email.from || event.data.from);
     const subject = (email.subject || event.data.subject || "(no subject)").slice(0, 300);
-    const { allowedSenders } = await this.settings(this.owner);
+    const { allowedSenders } = await this.settings(owner);
     const auth = JSON.stringify(email.headers ?? {}).toLowerCase();
     const reason = !allowedSenders.includes(from)
       ? "Sender is not on the approved list"
@@ -110,11 +149,11 @@ export class AgentInbox {
       status: reason ? "held" : "task",
       reason,
     };
-    if (!(await this.db.insertIfAbsent(this.owner, "agent-inbox", record)))
+    if (!(await this.db.insertIfAbsent(owner, "agent-inbox", record)))
       return { status: "duplicate" };
     if (reason) {
       await this.agent.notify(
-        this.owner,
+        owner,
         "Email to your agent was held",
         `From ${from}: ${subject}. ${reason}.`,
         undefined,
@@ -123,7 +162,7 @@ export class AgentInbox {
       return { status: "held" };
     }
     const task = await this.agent.createTask(
-      this.owner,
+      owner,
       {
         kind: "agent",
         title: `Email: ${subject}`.slice(0, 160),
@@ -131,7 +170,7 @@ export class AgentInbox {
       },
       `inbound:${id}`,
     );
-    await this.db.put(this.owner, "agent-inbox", { ...record, taskId: task.id });
+    await this.db.put(owner, "agent-inbox", { ...record, taskId: task.id });
     return { status: "task", taskId: task.id };
   }
   private async fetchEmail(id: string) {

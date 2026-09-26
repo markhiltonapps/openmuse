@@ -35,6 +35,7 @@ import type {
   Routine,
   RunEvent,
 } from "../../../packages/domain/src/agent";
+import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import {
@@ -1967,6 +1968,8 @@ export function AppsScreen() {
       <SpendingCard />
       <AgentEmailCard />
       <PhoneAppCard />
+      <AccountCard />
+      <PeopleCard />
       <Button onPress={() => setSettings(!settings)}>
         {settings
           ? "Close agent settings"

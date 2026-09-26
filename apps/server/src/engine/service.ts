@@ -108,7 +108,7 @@ export class AgentService {
       for (const { owner, value } of await this.db.scan<{ id: string; lastIdeasAt?: string }>(
         "agent-settings",
       )) {
-        if (value.id !== "identity") continue;
+        if (value.id !== "identity" || (await this.removed(owner))) continue;
         if (!value.lastIdeasAt || Date.now() - Date.parse(value.lastIdeasAt) > 15 * 60000)
           await this.refreshIdeas(owner).catch(async () => {
             await this.notify(
@@ -123,6 +123,12 @@ export class AgentService {
     } finally {
       this.refreshing = false;
     }
+  }
+  /** A person the admin removed keeps their data, but their agent stops working in the background. */
+  private async removed(owner: string) {
+    return (
+      (await this.db.get<{ status: string }>("system", "accounts", owner))?.status === "disabled"
+    );
   }
   async ensure(owner: string) {
     await this.db.insertIfAbsent(owner, "agent-settings", {
@@ -772,7 +778,8 @@ export class AgentService {
   /** Claims each due occurrence once (compare-and-swap on nextRunAt), then starts its run. */
   async runDueRoutines(now = Date.now()) {
     for (const { owner, value } of await this.db.scan<Routine>("routines")) {
-      if (!value.enabled || Date.parse(value.nextRunAt) > now) continue;
+      if (!value.enabled || Date.parse(value.nextRunAt) > now || (await this.removed(owner)))
+        continue;
       const claimed = await this.db.compareAndSwap<Routine>(
         owner,
         "routines",

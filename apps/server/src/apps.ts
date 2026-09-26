@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type AppAction, appActionSchema } from "../../../packages/domain/src/index.ts";
+import { ADMIN_OWNER } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -127,8 +128,9 @@ export class ComposioConnector implements AppConnector {
   async check() {
     await this.request("GET", "/api/v3.1/tools?limit=1");
   }
+  /** Each person's apps are connected under their own Composio user; the override is the admin's only. */
   private user(owner: string) {
-    return this.config.composioUserId ?? `openmuse-${owner}`;
+    return (owner === ADMIN_OWNER && this.config.composioUserId) || `openmuse-${owner}`;
   }
   private async request<T>(
     method: "GET" | "POST" | "DELETE",

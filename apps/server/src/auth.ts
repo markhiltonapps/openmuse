@@ -8,11 +8,15 @@ import { AppError } from "./errors.ts";
 const digest = (value: string) => createHash("sha256").update(value).digest();
 /** Sign-ins last 30 days and renew while in use, so a device stays signed in. */
 export const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
+/** The workspace owner: the access key holder and the admin account share this data. */
+export const ADMIN_OWNER = "local-user";
 interface Session {
   owner: string;
   expiresAt: number;
   /** Digest of the access key that created it; changing the key signs every device out. */
   key?: string;
+  /** Account that signed in by email; disabling the account ends its sessions. */
+  account?: string;
 }
 export class Auth {
   constructor(
@@ -31,11 +35,26 @@ export class Auth {
     const token = randomBytes(32).toString("base64url");
     await this.db.put("system", "sessions", {
       id: digest(token).toString("hex"),
-      owner: "local-user",
+      owner: ADMIN_OWNER,
       expiresAt: Date.now() + SESSION_TTL,
       key: this.keyDigest(),
     });
     return { token, mode: this.config.mode };
+  }
+  /** A session for an account that proved its email address. */
+  async sessionFor(account: { id: string }) {
+    const token = randomBytes(32).toString("base64url");
+    await this.db.put("system", "sessions", {
+      id: digest(token).toString("hex"),
+      owner: account.id,
+      account: account.id,
+      expiresAt: Date.now() + SESSION_TTL,
+    });
+    return { token, mode: this.config.mode };
+  }
+  async revoke(authorization?: string) {
+    if (authorization?.startsWith("Bearer "))
+      await this.db.remove("system", "sessions", digest(authorization.slice(7)).toString("hex"));
   }
   private keyDigest() {
     return this.config.accessKey
@@ -47,8 +66,14 @@ export class Auth {
     const id = digest(authorization.slice(7)).toString("hex");
     const session = await this.db.get<Session>("system", "sessions", id);
     const now = Date.now();
-    if (!session || session.expiresAt < now || session.key !== this.keyDigest())
-      throw new AppError("Session expired. Sign in again.", 401);
+    const valid =
+      session &&
+      session.expiresAt >= now &&
+      (session.account
+        ? (await this.db.get<{ status: string }>("system", "accounts", session.account))?.status ===
+          "active"
+        : session.key === this.keyDigest());
+    if (!session || !valid) throw new AppError("Session expired. Sign in again.", 401);
     if (session.expiresAt - now < SESSION_TTL / 2)
       await this.db.put("system", "sessions", { ...session, id, expiresAt: now + SESSION_TTL });
     return session.owner;

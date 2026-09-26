@@ -28,6 +28,9 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `RESEND_WEBHOOK_SECRET` | Signing secret of the Resend `email.received` webhook pointing at `PUBLIC_API_URL` + `/api/inbound/resend` |
 | `AGENT_EMAIL` | The agent's address, e.g. `muse@<id>.resend.app` or an address on a receiving domain |
 | `AGENT_EMAIL_ALLOWED_SENDERS` | Comma-separated senders who may hand the agent work; editable later in Apps |
+| `ADMIN_EMAIL` | Your email. Turns on email sign-in links and lets you invite people; needs `RESEND_API_KEY` |
+| `AUTH_EMAIL_FROM` | Optional sender of sign-in emails; defaults to `OpenMuse <signin@` + the `AGENT_EMAIL` domain + `>`, which must be verified for sending in Resend |
+| `APP_URL` | Optional web address used in sign-in links; defaults to the first `ALLOWED_ORIGINS` entry |
 
 The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
 
@@ -46,6 +49,12 @@ Web push keys are generated on first start and kept in `/data/vapid.json`; set `
 - Set `EXPO_PUBLIC_API_URL` to `https://${{api.RAILWAY_PUBLIC_DOMAIN}}`. It is compiled into the bundle, so redeploy the web service after the API domain changes.
 
 Open the web domain and sign in with `OPENMUSE_ACCESS_KEY`. Each device stays signed in for 30 days after its last use. To sign in without typing, open `https://<web domain>/#key=<OPENMUSE_ACCESS_KEY>`; the key is removed from the address bar immediately. Changing `OPENMUSE_ACCESS_KEY` signs every device out.
+
+## People
+
+With `ADMIN_EMAIL` set, the sign-in screen offers **Email me a sign-in link**. Links work once and expire after 15 minutes (invites after 3 days). The admin account owns the original workspace; the access key still opens it.
+
+Invite people under **Apps → People**. Each person gets a private workspace (chat, connected apps, routines, memory, spending limits) and their own agent address, `name@` the `AGENT_EMAIL` domain, which starts with only their own email approved as a sender. Mail to an address nobody uses is ignored; mail that reaches the agent through another address, such as a forwarding alias, goes to the admin. **Remove access** signs the person out everywhere, stops their routines and address, and keeps their data so access can be restored.
 
 With `COMPOSIO_API_KEY` set, the API logs `Connected apps ready (Composio)` at startup. Connect apps under **Apps & settings → More apps** or by asking in chat.
 

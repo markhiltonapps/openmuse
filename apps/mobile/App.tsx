@@ -32,15 +32,30 @@ import {
   IdeasScreen,
 } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
-import { API_URL, checkSession, createSession, MuseApi, onSignedOut } from "./src/api";
+import {
+  API_URL,
+  checkSession,
+  createSession,
+  MuseApi,
+  onSignedOut,
+  redeemSignInLink,
+  serverInfo,
+} from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
-import { clearSession, linkAccessKey, loadSession, saveSession } from "./src/session-store";
+import {
+  clearSession,
+  linkAccessKey,
+  linkLoginToken,
+  loadSession,
+  saveSession,
+} from "./src/session-store";
+import { SignInCard } from "./src/sign-in";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
-import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
+import { Button, colors, ErrorNotice, IconButton, Mascot, s } from "./src/ui";
 import { registerServiceWorker } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
@@ -70,14 +85,14 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
 };
 export default function App() {
   const [token, setToken] = useState("");
-  const [accessKey, setAccessKey] = useState("");
+  const [emailSignIn, setEmailSignIn] = useState(false);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
-  const connect = useCallback(async (key?: string) => {
+  const signIn = useCallback(async (start: () => Promise<{ token: string }>) => {
     setBusy(true);
     setError("");
     try {
-      const session = await createSession(key);
+      const session = await start();
       await saveSession(session.token);
       setToken(session.token);
     } catch (e) {
@@ -89,8 +104,14 @@ export default function App() {
   useEffect(() => registerServiceWorker(), []);
   useEffect(() => {
     void (async () => {
+      const info = serverInfo().then((value) => {
+        setEmailSignIn(value.emailSignIn);
+        return value;
+      });
+      const login = linkLoginToken();
+      if (login) return signIn(() => redeemSignInLink(login));
       const linked = linkAccessKey();
-      if (linked) return connect(linked);
+      if (linked) return signIn(() => createSession(linked));
       const saved = await loadSession();
       if (saved && (await checkSession(saved))) {
         setToken(saved);
@@ -98,15 +119,17 @@ export default function App() {
         return;
       }
       if (saved) await clearSession();
-      await connect();
+      // A local workspace opens without signing in; a live one shows the sign-in screen.
+      if ((await info).mode === "sample") return signIn(() => createSession());
+      setBusy(false);
     })();
-  }, [connect]);
+  }, [signIn]);
   useEffect(
     () =>
-      onSignedOut(() => {
+      onSignedOut((byChoice) => {
         void clearSession();
         setToken("");
-        setError("Your sign-in ended. Enter the access key again.");
+        setError(byChoice ? "" : "Your sign-in ended. Sign in again.");
       }),
     [],
   );
@@ -141,23 +164,12 @@ export default function App() {
             {busy ? (
               <ActivityIndicator color={colors.blueDark} />
             ) : (
-              <Card style={{ width: "100%" }}>
-                <ErrorNotice error={error} />
-                <Field
-                  label="Workspace access key"
-                  value={accessKey}
-                  onChangeText={setAccessKey}
-                  secureTextEntry
-                  placeholder="Required for a live workspace"
-                />
-                <Button primary onPress={() => void connect(accessKey || undefined)}>
-                  Open workspace
-                </Button>
-                <Text style={[s.small, { marginTop: 15 }]}>
-                  Local workspaces open without a key. Make sure your OpenMuse server is running at{" "}
-                  {API_URL}.
-                </Text>
-              </Card>
+              <SignInCard
+                emailSignIn={emailSignIn}
+                error={error}
+                onKey={(key) => void signIn(() => createSession(key || undefined))}
+                onLogin={(login) => void signIn(() => redeemSignInLink(login))}
+              />
             )}
           </View>
         </SafeAreaView>

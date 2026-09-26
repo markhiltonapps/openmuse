@@ -56,6 +56,12 @@ export interface Config {
   resendWebhookSecret?: string;
   agentEmail?: string;
   agentEmailAllowedSenders?: string[];
+  /** Email of the person who owns the original workspace and can invite others. */
+  adminEmail?: string;
+  /** Web app address used in sign-in links. */
+  appUrl?: string;
+  /** Sender of sign-in emails, on a domain verified for sending. */
+  authEmailFrom?: string;
   allowedOrigins: string[];
 }
 
@@ -131,10 +137,16 @@ export function readConfig(): Config {
     agentEmailAllowedSenders: process.env.AGENT_EMAIL_ALLOWED_SENDERS?.split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
+    adminEmail: process.env.ADMIN_EMAIL?.trim().toLowerCase() || undefined,
     allowedOrigins: (
       process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
     ).split(","),
   };
+  config.appUrl = process.env.APP_URL?.trim() || config.allowedOrigins[0]?.trim() || undefined;
+  const senderDomain = config.agentEmail?.split("@")[1];
+  config.authEmailFrom =
+    process.env.AUTH_EMAIL_FROM?.trim() ||
+    (senderDomain ? `OpenMuse <signin@${senderDomain}>` : undefined);
   if (
     mode === "live" &&
     (!config.accessKey || config.accessKey.length < 24 || !config.encryptionKey)

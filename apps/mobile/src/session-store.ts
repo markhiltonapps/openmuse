@@ -40,12 +40,13 @@ export async function clearSession() {
   }
 }
 /**
- * A sign-in link (https://…/#key=…) carries the access key in the URL fragment, which browsers
- * never send to a server. The key is removed from the address bar right away.
+ * Sign-in links carry a secret in the URL fragment, which browsers never send to a server:
+ * #login=… from a sign-in email, or #key=… with the access key. It is removed from the address
+ * bar right away.
  */
-export function linkAccessKey(): string | undefined {
+function fromLink(name: "key" | "login"): string | undefined {
   if (Platform.OS !== "web" || typeof window === "undefined") return undefined;
-  const match = /(?:^#|&)key=([^&]+)/.exec(window.location.hash);
+  const match = new RegExp(`(?:^#|&)${name}=([^&]+)`).exec(window.location.hash);
   if (!match?.[1]) return undefined;
   window.history.replaceState(null, "", window.location.pathname + window.location.search);
   try {
@@ -53,4 +54,13 @@ export function linkAccessKey(): string | undefined {
   } catch {
     return undefined;
   }
+}
+export const linkAccessKey = () => fromLink("key");
+export const linkLoginToken = () => fromLink("login");
+/** The token from a pasted sign-in link, for the installed iPhone app, which opens links in Safari. */
+export function pastedLoginToken(text: string) {
+  return (
+    /login=([\w-]{20,})/.exec(text)?.[1] ??
+    (/^[\w-]{40,}$/.test(text.trim()) ? text.trim() : undefined)
+  );
 }
