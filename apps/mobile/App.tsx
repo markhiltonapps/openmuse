@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Section, Workspace } from "../../packages/domain/src";
+import { taskActivity } from "./src/activity";
 import {
   AgentActivityScreen,
   AgentStatus,
@@ -41,7 +42,7 @@ import {
   redeemSignInLink,
   serverInfo,
 } from "./src/api";
-import { AgentAvatar, Mascot, type Mood, useChatBusy } from "./src/avatar";
+import { AgentAvatar, Mascot, type Mood, useChatActivity } from "./src/avatar";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
@@ -299,7 +300,9 @@ function WorkspaceShell({
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
     ) || data?.tasks.find((task) => task.status === "running");
   const agentName = data?.identity.name || "OpenMuse";
-  const chatBusy = useChatBusy();
+  const chatNow = useChatActivity();
+  const activity =
+    chatNow ?? (activeTask?.status === "running" ? taskActivity(activeTask) : undefined);
   // A task that newly succeeds gets a short celebration.
   const [celebrating, setCelebrating] = useState(false);
   const succeeded = useRef<Set<string>>(undefined);
@@ -317,20 +320,22 @@ function WorkspaceShell({
   useEffect(() => () => clearTimeout(celebration.current), []);
   const mood: Mood = celebrating
     ? "celebrate"
-    : activeTask && activeTask.status !== "running"
+    : activeTask && activeTask.status !== "running" && !chatNow
       ? "attention"
-      : activeTask || chatBusy
+      : activity
         ? "working"
         : "idle";
-  const status = activeTask
-    ? activeTask.status === "waiting_approval"
-      ? `Ready to review · ${activeTask.title}`
-      : activeTask.status === "waiting_input"
-        ? `Needs your input · ${activeTask.title}`
-        : activeTask.plan.find((step) => step.status === "running")?.title || activeTask.title
-    : data?.tasks.some((task) => task.status === "queued")
-      ? "Picking up your next task…"
-      : "Here when you need me";
+  const status = chatNow
+    ? chatNow.label
+    : activeTask
+      ? activeTask.status === "waiting_approval"
+        ? `Ready to review · ${activeTask.title}`
+        : activeTask.status === "waiting_input"
+          ? `Needs your input · ${activeTask.title}`
+          : (activity?.label ?? activeTask.title)
+      : data?.tasks.some((task) => task.status === "queued")
+        ? "Picking up your next task…"
+        : "Here when you need me";
   const title = titles[section] || titles.apps;
   const Screen =
     section === "mail"
@@ -380,7 +385,11 @@ function WorkspaceShell({
                   opacity: pressed ? 0.65 : 1,
                 })}
               >
-                <AgentAvatar size={desktop ? 58 : 49} mood={mood} />
+                <AgentAvatar
+                  size={desktop ? 58 : 49}
+                  mood={mood}
+                  activity={mood === "working" ? activity?.kind : undefined}
+                />
                 <Text
                   style={{
                     fontSize: 16,

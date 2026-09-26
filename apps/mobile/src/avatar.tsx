@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Animated, Easing, Image, Platform, Text, View } from "react-native";
 import type { AgentIdentity, AvatarImage } from "../../../packages/domain/src/agent";
+import type { Activity, ActivityKind } from "./activity";
+import { ActivityProp } from "./activity-props";
 import { useAgentWorkspace } from "./agent-workspace";
 import type { MuseApi } from "./api";
 import { ART, type CharacterId } from "./avatar-art";
@@ -17,24 +19,24 @@ export const AVATAR_COLORS: Record<AvatarColor, string> = {
   peach: "#FDE9E2",
 };
 
-/** Whether a chat reply is being written, so the header avatar can look busy. */
-let chatBusy = false;
-const busyListeners = new Set<() => void>();
-export function setChatBusy(value: boolean) {
-  if (chatBusy === value) return;
-  chatBusy = value;
-  for (const listener of busyListeners) listener();
+/** What the open chat's reply is doing right now, so the header avatar can act it out. */
+let chatNow: Activity | undefined;
+const activityListeners = new Set<() => void>();
+export function setChatActivity(value: Activity | undefined) {
+  if (chatNow?.kind === value?.kind && chatNow?.label === value?.label) return;
+  chatNow = value;
+  for (const listener of activityListeners) listener();
 }
-export function useChatBusy() {
+export function useChatActivity() {
   return useSyncExternalStore(
     (listener) => {
-      busyListeners.add(listener);
+      activityListeners.add(listener);
       return () => {
-        busyListeners.delete(listener);
+        activityListeners.delete(listener);
       };
     },
-    () => chatBusy,
-    () => chatBusy,
+    () => chatNow,
+    () => chatNow,
   );
 }
 
@@ -201,6 +203,7 @@ export function Mascot({
   character = "capybara",
   image,
   mood = "idle",
+  activity,
   animated = true,
 }: {
   size?: number;
@@ -208,6 +211,8 @@ export function Mascot({
   character?: CharacterId | "custom";
   image?: AvatarImage | null;
   mood?: Mood;
+  /** Shown with a small prop while working: a laptop, magnifying glass, page and so on. */
+  activity?: ActivityKind;
   animated?: boolean;
 }) {
   const reduce = useReducedMotion();
@@ -237,7 +242,10 @@ export function Mascot({
       ]);
     const animation =
       mood === "working"
-        ? Animated.loop(Animated.sequence([move(lift, 0.6, 340), move(lift, 0, 340)]))
+        ? activity === "apps" || activity === "computer" || activity === "writing"
+          ? // Quick, small bounces, like typing.
+            Animated.loop(Animated.sequence([move(lift, 0.3, 150), move(lift, 0, 150)]))
+          : Animated.loop(Animated.sequence([move(lift, 0.6, 340), move(lift, 0, 340)]))
         : mood === "attention"
           ? Animated.loop(Animated.sequence([Animated.delay(1700), hop(1.4)]))
           : mood === "celebrate"
@@ -245,7 +253,7 @@ export function Mascot({
             : Animated.loop(Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]));
     animation.start();
     return () => animation.stop();
-  }, [mood, motion, breathe, lift]);
+  }, [mood, activity, motion, breathe, lift]);
   const custom = character === "custom";
   const art = custom ? (
     image?.kind === "photo" ? (
@@ -309,7 +317,14 @@ export function Mascot({
       >
         {art}
       </Animated.View>
-      {motion && mood === "working" && size >= 36 && <ThinkingDots size={size} />}
+      {motion &&
+        mood === "working" &&
+        size >= 36 &&
+        (activity && activity !== "thinking" ? (
+          <ActivityProp kind={activity} size={size} />
+        ) : (
+          <ThinkingDots size={size} />
+        ))}
       {motion && mood === "celebrate" && <Sparkles size={size} />}
     </View>
   );
@@ -338,7 +353,15 @@ export function useAvatarImage(api: MuseApi, version?: string) {
 }
 
 /** The signed-in person's agent avatar, as chosen in Apps → Personality. */
-export function AgentAvatar({ size, mood }: { size: number; mood?: Mood }) {
+export function AgentAvatar({
+  size,
+  mood,
+  activity,
+}: {
+  size: number;
+  mood?: Mood;
+  activity?: ActivityKind;
+}) {
   const { data } = useAgentWorkspace();
   const { api } = useWorkspace();
   const identity = data?.identity;
@@ -351,6 +374,7 @@ export function AgentAvatar({ size, mood }: { size: number; mood?: Mood }) {
       character={identity?.character ?? "capybara"}
       image={image}
       mood={mood}
+      activity={activity}
     />
   );
 }

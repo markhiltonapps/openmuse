@@ -29,10 +29,11 @@ import {
   View,
 } from "react-native";
 import { z } from "zod";
+import { chatActivity } from "./activity";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AssistantResponse } from "./assistant-response";
-import { setChatBusy } from "./avatar";
+import { setChatActivity } from "./avatar";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
@@ -450,11 +451,11 @@ export function ChatScreen({
   );
   const visible = messages.filter((m) => m.role === "user" || m.role === "assistant");
   const replying = busy || agent.isRunning;
+  const activity = chatActivity(messages, replying);
   useEffect(() => {
-    if (!active) return;
-    setChatBusy(replying);
-    return () => setChatBusy(false);
-  }, [active, replying]);
+    if (active) setChatActivity(activity);
+  }, [active, activity]);
+  useEffect(() => () => setChatActivity(undefined), []);
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
@@ -649,14 +650,16 @@ export function ChatScreen({
         {(!richThreads || selection.id === mainId) && <BackgroundUpdates />}
         {(busy || agent.isRunning) && (
           <View
-            accessibilityLabel="Agent is working"
+            accessibilityLabel={activity?.label ?? "Agent is working"}
+            accessibilityLiveRegion="polite"
             style={[
               s.row,
               {
                 alignSelf: "flex-start",
+                maxWidth: "90%",
                 gap: 7,
                 paddingHorizontal: 19,
-                paddingVertical: 18,
+                paddingVertical: activity ? 13 : 18,
                 backgroundColor: "#EEEEF0",
                 borderRadius: 28,
               },
@@ -674,6 +677,11 @@ export function ChatScreen({
                 }}
               />
             ))}
+            {!!activity && (
+              <Text numberOfLines={1} style={[s.muted, { marginLeft: 4, flexShrink: 1 }]}>
+                {activity.label}
+              </Text>
+            )}
           </View>
         )}
         <ErrorNotice error={error} />
