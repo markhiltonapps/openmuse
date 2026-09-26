@@ -37,6 +37,7 @@ import type { Store } from "../db.ts";
 import { AppError } from "../errors.ts";
 import type { Files } from "../files.ts";
 import { backgroundFailure } from "../log.ts";
+import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
@@ -690,6 +691,8 @@ export class AgentService {
     );
     return this.db.get<Idea>(owner, "ideas", id);
   }
+  /** Web search for current information; set when a search provider is configured. */
+  search?: WebSearch;
   /** Purchase guardrails for connected-app actions. */
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
   /** Phone and browser notifications; set when web push is available. */

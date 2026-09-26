@@ -49,6 +49,9 @@ export interface Config {
   computerEnabled?: boolean;
   computerImage?: string;
   computerDeploymentId?: string;
+  /** Also enables web search through Anthropic's search tool. */
+  anthropicApiKey?: string;
+  webSearchModel?: string;
   composioApiKey?: string;
   composioUserId?: string;
   composioBaseUrl?: string;
@@ -128,6 +131,8 @@ export function readConfig(): Config {
     computerEnabled: process.env.COMPUTER_ENABLED === "true",
     computerImage: process.env.COMPUTER_IMAGE ?? "openmuse-computer:local",
     computerDeploymentId: process.env.COMPUTER_DEPLOYMENT_ID,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY?.trim() || undefined,
+    webSearchModel: process.env.WEB_SEARCH_MODEL?.trim() || undefined,
     composioApiKey: process.env.COMPOSIO_API_KEY?.trim() || undefined,
     composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
     composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,

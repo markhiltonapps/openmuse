@@ -24,12 +24,13 @@ import { GoogleAuth } from "./google-auth.ts";
 import { AgentInbox } from "./inbound.ts";
 import { PushService } from "./push.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
+import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; apps?: AppConnector; mailer?: Mailer } = {},
+  options: { docker?: DockerRunner; apps?: AppConnector; mailer?: Mailer; search?: WebSearch } = {},
 ) {
   assertApiDeploymentConfig(config);
   const auth = await createAuth(db, config);
@@ -85,6 +86,14 @@ export async function createApp(
   const push = await PushService.create(db, config);
   agent.push = push;
   agent.spending = spending;
+  agent.search =
+    options.search ??
+    (config.agentBackend === "model" && config.anthropicApiKey
+      ? new AnthropicWebSearch(config.anthropicApiKey, {
+          model: config.webSearchModel,
+          baseUrl: process.env.ANTHROPIC_BASE_URL,
+        })
+      : undefined);
   const inbox = new AgentInbox(db, config, agent, accounts);
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const runtime = makeRuntime(config, agent, auth, intelligence);
