@@ -17,12 +17,20 @@ export const approvalRuleSchema = z.object({
     .regex(/^[A-Z0-9_]+$/)
     .max(200)
     .optional(),
+  /** For a while only, like Muse's time-limited grants; without it, until turned off. */
+  hours: z.number().int().min(1).max(720).optional(),
 });
 export interface ApprovalRule {
   id: string;
   app: string;
   tool?: string;
   createdAt: string;
+  expiresAt?: string;
+}
+interface AppPermission {
+  /** The app's slug. */
+  id: string;
+  readOnly: boolean;
 }
 
 const DESTRUCTIVE =
@@ -40,11 +48,38 @@ export function destructiveAction(slug: string, app: string, tags: string[] = []
 
 /** Connected-app actions the person lets run without asking each time. Purchases always ask. */
 export class ApprovalRules {
-  constructor(private readonly db: Store) {}
+  constructor(
+    private readonly db: Store,
+    private readonly now: () => number = Date.now,
+  ) {}
+  /** Rules still in force; ones for a while are gone once their time is up. */
   async list(owner: string) {
-    return (await this.db.list<ApprovalRule>(owner, "approval-rules")).sort((a, b) =>
-      `${a.app}:${a.tool ?? ""}`.localeCompare(`${b.app}:${b.tool ?? ""}`),
-    );
+    const now = new Date(this.now()).toISOString();
+    return (await this.db.list<ApprovalRule>(owner, "approval-rules"))
+      .filter((rule) => !rule.expiresAt || rule.expiresAt > now)
+      .sort((a, b) => `${a.app}:${a.tool ?? ""}`.localeCompare(`${b.app}:${b.tool ?? ""}`));
+  }
+  /** Apps the person set to read-only: the agent can look, never change anything there. */
+  async readOnlyApps(owner: string) {
+    return (await this.db.list<AppPermission>(owner, "app-permissions"))
+      .filter((p) => p.readOnly)
+      .map((p) => p.id)
+      .sort();
+  }
+  async setReadOnly(owner: string, raw: unknown) {
+    const input = z.object({ app: approvalRuleSchema.shape.app, readOnly: z.boolean() }).parse(raw);
+    if (input.readOnly)
+      await this.db.put(owner, "app-permissions", { id: input.app, readOnly: true });
+    else await this.db.remove(owner, "app-permissions", input.app);
+    return { readOnly: await this.readOnlyApps(owner) };
+  }
+  /** Why an action that changes something can't run in this app, or undefined when it can. */
+  async blocked(owner: string, tool: { app: string; readOnly: boolean }) {
+    if (tool.readOnly) return undefined;
+    const app = tool.app.toLowerCase();
+    if (!(await this.readOnlyApps(owner)).includes(app)) return undefined;
+    const name = app.charAt(0).toUpperCase() + app.slice(1);
+    return `${name} is set to read-only, so nothing there can be changed or sent. The person can allow changes under Apps → Apps → App permissions.`;
   }
   async add(owner: string, raw: unknown) {
     const input = approvalRuleSchema.parse(raw);
@@ -52,9 +87,14 @@ export class ApprovalRules {
       id: input.tool ? `tool:${input.tool}` : `app:${input.app}`,
       app: input.app,
       ...(input.tool ? { tool: input.tool } : {}),
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(this.now()).toISOString(),
+      ...(input.hours
+        ? { expiresAt: new Date(this.now() + input.hours * 3_600_000).toISOString() }
+        : {}),
     };
-    return (await this.db.insertIfAbsent(owner, "approval-rules", rule)) ?? rule;
+    // A new grant replaces an older one for the same thing (say, "for an hour" after "always").
+    await this.db.put(owner, "approval-rules", rule);
+    return rule;
   }
   async remove(owner: string, id: string) {
     if (!(await this.db.take(owner, "approval-rules", id)))

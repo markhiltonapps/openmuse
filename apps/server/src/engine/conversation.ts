@@ -391,6 +391,8 @@ export class ConversationAgent extends AbstractAgent {
           this.service.approvals && {
             allowed: (tool) =>
               this.service.approvals?.allows(this.owner, tool) ?? Promise.resolve(undefined),
+            blocked: (tool) =>
+              this.service.approvals?.blocked(this.owner, tool) ?? Promise.resolve(undefined),
             approve: (proposal) =>
               this.service.actions.decide(this.owner, proposal.id, proposal.hash, "approve"),
           },

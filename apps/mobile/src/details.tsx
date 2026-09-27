@@ -545,7 +545,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
   const d = action.data;
   const pending = action.status === "awaiting_review";
   // "Always allow" for connected-app actions: this one action, or everything in the app.
-  const [allow, setAllow] = useState<"none" | "action" | "app">("none");
+  const [allow, setAllow] = useState<"none" | "hour" | "action" | "app">("none");
   async function decide(decision: "approve" | "deny") {
     setBusy(true);
     setError("");
@@ -553,7 +553,8 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       if (decision === "approve" && allow !== "none")
         await api.request("/api/approval-rules", {
           app: String(d.app || ""),
-          ...(allow === "action" ? { tool: String(d.tool || "") } : {}),
+          ...(allow !== "app" ? { tool: String(d.tool || "") } : {}),
+          ...(allow === "hour" ? { hours: 1 } : {}),
         });
       const result = await api.request<ActionProposal>(`/api/actions/${action.id}/decide`, {
         decision,
@@ -748,6 +749,11 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           </Text>
           {app && typeof d.amountUsd !== "number" && (
             <View style={{ gap: 4, marginBottom: 14 }}>
+              <CheckRow
+                label="Don't ask again for this for the next hour"
+                checked={allow === "hour"}
+                onPress={() => setAllow(allow === "hour" ? "none" : "hour")}
+              />
               <CheckRow
                 label={`Always allow ${String(d.tool || "this action")} without asking`}
                 checked={allow === "action"}

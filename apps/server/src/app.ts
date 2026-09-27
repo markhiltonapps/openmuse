@@ -521,6 +521,12 @@ export async function createApp(
   app.post("/api/approval-rules", async (c) =>
     c.json(await approvals.add(c.get("owner"), await c.req.json()), 201),
   );
+  app.get("/api/app-permissions", async (c) =>
+    c.json({ readOnly: await approvals.readOnlyApps(c.get("owner")) }),
+  );
+  app.post("/api/app-permissions", async (c) =>
+    c.json(await approvals.setReadOnly(c.get("owner"), await c.req.json())),
+  );
   app.post("/api/approval-rules/:id/delete", async (c) =>
     c.json(await approvals.remove(c.get("owner"), c.req.param("id"))),
   );

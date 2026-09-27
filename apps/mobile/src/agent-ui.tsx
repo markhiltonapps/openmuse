@@ -41,7 +41,7 @@ import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AppAlertsCard } from "./app-alerts-ui";
 import { AppearanceCard } from "./appearance-ui";
-import { AlwaysAllowedCard } from "./approvals-ui";
+import { AlwaysAllowedCard, AppPermissionsCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
@@ -2107,6 +2107,7 @@ export function AppsScreen() {
               ))}
           </Card>
           <AlwaysAllowedCard />
+          <AppPermissionsCard />
         </>
       )}
       {tab === "alerts" && (

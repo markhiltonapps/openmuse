@@ -715,3 +715,66 @@ test("actions the person always allows run straight away; purchases and deletes 
   assert.equal(bought.status, "awaiting_review", "purchases always ask");
   assert.deepEqual(approved, ["action-GOOGLECALENDAR_CREATE_EVENT"]);
 });
+
+test("a read-only app never changes anything, and an hour's grant runs out", async () => {
+  const db = await createStore();
+  let now = Date.parse("2026-09-27T12:00:00Z");
+  const rules = new ApprovalRules(db, () => now);
+  const owner = "careful";
+  await rules.setReadOnly(owner, { app: "slack", readOnly: true });
+  assert.deepEqual(await rules.readOnlyApps(owner), ["slack"]);
+  assert.match(
+    (await rules.blocked(owner, { app: "slack", readOnly: false })) ?? "",
+    /Slack is set to read-only/,
+  );
+  assert.equal(await rules.blocked(owner, { app: "slack", readOnly: true }), undefined);
+  assert.equal(await rules.blocked(owner, { app: "outlook", readOnly: false }), undefined);
+  assert.equal(await rules.blocked("someone-else", { app: "slack", readOnly: false }), undefined);
+
+  const { apps } = fakeApps({
+    tool: async (_owner, slug) => ({
+      slug,
+      name: slug,
+      description: "",
+      app: "slack",
+      readOnly: slug.includes("LIST"),
+      destructive: false,
+    }),
+    execute: async () => ({ channels: ["general"] }),
+  });
+  const proposed: string[] = [];
+  const specs = appToolSpecs(
+    apps,
+    owner,
+    async (action) => {
+      proposed.push(action.tool);
+      return { id: "a1", title: action.summary, hash: "h" };
+    },
+    { check: async () => undefined },
+    {
+      allowed: (tool) => rules.allows(owner, tool),
+      blocked: (tool) => rules.blocked(owner, tool),
+      approve: async () => ({ status: "succeeded" }),
+    },
+  );
+  const run = specs.find((s) => s.name === "use_app")?.execute as (
+    args: unknown,
+  ) => Promise<Record<string, unknown>>;
+  const sent = await run({
+    tool: "SLACK_SEND_MESSAGE",
+    arguments: { text: "hi" },
+    summary: "Say hi in #general",
+  });
+  assert.match(String(sent.error), /read-only/);
+  assert.deepEqual(proposed, [], "nothing even goes to review");
+  assert.ok((await run({ tool: "SLACK_LIST_CHANNELS", arguments: {}, summary: "List" })).result);
+  await rules.setReadOnly(owner, { app: "slack", readOnly: false });
+  assert.deepEqual(await rules.readOnlyApps(owner), []);
+
+  await rules.add(owner, { app: "outlook", tool: "OUTLOOK_SEND_EMAIL", hours: 1 });
+  const send = { slug: "OUTLOOK_SEND_EMAIL", app: "outlook" };
+  assert.match((await rules.allows(owner, send)) ?? "", /OUTLOOK_SEND_EMAIL/);
+  now += 61 * 60_000;
+  assert.equal(await rules.allows(owner, send), undefined, "the hour is up");
+  assert.deepEqual(await rules.list(owner), []);
+});

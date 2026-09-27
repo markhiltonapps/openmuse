@@ -373,6 +373,7 @@ export async function executeModelTask(
         service.spending,
         service.approvals && {
           allowed: (tool) => service.approvals?.allows(owner, tool) ?? Promise.resolve(undefined),
+          blocked: (tool) => service.approvals?.blocked(owner, tool) ?? Promise.resolve(undefined),
           approve: async (proposal) => {
             const done = await service.actions.decide(owner, proposal.id, proposal.hash, "approve");
             // Allowed without review: the task carries on instead of waiting.

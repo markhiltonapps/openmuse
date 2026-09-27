@@ -724,6 +724,8 @@ export function appToolSpecs(
   /** Runs actions the person always allows straight away instead of waiting for review. */
   auto?: {
     allowed(tool: AppTool): Promise<string | undefined>;
+    /** Why a change can't run in this app (it's read-only), or undefined. */
+    blocked?(tool: AppTool): Promise<string | undefined>;
     approve(proposal: { id: string; hash: string }): Promise<{
       status: string;
       result?: string;
@@ -812,6 +814,8 @@ export function appToolSpecs(
               : {}),
           };
         }
+        const blocked = await auto?.blocked?.(tool);
+        if (blocked) return { error: blocked };
         let amountUsd: number | undefined;
         if (isPurchase(tool.slug)) {
           amountUsd =

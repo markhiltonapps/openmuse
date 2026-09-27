@@ -1,14 +1,17 @@
 import { ShieldCheck, X } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
+import { Card, CheckRow, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 interface ApprovalRule {
   id: string;
   app: string;
   tool?: string;
+  expiresAt?: string;
 }
+const untilLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 const appLabel = (app: string) =>
   app.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 /** OUTLOOK_SEND_EMAIL in Outlook → "Send email". */
@@ -48,7 +51,12 @@ export function AlwaysAllowedCard() {
               {rule.tool ? actionLabel(rule) : `Everything in ${appLabel(rule.app)}`}
             </Text>
             <Text style={s.small}>
-              {rule.tool ? appLabel(rule.app) : "Except deleting or cancelling things"}
+              {[
+                rule.tool ? appLabel(rule.app) : "Except deleting or cancelling things",
+                rule.expiresAt ? `until ${untilLabel(rule.expiresAt)}` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </Text>
           </View>
           <Pressable
@@ -65,6 +73,70 @@ export function AlwaysAllowedCard() {
           </Pressable>
         </View>
       ))}
+      <ErrorNotice error={error} />
+    </Card>
+  );
+}
+
+/** Per connected app: can the agent change things there, or only look? */
+export function AppPermissionsCard() {
+  const { api, notify } = useWorkspace();
+  const [apps, setApps] = useState<{ app: string; name: string }[]>();
+  const [readOnly, setReadOnly] = useState<string[]>([]);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    void api
+      .request<{ apps?: { app: string; name: string; connected: boolean }[] }>("/api/apps")
+      .then(
+        (value) => setApps((value.apps ?? []).filter((a) => a.connected)),
+        () => setApps([]),
+      );
+    void api.request<{ readOnly: string[] }>("/api/app-permissions").then(
+      (value) => setReadOnly(value.readOnly),
+      () => undefined,
+    );
+  }, [api]);
+  if (!apps?.length) return null;
+  return (
+    <Card style={{ gap: 10 }}>
+      <SectionHeading title="App permissions" />
+      <Text style={s.muted}>
+        Read only means your agent can look things up in that app but never send, create or change
+        anything there, even with your approval.
+      </Text>
+      {apps.map((app) => {
+        const on = readOnly.includes(app.app.toLowerCase());
+        return (
+          <CheckRow
+            key={app.app}
+            label={`${app.name}: read only`}
+            checked={on}
+            onPress={() => {
+              if (busy) return;
+              setBusy(app.app);
+              setError("");
+              void api
+                .request<{ readOnly: string[] }>("/api/app-permissions", {
+                  app: app.app.toLowerCase(),
+                  readOnly: !on,
+                })
+                .then(
+                  (value) => {
+                    setReadOnly(value.readOnly);
+                    notify(
+                      on
+                        ? `${app.name} can make changes again, with your approval.`
+                        : `${app.name} is read only.`,
+                    );
+                  },
+                  (e) => setError(e instanceof Error ? e.message : String(e)),
+                )
+                .finally(() => setBusy(""));
+            }}
+          />
+        );
+      })}
       <ErrorNotice error={error} />
     </Card>
   );
