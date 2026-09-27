@@ -41,10 +41,12 @@ import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AppearanceCard } from "./appearance-ui";
 import { AlwaysAllowedCard } from "./approvals-ui";
+import { AppsTabs, useAppsTab } from "./apps-tabs";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
+import { HelpCard } from "./help-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { SubscriptionsCard } from "./subscriptions-ui";
@@ -2008,7 +2010,7 @@ export function AppsScreen() {
   const { navigate, open } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
-  const [settings, setSettings] = useState(false);
+  const [tab, setTab] = useAppsTab();
   const [name, setName] = useState(data?.identity.name || "Neddy");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
@@ -2074,50 +2076,59 @@ export function AppsScreen() {
   return (
     <View style={{ gap: 22 }}>
       <AgentStatus />
-      <Field
-        label="Search apps"
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search connectors"
-      />
-      <ConnectionsScreen query={query} />
-      <Text style={s.heading}>On your computer</Text>
-      <Card style={{ paddingVertical: 3, backgroundColor: colors.card }}>
-        {shortcuts
-          .filter((item) =>
-            `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()),
-          )
-          .map((item) => (
-            <LinkRow
-              key={item.section}
-              icon={item.icon}
-              title={item.title}
-              detail={item.detail}
-              onPress={() =>
-                item.section === "browser" ? open({ type: "computer" }) : navigate(item.section)
-              }
-            />
-          ))}
-      </Card>
-      <AlwaysAllowedCard />
-      <MailAlertsCard />
-      <SpendingCard />
-      <AgentEmailCard />
-      <PhoneAppCard />
-      <VoiceCard name={data?.identity.name || "Neddy"} />
-      <AppearanceCard />
-      <AccountCard />
-      <YourDataCard />
-      <UsageCard />
-      <PeopleCard />
-      <Button onPress={() => setSettings(!settings)}>
-        {settings
-          ? "Close agent settings"
-          : data?.memorySuggestions.length
-            ? `Personality & memory · ${data.memorySuggestions.length} to review`
-            : "Personality & memory"}
-      </Button>
-      {settings && (
+      <AppsTabs tab={tab} onTab={setTab} badges={{ agent: data?.memorySuggestions.length }} />
+      {tab === "apps" && (
+        <>
+          <Field
+            label="Search apps"
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search connectors"
+          />
+          <ConnectionsScreen query={query} />
+          <Text style={s.heading}>On your computer</Text>
+          <Card style={{ paddingVertical: 3, backgroundColor: colors.card }}>
+            {shortcuts
+              .filter((item) =>
+                `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()),
+              )
+              .map((item) => (
+                <LinkRow
+                  key={item.section}
+                  icon={item.icon}
+                  title={item.title}
+                  detail={item.detail}
+                  onPress={() =>
+                    item.section === "browser" ? open({ type: "computer" }) : navigate(item.section)
+                  }
+                />
+              ))}
+          </Card>
+          <AlwaysAllowedCard />
+        </>
+      )}
+      {tab === "alerts" && (
+        <>
+          <MailAlertsCard />
+          <PhoneAppCard />
+        </>
+      )}
+      {tab === "money" && (
+        <>
+          <SpendingCard />
+          <UsageCard />
+        </>
+      )}
+      {tab === "account" && (
+        <>
+          <AppearanceCard />
+          <AccountCard />
+          <YourDataCard />
+          <PeopleCard />
+        </>
+      )}
+      {tab === "help" && <HelpCard />}
+      {tab === "agent" && (
         <>
           <Card style={{ gap: 10 }}>
             <SectionHeading title="Your agent" />
@@ -2193,6 +2204,8 @@ export function AppsScreen() {
             <View style={s.divider} />
             <ChatgptImport />
           </Card>
+          <VoiceCard name={data?.identity.name || "Neddy"} />
+          <AgentEmailCard />
         </>
       )}
       <ErrorNotice error={error} />

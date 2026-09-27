@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Neato_Meca Help</title>
+    <meta name="description" content="How to use Neato_Meca and your AI agent, Neddy." />
+    <meta name="theme-color" content="#FCFCFC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      :root {
+        --canvas: #fcfcfc;
+        --card: #ffffff;
+        --text: #11191c;
+        --muted: #697176;
+        --line: #eeeef0;
+        --subtle: #f1f2f3;
+        --inverse: #11191c;
+        --on-inverse: #ffffff;
+        --teal: #0f8f8a;
+        --teal-soft: #e2f5f3;
+        --sky: #edf7fd;
+        --green: #e3f3e8;
+        --lavender: #f0eefa;
+        --orange: #fdf0df;
+        --pink: #fdeef2;
+        --bubble: #eeeef0;
+        --me: #1473c8;
+        --shadow: 0 1px 2px rgba(17, 25, 28, 0.04), 0 8px 24px rgba(17, 25, 28, 0.06);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #000000;
+          --card: #151517;
+          --text: #f3f3f5;
+          --muted: #9c9ca3;
+          --line: #26262a;
+          --subtle: #2a2a2e;
+          --inverse: #f3f3f5;
+          --on-inverse: #000000;
+          --teal: #4fd1c5;
+          --teal-soft: #0f2a28;
+          --sky: #0e2130;
+          --green: #0f2619;
+          --lavender: #1c1930;
+          --orange: #2b2012;
+          --pink: #2e1720;
+          --bubble: #1c1c1f;
+          --me: #2a7fd4;
+          --shadow: none;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 116px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: inherit;
+      }
+      img {
+        display: block;
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+
+      /* Top bar and section chips */
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: color-mix(in srgb, var(--canvas) 88%, transparent);
+        backdrop-filter: saturate(1.4) blur(14px);
+        -webkit-backdrop-filter: saturate(1.4) blur(14px);
+        border-bottom: 1px solid var(--line);
+        padding-top: env(safe-area-inset-top);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 56px;
+      }
+      .bar img {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+      }
+      .bar strong {
+        font-size: 17px;
+        letter-spacing: -0.3px;
+      }
+      .bar .spacer {
+        flex: 1;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 9px 16px;
+        border-radius: 999px;
+        background: var(--inverse);
+        color: var(--on-inverse);
+        white-space: nowrap;
+      }
+      .chips {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 0 0 12px;
+        scrollbar-width: none;
+      }
+      .chips::-webkit-scrollbar {
+        display: none;
+      }
+      .chips a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: none;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 6px 14px 6px 8px;
+        border-radius: 999px;
+        background: var(--subtle);
+      }
+      .chips img {
+        width: 22px;
+        height: 22px;
+      }
+
+      /* Hero */
+      .hero {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 22px;
+        align-items: center;
+        padding: 34px 0 10px;
+      }
+      .hero .neddy {
+        width: 132px;
+        height: 132px;
+        border-radius: 36px;
+        box-shadow: var(--shadow);
+      }
+      h1 {
+        font-size: clamp(30px, 6vw, 44px);
+        line-height: 1.08;
+        letter-spacing: -1.2px;
+        margin: 0 0 12px;
+      }
+      .say {
+        position: relative;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 14px 16px;
+        box-shadow: var(--shadow);
+        font-size: 16px;
+      }
+      .say::before {
+        content: "";
+        position: absolute;
+        left: -8px;
+        top: 22px;
+        width: 14px;
+        height: 14px;
+        background: var(--card);
+        border-left: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        transform: rotate(45deg);
+      }
+      @media (max-width: 560px) {
+        .hero {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          text-align: center;
+          padding-top: 26px;
+        }
+        .say::before {
+          left: 50%;
+          top: -8px;
+          margin-left: -7px;
+          transform: rotate(135deg);
+        }
+      }
+
+      /* Sections */
+      section {
+        padding: 34px 0 6px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+      .head img {
+        width: 44px;
+        height: 44px;
+      }
+      h2 {
+        font-size: 26px;
+        letter-spacing: -0.6px;
+        margin: 0;
+        line-height: 1.15;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 18px;
+      }
+      .grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 18px;
+        box-shadow: var(--shadow);
+      }
+      .card h3 {
+        font-size: 17px;
+        margin: 10px 0 4px;
+        letter-spacing: -0.2px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .card .pic {
+        width: 56px;
+        height: 56px;
+      }
+      .tint-sky {
+        background: var(--sky);
+      }
+      .tint-green {
+        background: var(--green);
+      }
+      .tint-lavender {
+        background: var(--lavender);
+      }
+      .tint-orange {
+        background: var(--orange);
+      }
+      .tint-pink {
+        background: var(--pink);
+      }
+      .tint-teal {
+        background: var(--teal-soft);
+      }
+      .path {
+        display: inline-block;
+        margin-top: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        background: var(--subtle);
+        border-radius: 8px;
+        padding: 3px 9px;
+      }
+
+      /* Steps */
+      .steps {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        counter-reset: step;
+      }
+      .step {
+        position: relative;
+      }
+      .step::before {
+        counter-increment: step;
+        content: counter(step);
+        position: absolute;
+        top: 14px;
+        right: 16px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 14px;
+        background: var(--inverse);
+        color: var(--on-inverse);
+      }
+      .howto {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .howto li {
+        margin-top: 4px;
+      }
+      .howto b {
+        color: var(--text);
+      }
+
+      /* Tabs tour */
+      .tabs {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+      .tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 6px;
+        padding: 16px 12px;
+      }
+      .tab img {
+        width: 48px;
+        height: 48px;
+      }
+      .tab b {
+        font-size: 15px;
+      }
+      .tab span {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      .corner {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        margin-top: 12px;
+      }
+      .corner .card {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .corner .icon {
+        flex: none;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--subtle);
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .corner p {
+        margin: 0;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .corner b {
+        color: var(--text);
+      }
+
+      /* Example chats */
+      .chats {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      }
+      .chat {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .chat .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+      .row img {
+        width: 30px;
+        height: 30px;
+      }
+      .me {
+        align-self: flex-end;
+        max-width: 92%;
+        background: var(--me);
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 18px 18px 4px 18px;
+        font-size: 15px;
+      }
+      .bot {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+      }
+      .bot img {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        flex: none;
+      }
+      .bot div {
+        background: var(--bubble);
+        padding: 10px 14px;
+        border-radius: 18px 18px 18px 4px;
+        font-size: 14px;
+        color: var(--text);
+      }
+
+      /* Safety */
+      .promise {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+      }
+      .promise img {
+        width: 48px;
+        height: 48px;
+        flex: none;
+      }
+      .promise h3 {
+        margin-top: 2px;
+      }
+
+      /* FAQ */
+      details {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        margin-bottom: 10px;
+        box-shadow: var(--shadow);
+      }
+      summary {
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        font-weight: 600;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      .faq-pic {
+        width: 32px;
+        height: 32px;
+        flex: none;
+      }
+      summary::after {
+        content: "+";
+        margin-left: auto;
+        font-size: 22px;
+        font-weight: 400;
+        color: var(--muted);
+        transition: transform 0.2s;
+      }
+      details[open] summary::after {
+        transform: rotate(45deg);
+      }
+      details .answer {
+        padding: 0 16px 16px 60px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      details .answer b {
+        color: var(--text);
+      }
+      @media (max-width: 560px) {
+        details .answer {
+          padding-left: 16px;
+        }
+      }
+
+      footer {
+        text-align: center;
+        padding: 40px 0 calc(40px + env(safe-area-inset-bottom));
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .foot-pic {
+        width: 72px;
+        height: 72px;
+        border-radius: 20px;
+        margin: 0 auto 12px;
+      }
+      footer .btn {
+        margin: 6px 0 18px;
+        font-size: 16px;
+        padding: 12px 22px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap">
+        <div class="bar">
+          <img src="/icon-192.png" alt="" />
+          <strong>Neato_Meca Help</strong>
+          <span class="spacer"></span>
+          <a class="btn" href="/">Open the app</a>
+        </div>
+        <nav class="chips" aria-label="Help topics">
+          <a href="#start"><img src="/help/wave.webp" alt="" />Start</a>
+          <a href="#tour"><img src="/help/puzzle.webp" alt="" />Find your way</a>
+          <a href="#ask"><img src="/help/chat.webp" alt="" />Things to ask</a>
+          <a href="#safe"><img src="/help/shield.webp" alt="" />You're in control</a>
+          <a href="#tips"><img src="/help/bulb.webp" alt="" />Tips</a>
+          <a href="#fix"><img src="/help/toolbox.webp" alt="" />Fix a problem</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="hero">
+        <img class="neddy" src="/icon-512.png" alt="Neddy, the Neato_Meca robot" />
+        <div>
+          <h1>How to use Neato_Meca</h1>
+          <div class="say">
+            Hi, I'm <b>Neddy</b>, your personal AI agent. I read and draft your email, keep your
+            calendar, research things, keep an eye on the web, set reminders and run errands. I
+            always check with you before I send, buy or change anything.
+          </div>
+        </div>
+      </div>
+
+      <section id="start">
+        <div class="head">
+          <img src="/help/wave.webp" alt="" />
+          <h2>Get started in 4 steps</h2>
+        </div>
+        <p class="lede">It takes about five minutes.</p>
+        <div class="steps">
+          <div class="card step tint-sky">
+            <img class="pic" src="/help/mail-link.webp" alt="" />
+            <h3>Sign in</h3>
+            <p>
+              Tap the link in your invite email. There's no password. Links work once, so ask for a
+              new one on the sign-in screen when you need it.
+            </p>
+          </div>
+          <div class="card step tint-green">
+            <img class="pic" src="/help/phone.webp" alt="" />
+            <h3>Add it to your home screen</h3>
+            <ul class="howto">
+              <li><b>iPhone:</b> in Safari, tap Share, then Add to Home Screen.</li>
+              <li><b>Android:</b> in Chrome, tap ⋮, then Install app.</li>
+            </ul>
+          </div>
+          <div class="card step tint-lavender">
+            <img class="pic" src="/help/plug.webp" alt="" />
+            <h3>Connect your apps</h3>
+            <p>
+              Open <b>Apps</b>, search for Gmail, Outlook, Google Calendar and more, and tap
+              Connect. You sign in to each app yourself.
+            </p>
+          </div>
+          <div class="card step tint-orange">
+            <img class="pic" src="/help/chat.webp" alt="" />
+            <h3>Say hi</h3>
+            <p>
+              Type in <b>Chat</b> or tap the sound-wave button to talk. Tell Neddy about yourself
+              and he'll remember what matters.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="tour">
+        <div class="head">
+          <img src="/help/puzzle.webp" alt="" />
+          <h2>Find your way around</h2>
+        </div>
+        <p class="lede">The tabs along the bottom of the app (on the left on a computer):</p>
+        <div class="tabs">
+          <div class="card tab">
+            <img src="/help/chat.webp" alt="" /><b>Chat</b><span>Talk to Neddy and give him work</span>
+          </div>
+          <div class="card tab">
+            <img src="/help/news.webp" alt="" /><b>Feed</b><span>Your news with pictures, plus reminders</span>
+          </div>
+          <div class="card tab">
+            <img src="/help/bolt.webp" alt="" /><b>Activity</b><span>What Neddy is working on, and what needs you</span>
+          </div>
+          <div class="card tab">
+            <img src="/help/bulb.webp" alt="" /><b>Ideas</b><span>Things Neddy offers to do for you</span>
+          </div>
+          <div class="card tab">
+            <img src="/help/target.webp" alt="" /><b>Goals</b><span>Goals and routines Neddy tracks for you</span>
+          </div>
+          <div class="card tab">
+            <img src="/help/files.webp" alt="" /><b>Files &amp; media</b><span>Documents, photos and things Neddy made</span>
+          </div>
+          <div class="card tab">
+            <img src="/help/puzzle.webp" alt="" /><b>Apps</b><span>Connections and settings, in tabs</span>
+          </div>
+        </div>
+        <div class="corner">
+          <div class="card">
+            <span class="icon">☰</span>
+            <p>
+              <b>Top left:</b> your conversations, Delegate task, Agent computer, Calendar and
+              Help.
+            </p>
+          </div>
+          <div class="card">
+            <img src="/help/robot.webp" alt="" style="width: 44px; height: 44px" />
+            <p><b>Tap Neddy</b> at the top to see what he's doing and what's waiting for you.</p>
+          </div>
+          <div class="card">
+            <img src="/help/bell.webp" alt="" style="width: 44px; height: 44px" />
+            <p><b>Top right:</b> notifications, results and anything waiting for your OK.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="ask">
+        <div class="head">
+          <img src="/help/chat.webp" alt="" />
+          <h2>Things you can ask</h2>
+        </div>
+        <p class="lede">Talk to Neddy like you would a helpful assistant. A few ideas:</p>
+        <div class="chats">
+          <div class="card chat">
+            <div class="row"><img src="/help/email.webp" alt="" />Email</div>
+            <div class="me">Summarize my unread email and draft replies to anything urgent.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>You have 3 that need you. I drafted 2 replies for you to check.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/calendar.webp" alt="" />Calendar</div>
+            <div class="me">What's on tomorrow? Move my 3pm to Thursday.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>Two meetings and a dentist visit. Here's the change, tap Approve to send it.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/dinner.webp" alt="" />Restaurants</div>
+            <div class="me">Find a table for 4 at Nobu on Friday at 7:30.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>7:15 and 8:00 are open. Here's the OpenTable link with it all filled in.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/alarm.webp" alt="" />Reminders</div>
+            <div class="me">Remind me to call Mom on Sunday at 5.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>Done. You'll see it on your Feed with your other reminders.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/target.webp" alt="" />Routines</div>
+            <div class="me">Every weekday at 8am, send me a rundown of my day.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>Routine set. You'll get the first one tomorrow morning.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/eyes.webp" alt="" />Watch the web</div>
+            <div class="me">Watch this page and tell me when the price drops.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>I'm checking it regularly and will ping you when it changes.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/memo.webp" alt="" />Documents</div>
+            <div class="me">Write a one-page proposal as a Word document.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>Here it is. It's saved in Files &amp; media too.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/camera.webp" alt="" />Photos</div>
+            <div class="me">📎 What plant is this, and how often should I water it?</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>That's a pothos. Water it when the top inch of soil is dry.</div>
+            </div>
+          </div>
+        </div>
+        <div class="grid" style="margin-top: 12px">
+          <div class="card tint-green">
+            <img class="pic" src="/help/salad.webp" alt="" />
+            <h3>Health</h3>
+            <p>"Log my lunch: chicken salad and iced tea." "Coach me through a 20-minute workout."</p>
+          </div>
+          <div class="card tint-pink">
+            <img class="pic" src="/help/money.webp" alt="" />
+            <h3>Money</h3>
+            <p>"Find my subscriptions." "Buy the shoes in this photo, under $120."</p>
+          </div>
+          <div class="card tint-sky">
+            <img class="pic" src="/help/search.webp" alt="" />
+            <h3>Research</h3>
+            <p>"Compare the best family SUVs under $40k." "What's new with electric cars?"</p>
+          </div>
+          <div class="card tint-orange">
+            <img class="pic" src="/help/news.webp" alt="" />
+            <h3>Your feed</h3>
+            <p>"Make me a feed about local news and the Warriors."</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="safe">
+        <div class="head">
+          <img src="/help/shield.webp" alt="" />
+          <h2>You're always in control</h2>
+        </div>
+        <p class="lede">Neddy does the legwork. You make the calls.</p>
+        <div class="grid">
+          <div class="card promise">
+            <img src="/help/check.webp" alt="" />
+            <div>
+              <h3>Nothing happens without your OK</h3>
+              <p>
+                Sending, buying, booking or changing anything waits for you to tap Approve, in chat
+                or under the bell.
+              </p>
+            </div>
+          </div>
+          <div class="card promise">
+            <img src="/help/card.webp" alt="" />
+            <div>
+              <h3>Spending is off until you turn it on</h3>
+              <p>Then you set the most for one purchase and the most per month.</p>
+              <span class="path">Apps › Money</span>
+            </div>
+          </div>
+          <div class="card promise">
+            <img src="/help/lock.webp" alt="" />
+            <div>
+              <h3>Your space is private</h3>
+              <p>
+                Your chats, memory, files and apps are yours alone. Other people using Neato_Meca
+                can't see them.
+              </p>
+            </div>
+          </div>
+          <div class="card promise">
+            <img src="/help/brain.webp" alt="" />
+            <div>
+              <h3>You decide what Neddy remembers</h3>
+              <p>See, fix or forget any memory. Neddy suggests new ones and you approve them.</p>
+              <span class="path">Apps › Agent › Memory</span>
+            </div>
+          </div>
+          <div class="card promise">
+            <img src="/help/box.webp" alt="" />
+            <div>
+              <h3>Take your data or delete it</h3>
+              <p>Download everything, delete single messages, or start fresh.</p>
+              <span class="path">Apps › Account › Your data</span>
+            </div>
+          </div>
+          <div class="card promise">
+            <img src="/help/hand.webp" alt="" />
+            <div>
+              <h3>Skip the question for small things</h3>
+              <p>You can let chosen low-risk actions go ahead without asking, and undo that anytime.</p>
+              <span class="path">Apps › Apps › Always allowed</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tips">
+        <div class="head">
+          <img src="/help/bulb.webp" alt="" />
+          <h2>Tips to get more from Neddy</h2>
+        </div>
+        <p class="lede">Settings live under <b>Apps</b>, sorted into tabs.</p>
+        <div class="grid">
+          <div class="card tint-lavender">
+            <img class="pic" src="/help/mic.webp" alt="" />
+            <h3>Talk hands-free</h3>
+            <p>
+              Tap the sound-wave button next to the message box and just talk. Tap Interrupt to cut
+              in while Neddy is speaking.
+            </p>
+            <span class="path">Voice: Apps › Agent</span>
+          </div>
+          <div class="card tint-sky">
+            <img class="pic" src="/help/mailbox.webp" alt="" />
+            <h3>Neddy's own email address</h3>
+            <p>Forward email to it and Neddy takes it from there, attachments included.</p>
+            <span class="path">Apps › Agent › Agent email</span>
+          </div>
+          <div class="card tint-orange">
+            <img class="pic" src="/help/bell.webp" alt="" />
+            <h3>Email alerts and rules</h3>
+            <p>Hear about new email right away, or set rules like "When Dana emails, summarize it."</p>
+            <span class="path">Apps › Alerts</span>
+          </div>
+          <div class="card tint-green">
+            <img class="pic" src="/help/phone.webp" alt="" />
+            <h3>Phone notifications</h3>
+            <p>On iPhone, add the app to your home screen first and open it from there.</p>
+            <span class="path">Apps › Alerts › Phone app</span>
+          </div>
+          <div class="card tint-teal">
+            <img class="pic" src="/help/computer.webp" alt="" />
+            <h3>Neddy's computer</h3>
+            <p>
+              Neddy browses in his own browser. Tap Take control to sign in to a site or finish
+              something yourself.
+            </p>
+          </div>
+          <div class="card tint-pink">
+            <img class="pic" src="/help/thumbs-up.webp" alt="" />
+            <h3>Tune your feed</h3>
+            <p>React to stories and your feed learns what you like, and what you don't.</p>
+          </div>
+          <div class="card tint-lavender">
+            <img class="pic" src="/help/palette.webp" alt="" />
+            <h3>Make Neddy yours</h3>
+            <p>Rename him, pick a different avatar and choose how he talks. Dark mode is in Account.</p>
+            <span class="path">Apps › Agent</span>
+          </div>
+          <div class="card tint-sky">
+            <img class="pic" src="/help/files.webp" alt="" />
+            <h3>Bring in your files</h3>
+            <p>Share a Google Drive, OneDrive or Dropbox link and ask Neddy to save it to Files.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="fix">
+        <div class="head">
+          <img src="/help/toolbox.webp" alt="" />
+          <h2>Something not working?</h2>
+        </div>
+        <p class="lede">Tap a question to see the answer.</p>
+        <details>
+          <summary><img class="faq-pic" src="/help/mail-link.webp" alt="" />My sign-in link doesn't work</summary>
+          <div class="answer">
+            Each link works once. Invite links last 3 days and sign-in links 15 minutes. Ask for a
+            new one on the sign-in screen. <b>Using the app from your iPhone home screen?</b> Links
+            open in Safari, so press and hold the link in the email, tap Copy, and paste it on the
+            sign-in screen.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/plug.webp" alt="" />Neddy says an app needs reconnecting</summary>
+          <div class="answer">
+            Apps sometimes sign you out. Go to <b>Apps › Apps</b>, find the app and tap Connect to
+            sign in again.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/dinner.webp" alt="" />A website turned Neddy away</summary>
+          <div class="answer">
+            Some sites, like OpenTable, block automated browsers. Neddy gives you a link with the
+            date, time and party size already filled in. Tap it to finish on your phone.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/bell.webp" alt="" />I'm not getting notifications</summary>
+          <div class="answer">
+            On iPhone, add Neato_Meca to your home screen, open it from there, then turn on
+            notifications in <b>Apps › Alerts</b>. Check that your phone's settings allow
+            notifications for it too.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/thinking.webp" alt="" />Neddy got something wrong</summary>
+          <div class="answer">
+            Tell him in chat, like "No, I prefer morning meetings." To fix something he remembers,
+            go to <b>Apps › Agent › Memory</b>.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/computer.webp" alt="" />It says the worker is offline</summary>
+          <div class="answer">
+            Background work pauses for a moment, often during an update. Your saved work carries on
+            by itself when it reconnects, so try again in a minute or two.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/phone.webp" alt="" />The app icon or look didn't update</summary>
+          <div class="answer">
+            Close and reopen the app. For a new home-screen icon, remove the app from your home
+            screen and add it again.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/people.webp" alt="" />How do I invite a friend?</summary>
+          <div class="answer">
+            The person who runs your Neato_Meca invites people in <b>Apps › Account › People</b>.
+            Each person gets their own private space and their own agent.
+          </div>
+        </details>
+        <details>
+          <summary><img class="faq-pic" src="/help/raise-hand.webp" alt="" />Still stuck?</summary>
+          <div class="answer">
+            Ask the person who invited you to Neato_Meca. It helps to say what you tapped and what
+            you saw.
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <img class="foot-pic" src="/icon-512.png" alt="" />
+      <div><a class="btn" href="/">Open Neato_Meca</a></div>
+      3D emoji from Microsoft's Fluent Emoji (MIT license).
+    </footer>
+  </body>
+</html>

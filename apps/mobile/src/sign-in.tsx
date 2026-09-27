@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { API_URL, requestSignInLink } from "./api";
+import { hasHelp, openHelp } from "./help-ui";
 import { pastedLoginToken } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
 
@@ -124,6 +125,13 @@ export function SignInCard({
           Local workspaces open without a key. Make sure your Neato_Meca server is running at{" "}
           {API_URL}.
         </Text>
+      )}
+      {hasHelp && (
+        <Pressable accessibilityRole="link" onPress={() => openHelp("start")}>
+          <Text style={[s.small, { textAlign: "center", textDecorationLine: "underline" }]}>
+            New here? See how Neato_Meca works
+          </Text>
+        </Pressable>
       )}
     </Card>
   );
