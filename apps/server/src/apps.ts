@@ -47,6 +47,14 @@ export interface AppConnector {
   /** Starts reporting new email in a connected mail app to the webhook; returns its trigger. */
   watchMail?(owner: string, app: string): Promise<{ triggerId: string; trigger: string }>;
   unwatchMail?(owner: string, triggerId: string): Promise<void>;
+  /** The events a connected app can report, such as a new booking or message. */
+  eventTypes?(owner: string, app: string): Promise<AppEventType[]>;
+  /** Starts reporting one of those events to the webhook; stop it with unwatchMail. */
+  watchEvent?(
+    owner: string,
+    app: string,
+    event: string,
+  ): Promise<{ triggerId: string; name: string }>;
   /**
    * Has the connector send trigger events to `url`. Returns the secret it signs them with, or no
    * secret when the subscription `knownId` (whose secret the server keeps) already does.
@@ -150,7 +158,28 @@ interface WebhookSubscription {
 interface TriggerType {
   slug: string;
   name?: string;
-  config?: { properties?: Record<string, { default?: unknown }> };
+  description?: string;
+  config?: { properties?: Record<string, { default?: unknown }>; required?: string[] };
+}
+export interface AppEventType {
+  slug: string;
+  name: string;
+  description: string;
+  /** Settings the app needs that have no default, such as a Slack channel. */
+  needs: string[];
+}
+/** What an app's trigger reports, and the settings it can't start without. */
+export function eventType(type: TriggerType): AppEventType {
+  const properties = type.config?.properties ?? {};
+  return {
+    slug: type.slug,
+    name: type.name?.trim() || type.slug,
+    description: (type.description ?? "").slice(0, 300),
+    needs: (type.config?.required ?? []).filter(
+      (key) =>
+        !(properties[key] && typeof properties[key] === "object" && "default" in properties[key]),
+    ),
+  };
 }
 /** The trigger for new incoming email among an app's triggers. */
 export function mailTrigger(types: TriggerType[]) {
@@ -573,6 +602,47 @@ export class ComposioConnector implements AppConnector {
     const triggerId = created.trigger_id ?? created.id;
     if (!triggerId) throw new AppError("The app connector didn't start watching", 502);
     return { triggerId, trigger: trigger.slug };
+  }
+  private async activeAccount(owner: string, app: string) {
+    const slug = app.trim().toLowerCase();
+    const account = (await this.toolkits(owner, { is_connected: "true" })).find(
+      (item) => item.slug === slug,
+    )?.connected_account;
+    if (!account?.id || account.status?.toUpperCase() !== "ACTIVE")
+      throw new AppError(`Connect ${slug} in Apps first`, 409);
+    return { slug, id: account.id };
+  }
+  private async triggerTypes(slug: string) {
+    const types = await this.request<{ items?: TriggerType[] }>(
+      "GET",
+      `/api/v3/triggers_types?toolkit_slugs=${encodeURIComponent(slug)}&limit=100`,
+    );
+    return types.items ?? [];
+  }
+  async eventTypes(owner: string, app: string) {
+    const { slug } = await this.activeAccount(owner, app);
+    return (await this.triggerTypes(slug)).map(eventType);
+  }
+  async watchEvent(owner: string, app: string, event: string) {
+    const { slug, id } = await this.activeAccount(owner, app);
+    const type = (await this.triggerTypes(slug)).find(
+      (t) => t.slug.toUpperCase() === event.trim().toUpperCase(),
+    );
+    if (!type) throw new AppError(`${slug} doesn't report "${event}"`, 404);
+    const info = eventType(type);
+    if (info.needs.length)
+      throw new AppError(
+        `This alert needs settings that can't be guessed yet (${info.needs.join(", ")}). Choose another event.`,
+        422,
+      );
+    const created = await this.request<{ trigger_id?: string; id?: string }>(
+      "POST",
+      `/api/v3/trigger_instances/${encodeURIComponent(type.slug)}/upsert`,
+      { connected_account_id: id, trigger_config: triggerDefaults(type) },
+    );
+    const triggerId = created.trigger_id ?? created.id;
+    if (!triggerId) throw new AppError("The app connector didn't start watching", 502);
+    return { triggerId, name: info.name };
   }
   async ensureWebhook(url: string, knownId?: string) {
     const listed = await this.request<WebhookSubscription[] | { items?: WebhookSubscription[] }>(

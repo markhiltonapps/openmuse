@@ -9,6 +9,7 @@ import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/i
 import { AccountService, type Mailer, ResendMailer } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
+import { AppEvents } from "./app-events.ts";
 import { ApprovalRules } from "./approval-rules.ts";
 import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
@@ -148,6 +149,14 @@ export async function createApp(
       })
     : undefined;
   agent.mailAlerts = mailAlerts;
+  const appEvents = new AppEvents(
+    db,
+    apps,
+    agent,
+    () => mailAlerts?.ready() ?? Promise.resolve(false),
+  );
+  if (mailAlerts) mailAlerts.others = (id, data, key) => appEvents.handle(id, data, key);
+  agent.appEvents = appEvents;
   // A live server tells Composio where to send new-email events as soon as it starts.
   if (mailAlerts && config.mode === "live" && /^https:/.test(config.publicUrl))
     void mailAlerts.setUp();
@@ -780,6 +789,15 @@ export async function createApp(
     );
     return c.body(await files.bytes(c.get("owner"), file.id));
   });
+  app.get("/api/app-alerts", async (c) =>
+    c.json({
+      available: appEvents.available && !!mailAlerts,
+      alerts: await appEvents.list(c.get("owner")),
+    }),
+  );
+  app.post("/api/app-alerts/:id/stop", async (c) =>
+    c.json(await appEvents.stop(c.get("owner"), c.req.param("id"))),
+  );
   app.get("/api/people", async (c) => c.json({ people: await agent.people.list(c.get("owner")) }));
   app.post("/api/people", async (c) =>
     c.json(await agent.people.note(c.get("owner"), await c.req.json()), 201),

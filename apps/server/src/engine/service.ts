@@ -29,6 +29,7 @@ import type {
   ProposalInput,
 } from "../../../../packages/domain/src/index.ts";
 import { type ActionService, usesGoogle } from "../actions.ts";
+import type { AppEvents } from "../app-events.ts";
 import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
 import type { BrowserService } from "../browser.ts";
@@ -896,6 +897,8 @@ export class AgentService {
   reminders?: ReminderService;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
   commitments?: Commitments;
+  /** Alerts from connected apps beyond email, such as a new booking or message. */
+  appEvents?: AppEvents;
   /** Connected-app actions the person always allows. */
   approvals?: ApprovalRules;
   /** Looks at pictures in Files; set when a vision model is configured. */

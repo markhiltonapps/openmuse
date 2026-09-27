@@ -13,6 +13,7 @@ import {
   routineInputSchema,
 } from "../../../../packages/domain/src/agent.ts";
 import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tools.ts";
+import { appEventInstructions, appEventToolSpecs } from "../app-events.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
 import { commitmentInstructions, commitmentToolSpecs } from "../commitments.ts";
@@ -269,6 +270,9 @@ export class ConversationAgent extends AbstractAgent {
         ...(this.service.commitments
           ? commitmentToolSpecs(this.service.commitments, this.owner)
           : []),
+        ...(this.service.appEvents?.available && this.service.mailAlerts
+          ? appEventToolSpecs(this.service.appEvents, this.owner)
+          : []),
       ].map((spec) =>
         defineTool({
           ...spec,
@@ -461,6 +465,7 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.commitments ? commitmentInstructions : "") +
         restaurantInstructions +
         (mailAlerts ? mailAlertInstructions : "") +
+        (this.service.appEvents?.available && mailAlerts ? appEventInstructions : "") +
         (search ? webSearchInstructions : "") +
         (mail ? agentEmailInstructions : "") +
         (health ? healthToolInstructions : "") +

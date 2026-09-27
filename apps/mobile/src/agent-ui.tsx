@@ -39,6 +39,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { AppAlertsCard } from "./app-alerts-ui";
 import { AppearanceCard } from "./appearance-ui";
 import { AlwaysAllowedCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
@@ -2111,6 +2112,7 @@ export function AppsScreen() {
       {tab === "alerts" && (
         <>
           <MailAlertsCard />
+          <AppAlertsCard />
           <PhoneAppCard />
         </>
       )}

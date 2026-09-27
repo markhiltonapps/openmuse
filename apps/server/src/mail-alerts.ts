@@ -153,6 +153,8 @@ export class MailAlerts {
   private setupError?: string;
   private failedAt = 0;
   private settingUp?: Promise<string | undefined>;
+  /** Events from other app alerts (not email) that arrive on the same webhook. */
+  others?: (triggerId: string, data: Record<string, unknown>, key: string) => Promise<boolean>;
   constructor(
     private readonly db: Store,
     private readonly apps: AppConnector | undefined,
@@ -217,7 +219,7 @@ export class MailAlerts {
     return this.settingUp;
   }
   /** Watching needs the connector and the webhook secret that proves events come from it. */
-  private async ready() {
+  async ready() {
     if (!this.apps?.watchMail) return false;
     return Boolean((await this.signingSecret()) ?? (await this.setUp()));
   }
@@ -346,8 +348,12 @@ export class MailAlerts {
     const watch = triggerId
       ? await this.db.get<TriggerOwner>("system", "mail-triggers", triggerId)
       : null;
-    // Events for triggers this server didn't create (another app on the same project).
-    if (!watch) return { ignored: true };
+    if (!watch) {
+      // Another app alert of this server's, or a trigger it didn't create (another app).
+      const key = text(event.data.id) || headers.id || hash(body);
+      if (triggerId && (await this.others?.(triggerId, event.data, key))) return { ok: true };
+      return { ignored: true };
+    }
     const settings = await this.settings(watch.owner);
     // The person turned it off or reset their data since.
     if (settings.watching[watch.app]?.triggerId !== watch.id) return { ignored: true };
