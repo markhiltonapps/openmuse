@@ -192,3 +192,64 @@ test("watching a mailbox creates a Composio trigger with its defaults", async ()
   await assert.rejects(connector.watchMail("sam", "outlook"), /Connect outlook in Apps first/);
   await db.close();
 });
+
+test("the server sets up its own Composio webhook and keeps the secret encrypted", async () => {
+  const db = await createStore();
+  const key = Buffer.alloc(32, 7).toString("base64");
+  const calls: { method: string; path: string; body?: unknown }[] = [];
+  let subscriptions: { id: string; webhook_url: string; enabled_events: string[] }[] = [];
+  const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+    const { pathname } = new URL(String(url));
+    const method = init?.method ?? "GET";
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ method, path: pathname, body });
+    if (method === "GET" && pathname === "/api/v3/webhook_subscriptions")
+      return Response.json({ items: subscriptions });
+    if (method === "POST" && pathname === "/api/v3/webhook_subscriptions") {
+      subscriptions = [
+        { id: "ws_1", webhook_url: body.webhook_url, enabled_events: body.enabled_events },
+      ];
+      return Response.json({ ...subscriptions[0], secret: "whsec_c2VjcmV0LWtleS1mb3ItdGVzdHM=" });
+    }
+    if (method === "POST" && pathname === "/api/v3/webhook_subscriptions/ws_1/rotate_secret")
+      return Response.json({ secret: "rotated-secret" });
+    return Response.json({ error: { message: "Not found" } }, { status: 404 });
+  }) as typeof fetch;
+  const connector = new ComposioConnector(
+    db,
+    { composioApiKey: "test-composio-key", composioBaseUrl: "https://composio.test" } as Config & {
+      composioApiKey: string;
+    },
+    fetcher,
+  );
+  const url = "https://api.example/api/webhooks/composio";
+  const alerts = new MailAlerts(
+    db,
+    connector,
+    undefined,
+    {
+      notify: () => undefined,
+      createTask: async () => ({ id: "t" }),
+    },
+    { url, encryptionKey: key },
+  );
+  assert.equal(await alerts.setUp(), SECRET);
+  assert.deepEqual(calls.find((c) => c.method === "POST")?.body, {
+    webhook_url: url,
+    enabled_events: ["composio.trigger.message"],
+  });
+  // Kept encrypted, and events signed with it are accepted.
+  const saved = await db.get<{ secret: string }>("system", "composio-webhook", "subscription");
+  assert.ok(saved && !saved.secret.includes("c2VjcmV0"));
+  const body = '{"metadata":{"trigger_id":"unknown"},"data":{}}';
+  assert.deepEqual(await alerts.receive(body, signed(body)), { ignored: true });
+  // Set up again: nothing new is created or rotated.
+  const before = calls.length;
+  await alerts.setUp();
+  assert.equal(calls.filter((c) => c.method === "POST").length, 1);
+  assert.ok(calls.length > before);
+  // A subscription already sending here whose secret was lost gets a new secret.
+  await db.remove("system", "composio-webhook", "subscription");
+  assert.equal(await alerts.setUp(), "rotated-secret");
+  await db.close();
+});

@@ -139,9 +139,15 @@ export async function createApp(
         })
       : undefined);
   const mailAlerts = apps
-    ? new MailAlerts(db, apps, config.composioWebhookSecret, agent)
+    ? new MailAlerts(db, apps, config.composioWebhookSecret, agent, {
+        url: `${config.publicUrl.replace(/\/+$/, "")}/api/webhooks/composio`,
+        encryptionKey: config.encryptionKey,
+      })
     : undefined;
   agent.mailAlerts = mailAlerts;
+  // A live server tells Composio where to send new-email events as soon as it starts.
+  if (mailAlerts && config.mode === "live" && /^https:/.test(config.publicUrl))
+    void mailAlerts.setUp();
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   feed.usage = (owner) => usage.sink(owner, "feed");
   agent.feed = feed;

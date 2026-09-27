@@ -47,6 +47,11 @@ export interface AppConnector {
   /** Starts reporting new email in a connected mail app to the webhook; returns its trigger. */
   watchMail?(owner: string, app: string): Promise<{ triggerId: string; trigger: string }>;
   unwatchMail?(owner: string, triggerId: string): Promise<void>;
+  /**
+   * Has the connector send trigger events to `url`. Returns the secret it signs them with, or no
+   * secret when the subscription `knownId` (whose secret the server keeps) already does.
+   */
+  ensureWebhook?(url: string, knownId?: string): Promise<{ id: string; secret?: string }>;
 }
 
 /** Apps shown before the person searches, in this order. */
@@ -133,6 +138,14 @@ const toConnection = (item: Toolkit): AppConnection => ({
   description: item.meta?.description?.slice(0, 200),
 });
 
+/** The Composio event that carries a trigger's data, such as a new email. */
+const TRIGGER_EVENT = "composio.trigger.message";
+interface WebhookSubscription {
+  id: string;
+  webhook_url?: string;
+  enabled_events?: string[];
+  secret?: string;
+}
 interface TriggerType {
   slug: string;
   name?: string;
@@ -194,7 +207,7 @@ export class ComposioConnector implements AppConnector {
    * requests. A refused request did nothing, so trying a write again can't do it twice.
    */
   private async request<T>(
-    method: "GET" | "POST" | "DELETE",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body?: unknown,
     options: { write?: boolean } = {},
@@ -210,7 +223,7 @@ export class ComposioConnector implements AppConnector {
     }
   }
   private async requestOnce<T>(
-    method: "GET" | "POST" | "DELETE",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body?: unknown,
     options: { write?: boolean } = {},
@@ -222,9 +235,11 @@ export class ComposioConnector implements AppConnector {
         headers: {
           "x-api-key": this.config.composioApiKey,
           accept: "application/json",
-          ...(method === "POST" ? { "content-type": "application/json" } : {}),
+          ...(method === "POST" || method === "PATCH"
+            ? { "content-type": "application/json" }
+            : {}),
         },
-        body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+        body: method === "POST" || method === "PATCH" ? JSON.stringify(body ?? {}) : undefined,
         signal: AbortSignal.timeout(60000),
       });
     } catch (error) {
@@ -557,6 +572,53 @@ export class ComposioConnector implements AppConnector {
     const triggerId = created.trigger_id ?? created.id;
     if (!triggerId) throw new AppError("The app connector didn't start watching", 502);
     return { triggerId, trigger: trigger.slug };
+  }
+  async ensureWebhook(url: string, knownId?: string) {
+    const listed = await this.request<WebhookSubscription[] | { items?: WebhookSubscription[] }>(
+      "GET",
+      "/api/v3/webhook_subscriptions",
+    );
+    const all = Array.isArray(listed) ? listed : (listed.items ?? []);
+    const same = (value?: string) => value?.replace(/\/+$/, "") === url.replace(/\/+$/, "");
+    const mine = all.find((item) => same(item.webhook_url));
+    if (mine) {
+      if (mine.enabled_events && !mine.enabled_events.includes(TRIGGER_EVENT))
+        await this.request(
+          "PATCH",
+          `/api/v3/webhook_subscriptions/${encodeURIComponent(mine.id)}`,
+          {
+            enabled_events: [...mine.enabled_events, TRIGGER_EVENT],
+          },
+        );
+      if (mine.id === knownId) return { id: mine.id };
+      // Already sending here, but this server doesn't have its secret: get a new one.
+      const rotated = await this.request<{ secret?: string }>(
+        "POST",
+        `/api/v3/webhook_subscriptions/${encodeURIComponent(mine.id)}/rotate_secret`,
+        {},
+      );
+      if (!rotated.secret) throw new AppError("Composio didn't return a signing secret", 502);
+      return { id: mine.id, secret: rotated.secret };
+    }
+    try {
+      const created = await this.request<WebhookSubscription>(
+        "POST",
+        "/api/v3/webhook_subscriptions",
+        { webhook_url: url, enabled_events: [TRIGGER_EVENT] },
+      );
+      if (!created.id || !created.secret)
+        throw new AppError("Composio didn't return a signing secret", 502);
+      return { id: created.id, secret: created.secret };
+    } catch (error) {
+      // A Composio project may allow a single subscription, used by another app.
+      const others = all.map((item) => item.webhook_url).filter(Boolean);
+      if (others.length && error instanceof AppError)
+        throw new AppError(
+          `${error.message}. Composio already sends events to ${others.join(", ")}`,
+          error.status,
+        );
+      throw error;
+    }
   }
   async unwatchMail(_owner: string, triggerId: string) {
     try {

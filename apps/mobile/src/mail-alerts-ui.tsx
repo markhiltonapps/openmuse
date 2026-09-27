@@ -13,6 +13,8 @@ interface MailRule {
 }
 interface MailAlerts {
   available: boolean;
+  /** Why the server couldn't set up new-email events with Composio. */
+  problem?: string;
   notify: Notify;
   apps: { app: "gmail" | "outlook"; name: string; connected: boolean; watching: boolean }[];
   rules: MailRule[];
@@ -66,7 +68,9 @@ export function MailAlertsCard() {
       </Text>
       {!state.available ? (
         <Text style={s.muted}>
-          Needs the Composio webhook set up on the server (COMPOSIO_WEBHOOK_SECRET).
+          {state.problem
+            ? `Couldn't set this up with Composio: ${state.problem}`
+            : "Setting this up with Composio. Check back in a minute."}
         </Text>
       ) : !connected.length ? (
         <Text style={s.muted}>Connect Gmail or Outlook under More apps to turn this on.</Text>

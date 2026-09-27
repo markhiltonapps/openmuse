@@ -28,7 +28,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `ALLOWED_ORIGINS` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` |
 | `COMPOSIO_API_KEY` | Optional. Connects Outlook, Slack, Notion and 1,000+ more apps through Composio |
 | `COMPOSIO_AUTH_CONFIGS` | Optional. Auth configs to use for apps Composio can't sign in to itself, such as `brex=ac_…` (comma-separated). Found automatically when unset |
-| `COMPOSIO_WEBHOOK_SECRET` | Optional. Turns on instant new-email alerts and "when X emails me, do Y" rules for Gmail and Outlook. In the Composio dashboard, set the project's webhook URL to `https://<api domain>/api/webhooks/composio` and copy its signing secret here |
+| `COMPOSIO_WEBHOOK_SECRET` | Optional. New-email alerts and "when X emails me, do Y" rules work without it: a live server registers its own webhook with Composio at `PUBLIC_API_URL/api/webhooks/composio` when it starts, and keeps the signing secret encrypted in its database. Set this only to use a webhook you created in the Composio dashboard yourself |
 | `BROWSER_WORKER_URL` | `http://${{browser.RAILWAY_PRIVATE_DOMAIN}}:8790` |
 | `WORKER_TOKEN` | Same random 32+ character secret as the browser service |
 | `RESEND_API_KEY` | Optional. Reads email sent to the agent's address |

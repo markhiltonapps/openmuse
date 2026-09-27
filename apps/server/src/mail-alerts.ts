@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { decryptSecret, encryptSecret } from "../../../packages/integrations/src/vault.ts";
 import type { AppConnector } from "./apps.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -135,24 +136,88 @@ export function ruleMatches(rule: MailRule, email: IncomingEmail) {
   );
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 32);
+interface SavedWebhook {
+  id: "subscription";
+  subscriptionId: string;
+  url: string;
+  /** Encrypted with TOKEN_ENCRYPTION_KEY when the server has one. */
+  secret: string;
+  createdAt: string;
+}
 
 /**
  * New email in Gmail and Outlook as it arrives, through the app connector's triggers: a
  * notification, and the person's "when X emails me, do Y" rules run as background tasks.
  */
 export class MailAlerts {
+  private setupError?: string;
+  private failedAt = 0;
+  private settingUp?: Promise<string | undefined>;
   constructor(
     private readonly db: Store,
     private readonly apps: AppConnector | undefined,
+    /** COMPOSIO_WEBHOOK_SECRET, when it's set by hand; otherwise the server sets it up. */
     private readonly secret: string | undefined,
     private readonly agent: {
       notify(owner: string, title: string, body: string, taskId?: string, key?: string): unknown;
       createTask(owner: string, input: unknown, key?: string): Promise<{ id: string }>;
     },
+    private readonly webhook?: { url: string; encryptionKey?: string },
   ) {}
+  /** The secret Composio signs events with: set by hand, or kept from setting it up. */
+  private async signingSecret() {
+    if (this.secret) return this.secret;
+    const saved = await this.db.get<SavedWebhook>("system", "composio-webhook", "subscription");
+    if (!saved || saved.url !== this.webhook?.url) return undefined;
+    const key = this.webhook.encryptionKey;
+    return key ? decryptSecret(saved.secret, key) : saved.secret;
+  }
+  /**
+   * Has Composio send new-email events to this server and keeps the secret it signs them with,
+   * so nobody has to copy it by hand. Safe to call again; runs once at a time.
+   */
+  async setUp(): Promise<string | undefined> {
+    if (this.secret) return this.secret;
+    if (!this.apps?.ensureWebhook || !this.webhook) return undefined;
+    // After a failure, wait a few minutes before asking Composio again.
+    if (!this.settingUp && Date.now() - this.failedAt < 5 * 60_000) return undefined;
+    this.settingUp ??= (async () => {
+      const { url, encryptionKey } = this.webhook as { url: string; encryptionKey?: string };
+      const saved = await this.db.get<SavedWebhook>("system", "composio-webhook", "subscription");
+      const known = saved?.url === url ? saved.subscriptionId : undefined;
+      try {
+        const result = await this.apps?.ensureWebhook?.(url, known);
+        if (result?.secret)
+          await this.db.put("system", "composio-webhook", {
+            id: "subscription",
+            subscriptionId: result.id,
+            url,
+            secret: encryptionKey ? encryptSecret(result.secret, encryptionKey) : result.secret,
+            createdAt: new Date().toISOString(),
+          } satisfies SavedWebhook);
+        this.setupError = undefined;
+        const secret = await this.signingSecret();
+        console.log(
+          secret
+            ? `[OpenMuse] Composio sends new-email events to ${url}`
+            : "[OpenMuse] Composio webhook set up, but its secret isn't saved",
+        );
+        return secret;
+      } catch (error) {
+        this.setupError = error instanceof Error ? error.message : String(error);
+        this.failedAt = Date.now();
+        console.warn(`[OpenMuse] Composio webhook setup failed: ${this.setupError}`);
+        return undefined;
+      } finally {
+        this.settingUp = undefined;
+      }
+    })();
+    return this.settingUp;
+  }
   /** Watching needs the connector and the webhook secret that proves events come from it. */
-  get available() {
-    return Boolean(this.apps?.watchMail && this.secret);
+  private async ready() {
+    if (!this.apps?.watchMail) return false;
+    return Boolean((await this.signingSecret()) ?? (await this.setUp()));
   }
   private async settings(owner: string): Promise<MailAlertSettings> {
     return (
@@ -171,8 +236,10 @@ export class MailAlerts {
         ? this.apps.connections(owner).catch(() => [])
         : Promise.resolve([] as { app: string; connected: boolean }[]),
     ]);
+    const available = await this.ready().catch(() => false);
     return {
-      available: this.available,
+      available,
+      ...(available || !this.setupError ? {} : { problem: this.setupError }),
       notify: settings.notify,
       apps: MAIL_APPS.map((app) => ({
         app,
@@ -186,9 +253,9 @@ export class MailAlerts {
   async watch(owner: string, app: MailApp, enabled: boolean) {
     if (!this.apps?.watchMail || !this.apps.unwatchMail)
       throw new AppError("Connected apps aren't set up on the server", 503);
-    if (enabled && !this.secret)
+    if (enabled && !(await this.ready()))
       throw new AppError(
-        "New-email alerts need COMPOSIO_WEBHOOK_SECRET on the server (see the setup guide)",
+        `New-email alerts couldn't be set up with Composio${this.setupError ? `: ${this.setupError}` : ""}`,
         503,
       );
     const settings = await this.settings(owner);
@@ -254,8 +321,9 @@ export class MailAlerts {
   }
   /** An event from the connector: checked, then turned into a notification and rule tasks. */
   async receive(body: string, headers: { id?: string; timestamp?: string; signature?: string }) {
-    if (!this.secret) throw new AppError("New-email alerts aren't set up", 503);
-    if (!verifyWebhook(this.secret, headers, body)) {
+    const secret = await this.signingSecret();
+    if (!secret) throw new AppError("New-email alerts aren't set up", 503);
+    if (!verifyWebhook(secret, headers, body)) {
       console.warn(
         `[OpenMuse] Composio webhook signature didn't match (id ${headers.id ? "present" : "missing"}, timestamp ${headers.timestamp ? "present" : "missing"}, signature ${headers.signature ? "present" : "missing"})`,
       );
