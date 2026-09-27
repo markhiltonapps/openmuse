@@ -15,6 +15,7 @@ import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
 import { assertApiDeploymentConfig, type Config } from "./config.ts";
+import { DataControls, type ThreadStore } from "./data-controls.ts";
 import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
@@ -24,7 +25,14 @@ import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
+import {
+  chatgptMessages,
+  extractMemories,
+  listedMemories,
+  recentHistory,
+} from "./memory-import.ts";
 import { PushService } from "./push.ts";
+import { ReminderService } from "./reminders.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { lookAtImage } from "./vision.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
@@ -38,7 +46,7 @@ export async function createApp(
     apps?: AppConnector;
     mailer?: Mailer;
     search?: WebSearch;
-    intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread">;
+    intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread"> & ThreadStore;
   } = {},
 ) {
   assertApiDeploymentConfig(config);
@@ -96,15 +104,19 @@ export async function createApp(
   const push = await PushService.create(db, config);
   agent.push = push;
   agent.spending = spending;
-  if (config.agentBackend === "model" && config.anthropicApiKey) {
-    const apiKey = config.anthropicApiKey;
-    const model =
-      process.env.VISION_MODEL?.trim() ||
-      /^anthropic[/:](.+)$/.exec(config.model ?? "")?.[1] ||
-      "claude-sonnet-5";
-    agent.look = (image, question) =>
-      lookAtImage(image, question, { apiKey, model, baseUrl: process.env.ANTHROPIC_BASE_URL });
-  }
+  // Direct Claude calls for pictures and for reading imported history.
+  const claude =
+    config.agentBackend === "model" && config.anthropicApiKey
+      ? {
+          apiKey: config.anthropicApiKey,
+          model:
+            process.env.VISION_MODEL?.trim() ||
+            /^anthropic[/:](.+)$/.exec(config.model ?? "")?.[1] ||
+            "claude-sonnet-5",
+          baseUrl: process.env.ANTHROPIC_BASE_URL,
+        }
+      : undefined;
+  if (claude) agent.look = (image, question) => lookAtImage(image, question, claude);
   agent.search =
     options.search ??
     (config.agentBackend === "model" && config.anthropicApiKey
@@ -117,6 +129,15 @@ export async function createApp(
   agent.feed = feed;
   const health = new HealthService(db, (owner) => agent.timeZone(owner));
   agent.health = health;
+  const reminders = new ReminderService(
+    db,
+    (owner) => agent.timeZone(owner),
+    (owner, reminder) =>
+      agent.notify(owner, reminder.title, reminder.body, undefined, reminder.key, {
+        reminderId: reminder.id,
+      }),
+  );
+  agent.reminders = reminders;
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
@@ -232,7 +253,7 @@ export async function createApp(
   });
   app.use("/api/*", async (c, next) => {
     const signedRoute =
-      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$/.test(
+      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$/.test(
         c.req.path,
       );
     const owner =
@@ -328,6 +349,16 @@ export async function createApp(
   app.post("/api/health-log/meals", async (c) =>
     c.json(await health.logMeal(c.get("owner"), await c.req.json()), 201),
   );
+  app.get("/api/reminders", async (c) => c.json(await reminders.list(c.get("owner"))));
+  app.post("/api/reminders/:id/cancel", async (c) =>
+    c.json(await reminders.cancel(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/reminders/:id/snooze", async (c) => {
+    const { minutes } = z
+      .object({ minutes: z.number().int().min(1).max(1440).default(10) })
+      .parse(await c.req.json().catch(() => ({})));
+    return c.json(await reminders.snooze(c.get("owner"), c.req.param("id"), minutes));
+  });
   app.post("/api/health-log/:id/delete", async (c) =>
     c.json(await health.remove(c.get("owner"), c.req.param("id"))),
   );
@@ -443,6 +474,81 @@ export async function createApp(
         .deleteThread({ threadId: old.threadId, userId: owner, agentId: "default" })
         .catch(() => console.warn("[OpenMuse] Could not delete the previous main conversation"));
     return c.json({ ok: true });
+  });
+  const data = new DataControls(db, files, threads);
+  app.get("/api/threads/:threadId/hidden", async (c) =>
+    c.json({ messageIds: await data.hidden(c.get("owner"), c.req.param("threadId")) }),
+  );
+  app.post("/api/threads/:threadId/messages/:messageId/delete", async (c) =>
+    c.json(await data.hide(c.get("owner"), c.req.param("threadId"), c.req.param("messageId"))),
+  );
+  // A signed link, so the browser can download the export as a file.
+  app.post("/api/account/export-link", (c) =>
+    c.json({ url: auth.sign(c.get("owner"), "/api/account/export") }),
+  );
+  app.get("/api/account/export", async (c) => {
+    const zip = await data.export(c.get("owner"));
+    const day = new Date().toISOString().slice(0, 10);
+    return c.body(zip.buffer as ArrayBuffer, 200, {
+      "content-type": "application/zip",
+      "content-disposition": `attachment; filename="openmuse-export-${day}.zip"`,
+      "cache-control": "no-store",
+    });
+  });
+  app.post("/api/account/reset", async (c) => {
+    z.object({ confirm: z.literal("RESET") }).parse(await c.req.json());
+    return c.json(await data.reset(c.get("owner")));
+  });
+  // Memories from ChatGPT: its data export, or a pasted list. Each one waits for approval.
+  app.post("/api/memories/import", async (c) => {
+    const owner = c.get("owner");
+    const read = (text: string) => {
+      if (!claude)
+        throw new AppError(
+          "Reading ChatGPT history needs the Anthropic API key on the server",
+          503,
+        );
+      return extractMemories(text, claude);
+    };
+    let memories: string[];
+    if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+      const file = (await c.req.parseBody()).file;
+      if (!(file instanceof File)) throw new AppError("Choose your ChatGPT export");
+      if (file.size > 150 * 1024 * 1024)
+        throw new AppError(
+          "This export is too large. Open the .zip and upload conversations.json from inside it.",
+          413,
+        );
+      const history = recentHistory(chatgptMessages(new Uint8Array(await file.arrayBuffer())));
+      if (!history) throw new AppError("No conversations were found in this export", 422);
+      memories = await read(history);
+    } else {
+      const { text } = z
+        .object({ text: z.string().trim().min(3).max(100000) })
+        .parse(await c.req.json());
+      memories = listedMemories(text) ?? (await read(text));
+    }
+    let suggested = 0;
+    for (const text of memories) {
+      const result = await agent
+        .suggestMemory(
+          owner,
+          { text: text.slice(0, 500), reason: "From your ChatGPT history" },
+          "ChatGPT import",
+          { quiet: true },
+        )
+        .catch(() => undefined);
+      if (result?.status === "suggested") suggested++;
+    }
+    if (suggested)
+      await agent.notify(
+        owner,
+        "Memories from ChatGPT to review",
+        `${suggested} ${suggested === 1 ? "thing" : "things"} to keep or dismiss under Memory.`,
+        undefined,
+        `memory-import:${randomUUID()}`,
+      );
+    return c.json({ found: memories.length, suggested });
   });
   app.get("/api/conversation", async (c) =>
     c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),

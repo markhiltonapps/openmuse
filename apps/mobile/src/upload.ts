@@ -40,3 +40,32 @@ export async function chooseAndUpload(
     throw new Error(payload.error || "Could not add this file.");
   return payload;
 }
+
+/** Lets the person pick a file and sends it to `path` as-is. Undefined when they cancel. */
+export async function chooseAndSend<T>(
+  api: MuseApi,
+  path: string,
+  types: string[],
+): Promise<T | undefined> {
+  const result = await DocumentPicker.getDocumentAsync({ type: types, copyToCacheDirectory: true });
+  if (result.canceled) return undefined;
+  const file = result.assets[0];
+  if (!file) return undefined;
+  if (Platform.OS === "web") {
+    if (!file.file) throw new Error("The selected file could not be read. Please choose it again.");
+    const form = new FormData();
+    form.append("file", file.file, file.name);
+    return api.request<T>(path, form);
+  }
+  const response = await FileSystem.uploadAsync(`${API_URL}${path}`, file.uri, {
+    httpMethod: "POST",
+    uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+    fieldName: "file",
+    mimeType: file.mimeType ?? "application/octet-stream",
+    headers: { Authorization: `Bearer ${api.token}` },
+  });
+  const payload = JSON.parse(response.body);
+  if (response.status < 200 || response.status >= 300)
+    throw new Error(payload.error || "Could not send this file.");
+  return payload;
+}

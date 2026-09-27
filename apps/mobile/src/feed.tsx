@@ -1,4 +1,5 @@
 import {
+  AlarmClock,
   CalendarDays,
   CircleCheck,
   Clock,
@@ -22,6 +23,11 @@ interface FeedItem {
   sources: { title: string; url: string }[];
   day: string;
   createdAt: string;
+}
+interface Reminder {
+  id: string;
+  text: string;
+  when: string;
 }
 interface FeedState {
   topics: string[];
@@ -64,6 +70,18 @@ export function FeedScreen() {
   const { data } = useAgentWorkspace();
   const health = useHealth();
   const [feed, setFeed] = useState<FeedState>();
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const loadReminders = useCallback(
+    () =>
+      api.request<{ upcoming: Reminder[] }>("/api/reminders").then(
+        (list) => setReminders(list.upcoming),
+        () => undefined,
+      ),
+    [api],
+  );
+  useEffect(() => {
+    void loadReminders();
+  }, [loadReminders]);
   const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -171,6 +189,46 @@ export function FeedScreen() {
             </Text>
           </Pressable>
         )}
+      </Card>
+
+      <Card style={{ gap: 12 }}>
+        <SectionHeading
+          title="Upcoming"
+          action="Add a reminder"
+          onPress={() => ask("I'd like to set a reminder.")}
+        />
+        {reminders.length ? (
+          reminders.slice(0, 8).map((reminder) => (
+            <View key={reminder.id} style={[s.row, { gap: 10 }]}>
+              <AlarmClock size={16} color={colors.blueDark} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.text} numberOfLines={2}>
+                  {reminder.text}
+                </Text>
+                <Text style={s.small}>{reminder.when}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Cancel reminder: ${reminder.text}`}
+                hitSlop={8}
+                onPress={() =>
+                  void api
+                    .request(`/api/reminders/${reminder.id}/cancel`, {})
+                    .then(loadReminders, (e) =>
+                      setError(e instanceof Error ? e.message : String(e)),
+                    )
+                }
+              >
+                <X size={15} color={colors.muted} />
+              </Pressable>
+            </View>
+          ))
+        ) : (
+          <Text style={s.muted}>
+            No reminders. Ask in chat, like “remind me at 3 tomorrow to call the dentist.”
+          </Text>
+        )}
+        {reminders.length > 8 && <Text style={s.small}>+ {reminders.length - 8} more</Text>}
       </Card>
 
       <Card style={{ gap: 12 }}>

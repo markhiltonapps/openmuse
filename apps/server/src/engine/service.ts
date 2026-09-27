@@ -39,6 +39,7 @@ import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import type { HealthService } from "../health.ts";
 import { backgroundFailure } from "../log.ts";
+import type { ReminderService } from "../reminders.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
@@ -93,6 +94,9 @@ export class AgentService {
         await this.activateMonitor(owner, value);
       await this.runDueRoutines();
       await this.feed?.refreshDue().catch((error) => backgroundFailure("feed refresh", error));
+      await this.reminders
+        ?.deliverDue((owner) => this.removed(owner))
+        .catch((error) => backgroundFailure("reminders", error));
       for (const { owner, value } of await this.db.scan<Idea>("ideas"))
         if (
           value.status === "accepted" &&
@@ -715,6 +719,8 @@ export class AgentService {
   health?: HealthService;
   /** The Feed's morning refresh; runs from the maintenance loop. */
   feed?: { refreshDue(): Promise<void> };
+  /** One-off reminders; delivered from the maintenance loop. */
+  reminders?: ReminderService;
   /** Looks at pictures in Files; set when a vision model is configured. */
   look?: LookAtImage;
   /** The agent's own email address; set when agent email is configured. */
@@ -729,10 +735,18 @@ export class AgentService {
   push?: {
     notify(owner: string, message: { title: string; body: string; tag?: string }): Promise<void>;
   };
-  async notify(owner: string, title: string, body: string, taskId?: string, key?: string) {
+  async notify(
+    owner: string,
+    title: string,
+    body: string,
+    taskId?: string,
+    key?: string,
+    extra: Pick<AgentNotification, "reminderId"> = {},
+  ) {
     const value: AgentNotification = {
       id: key ? hash(key) : randomUUID(),
       taskId,
+      ...extra,
       title,
       body,
       createdAt: date(),
@@ -833,7 +847,12 @@ export class AgentService {
     }
   }
   /** Saves a fact the agent noticed for the person to keep or dismiss; never used until kept. */
-  async suggestMemory(owner: string, raw: unknown, source: string) {
+  async suggestMemory(
+    owner: string,
+    raw: unknown,
+    source: string,
+    options: { quiet?: boolean } = {},
+  ) {
     const input = memorySuggestionSchema.parse(raw);
     const normal = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
     const memories = await this.db.list<AgentMemory>(owner, "memories");
@@ -849,7 +868,7 @@ export class AgentService {
       status: "pending",
     };
     const saved = await this.db.insertIfAbsent(owner, "memory-suggestions", suggestion);
-    if (saved)
+    if (saved && !options.quiet)
       await this.notify(owner, "Something to remember?", input.text, undefined, `memory:${id}`);
     return { status: saved ? "suggested" : "already_suggested", id };
   }

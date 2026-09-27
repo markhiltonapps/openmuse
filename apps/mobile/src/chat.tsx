@@ -17,6 +17,7 @@ import {
   Paperclip,
   RotateCcw,
   Square,
+  Trash2,
   Volume2,
   X,
 } from "lucide-react-native";
@@ -345,6 +346,30 @@ export function ChatScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  // Messages the person deleted from this chat; the agent no longer sees them either.
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState<string>();
+  const hiddenPath = `/api/threads/${encodeURIComponent(threadId)}`;
+  useEffect(() => {
+    setHidden(new Set());
+    void api.request<{ messageIds: string[] }>(`${hiddenPath}/hidden`).then(
+      (result) => setHidden(new Set(result.messageIds)),
+      () => undefined,
+    );
+  }, [api, hiddenPath]);
+  async function deleteMessage(id: string) {
+    setConfirmingDelete(undefined);
+    if (speakingId === id) stopSpeaking();
+    try {
+      const result = await api.request<{ messageIds: string[] }>(
+        `${hiddenPath}/messages/${encodeURIComponent(id)}/delete`,
+        {},
+      );
+      setHidden(new Set(result.messageIds));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState<"photos" | "any">();
@@ -554,7 +579,9 @@ export function ChatScreen({
     (last, message, index) => (message.role === "user" ? index : last),
     -1,
   );
-  const visible = messages.filter((m) => m.role === "user" || m.role === "assistant");
+  const visible = messages.filter(
+    (m) => (m.role === "user" || m.role === "assistant") && !hidden.has(m.id),
+  );
   const replying = busy || agent.isRunning;
   const activity = chatActivity(messages, replying);
   useEffect(() => {
@@ -666,26 +693,71 @@ export function ChatScreen({
                     )}
                   </View>
                 )}
-                {!user && !!text && speechAvailable() && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={speakingId === message.id ? "Stop reading" : "Read aloud"}
-                    hitSlop={8}
-                    onPress={() => {
-                      if (speakingId === message.id) {
-                        stopSpeaking();
-                        setSpeakingId(undefined);
-                      } else void readAloud(message.id, text);
-                    }}
-                    style={[s.row, { gap: 5, alignSelf: "flex-start", paddingHorizontal: 6 }]}
+                {!!text && (
+                  <View
+                    style={[
+                      s.row,
+                      {
+                        gap: 12,
+                        alignSelf: user ? "flex-end" : "flex-start",
+                        paddingHorizontal: 6,
+                      },
+                    ]}
                   >
-                    {speakingId === message.id ? (
-                      <Square size={12} fill={colors.muted} strokeWidth={0} />
-                    ) : (
-                      <Volume2 size={14} color={colors.muted} />
+                    {!user && speechAvailable() && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          speakingId === message.id ? "Stop reading" : "Read aloud"
+                        }
+                        hitSlop={8}
+                        onPress={() => {
+                          if (speakingId === message.id) {
+                            stopSpeaking();
+                            setSpeakingId(undefined);
+                          } else void readAloud(message.id, text);
+                        }}
+                        style={[s.row, { gap: 5 }]}
+                      >
+                        {speakingId === message.id ? (
+                          <Square size={12} fill={colors.muted} strokeWidth={0} />
+                        ) : (
+                          <Volume2 size={14} color={colors.muted} />
+                        )}
+                        <Text style={s.small}>{speakingId === message.id ? "Stop" : "Listen"}</Text>
+                      </Pressable>
                     )}
-                    <Text style={s.small}>{speakingId === message.id ? "Stop" : "Listen"}</Text>
-                  </Pressable>
+                    {confirmingDelete === message.id ? (
+                      <>
+                        <Pressable
+                          accessibilityRole="button"
+                          hitSlop={8}
+                          onPress={() => void deleteMessage(message.id)}
+                        >
+                          <Text style={[s.small, { color: colors.danger, fontWeight: "600" }]}>
+                            Delete message
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          hitSlop={8}
+                          onPress={() => setConfirmingDelete(undefined)}
+                        >
+                          <Text style={s.small}>Keep</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete this message"
+                        hitSlop={8}
+                        onPress={() => setConfirmingDelete(message.id)}
+                        style={{ opacity: 0.55 }}
+                      >
+                        <Trash2 size={13} color={colors.muted} />
+                      </Pressable>
+                    )}
+                  </View>
                 )}
                 <BrowserRunContext
                   value={{

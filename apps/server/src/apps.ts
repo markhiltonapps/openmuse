@@ -171,21 +171,31 @@ export class ComposioConnector implements AppConnector {
     }
     return payload as T;
   }
-  /** One Tool Router session per owner, recreated when Composio no longer knows it. */
-  private async session(owner: string, fresh = false): Promise<string> {
-    const saved = fresh
-      ? null
-      : await this.db.get<{ id: string; sessionId: string; userId: string }>(
-          owner,
-          "app-connector",
-          "session",
-        );
-    if (saved && saved.userId === this.user(owner)) return saved.sessionId;
+  /**
+   * One Tool Router session per owner, recreated when Composio no longer knows it. `authConfigs`
+   * names the sign-in set up in the Composio dashboard for apps Composio can't sign in to itself;
+   * it carries over to later sessions.
+   */
+  private async session(
+    owner: string,
+    fresh = false,
+    authConfigs?: Record<string, string>,
+  ): Promise<string> {
+    const saved = await this.db.get<{
+      id: string;
+      sessionId: string;
+      userId: string;
+      authConfigs?: Record<string, string>;
+    }>(owner, "app-connector", "session");
+    const current = saved?.userId === this.user(owner) ? saved : null;
+    if (current && !fresh) return current.sessionId;
+    const configs = authConfigs ?? current?.authConfigs ?? {};
     const created = await this.request<{ session_id: string }>(
       "POST",
       "/api/v3.1/tool_router/session",
       {
         user_id: this.user(owner),
+        ...(Object.keys(configs).length ? { auth_configs: configs } : {}),
         manage_connections: { enable: false },
         workbench: { enable: false },
       },
@@ -194,8 +204,32 @@ export class ComposioConnector implements AppConnector {
       id: "session",
       sessionId: created.session_id,
       userId: this.user(owner),
+      authConfigs: configs,
     });
     return created.session_id;
+  }
+  /** Sign-ins set up in the Composio dashboard ("auth configs"), by app. */
+  private async customAuthConfigs(): Promise<Record<string, string>> {
+    try {
+      const list = await this.request<{
+        items?: {
+          id?: string;
+          toolkit?: { slug?: string };
+          is_composio_managed?: boolean;
+          status?: string;
+        }[];
+      }>("GET", "/api/v3/auth_configs?is_composio_managed=false&limit=100");
+      const configs: Record<string, string> = {};
+      for (const item of list.items ?? []) {
+        const app = item.toolkit?.slug?.toLowerCase();
+        if (!app || !item.id || item.is_composio_managed === true) continue;
+        if (item.status && item.status.toUpperCase() !== "ENABLED") continue;
+        configs[app] ??= item.id;
+      }
+      return configs;
+    } catch {
+      return {};
+    }
   }
   private async inSession<T>(owner: string, run: (session: string) => Promise<T>): Promise<T> {
     try {
@@ -272,14 +306,37 @@ export class ComposioConnector implements AppConnector {
     if (!/^[a-z0-9_-]+$/.test(slug)) throw new AppError(`Unknown app ${app}`, 404);
     if ((await this.connections(owner)).some((c) => c.app === slug && c.connected))
       return { connected: true };
-    const link = await this.inSession(owner, (session) =>
-      this.request<{ redirect_url: string }>(
-        "POST",
-        `/api/v3.1/tool_router/session/${encodeURIComponent(session)}/link`,
-        { toolkit: slug },
-      ),
-    );
-    return { connected: false, url: link.redirect_url };
+    const link = () =>
+      this.inSession(owner, (session) =>
+        this.request<{ redirect_url: string }>(
+          "POST",
+          `/api/v3.1/tool_router/session/${encodeURIComponent(session)}/link`,
+          { toolkit: slug },
+        ),
+      );
+    try {
+      return { connected: false, url: (await link()).redirect_url };
+    } catch (error) {
+      // Composio has no ready-made sign-in for some apps, such as Brex. Use one set up in its
+      // dashboard, if there is one.
+      if (!(error instanceof ComposioError) || !/does not manage auth/i.test(error.message))
+        throw error;
+      const config = (await this.customAuthConfigs())[slug];
+      const name = slug.charAt(0).toUpperCase() + slug.slice(1);
+      if (!config)
+        throw new AppError(
+          `${name} needs to be set up in Composio before it can be connected. In the Composio dashboard, open Auth Configs, create one for ${name} (for Brex, choose API Key), then tap Connect again.`,
+          409,
+        );
+      const saved = await this.db.get<{ authConfigs?: Record<string, string> }>(
+        owner,
+        "app-connector",
+        "session",
+      );
+      if (saved?.authConfigs?.[slug] === config) throw error;
+      await this.session(owner, true, { ...saved?.authConfigs, [slug]: config });
+      return { connected: false, url: (await link()).redirect_url };
+    }
   }
   private async toolkits(owner: string, query: Record<string, string>) {
     const list = await this.inSession(owner, (session) =>

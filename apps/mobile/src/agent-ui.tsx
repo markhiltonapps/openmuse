@@ -38,6 +38,7 @@ import type {
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AvatarPicker } from "./avatar-settings";
+import { ChatgptImport, YourDataCard } from "./data-ui";
 import { HealthSection } from "./health-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import {
@@ -1977,6 +1978,7 @@ export function AppsScreen() {
       <PhoneAppCard />
       <VoiceCard name={data?.identity.name || "OpenMuse"} />
       <AccountCard />
+      <YourDataCard />
       <PeopleCard />
       <Button onPress={() => setSettings(!settings)}>
         {settings
@@ -2058,6 +2060,8 @@ export function AppsScreen() {
             >
               Remember
             </Button>
+            <View style={s.divider} />
+            <ChatgptImport />
           </Card>
         </>
       )}

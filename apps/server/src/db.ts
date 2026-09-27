@@ -75,6 +75,21 @@ export class Store {
     );
     return result.rows.map((row) => row.data as { owner: string; value: T });
   }
+  /** Every record one person owns, except the kinds in `except`. */
+  async records(owner: string, except: string[] = []) {
+    const result = await this.db.query(
+      "SELECT jsonb_build_object('kind',kind,'value',data) AS data FROM records WHERE owner=$1 AND NOT (kind = ANY($2::text[])) ORDER BY kind,updated_at ASC",
+      [owner, except],
+    );
+    return result.rows.map((row) => row.data as { kind: string; value: Record<string, unknown> });
+  }
+  /** Deletes every record one person owns, except the kinds in `keep`. */
+  async removeAll(owner: string, keep: string[] = []) {
+    await this.db.query("DELETE FROM records WHERE owner=$1 AND NOT (kind = ANY($2::text[]))", [
+      owner,
+      keep,
+    ]);
+  }
   async claim<T>(owner: string, id: string, status: string, now: string): Promise<T | null> {
     const result = await this.db.query(
       `UPDATE records AS action SET data=jsonb_set(data,'{status}',$4::jsonb),updated_at=now()

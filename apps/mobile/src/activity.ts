@@ -100,6 +100,13 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
     }
     case "delegate_task":
       return { kind: "plan", label: "Setting up a task…" };
+    case "set_reminder":
+    case "change_reminder":
+      return { kind: "plan", label: "Setting a reminder…" };
+    case "list_reminders":
+      return { kind: "plan", label: "Checking your reminders…" };
+    case "cancel_reminder":
+      return { kind: "plan", label: "Cancelling a reminder…" };
     case "create_routine":
       return { kind: "plan", label: "Setting up a routine…" };
     case "create_goal":

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Artifact } from "../../../packages/domain/src/index.ts";
 import {
@@ -105,6 +105,11 @@ export class Files {
     const file = await this.db.get<Artifact>(owner, "files", id);
     if (!file) throw new AppError("File not found", 404);
     return file;
+  }
+  /** Deletes a file's contents and extracted text from disk (the record is removed separately). */
+  async erase(file: Artifact) {
+    await rm(this.path(file), { force: true });
+    await rm(join(this.config.dataDir, "files", `${file.id}.text.json`), { force: true });
   }
   async bytes(owner: string, id: string) {
     return readFile(this.path(await this.get(owner, id)));

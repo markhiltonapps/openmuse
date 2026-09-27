@@ -423,3 +423,56 @@ test("the app directory lists connected apps first, then featured apps, with saf
     calls.some((c) => c.method === "DELETE" && c.path === "/api/v3.1/connected_accounts/ca_jira"),
   );
 });
+
+test("apps Composio can't sign in to itself use the sign-in set up in its dashboard", async () => {
+  let sessions = 0;
+  let configured = false;
+  const { fetcher, calls } = fakeComposio({
+    "POST /api/v3.1/tool_router/session": () =>
+      Response.json({ session_id: `trs_brex_${++sessions}` }, { status: 201 }),
+    "GET /api/v3.1/tool_router/session/trs_brex_1/toolkits": () => Response.json({ items: [] }),
+    "GET /api/v3.1/tool_router/session/trs_brex_2/toolkits": () => Response.json({ items: [] }),
+    "POST /api/v3.1/tool_router/session/trs_brex_1/link": () =>
+      Response.json(
+        {
+          error: {
+            message:
+              "Composio does not manage auth for toolkit brex and no auth config without required fields is available. Please create an auth config manually or specify one in auth_config_override.",
+          },
+        },
+        { status: 400 },
+      ),
+    "POST /api/v3.1/tool_router/session/trs_brex_2/link": () =>
+      Response.json({ redirect_url: "https://connect.composio.test/brex" }),
+    "GET /api/v3/auth_configs": () =>
+      Response.json({
+        items: configured
+          ? [
+              { id: "ac_managed", toolkit: { slug: "gmail" }, is_composio_managed: true },
+              { id: "ac_off", toolkit: { slug: "brex" }, status: "DISABLED" },
+              { id: "ac_brex", toolkit: { slug: "brex" }, status: "ENABLED" },
+            ]
+          : [],
+      }),
+  });
+  const connector = new ComposioConnector(db, config(), fetcher);
+  await assert.rejects(
+    connector.connect("brex-owner", "Brex"),
+    (error: Error & { status?: number }) => {
+      assert.equal(error.status, 409);
+      assert.match(error.message, /Brex needs to be set up in Composio.*Auth Configs.*API Key/);
+      return true;
+    },
+  );
+  assert.equal(sessions, 1);
+  configured = true;
+  assert.deepEqual(await connector.connect("brex-owner", "brex"), {
+    connected: false,
+    url: "https://connect.composio.test/brex",
+  });
+  const created = calls.filter((c) => c.path === "/api/v3.1/tool_router/session");
+  assert.equal(created.length, 2);
+  assert.deepEqual((created[1]?.body as { auth_configs?: unknown } | undefined)?.auth_configs, {
+    brex: "ac_brex",
+  });
+});

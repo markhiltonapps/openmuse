@@ -61,6 +61,8 @@ Invite people under **Apps → People**. Each person gets a private workspace (c
 
 With `COMPOSIO_API_KEY` set, the API logs `Connected apps ready (Composio)` at startup. Connect apps under **Apps & settings → More apps** or by asking in chat.
 
+Composio has no ready-made sign-in for some apps, such as Brex. For those, create an auth config for the app in the Composio dashboard (for Brex, choose API Key); **Connect** then uses it and asks for the key on Composio's page. Until one exists, Connect explains what to set up.
+
 The web client installs to a phone's home screen. On iPhone, notifications need the installed app (Share → Add to Home Screen). Store builds use `apps/mobile/eas.json` with an Apple Developer or Google Play account: `npx eas-cli build --platform ios --profile production`.
 
 Purchases through connected apps are off until enabled under **Apps → Spending**, then capped per purchase and per month, and every purchase waits for approval.

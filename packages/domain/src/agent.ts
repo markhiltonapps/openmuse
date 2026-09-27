@@ -162,6 +162,8 @@ export interface AgentArtifact {
 export interface AgentNotification {
   id: string;
   taskId?: string;
+  /** Set on a reminder going off. */
+  reminderId?: string;
   title: string;
   body: string;
   createdAt: string;

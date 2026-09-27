@@ -29,6 +29,14 @@ function zoned(year: number, month: number, day: number, minutes: number, timeZo
   return guess - offset(first, timeZone);
 }
 
+/** The instant of a wall-clock "YYYY-MM-DDTHH:MM" in `timeZone`. */
+export function localInstant(local: string, timeZone: string) {
+  const [date = "", time = ""] = local.split("T");
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  const [hour = 0, minute = 0] = time.split(":").map(Number);
+  return zoned(year, month - 1, day, hour * 60 + minute, timeZone);
+}
+
 /** Next run strictly after `after` on one of `days` (0 = Sunday) at `time` (HH:MM). */
 export function nextRun(
   routine: Pick<Routine, "time" | "days" | "timeZone">,
