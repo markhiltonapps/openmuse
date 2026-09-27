@@ -593,3 +593,19 @@ test("the workspace reports the browser offline while its worker's health check 
     );
   }
 });
+
+test("the worker says why a page didn't load", async () => {
+  const { navigationFailure } = await import("../apps/worker/src/browser.ts");
+  assert.match(
+    navigationFailure(
+      new Error("page.goto: net::ERR_HTTP2_PROTOCOL_ERROR at https://www.opentable.com/s"),
+    ),
+    /turn away automated browsers/,
+  );
+  assert.match(navigationFailure(new Error("page.goto: Timeout 25000ms exceeded.")), /too long/);
+  assert.match(
+    navigationFailure(new Error("net::ERR_NAME_NOT_RESOLVED")),
+    /address couldn't be reached/,
+  );
+  assert.match(navigationFailure(new Error("something else")), /could not be loaded/);
+});

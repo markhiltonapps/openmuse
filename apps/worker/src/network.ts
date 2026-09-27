@@ -43,10 +43,20 @@ export function isPublicIp(address: string): boolean {
 
 export type Resolver = (hostname: string) => Promise<LookupAddress[]>;
 
-export async function validatePublicUrl(
-  value: string,
-  resolve: Resolver = (hostname) => lookup(hostname, { all: true, verbatim: true }),
-) {
+// A page loads hundreds of files from a few hosts; looking each one up again queues on Node's
+// four DNS threads and can stall a big page. Answers are kept for a minute: every socket still
+// connects to the exact address that was checked, so a cached answer can't reach a private one.
+const answers = new Map<string, { addresses: LookupAddress[]; until: number }>();
+const systemResolver: Resolver = async (hostname) => {
+  const cached = answers.get(hostname);
+  if (cached && cached.until > Date.now()) return cached.addresses;
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (answers.size > 500) answers.clear();
+  answers.set(hostname, { addresses, until: Date.now() + 60_000 });
+  return addresses;
+};
+
+export async function validatePublicUrl(value: string, resolve: Resolver = systemResolver) {
   const blocked = () =>
     new WorkerError(
       "BLOCKED_URL",

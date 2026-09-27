@@ -114,22 +114,22 @@ export async function createBrowserManager(options: {
     const target = await validatePublicUrl(url);
     const { page } = active(id);
     try {
-      await page.goto(target.url.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      await page.goto(target.url.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
       // Chromium can follow redirects outside Playwright's initial route hook.
       // The proxy blocks those sockets, but its 403 is still an HTTP response:
       // validate the final location so the API does not report it as success.
       await validatePublicUrl(page.url());
+      // Pages drawn by JavaScript fill in after the HTML arrives; give them a moment.
+      await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
     } catch (error) {
       if (error instanceof WorkerError && error.code === "BLOCKED_URL") {
         await page.goto("about:blank", { timeout: 5000 });
       }
       // A successful attachment intentionally aborts page navigation.
       if (!(error instanceof Error && /Download is starting/.test(error.message))) {
-        throw new WorkerError(
-          "NAVIGATION_FAILED",
-          "The page could not be loaded. It may be unreachable or contain a blocked destination.",
-          502,
-        );
+        const detail = error instanceof Error ? (error.message.split("\n")[0] ?? "") : "";
+        console.warn(`[OpenMuse worker] ${target.url.hostname} did not load: ${detail}`);
+        throw new WorkerError("NAVIGATION_FAILED", navigationFailure(error), 502);
       }
     }
     return refresh(id);
@@ -385,4 +385,23 @@ export async function createBrowserManager(options: {
       await proxy.close();
     },
   };
+}
+
+/** Why a page didn't load, in words the agent can pass on. */
+export function navigationFailure(error: unknown) {
+  if (error instanceof WorkerError && error.code === "BLOCKED_URL")
+    return "The page sent the browser to a blocked destination.";
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    /ERR_HTTP2_PROTOCOL_ERROR|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_EMPTY_RESPONSE|ERR_CONNECTION_REFUSED|ERR_TUNNEL_CONNECTION_FAILED/.test(
+      message,
+    )
+  )
+    return "The site refused the connection from the agent's browser. Some sites, such as OpenTable, turn away automated browsers.";
+  if (/Timeout|timed out|ERR_TIMED_OUT/i.test(message))
+    return "The page took too long to load (over 25 seconds).";
+  if (/ERR_NAME_NOT_RESOLVED|ERR_ADDRESS_UNREACHABLE/.test(message))
+    return "The site's address couldn't be reached.";
+  if (/ERR_CERT|ERR_SSL/.test(message)) return "The site's security certificate isn't valid.";
+  return "The page could not be loaded. It may be unreachable or contain a blocked destination.";
 }

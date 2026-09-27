@@ -44,7 +44,10 @@ export function openTableLink(request: TableRequest) {
 }
 
 export const restaurantInstructions =
-  " To book a restaurant, call find_table with the restaurant, date, time and party size (ask for any that are missing; use the person's usual party size from memory when there is one). It opens OpenTable in the chat browser with those filled in and returns the page text. Tell the person the times that are open, from the page text only. You never complete a booking yourself: the person picks a time and confirms with their own details using Take control on the browser card, or on the returned link. Never say a table is booked until they tell you it is. If OpenTable shows no times or blocks the browser, say so and offer the link, nearby times, or another restaurant found with search_web. After they book, offer to set a reminder.";
+  " To book a restaurant, call find_table with the restaurant, date, time and party size (ask for any that are missing; use the person's usual party size from memory when there is one). It opens OpenTable with those filled in. When it loaded, tell the person the times that are open, from the page text only. When loaded is false (OpenTable often turns away automated browsers), don't retry or blame an outage: give them the returned link as a markdown link, since it opens OpenTable on their phone with the date, time and party size already filled in. You never complete a booking yourself: the person picks a time and books with their own OpenTable account, on the link or with Take control on the browser card. Never say a table is booked until they tell you it is. For a restaurant that isn't on OpenTable, find its phone number or own booking page with search_web. After they book, offer to set a reminder.";
+/** Words on the pages sites show automated browsers instead of the real one. */
+const TURNED_AWAY =
+  /access denied|pardon our interruption|verify (that )?you are (a )?human|are you a robot|unusual traffic|request blocked|bot detection|captcha/i;
 
 /** find_table for an agent that can open pages in its browser. */
 export function restaurantToolSpecs(
@@ -58,9 +61,24 @@ export function restaurantToolSpecs(
       parameters: tableRequestSchema,
       execute: async (request: TableRequest) => {
         const link = openTableLink(request);
-        const page = await open(link);
+        const handOff = (reason: string) => ({
+          link,
+          loaded: false,
+          reason,
+          booked: false,
+          next: `Give the person this link as a markdown link: ${link} — it opens OpenTable with ${request.partySize} people on ${request.date} at ${request.time} filled in, where they pick a time and book. Tell them in one short sentence that OpenTable turned away your browser.`,
+        });
+        let page: Awaited<ReturnType<typeof open>>;
+        try {
+          page = await open(link);
+        } catch (error) {
+          return handOff(error instanceof Error ? error.message : "OpenTable didn't load");
+        }
+        if (TURNED_AWAY.test(`${page.title} ${page.text.slice(0, 2000)}`))
+          return handOff("OpenTable showed a page for automated browsers instead of the tables");
         return {
           link,
+          loaded: true,
           url: page.url,
           title: page.title,
           sessionId: page.sessionId,
