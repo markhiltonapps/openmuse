@@ -411,12 +411,31 @@ export function ChatScreen({
     async function hydrate() {
       try {
         if (richThreads) {
-          if (selection.existing)
-            await runConversationTurn(
-              agentId,
-              () => copilotkit.connectAgent({ agent }),
-              (onError) => copilotkit.subscribe({ onError }),
-            );
+          if (selection.existing) {
+            let failure: unknown;
+            try {
+              await runConversationTurn(
+                agentId,
+                () => copilotkit.connectAgent({ agent }),
+                (onError) => copilotkit.subscribe({ onError }),
+              );
+            } catch (e) {
+              failure = e;
+            }
+            // CopilotKit deletes chats after its retention period; the app keeps its own copy.
+            if (active && !agent.messages.length) {
+              const saved = await api
+                .request<{ messages: Message[] }>(
+                  `/api/threads/${encodeURIComponent(threadId)}/archive`,
+                )
+                .catch(() => ({ messages: [] as Message[] }));
+              if (saved.messages.length) {
+                agent.setMessages(saved.messages);
+                failure = undefined;
+              }
+            }
+            if (failure) throw failure;
+          }
         } else {
           const { messages } = await api.request<{ messages: Message[] }>("/api/conversation");
           if (active) agent.setMessages(messages);
@@ -447,11 +466,21 @@ export function ChatScreen({
     richThreads,
     selection.existing,
     resets,
+    threadId,
   ]);
   const saveHistory = useCallback(async () => {
     if (!richThreads) await api.request("/api/conversation", { messages: agent.messages }, "PUT");
+    // A copy the app keeps, since CopilotKit deletes chats after its retention period.
+    else if (agent.messages.length)
+      await api
+        .request(
+          `/api/threads/${encodeURIComponent(threadId)}/archive`,
+          { messages: agent.messages },
+          "PUT",
+        )
+        .catch(() => undefined);
     setSaveError("");
-  }, [agent, api, richThreads]);
+  }, [agent, api, richThreads, threadId]);
   const run = useCallback(
     async (message?: QueuedMessage) => {
       if (runLock.current || agent.isRunning || !isReady || !loaded)

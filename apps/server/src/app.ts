@@ -14,6 +14,7 @@ import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
+import { ChatArchive } from "./chat-archive.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
 import { assertApiDeploymentConfig, type Config } from "./config.ts";
@@ -501,6 +502,7 @@ export async function createApp(
       existing: false,
     });
     await db.put(owner, "conversations", { id: "default", messages: [] });
+    if (old) await db.remove(owner, "chat-archive", old.threadId);
     if (old)
       await threads
         .deleteThread({ threadId: old.threadId, userId: owner, agentId: "default" })
@@ -508,6 +510,17 @@ export async function createApp(
     return c.json({ ok: true });
   });
   const data = new DataControls(db, files, threads);
+  const archive = new ChatArchive(db);
+  app.get("/api/threads/archive", async (c) => c.json(await archive.list(c.get("owner"))));
+  app.get("/api/threads/:threadId/archive", async (c) =>
+    c.json({ messages: await archive.messages(c.get("owner"), c.req.param("threadId")) }),
+  );
+  app.put("/api/threads/:threadId/archive", async (c) =>
+    c.json(await archive.save(c.get("owner"), c.req.param("threadId"), await c.req.json())),
+  );
+  app.post("/api/threads/:threadId/archive/delete", async (c) =>
+    c.json(await archive.remove(c.get("owner"), c.req.param("threadId"))),
+  );
   app.get("/api/threads/:threadId/hidden", async (c) =>
     c.json({ messageIds: await data.hidden(c.get("owner"), c.req.param("threadId")) }),
   );

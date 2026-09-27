@@ -131,16 +131,29 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     forget,
     resetMain,
   } = useMuseThread();
-  const { workspace, open, navigate, refresh, notify } = useWorkspace();
+  const { workspace, open, navigate, refresh, notify, api } = useWorkspace();
   const [confirming, setConfirming] = useState<string>();
   const [deleting, setDeleting] = useState(false);
+  // The app's own copies of chats, which outlive CopilotKit's retention period.
+  const [saved, setSaved] = useState<{ threadId: string; name: string; updatedAt: string }[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    void api
+      .request<{ threadId: string; name: string; updatedAt: string }[]>("/api/threads/archive")
+      .then(setSaved, () => undefined);
+  }, [api, enabled]);
   async function remove(id: string) {
     setDeleting(true);
     setError("");
     try {
       if (id === "main") await resetMain();
       else {
-        await threads.deleteThread(id);
+        const live = threads.threads.some((thread) => thread.id === id);
+        if (live) await threads.deleteThread(id);
+        await api
+          .request(`/api/threads/${encodeURIComponent(id)}/archive/delete`, {})
+          .catch(() => undefined);
+        setSaved((items) => items.filter((item) => item.threadId !== id));
         forget(id);
       }
       setConfirming(undefined);
@@ -333,6 +346,40 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                   {confirmDelete(thread.id, `Delete “${thread.name || "Untitled conversation"}”?`)}
                 </View>
               ))}
+            {!archived &&
+              !threads.isLoading &&
+              !threads.hasMoreThreads &&
+              saved
+                .filter(
+                  (chat) =>
+                    chat.threadId !== mainId &&
+                    !threads.threads.some((thread) => thread.id === chat.threadId) &&
+                    !visited.some((item) => item.id === chat.threadId),
+                )
+                .map((chat) => (
+                  <View key={chat.threadId} style={{ gap: 8 }}>
+                    <LinkRow
+                      icon={MessageCircle}
+                      title={chat.name}
+                      detail={`Saved ${new Date(chat.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
+                      onPress={() => {
+                        select({ id: chat.threadId, existing: true });
+                        onClose();
+                      }}
+                    />
+                    {confirmDelete(chat.threadId, `Delete “${chat.name}”?`) ?? (
+                      <Button
+                        small
+                        danger
+                        icon={Trash2}
+                        style={{ alignSelf: "flex-start" }}
+                        onPress={() => setConfirming(chat.threadId)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </View>
+                ))}
             {!threads.isLoading &&
               !threads.error &&
               !threads.threads.some(
