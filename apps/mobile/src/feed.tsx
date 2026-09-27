@@ -1,26 +1,38 @@
 import {
   AlarmClock,
+  ArrowUp,
   CalendarDays,
   CircleCheck,
   Clock,
+  type LucideIcon,
   Plus,
   RefreshCw,
   Utensils,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, Text, View } from "react-native";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AssistantResponse } from "./assistant-response";
 import { todayLine, useHealth } from "./health-ui";
-import { Button, Card, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
+import { dark } from "./theme";
+import { Button, Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
+interface FeedStory {
+  emoji: string;
+  headline: string;
+  summary: string;
+  url?: string;
+  image?: string;
+}
 interface FeedItem {
   id: string;
   topic: string;
   summary: string;
   sources: { title: string; url: string }[];
+  stories?: FeedStory[];
   day: string;
   createdAt: string;
 }
@@ -114,11 +126,17 @@ export function FeedScreen() {
   }
   const saveTopics = (topics: string[]) =>
     run(() => api.request<FeedState>("/api/feed/topics", { topics }));
-  function follow(value: string) {
-    const next = value.trim();
-    if (!next || !feed || feed.topics.includes(next)) return;
+
+  function addTopics(text: string) {
+    if (!feed) return;
+    const wanted = text
+      .split(/,|;|\n|\band\b|&/i)
+      .map((part) => part.trim().replace(/^(about|on)\s+/i, ""))
+      .filter((part) => part.length >= 2 && part.length <= 80);
+    const next = [...new Set([...feed.topics, ...wanted])].slice(0, 8);
+    if (next.length === feed.topics.length) return;
     setTopic("");
-    void saveTopics([...feed.topics, next]);
+    void saveTopics(next);
   }
 
   const now = new Date();
@@ -136,71 +154,98 @@ export function FeedScreen() {
   ).length;
   const days = [...new Set((feed?.items ?? []).map((item) => item.day))];
   const healthLine = health.summary ? todayLine(health.summary.today) : "";
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
-    <View style={{ gap: 20 }}>
-      <Card style={{ gap: 12 }}>
-        <SectionHeading
-          title={now.toLocaleDateString(undefined, {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-          })}
-        />
-        <View style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
-          <CalendarDays size={18} color={colors.blueDark} />
-          <View style={{ flex: 1, gap: 4 }}>
-            {events.length ? (
-              events.map((e) => (
-                <Text key={e.id} style={s.text}>
-                  {e.allDay
-                    ? "All day"
-                    : new Date(e.start).toLocaleTimeString(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}{" "}
-                  · {e.title}
-                </Text>
-              ))
-            ) : (
-              <Text style={s.muted}>Nothing else on your calendar today.</Text>
-            )}
-          </View>
+    <View style={{ gap: 22 }}>
+      {(feed?.topics.length ?? 0) < 8 && (
+        <View
+          style={[
+            s.row,
+            {
+              backgroundColor: colors.subtle,
+              borderRadius: 30,
+              paddingLeft: 20,
+              paddingRight: 6,
+              minHeight: 56,
+              gap: 8,
+            },
+          ]}
+        >
+          <TextInput
+            value={topic}
+            onChangeText={setTopic}
+            onSubmitEditing={() => addTopics(topic)}
+            returnKeyType="done"
+            placeholder="Make me a feed about…"
+            placeholderTextColor={colors.muted}
+            accessibilityLabel="Topics for your feed"
+            style={{ flex: 1, color: colors.text, fontSize: 17, paddingVertical: 14 }}
+          />
+          {topic.trim().length >= 2 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add to my feed"
+              onPress={() => addTopics(topic)}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: colors.inverse,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ArrowUp size={20} color={colors.onInverse} />
+            </Pressable>
+          )}
         </View>
-        {!!healthLine && (
-          <Pressable style={[s.row, { gap: 10 }]} onPress={() => navigate("goals")}>
-            <Utensils size={18} color={colors.blueDark} />
-            <Text style={s.text}>{healthLine}</Text>
-          </Pressable>
-        )}
-        {approvals > 0 && (
-          <Pressable style={[s.row, { gap: 10 }]} onPress={() => navigate("activity")}>
-            <CircleCheck size={18} color={colors.blueDark} />
-            <Text style={[s.text, { textDecorationLine: "underline" }]}>
-              {approvals} waiting for your approval
-            </Text>
-          </Pressable>
-        )}
-        {working > 0 && (
-          <Pressable style={[s.row, { gap: 10 }]} onPress={() => navigate("activity")}>
-            <Clock size={18} color={colors.blueDark} />
-            <Text style={[s.text, { textDecorationLine: "underline" }]}>
-              {working} {working === 1 ? "task" : "tasks"} in progress
-            </Text>
-          </Pressable>
-        )}
-      </Card>
+      )}
 
-      <Card style={{ gap: 12 }}>
-        <SectionHeading
-          title="Upcoming"
-          action="Add a reminder"
-          onPress={() => ask("I'd like to set a reminder.")}
-        />
-        {reminders.length ? (
-          reminders.slice(0, 8).map((reminder) => (
-            <View key={reminder.id} style={[s.row, { gap: 10 }]}>
-              <AlarmClock size={16} color={colors.blueDark} />
+      <View style={{ borderRadius: 26, overflow: "hidden", padding: 22, gap: 14 }}>
+        <View style={{ position: "absolute", inset: 0 }} pointerEvents="none">
+          <Svg width="100%" height="100%">
+            <Defs>
+              <LinearGradient id="day" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={dark ? "#12263A" : "#DDF0FF"} />
+                <Stop offset="0.55" stopColor={dark ? "#1B1A38" : "#EEE9FF"} />
+                <Stop offset="1" stopColor={dark ? "#2A1830" : "#FFEFE6"} />
+              </LinearGradient>
+            </Defs>
+            <Rect width="100%" height="100%" fill="url(#day)" />
+          </Svg>
+        </View>
+        <View style={{ gap: 2 }}>
+          <Text
+            style={{ color: colors.text, fontSize: 26, fontWeight: "700", letterSpacing: -0.8 }}
+          >
+            {greeting}
+          </Text>
+          <Text style={[s.muted, { fontSize: 15 }]}>
+            {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          </Text>
+        </View>
+        <DayRow icon={CalendarDays} tint="#4AA3FF">
+          {events.length ? (
+            events.map((e) => (
+              <Text key={e.id} style={s.text}>
+                {e.allDay
+                  ? "All day"
+                  : new Date(e.start).toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}{" "}
+                · {e.title}
+              </Text>
+            ))
+          ) : (
+            <Text style={s.muted}>Nothing else on your calendar today.</Text>
+          )}
+        </DayRow>
+        {reminders.slice(0, 3).map((reminder) => (
+          <DayRow key={reminder.id} icon={AlarmClock} tint="#F5A524">
+            <View style={[s.row, { gap: 8 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={s.text} numberOfLines={2}>
                   {reminder.text}
@@ -222,14 +267,83 @@ export function FeedScreen() {
                 <X size={15} color={colors.muted} />
               </Pressable>
             </View>
-          ))
-        ) : (
-          <Text style={s.muted}>
-            No reminders. Ask in chat, like “remind me at 3 tomorrow to call the dentist.”
-          </Text>
+          </DayRow>
+        ))}
+        {reminders.length > 3 && (
+          <Text style={[s.small, { marginLeft: 46 }]}>+ {reminders.length - 3} more reminders</Text>
         )}
-        {reminders.length > 8 && <Text style={s.small}>+ {reminders.length - 8} more</Text>}
-      </Card>
+        {!!healthLine && (
+          <Pressable onPress={() => navigate("goals")}>
+            <DayRow icon={Utensils} tint="#2BD46E">
+              <Text style={s.text}>{healthLine}</Text>
+            </DayRow>
+          </Pressable>
+        )}
+        {approvals > 0 && (
+          <Pressable onPress={() => navigate("activity")}>
+            <DayRow icon={CircleCheck} tint="#B58CFF">
+              <Text style={[s.text, { textDecorationLine: "underline" }]}>
+                {approvals} waiting for your approval
+              </Text>
+            </DayRow>
+          </Pressable>
+        )}
+        {working > 0 && (
+          <Pressable onPress={() => navigate("activity")}>
+            <DayRow icon={Clock} tint="#4AA3FF">
+              <Text style={[s.text, { textDecorationLine: "underline" }]}>
+                {working} {working === 1 ? "task" : "tasks"} in progress
+              </Text>
+            </DayRow>
+          </Pressable>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => ask("I'd like to set a reminder.")}
+          style={{ alignSelf: "flex-start", marginLeft: 46 }}
+        >
+          <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
+            + Add a reminder
+          </Text>
+        </Pressable>
+      </View>
+
+      {days.map((day) => (
+        <View key={day}>
+          <Text
+            style={{ color: colors.text, fontSize: 22, fontWeight: "700", letterSpacing: -0.5 }}
+          >
+            {dayHeading(day)}
+          </Text>
+          {(feed?.items ?? [])
+            .filter((item) => item.day === day)
+            .flatMap((item) =>
+              (
+                item.stories ?? [
+                  {
+                    emoji: "📰",
+                    headline: item.topic,
+                    summary: item.summary,
+                    url: item.sources[0]?.url,
+                  },
+                ]
+              ).map((story) => (
+                <StoryRow
+                  key={`${item.id}-${story.headline}`}
+                  story={story}
+                  topic={item.topic}
+                  onAsk={() => ask(`Tell me more about this: ${story.headline} (${item.topic}).`)}
+                />
+              )),
+            )}
+        </View>
+      ))}
+      {feed?.refreshing && (
+        <View style={[s.row, { gap: 10, justifyContent: "center", paddingVertical: 8 }]}>
+          <RefreshCw size={16} color={colors.muted} />
+          <Text style={s.muted}>Looking up what's new…</Text>
+        </View>
+      )}
 
       <Card style={{ gap: 12 }}>
         <SectionHeading
@@ -255,10 +369,10 @@ export function FeedScreen() {
                 s.row,
                 {
                   gap: 6,
-                  paddingHorizontal: 12,
-                  paddingVertical: 7,
-                  borderRadius: 16,
-                  backgroundColor: colors.sky,
+                  paddingHorizontal: 13,
+                  paddingVertical: 8,
+                  borderRadius: 18,
+                  backgroundColor: colors.subtle,
                 },
               ]}
             >
@@ -267,97 +381,120 @@ export function FeedScreen() {
             </Pressable>
           ))}
         </View>
-        {(feed?.topics.length ?? 0) < 8 && (
-          <View style={[s.row, { gap: 8, alignItems: "flex-end" }]}>
-            <View style={{ flex: 1 }}>
-              <Field
-                label="Follow a topic"
-                value={topic}
-                onChangeText={setTopic}
-                placeholder="Houston Astros, AI agents, mortgage rates…"
-                maxLength={80}
-                onSubmitEditing={() => follow(topic)}
-              />
-            </View>
-            <Button
-              style={{ marginBottom: 16 }}
-              icon={Plus}
-              busy={busy}
-              disabled={topic.trim().length < 2}
-              onPress={() => follow(topic)}
-            >
-              Follow
-            </Button>
-          </View>
-        )}
         {feed && !feed.topics.length && (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {SUGGESTIONS.map((item) => (
-              <Button key={item} small icon={Plus} onPress={() => setTopic(item)}>
+              <Button key={item} small icon={Plus} onPress={() => addTopics(item)}>
                 {item}
               </Button>
             ))}
           </View>
         )}
         <Text style={s.small}>
-          Your agent looks up what's new on each topic every morning, about 1–3¢ per topic.
+          Your agent looks up what's new on each topic every morning, about 1–3¢ per topic. Tap a
+          topic to stop following it.
           {feed?.refreshedAt
             ? ` Last updated ${new Date(feed.refreshedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}.`
             : ""}
         </Text>
         <ErrorNotice error={error} />
       </Card>
+    </View>
+  );
+}
 
-      {days.map((day) => (
-        <View key={day} style={{ gap: 12 }}>
-          <Text style={s.heading}>{dayHeading(day)}</Text>
-          {(feed?.items ?? [])
-            .filter((item) => item.day === day)
-            .map((item) => (
-              <Card key={item.id} style={{ gap: 10 }}>
-                <Text
-                  style={[
-                    s.small,
-                    { fontWeight: "700", letterSpacing: 0.4, color: colors.blueDark },
-                  ]}
-                >
-                  {item.topic.toUpperCase()}
-                </Text>
-                <AssistantResponse content={item.summary} />
-                {item.sources.length > 0 && (
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-                    {item.sources.slice(0, 3).map((source) => (
-                      <Pressable
-                        key={source.url}
-                        accessibilityRole="link"
-                        onPress={() => void Linking.openURL(source.url).catch(() => undefined)}
-                      >
-                        <Text style={[s.small, { textDecorationLine: "underline" }]}>
-                          {site(source.url)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-                <Button
-                  small
-                  style={{ alignSelf: "flex-start" }}
-                  onPress={() => ask(`Tell me more about the latest on ${item.topic}.`)}
-                >
-                  Ask about this
-                </Button>
-              </Card>
-            ))}
+function DayRow({
+  icon: Icon,
+  tint,
+  children,
+}: {
+  icon: LucideIcon;
+  tint: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={[s.row, { gap: 12, alignItems: "flex-start" }]}>
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          backgroundColor: `${tint}26`,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Icon size={17} color={tint} />
+      </View>
+      <View style={{ flex: 1, gap: 3, paddingTop: 5 }}>{children}</View>
+    </View>
+  );
+}
+
+/** One news story: an emoji, a headline, what happened, and the article's picture. */
+function StoryRow({ story, topic, onAsk }: { story: FeedStory; topic: string; onAsk: () => void }) {
+  const [broken, setBroken] = useState(false);
+  const open = () => story.url && void Linking.openURL(story.url).catch(() => undefined);
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        gap: 14,
+        paddingVertical: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.line,
+      }}
+    >
+      <Text style={{ fontSize: 30, lineHeight: 38, width: 40, textAlign: "center" }}>
+        {story.emoji}
+      </Text>
+      <View style={{ flex: 1, gap: 8 }}>
+        <Text
+          style={{
+            color: colors.text,
+            fontSize: 19,
+            lineHeight: 25,
+            fontWeight: "700",
+            letterSpacing: -0.3,
+          }}
+        >
+          {story.headline}
+        </Text>
+        <AssistantResponse content={story.summary} />
+        {!!story.image && !broken && (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`Open the article: ${story.headline}`}
+            onPress={open}
+          >
+            <Image
+              source={{ uri: story.image }}
+              onError={() => setBroken(true)}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+              style={{
+                width: "100%",
+                aspectRatio: 16 / 10,
+                borderRadius: 18,
+                backgroundColor: colors.subtle,
+              }}
+            />
+          </Pressable>
+        )}
+        <View style={[s.row, { gap: 14, flexWrap: "wrap" }]}>
+          {!!story.url && (
+            <Pressable accessibilityRole="link" onPress={open}>
+              <Text style={[s.small, { textDecorationLine: "underline" }]}>{site(story.url)}</Text>
+            </Pressable>
+          )}
+          <Text style={s.small}>{topic}</Text>
+          <Pressable accessibilityRole="button" onPress={onAsk}>
+            <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
+              Ask about this
+            </Text>
+          </Pressable>
         </View>
-      ))}
-      {feed?.refreshing && !feed.items.length && (
-        <Card>
-          <View style={[s.row, { gap: 10 }]}>
-            <RefreshCw size={16} color={colors.muted} />
-            <Text style={s.muted}>Looking up what's new…</Text>
-          </View>
-        </Card>
-      )}
+      </View>
     </View>
   );
 }

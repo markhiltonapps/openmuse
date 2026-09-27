@@ -8,6 +8,7 @@ import { useAgentWorkspace } from "./agent-workspace";
 import type { MuseApi } from "./api";
 import { ART, type CharacterId, VIDEO_CHARACTERS } from "./avatar-art";
 import SvgArt from "./SvgArt";
+import { colors } from "./ui";
 import { useSpeaking } from "./voice";
 import { useWorkspace } from "./workspace";
 
@@ -147,7 +148,7 @@ function ThinkingDots({ size }: { size: number }) {
         paddingHorizontal: dot * 1.2,
         paddingVertical: dot * 0.9,
         borderRadius: size,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: colors.surface,
         shadowColor: "#000",
         shadowOpacity: 0.12,
         shadowRadius: 4,
@@ -161,7 +162,7 @@ function ThinkingDots({ size }: { size: number }) {
             width: dot,
             height: dot,
             borderRadius: dot,
-            backgroundColor: "#6F777C",
+            backgroundColor: colors.muted,
             opacity: pulse.interpolate({
               inputRange: [0, 1, 2, 3],
               outputRange:

@@ -14,20 +14,8 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-export const colors = {
-  canvas: "#FCFCFC",
-  card: "#FFFFFF",
-  text: "#11191C",
-  muted: "#697176",
-  line: "#EEEEF0",
-  blue: "#C8E7FF",
-  blueDark: "#1473C8",
-  sky: "#EDF7FD",
-  green: "#E3F3E8",
-  lavender: "#F0EEFA",
-  orange: "#FDF0DF",
-  danger: "#AA4A45",
-};
+import { palette } from "./theme";
+export const colors = palette;
 export const s = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center" },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -59,7 +47,7 @@ export const s = StyleSheet.create({
     paddingVertical: 12,
     color: colors.text,
     fontSize: 16,
-    backgroundColor: "#FFF",
+    backgroundColor: colors.surface,
     minHeight: 45,
   },
   field: { gap: 7, marginBottom: 16 },
@@ -74,7 +62,7 @@ export const s = StyleSheet.create({
     borderRadius: 24,
   },
   primary: { backgroundColor: colors.blue },
-  secondary: { backgroundColor: "#F1F2F3" },
+  secondary: { backgroundColor: colors.subtle },
   buttonText: { fontSize: 14, fontWeight: "600" },
   chip: {
     paddingHorizontal: 10,
@@ -92,10 +80,16 @@ export const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.sky,
   },
-  error: { padding: 16, borderRadius: 14, backgroundColor: "#FBEFED", marginVertical: 10, gap: 4 },
+  error: {
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: colors.errorBg,
+    marginVertical: 10,
+    gap: 4,
+  },
   modalShade: {
     flex: 1,
-    backgroundColor: "rgba(35,48,44,0.25)",
+    backgroundColor: colors.shade,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -178,7 +172,7 @@ export function IconButton({
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 22,
-          backgroundColor: pressed ? colors.line : "#FFFFFF",
+          backgroundColor: pressed ? colors.line : colors.surface,
         },
       ]}
     >
@@ -281,7 +275,7 @@ export function Sheet({
                 width: 34,
                 height: 4,
                 borderRadius: 3,
-                backgroundColor: "#D8DBDE",
+                backgroundColor: colors.subtle,
                 marginTop: 10,
               }}
             />
@@ -332,12 +326,12 @@ export function CheckRow({
           borderRadius: 5,
           borderWidth: 1,
           borderColor: checked ? colors.text : colors.line,
-          backgroundColor: checked ? colors.text : "#FFF",
+          backgroundColor: checked ? colors.inverse : colors.surface,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        {checked && <Check size={13} color="#FFF" />}
+        {checked && <Check size={13} color={colors.onInverse} />}
       </View>
       <Text style={[s.text, { flex: 1 }]}>{label}</Text>
     </Pressable>

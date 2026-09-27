@@ -863,7 +863,7 @@ function FileDetail({ file: f }: { file: Artifact }) {
           source={{ uri: url }}
           resizeMode="contain"
           accessibilityLabel={f.name}
-          style={{ width: "100%", height: 480, borderRadius: 12, backgroundColor: "#F3F5F6" }}
+          style={{ width: "100%", height: 480, borderRadius: 12, backgroundColor: colors.subtle }}
         />
       ) : isPdf(f) ? (
         <PdfReader url={url} token={api.token} pageCount={f.pageCount} />

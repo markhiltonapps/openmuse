@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { previewImage } from "./link-preview.ts";
 import type { UsageSink } from "./usage.ts";
-import type { SearchSource, WebSearch } from "./web-search.ts";
+import type { SearchSource, Story, WebSearch } from "./web-search.ts";
 
 export const feedTopicsSchema = z.object({
   topics: z.array(z.string().trim().min(2).max(80)).max(8),
@@ -15,11 +16,17 @@ interface FeedSettings {
   refreshedOn?: string;
   refreshedAt?: string;
 }
+export interface FeedStory extends Story {
+  /** The article's share picture, when it has one. */
+  image?: string;
+}
 export interface FeedItem {
   id: string;
   topic: string;
   summary: string;
   sources: SearchSource[];
+  /** The news as separate stories with headlines and pictures; older items have only a summary. */
+  stories?: FeedStory[];
   day: string;
   createdAt: string;
 }
@@ -51,6 +58,8 @@ export class FeedService {
   private refreshing = new Set<string>();
   /** Where each person's search usage is recorded. */
   usage?: (owner: string) => UsageSink;
+  /** Finds an article's share picture. */
+  preview: (url: string) => Promise<string | undefined> = (url) => previewImage(url);
   constructor(
     private readonly db: Store,
     private readonly search: WebSearch | undefined,
@@ -104,18 +113,12 @@ export class FeedService {
       const settings = await this.settings(owner);
       const { day } = local(this.now(), await this.timeZone(owner));
       for (const topic of only ?? settings.topics) {
-        const found = await this.search
-          .search(
-            `What's new about ${topic}? The most important news and developments from the past few days.`,
-            this.usage?.(owner),
-          )
-          .catch(() => undefined);
-        if (!found || found.answer === "No results found.") continue;
+        const item = await this.lookUp(owner, topic).catch(() => undefined);
+        if (!item) continue;
         await this.db.put(owner, "feed-items", {
           id: hash(`${day}:${topic.toLowerCase()}`),
           topic,
-          summary: found.answer,
-          sources: found.sources.slice(0, 4),
+          ...item,
           day,
           createdAt: new Date(this.now()).toISOString(),
         } satisfies FeedItem);
@@ -132,6 +135,35 @@ export class FeedService {
     } finally {
       this.refreshing.delete(owner);
     }
+  }
+  /** What's new on one topic: stories with pictures when the search can tell them apart. */
+  private async lookUp(owner: string, topic: string) {
+    const search = this.search;
+    if (!search) return undefined;
+    if (search.stories) {
+      const found = await search.stories(topic, this.usage?.(owner));
+      if (found.stories.length) {
+        const stories = await Promise.all(
+          found.stories.map(async (story) => {
+            const image = story.url
+              ? await this.preview(story.url).catch(() => undefined)
+              : undefined;
+            return { ...story, ...(image ? { image } : {}) } satisfies FeedStory;
+          }),
+        );
+        return {
+          stories,
+          summary: stories.map((story) => `**${story.headline}** ${story.summary}`).join("\n\n"),
+          sources: found.sources.slice(0, 4),
+        };
+      }
+    }
+    const found = await search.search(
+      `What's new about ${topic}? The most important news and developments from the past few days.`,
+      this.usage?.(owner),
+    );
+    if (found.answer === "No results found.") return undefined;
+    return { summary: found.answer, sources: found.sources.slice(0, 4) };
   }
   /** Called from the agent's maintenance loop: each person's first refresh of their day. */
   async refreshDue() {

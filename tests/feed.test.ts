@@ -67,3 +67,90 @@ test("the Feed searches each followed topic once each morning", async () => {
     /web search/,
   );
 });
+
+test("the Feed tells the news as stories with headlines and pictures", async () => {
+  const feed = new FeedService(
+    db,
+    {
+      search: async () => ({ answer: "unused", sources: [] }),
+      stories: async (topic) => ({
+        stories: [
+          {
+            emoji: "🎬",
+            headline: `${topic}: ads restored`,
+            summary: "Meta called it an error and [restored the ads](https://news.example/ads).",
+            url: "https://news.example/ads",
+          },
+          { emoji: "📰", headline: "A second story", summary: "Without a picture this time." },
+        ],
+        sources: [{ title: "News", url: "https://news.example/ads" }],
+      }),
+    },
+    async () => "UTC",
+  );
+  feed.preview = async (url) => (url.endsWith("/ads") ? "https://img.example/ads.jpg" : undefined);
+  await feed.setTopics("stories", { topics: ["Musk documentary"] });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const [item] = (await feed.get("stories")).items;
+  assert.equal(item?.stories?.length, 2);
+  assert.deepEqual(item?.stories?.[0], {
+    emoji: "🎬",
+    headline: "Musk documentary: ads restored",
+    summary: "Meta called it an error and [restored the ads](https://news.example/ads).",
+    url: "https://news.example/ads",
+    image: "https://img.example/ads.jpg",
+  });
+  assert.equal(item?.stories?.[1]?.image, undefined);
+  assert.match(item?.summary ?? "", /\*\*A second story\*\*/);
+});
+
+test("story replies are read safely, and pictures come only from public pages", async () => {
+  const { parseStories } = await import("../apps/server/src/web-search.ts");
+  const { imageFromHtml, previewImage, publicAddress } = await import(
+    "../apps/server/src/link-preview.ts"
+  );
+  assert.deepEqual(
+    parseStories(
+      'Here you go: {"stories":[{"emoji":"x","headline":"Rates fall","summary":"Mortgage rates fell to 6.1% [per Freddie](javascript:alert).","url":"http://insecure.example"},{"headline":"no"}]}',
+    ),
+    [{ emoji: "📰", headline: "Rates fall", summary: "Mortgage rates fell to 6.1% per Freddie." }],
+  );
+  assert.deepEqual(parseStories("not json"), []);
+  assert.equal(
+    imageFromHtml(
+      `<head><meta name="twitter:image" content="https://cdn.example/t.jpg"><meta content='/img/og.jpg?a=1&amp;b=2' property='og:image'></head>`,
+      "https://news.example/story",
+    ),
+    "https://news.example/img/og.jpg?a=1&b=2",
+  );
+  for (const address of [
+    "127.0.0.1",
+    "10.1.2.3",
+    "169.254.169.254",
+    "::1",
+    "fd12::1",
+    "::ffff:192.168.1.1",
+  ])
+    assert.equal(publicAddress(address), false, address);
+  assert.equal(publicAddress("93.184.216.34"), true);
+  const fetched: string[] = [];
+  const html = `<html><head><meta property="og:image" content="https://cdn.example/a.jpg"></head>`;
+  const fetcher = (async (url: string | URL) => {
+    fetched.push(String(url));
+    if (String(url).includes("moved"))
+      return new Response(null, { status: 301, headers: { location: "http://internal.example/" } });
+    return new Response(html, { headers: { "content-type": "text/html" } });
+  }) as typeof fetch;
+  const resolve = async (host: string) => [
+    { address: host === "internal.example" ? "10.0.0.5" : "93.184.216.34" },
+  ];
+  assert.equal(
+    await previewImage("https://news.example/a", { fetcher, resolve }),
+    "https://cdn.example/a.jpg",
+  );
+  // A redirect into a private network, a private address and a non-standard port are refused.
+  assert.equal(await previewImage("https://news.example/moved", { fetcher, resolve }), undefined);
+  assert.equal(await previewImage("http://127.0.0.1/", { fetcher, resolve }), undefined);
+  assert.equal(await previewImage("https://news.example:8443/", { fetcher, resolve }), undefined);
+  assert.deepEqual(fetched, ["https://news.example/a", "https://news.example/moved"]);
+});

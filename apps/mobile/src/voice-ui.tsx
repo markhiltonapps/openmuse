@@ -101,7 +101,7 @@ export function VoiceCard({ name }: { name: string }) {
                   paddingHorizontal: 12,
                   borderRadius: 14,
                   backgroundColor:
-                    chosen?.id === voice.id ? colors.sky : pressed ? "#F3F5F6" : "transparent",
+                    chosen?.id === voice.id ? colors.sky : pressed ? colors.subtle : "transparent",
                 },
               ]}
             >
@@ -137,7 +137,7 @@ export function VoiceCard({ name }: { name: string }) {
                     (settings.microphone ?? "") === mic.id
                       ? colors.sky
                       : pressed
-                        ? "#F3F5F6"
+                        ? colors.subtle
                         : "transparent",
                 },
               ]}

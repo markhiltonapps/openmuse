@@ -114,7 +114,7 @@ export function AvatarPicker({
               borderRadius: 15,
               backgroundColor: AVATAR_COLORS[item],
               borderWidth: 2,
-              borderColor: color === item ? colors.blueDark : "#D8DBDE",
+              borderColor: color === item ? colors.blueDark : colors.subtle,
             }}
           />
         ))}

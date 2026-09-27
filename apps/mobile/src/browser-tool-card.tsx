@@ -93,7 +93,7 @@ export function BrowserToolCard({
       : "";
   return (
     <Card
-      style={{ padding: 13, backgroundColor: "#EEEEF0", gap: 12, width: "100%", maxWidth: 440 }}
+      style={{ padding: 13, backgroundColor: colors.bubble, gap: 12, width: "100%", maxWidth: 440 }}
     >
       <View style={[s.row, { gap: 10 }]}>
         <View style={[s.iconBox, { width: 36, height: 36, borderRadius: 10 }]}>
@@ -121,12 +121,17 @@ export function BrowserToolCard({
         <Image
           accessibilityLabel={`Browser preview: ${visited?.title}`}
           source={{ uri: api.url(preview) }}
-          style={{ width: "100%", aspectRatio: 1.7, borderRadius: 12, backgroundColor: "#FFF" }}
+          style={{
+            width: "100%",
+            aspectRatio: 1.7,
+            borderRadius: 12,
+            backgroundColor: colors.surface,
+          }}
           resizeMode="contain"
           onError={() => setPreviewFailed(true)}
         />
       ) : (
-        <View style={{ backgroundColor: "#FAFAFB", borderRadius: 12, padding: 21, gap: 12 }}>
+        <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 21, gap: 12 }}>
           <Text numberOfLines={2} style={[s.text, { fontSize: 14 }]}>
             {visited?.title || siteLabel(url)}
           </Text>
@@ -135,7 +140,7 @@ export function BrowserToolCard({
               {(["90%", "74%", "84%"] as const).map((width) => (
                 <View
                   key={width}
-                  style={{ height: 7, width, borderRadius: 4, backgroundColor: "#E3E9ED" }}
+                  style={{ height: 7, width, borderRadius: 4, backgroundColor: colors.subtle }}
                 />
               ))}
             </View>
@@ -160,7 +165,7 @@ export function BrowserToolCard({
           icon={Hand}
           disabled={!browser || running}
           onPress={() => browser && open({ type: "browser", browser })}
-          style={{ backgroundColor: "#F9F9FA", minHeight: 38, paddingVertical: 8 }}
+          style={{ backgroundColor: colors.surface, minHeight: 38, paddingVertical: 8 }}
         >
           Take control
         </Button>

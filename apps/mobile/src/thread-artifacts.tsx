@@ -17,8 +17,8 @@ export function FileThreadCard({ file }: { file: Artifact }) {
       onPress={() => open({ type: "file", file })}
       style={{ width: "100%", maxWidth: 440 }}
     >
-      <Card style={{ padding: 18, backgroundColor: "#F0F1F2", gap: 18 }}>
-        <View style={{ borderRadius: 12, padding: 22, backgroundColor: "#FFF", gap: 14 }}>
+      <Card style={{ padding: 18, backgroundColor: colors.subtle, gap: 18 }}>
+        <View style={{ borderRadius: 12, padding: 22, backgroundColor: colors.surface, gap: 14 }}>
           <Text style={[s.heading, { fontSize: 18 }]}>{file.name.replace(/\.pdf$/i, "")}</Text>
           {file.fields?.length ? (
             file.fields.slice(0, 4).map((field) => (

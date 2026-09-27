@@ -182,7 +182,9 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
         <>
           <View style={{ display: tab === "Terminal" ? "flex" : "none", gap: 16 }}>
             {editingCommand || command.length > 0 || snapshot.commands.length === 0 ? (
-              <View style={{ borderRadius: 22, backgroundColor: "#F1F3F4", padding: 18, gap: 8 }}>
+              <View
+                style={{ borderRadius: 22, backgroundColor: colors.subtle, padding: 18, gap: 8 }}
+              >
                 <Text style={{ color: colors.muted, fontSize: 12, fontFamily: mono }}>
                   TERMINAL
                 </Text>

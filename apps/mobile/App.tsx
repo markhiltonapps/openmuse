@@ -59,6 +59,7 @@ import {
   saveSession,
 } from "./src/session-store";
 import { SignInCard } from "./src/sign-in";
+import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
 import { registerServiceWorker } from "./src/web-app";
@@ -143,7 +144,7 @@ export default function App() {
   );
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style={dark ? "light" : "dark"} />
       {token ? (
         <CopilotKitProvider
           runtimeUrl={`${API_URL}/api/copilotkit`}
@@ -362,6 +363,7 @@ function WorkspaceShell({
                     ? GoalsScreen
                     : AppsScreen;
   const utility = ["mail", "calendar", "browser"].includes(section);
+  const chat = section === "chat";
   return (
     <>
       <WorkspaceTools />
@@ -369,8 +371,8 @@ function WorkspaceShell({
         <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
           <View
             style={{
-              height: desktop ? 146 : 122,
-              paddingTop: desktop ? 14 : 2,
+              height: chat ? (desktop ? 150 : 128) : desktop ? 158 : 132,
+              paddingTop: desktop ? 14 : 4,
               marginHorizontal: 20,
             }}
           >
@@ -394,25 +396,38 @@ function WorkspaceShell({
                 })}
               >
                 <AgentAvatar
-                  size={desktop ? 58 : 49}
+                  size={chat ? (desktop ? 66 : 58) : desktop ? 88 : 76}
                   mood={mood}
                   activity={mood === "working" ? activity?.kind : undefined}
                 />
-                <Text
+                <View
                   style={{
-                    fontSize: 16,
-                    fontWeight: "600",
-                    color: colors.text,
-                    letterSpacing: -0.4,
+                    marginTop: -10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 5,
+                    borderRadius: 18,
+                    backgroundColor: colors.subtle,
+                    borderWidth: 2,
+                    borderColor: colors.canvas,
                   }}
                 >
-                  {agentName}
-                </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      fontSize: 15,
+                      fontWeight: "600",
+                      color: colors.text,
+                      letterSpacing: -0.3,
+                    }}
+                  >
+                    {agentName}
+                  </Text>
+                </View>
                 <Text
                   numberOfLines={1}
-                  style={{ fontSize: 11, color: colors.muted, marginBottom: 6 }}
+                  style={{ fontSize: 11, color: colors.muted, marginTop: 4, marginBottom: 6 }}
                 >
-                  {status}
+                  {mood === "idle" ? " " : status}
                 </Text>
               </Pressable>
               {section === "chat" && <ComputerEntry />}
@@ -456,7 +471,14 @@ function WorkspaceShell({
                     Back to Apps
                   </Button>
                 )}
-                <Text style={[s.title, { fontSize: 25, marginBottom: 22 }]}>{title?.title}</Text>
+                <Text
+                  style={[
+                    s.title,
+                    { fontSize: 34, letterSpacing: -1, fontWeight: "600", marginBottom: 22 },
+                  ]}
+                >
+                  {title?.title}
+                </Text>
                 <ErrorNotice error={error} />
                 <Screen />
               </ScrollView>
@@ -514,7 +536,7 @@ function WorkspaceShell({
                 width: "100%",
                 maxWidth: 370,
                 padding: 5,
-                backgroundColor: "#FFF",
+                backgroundColor: colors.surface,
                 borderRadius: 40,
                 shadowColor: "#132631",
                 shadowOffset: { width: 0, height: 2 },
@@ -522,7 +544,7 @@ function WorkspaceShell({
                 shadowRadius: 18,
                 elevation: 3,
                 borderWidth: 1,
-                borderColor: "#F8F8F8",
+                borderColor: colors.line,
               }}
             >
               {nav.map((item) => {
@@ -539,7 +561,7 @@ function WorkspaceShell({
                       height: 47,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: active ? "#F0F1F2" : "transparent",
+                      backgroundColor: active ? colors.subtle : "transparent",
                       borderRadius: 28,
                     }}
                   >
@@ -561,20 +583,20 @@ function WorkspaceShell({
                 {
                   gap: 10,
                   padding: 14,
-                  backgroundColor: colors.text,
+                  backgroundColor: colors.inverse,
                   borderRadius: 20,
                   maxWidth: 560,
                 },
               ]}
             >
               <Check size={16} color={colors.blue} />
-              <Text style={{ color: "#FFF", fontSize: 13, flexShrink: 1 }}>{toast}</Text>
+              <Text style={{ color: colors.onInverse, fontSize: 13, flexShrink: 1 }}>{toast}</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss notification"
                 onPress={clearToast}
               >
-                <X size={16} color="#FFF" />
+                <X size={16} color={colors.onInverse} />
               </Pressable>
             </View>
           </View>

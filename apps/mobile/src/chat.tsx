@@ -710,7 +710,7 @@ export function ChatScreen({
                       borderRadius: 22,
                       borderBottomRightRadius: user ? 7 : 22,
                       borderBottomLeftRadius: user ? 22 : 7,
-                      backgroundColor: user ? colors.blue : "#EEEEF0",
+                      backgroundColor: user ? colors.blue : colors.bubble,
                     }}
                   >
                     {user ? (
@@ -866,7 +866,7 @@ export function ChatScreen({
                 gap: 7,
                 paddingHorizontal: 19,
                 paddingVertical: activity ? 13 : 18,
-                backgroundColor: "#EEEEF0",
+                backgroundColor: colors.bubble,
                 borderRadius: 28,
               },
             ]}
@@ -1061,10 +1061,10 @@ export function ChatScreen({
         )}
         <View
           style={{
-            backgroundColor: "#FFF",
+            backgroundColor: colors.surface,
             borderRadius: 32,
             borderWidth: 1,
-            borderColor: focused ? "#C7E4F9" : "#EEF0F2",
+            borderColor: focused ? colors.blue : colors.line,
             padding: 8,
             shadowColor: "#18384B",
             shadowOpacity: focused ? 0.1 : 0.06,
@@ -1158,7 +1158,7 @@ export function ChatScreen({
                       : "Loading conversation…"
                     : "Message…"
               }
-              placeholderTextColor="#949B9F"
+              placeholderTextColor={colors.muted}
               selectionColor={colors.blueDark}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
@@ -1209,7 +1209,7 @@ export function ChatScreen({
                       : "transparent",
                 })}
               >
-                <AudioLines size={22} color={voiceMode ? colors.text : "#6F777C"} />
+                <AudioLines size={22} color={voiceMode ? colors.text : colors.muted} />
               </Pressable>
             )}
             {dictationAvailable() && !replying && !voiceMode && (
@@ -1231,7 +1231,7 @@ export function ChatScreen({
                       : "transparent",
                 })}
               >
-                <Mic size={22} color={listening ? colors.text : "#6F777C"} />
+                <Mic size={22} color={listening ? colors.text : colors.muted} />
               </Pressable>
             )}
             <Pressable
@@ -1243,7 +1243,7 @@ export function ChatScreen({
                 width: 44,
                 height: 44,
                 borderRadius: 24,
-                backgroundColor: replying || draft.trim() ? colors.blue : "#F3F5F6",
+                backgroundColor: replying || draft.trim() ? colors.blue : colors.subtle,
                 alignItems: "center",
                 justifyContent: "center",
                 transform: [{ scale: pressed ? 0.94 : 1 }],
@@ -1255,7 +1255,7 @@ export function ChatScreen({
                 <ArrowUp
                   size={25}
                   strokeWidth={1.8}
-                  color={draft.trim() ? colors.text : "#9CB5C5"}
+                  color={draft.trim() ? colors.text : colors.muted}
                 />
               )}
             </Pressable>

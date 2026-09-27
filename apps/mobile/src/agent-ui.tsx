@@ -37,6 +37,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { AppearanceCard } from "./appearance-ui";
 import { AlwaysAllowedCard } from "./approvals-ui";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
@@ -44,6 +45,7 @@ import { HealthSection } from "./health-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { SubscriptionsCard } from "./subscriptions-ui";
+import { dark } from "./theme";
 import {
   Button,
   Card,
@@ -128,7 +130,7 @@ export function TaskCard({
           padding: compact ? 15 : 20,
           gap: 11,
           borderRadius: 22,
-          backgroundColor: "#F0F1F2",
+          backgroundColor: colors.subtle,
         }}
       >
         <View style={[s.row, { gap: 10 }]}>
@@ -732,7 +734,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
   const period = record(artifact.data.period);
   return (
     <Card
-      style={{ gap: 12, padding: 10, backgroundColor: "#EEEEF0", maxWidth: 440, width: "100%" }}
+      style={{ gap: 12, padding: 10, backgroundColor: colors.bubble, maxWidth: 440, width: "100%" }}
     >
       <Pressable
         accessibilityRole="button"
@@ -1097,7 +1099,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
         onPress={() => setExpanded(!expanded)}
         style={{ flexDirection: "row", gap: 14 }}
       >
-        <Text style={{ fontSize: 27, width: 34, paddingTop: 3 }}>
+        <Text style={{ fontSize: 34, lineHeight: 42, width: 44, textAlign: "center" }}>
           {/document|permission|form/i.test(idea.title)
             ? "📋"
             : /money|spend|saving/i.test(idea.title)
@@ -1109,12 +1111,12 @@ function IdeaCard({ idea }: { idea: Idea }) {
                   : "💡"}
         </Text>
         <View style={{ flex: 1, gap: 5 }}>
-          <Text style={[s.heading, { fontSize: 16, lineHeight: 23 }]}>{idea.title}</Text>
+          <Text style={[s.heading, { fontSize: 18, lineHeight: 25 }]}>{idea.title}</Text>
           <Text style={s.muted}>{idea.reason}</Text>
         </View>
       </Pressable>
       {expanded && (
-        <View style={{ gap: 15, marginTop: 18, paddingLeft: 48 }}>
+        <View style={{ gap: 15, marginTop: 18, paddingLeft: 58 }}>
           <EvidenceList items={idea.evidence} />
           {editing && (
             <Field
@@ -1220,11 +1222,11 @@ function RoutinesSection({ routines }: { routines: Routine[] }) {
               height: 16,
               borderRadius: 8,
               borderWidth: 5,
-              borderColor: "#EDE7FB",
+              borderColor: colors.lavender,
               backgroundColor: "#8C6BE0",
             }}
           />
-          <Text style={[s.heading, { color: "#6E4FC4" }]}>Routines</Text>
+          <Text style={[s.heading, { color: dark ? "#A58BFF" : "#6E4FC4" }]}>Routines</Text>
         </View>
         {!draft && (
           <Button small icon={Plus} onPress={() => setDraft({ ...MORNING_BRIEF })}>
@@ -1378,11 +1380,11 @@ export function GoalsScreen() {
                 height: 16,
                 borderRadius: 8,
                 borderWidth: 5,
-                borderColor: "#D9F1E2",
+                borderColor: colors.green,
                 backgroundColor: "#24A46B",
               }}
             />
-            <Text style={[s.heading, { color: "#189A58" }]}>Tracking</Text>
+            <Text style={[s.heading, { color: colors.greenDark }]}>Tracking</Text>
           </View>
           <Button small icon={Plus} onPress={() => setAdding("Tracking")}>
             Track
@@ -1396,7 +1398,7 @@ export function GoalsScreen() {
             onPress={() => setSelectedMonitor(item.id)}
             style={[s.row, { gap: 12, paddingVertical: 13 }]}
           >
-            <Square size={21} color="#A7AAAC" />
+            <Square size={21} color={colors.muted} />
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={s.text}>{item.title}</Text>
               <Text numberOfLines={1} style={s.muted}>
@@ -1405,7 +1407,7 @@ export function GoalsScreen() {
                   : statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronRight size={18} color="#A3A6A8" />
+            <ChevronRight size={18} color={colors.muted} />
           </Pressable>
         ))}
         {!monitors.length && (
@@ -1428,7 +1430,7 @@ export function GoalsScreen() {
               height: 16,
               borderRadius: 8,
               borderWidth: 5,
-              borderColor: "#D7E9FA",
+              borderColor: colors.sky,
               backgroundColor: "#3D9BDE",
             }}
           />
@@ -1444,7 +1446,7 @@ export function GoalsScreen() {
           >
             <Square
               size={21}
-              color="#A7AAAC"
+              color={colors.muted}
               fill={item.status === "completed" ? colors.green : "transparent"}
             />
             <View style={{ flex: 1, gap: 4 }}>
@@ -1453,7 +1455,7 @@ export function GoalsScreen() {
                 {item.description || statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronRight size={18} color="#A3A6A8" />
+            <ChevronRight size={18} color={colors.muted} />
           </Pressable>
         ))}
         {!data?.goals.length && (
@@ -1477,9 +1479,9 @@ export function GoalsScreen() {
           onPress={() => setAdding(item.name)}
           style={[s.row, { gap: 12, minHeight: 38 }]}
         >
-          <item.icon size={23} color="#989C9F" />
-          <Text style={[s.text, { flex: 1, color: "#666A6D" }]}>{item.name}</Text>
-          <Plus size={18} color="#989C9F" />
+          <item.icon size={23} color={colors.muted} />
+          <Text style={[s.text, { flex: 1, color: colors.muted }]}>{item.name}</Text>
+          <Plus size={18} color={colors.muted} />
         </Pressable>
       ))}
       {adding && (
@@ -1961,7 +1963,7 @@ export function AppsScreen() {
       />
       <ConnectionsScreen query={query} />
       <Text style={s.heading}>On your computer</Text>
-      <Card style={{ paddingVertical: 3, backgroundColor: "#F4F5F6" }}>
+      <Card style={{ paddingVertical: 3, backgroundColor: colors.card }}>
         {shortcuts
           .filter((item) =>
             `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()),
@@ -1984,6 +1986,7 @@ export function AppsScreen() {
       <AgentEmailCard />
       <PhoneAppCard />
       <VoiceCard name={data?.identity.name || "OpenMuse"} />
+      <AppearanceCard />
       <AccountCard />
       <YourDataCard />
       <UsageCard />
