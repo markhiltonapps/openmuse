@@ -44,6 +44,7 @@ import type { HealthService } from "../health.ts";
 import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
 import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
+import { People } from "../people.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { UsageMeter } from "../usage.ts";
 import type { WebSearch } from "../web-search.ts";
@@ -63,6 +64,8 @@ export class AgentService {
   readonly chats: ChatSummaries;
   /** Links to files that anyone with the link can open until they expire. */
   readonly shares: FileShares;
+  /** Pages on the people and groups the person deals with. */
+  readonly people: People;
   private maintenance?: ReturnType<typeof setInterval>;
   private refreshing = false;
   constructor(
@@ -77,6 +80,7 @@ export class AgentService {
     readonly apps?: AppConnector,
   ) {
     this.shares = new FileShares(db, files, config.publicUrl);
+    this.people = new People(db);
     this.chats = new ChatSummaries(db, (owner, previous, transcript) => {
       const model = this.config.workerModel ?? this.config.model;
       if (this.config.agentBackend !== "model" || !model) return Promise.resolve("");

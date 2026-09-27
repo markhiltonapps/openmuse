@@ -759,6 +759,16 @@ export async function createApp(
     );
     return c.body(await files.bytes(c.get("owner"), file.id));
   });
+  app.get("/api/people", async (c) => c.json({ people: await agent.people.list(c.get("owner")) }));
+  app.post("/api/people", async (c) =>
+    c.json(await agent.people.note(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/people/:id", async (c) =>
+    c.json(await agent.people.edit(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.post("/api/people/:id/delete", async (c) =>
+    c.json(await agent.people.remove(c.get("owner"), c.req.param("id"))),
+  );
   app.get("/api/files/:id/share", async (c) =>
     c.json({ links: await shares.list(c.get("owner"), c.req.param("id")) }),
   );

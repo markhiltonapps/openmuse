@@ -48,6 +48,7 @@ import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
 import { HelpCard } from "./help-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
+import { PeopleNotesCard } from "./people-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { SubscriptionsCard } from "./subscriptions-ui";
 import { dark } from "./theme";
@@ -2204,6 +2205,7 @@ export function AppsScreen() {
             <View style={s.divider} />
             <ChatgptImport />
           </Card>
+          <PeopleNotesCard />
           <VoiceCard name={data?.identity.name || "Neddy"} />
           <AgentEmailCard />
         </>
