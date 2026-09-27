@@ -211,30 +211,40 @@ export class ComposioConnector implements AppConnector {
   /** The sign-in set up in the Composio dashboard ("auth config") for one app, if any. */
   private async customAuthConfig(app: string): Promise<string | undefined> {
     const seen: string[] = [];
-    // Filtered first; the whole list as a fallback, in case the filter isn't accepted.
-    for (const query of [`?toolkit_slug=${encodeURIComponent(app)}`, ""]) {
+    // The list comes in pages; a project with many auth configs has this one on a later page.
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    for (let page = 0; page < 30; page++) {
+      const query = new URLSearchParams({ toolkit_slug: app, limit: "50" });
+      if (cursor) query.set("cursor", cursor);
+      let list: {
+        items?: {
+          id?: string;
+          toolkit?: { slug?: string };
+          toolkit_slug?: string;
+          is_composio_managed?: boolean;
+          status?: string;
+        }[];
+        next_cursor?: string | null;
+      };
       try {
-        const list = await this.request<{
-          items?: {
-            id?: string;
-            toolkit?: { slug?: string };
-            toolkit_slug?: string;
-            is_composio_managed?: boolean;
-            status?: string;
-          }[];
-        }>("GET", `/api/v3/auth_configs${query}`);
-        for (const item of list.items ?? []) {
-          const slug = (item.toolkit?.slug ?? item.toolkit_slug ?? "").toLowerCase();
-          seen.push(`${slug || "?"}${item.is_composio_managed ? " (managed)" : ""}`);
-          if (slug !== app || !item.id || item.is_composio_managed === true) continue;
-          if (item.status?.toUpperCase() === "DISABLED") continue;
-          return item.id;
-        }
+        list = await this.request("GET", `/api/v3/auth_configs?${query}`);
       } catch (error) {
         console.warn(
-          `[OpenMuse] Could not list Composio auth configs${query ? " for " + app : ""}: ${error instanceof Error ? error.message : error}`,
+          `[OpenMuse] Could not list Composio auth configs: ${error instanceof Error ? error.message : error}`,
         );
+        break;
       }
+      for (const item of list.items ?? []) {
+        const slug = (item.toolkit?.slug ?? item.toolkit_slug ?? "").toLowerCase();
+        seen.push(`${slug || "?"}${item.is_composio_managed ? " (managed)" : ""}`);
+        if (slug !== app || !item.id || item.is_composio_managed === true) continue;
+        if (item.status?.toUpperCase() === "DISABLED") continue;
+        return item.id;
+      }
+      cursor = list.next_cursor ?? undefined;
+      if (!cursor || !list.items?.length || cursors.has(cursor)) break;
+      cursors.add(cursor);
     }
     console.warn(
       `[OpenMuse] No Composio auth config for ${app}. Auth configs in this Composio project: ${[...new Set(seen)].join(", ") || "none"}`,
