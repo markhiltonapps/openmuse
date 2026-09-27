@@ -1,6 +1,6 @@
 {
-  "name": "Neato_Meca",
-  "short_name": "Neato_Meca",
+  "name": "Neato_Muse",
+  "short_name": "Neato_Muse",
   "description": "A personal agent for your mail, calendar, apps and errands.",
   "start_url": "/",
   "scope": "/",

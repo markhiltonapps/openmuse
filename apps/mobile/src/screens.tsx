@@ -1497,7 +1497,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 has not been configured.
               </Text>
               <Text style={s.muted}>
-                Your current computer uses Neato_Meca’s persistent Chromium worker. OpenBot
+                Your current computer uses Neato_Muse’s persistent Chromium worker. OpenBot
                 integration will expand the execution backend while keeping this interface.
               </Text>
             </View>

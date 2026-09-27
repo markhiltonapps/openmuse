@@ -2404,19 +2404,19 @@ function PhoneAppCard() {
       {!isInstalled() && (
         <Text style={s.muted}>
           {isIos()
-            ? "Add Neato_Meca to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
-            : "Install Neato_Meca from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
+            ? "Add Neato_Muse to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
+            : "Install Neato_Muse from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
         </Text>
       )}
       <Text style={s.muted}>
         {state === "on"
           ? "This device gets a notification when a routine finishes, a task needs your details, or something is ready for review."
           : state === "install-first"
-            ? "Notifications work once Neato_Meca is on your Home Screen."
+            ? "Notifications work once Neato_Muse is on your Home Screen."
             : state === "blocked"
               ? "Notifications are blocked for this site. Allow them in your browser settings, then come back."
               : state === "unsupported"
-                ? "This browser can't show notifications from Neato_Meca."
+                ? "This browser can't show notifications from Neato_Muse."
                 : "Get a notification when a routine finishes or something needs your review."}
       </Text>
       {(state === "on" || state === "off") && (

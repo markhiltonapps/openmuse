@@ -64,25 +64,25 @@ export function signInEmail(input: SignInEmail) {
   const help = esc(`${base}/help.html`);
   const first = input.name?.trim().split(/\s+/)[0];
   const hello = first ? `Hi ${esc(first)}, you're invited!` : "You're invited!";
-  const subject = input.invite ? "You're invited to Neato_Meca" : "Your Neato_Meca sign-in link";
+  const subject = input.invite ? "You're invited to Neato_Muse" : "Your Neato_Muse sign-in link";
 
   const intro = input.invite
-    ? `You've been invited to Neato_Meca, a personal assistant for your email, calendar, apps and errands.`
-    : "Here's your link to sign in to Neato_Meca.";
+    ? `You've been invited to Neato_Muse, a personal assistant for your email, calendar, apps and errands.`
+    : "Here's your link to sign in to Neato_Muse.";
   const agent =
     input.invite && input.address
       ? `\n\nYour assistant's email address is ${input.address}. Send or forward email there from ${input.email} to hand it work.`
       : "";
-  const guide = input.invite ? `\n\nNew to Neato_Meca? See how it works: ${base}/help.html` : "";
+  const guide = input.invite ? `\n\nNew to Neato_Muse? See how it works: ${base}/help.html` : "";
   const text = `${intro}\n\nSign in: ${input.link}\n\nThe link works once and expires ${input.expiry}.${agent}${guide}`;
 
-  const header = `<tr><td bgcolor="#E2F5F3" align="center" style="background:#E2F5F3;padding:34px 24px 26px;border-radius:28px 28px 0 0"><img src="${img("neddy")}" width="${input.invite ? 120 : 88}" height="${input.invite ? 120 : 88}" alt="Neddy, the Neato_Meca robot" style="display:block;border:0;border-radius:32px;width:${input.invite ? 120 : 88}px;height:${input.invite ? 120 : 88}px"><div style="font-family:${FONT};font-size:${input.invite ? 30 : 26}px;line-height:1.15;font-weight:800;letter-spacing:-0.6px;color:${INK};margin-top:18px">${input.invite ? hello : "Here's your sign-in link"}</div>${
+  const header = `<tr><td bgcolor="#E2F5F3" align="center" style="background:#E2F5F3;padding:34px 24px 26px;border-radius:28px 28px 0 0"><img src="${img("neddy")}" width="${input.invite ? 120 : 88}" height="${input.invite ? 120 : 88}" alt="Neddy, the Neato_Muse robot" style="display:block;border:0;border-radius:32px;width:${input.invite ? 120 : 88}px;height:${input.invite ? 120 : 88}px"><div style="font-family:${FONT};font-size:${input.invite ? 30 : 26}px;line-height:1.15;font-weight:800;letter-spacing:-0.6px;color:${INK};margin-top:18px">${input.invite ? hello : "Here's your sign-in link"}</div>${
     input.invite
       ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:18px auto 0;max-width:470px"><tr><td bgcolor="#FFFFFF" style="background:#FFFFFF;border:1px solid #D6ECE9;border-radius:22px;padding:14px 18px;font-family:${FONT};font-size:16px;line-height:23px;color:${INK};text-align:left">Hi, I'm <b>Neddy</b>, your new personal AI agent. I read and draft your email, keep your calendar, research things, set reminders and run errands, and I always check with you before I send, buy or change anything.</td></tr></table>`
       : ""
   }</td></tr>`;
 
-  const cta = `<tr><td align="center" style="padding:28px 24px 8px">${button(link, input.invite ? "Accept your invite &rarr;" : "Sign in to Neato_Meca")}<div style="font-family:${FONT};font-size:13px;color:${MUTED};margin-top:12px">The link works once and expires ${esc(input.expiry)}.</div></td></tr>`;
+  const cta = `<tr><td align="center" style="padding:28px 24px 8px">${button(link, input.invite ? "Accept your invite &rarr;" : "Sign in to Neato_Muse")}<div style="font-family:${FONT};font-size:13px;color:${MUTED};margin-top:12px">The link works once and expires ${esc(input.expiry)}.</div></td></tr>`;
 
   const tour = input.invite
     ? `<tr><td style="padding:26px 18px 4px"><div style="font-family:${FONT};font-size:21px;font-weight:800;letter-spacing:-0.3px;color:${INK};padding:0 6px 8px">What I can do for you</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${[
@@ -106,7 +106,7 @@ export function signInEmail(input: SignInEmail) {
 <tr><td align="center" style="padding:28px 24px 30px">${button(link, "Meet Neddy &rarr;")}</td></tr>`
     : `<tr><td style="padding:0 24px 28px"></td></tr>`;
 
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${subject}</title></head><body style="margin:0;padding:0;background:#F3F4F1"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${input.invite ? "Meet Neddy, your new personal AI agent. Your invite link works for 3 days." : "Your one-time sign-in link for Neato_Meca."}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F3F4F1" style="background:#F3F4F1"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="max-width:600px;background:#FFFFFF;border-radius:28px">${header}${cta}${tour}</table><div style="max-width:560px;font-family:${FONT};font-size:12px;line-height:18px;color:#8A9296;padding:18px 12px 0;text-align:center">${input.invite ? "You're getting this because someone invited you to their Neato_Meca." : "You asked for a sign-in link."} If you weren't expecting it, you can ignore this email.</div></td></tr></table></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${subject}</title></head><body style="margin:0;padding:0;background:#F3F4F1"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${input.invite ? "Meet Neddy, your new personal AI agent. Your invite link works for 3 days." : "Your one-time sign-in link for Neato_Muse."}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F3F4F1" style="background:#F3F4F1"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="max-width:600px;background:#FFFFFF;border-radius:28px">${header}${cta}${tour}</table><div style="max-width:560px;font-family:${FONT};font-size:12px;line-height:18px;color:#8A9296;padding:18px 12px 0;text-align:center">${input.invite ? "You're getting this because someone invited you to their Neato_Muse." : "You asked for a sign-in link."} If you weren't expecting it, you can ignore this email.</div></td></tr></table></body></html>`;
 
   return { subject, text, html };
 }

@@ -62,7 +62,7 @@ export class Auth {
       : undefined;
   }
   async owner(authorization?: string) {
-    if (!authorization?.startsWith("Bearer ")) throw new AppError("Sign in to Neato_Meca", 401);
+    if (!authorization?.startsWith("Bearer ")) throw new AppError("Sign in to Neato_Muse", 401);
     const id = digest(authorization.slice(7)).toString("hex");
     const session = await this.db.get<Session>("system", "sessions", id);
     const now = Date.now();

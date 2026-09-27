@@ -62,7 +62,7 @@ export function SignInCard({
         <>
           <Text style={s.heading}>Check your email</Text>
           <Text style={s.muted}>
-            If {sentTo} has a Neato_Meca account, a sign-in link is on its way. Open it on this
+            If {sentTo} has a Neato_Muse account, a sign-in link is on its way. Open it on this
             device. It works once and expires in 15 minutes.
           </Text>
           <Field
@@ -74,7 +74,7 @@ export function SignInCard({
             placeholder="https://…#login=…"
           />
           <Text style={s.small}>
-            Using Neato_Meca from your iPhone Home Screen? Links open in Safari, so press and hold
+            Using Neato_Muse from your iPhone Home Screen? Links open in Safari, so press and hold
             the link in the email, tap Copy, and paste it here.
           </Text>
           <Button
@@ -122,14 +122,14 @@ export function SignInCard({
         </Pressable>
       ) : (
         <Text style={s.small}>
-          Local workspaces open without a key. Make sure your Neato_Meca server is running at{" "}
+          Local workspaces open without a key. Make sure your Neato_Muse server is running at{" "}
           {API_URL}.
         </Text>
       )}
       {hasHelp && (
         <Pressable accessibilityRole="link" onPress={() => openHelp("start")}>
           <Text style={[s.small, { textAlign: "center", textDecorationLine: "underline" }]}>
-            New here? See how Neato_Meca works
+            New here? See how Neato_Muse works
           </Text>
         </Pressable>
       )}

@@ -16,7 +16,7 @@ test("the invite email shows Neddy, the button, the tour and the agent's address
     name: "Sarah Jones",
     address: "sarah@agent.test",
   });
-  assert.equal(mail.subject, "You're invited to Neato_Meca");
+  assert.equal(mail.subject, "You're invited to Neato_Muse");
   assert.match(mail.html, /Hi Sarah, you're invited!/);
   assert.match(mail.html, /href="https:\/\/app\.test\/#login=abc123"/);
   assert.match(mail.html, /src="https:\/\/app\.test\/email\/neddy\.png"/);
@@ -41,7 +41,7 @@ test("names from the invite form can't add markup to the email", () => {
 
 test("the sign-in email stays short, without the tour", () => {
   const mail = signInEmail({ ...base, invite: false, expiry: "within 15 minutes" });
-  assert.equal(mail.subject, "Your Neato_Meca sign-in link");
+  assert.equal(mail.subject, "Your Neato_Muse sign-in link");
   assert.match(mail.html, /Here's your sign-in link/);
   assert.match(mail.html, /expires within 15 minutes/);
   assert.doesNotMatch(mail.html, /What I can do for you/);

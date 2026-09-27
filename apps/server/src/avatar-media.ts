@@ -7,7 +7,7 @@ import { AppError } from "./errors.ts";
  * loop, one idle and one talking. The files are fetched once and kept with the server's data.
  */
 export const avatarPresets: Record<string, Record<"poster" | "idle" | "talking", string>> = {
-  // Neddy, the Neato_Meca mascot: he looks around and blinks, and his eyes glow as he talks.
+  // Neddy, the Neato_Muse mascot: he looks around and blinks, and his eyes glow as he talks.
   neddy: {
     poster:
       "https://d2ol7oe51mr4n9.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/3d7842c2-486b-40f7-84e5-e2bafb5ac2f4.webp",

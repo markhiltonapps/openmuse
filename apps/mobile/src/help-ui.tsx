@@ -27,7 +27,7 @@ export function HelpCard() {
     <Card style={{ gap: 14 }}>
       <SectionHeading title="Help & how-to" />
       <Text style={s.muted}>
-        Pictures and simple steps for everything Neato_Meca does. It opens in a new tab.
+        Pictures and simple steps for everything Neato_Muse does. It opens in a new tab.
       </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
         {TOPICS.map((topic) => (
