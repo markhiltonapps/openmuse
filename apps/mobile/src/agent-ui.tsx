@@ -51,6 +51,7 @@ import { HelpCard } from "./help-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
 import { PeopleNotesCard } from "./people-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
+import { PasswordsCard } from "./sign-in-ui";
 import { SubscriptionsCard } from "./subscriptions-ui";
 import { dark } from "./theme";
 import {
@@ -2127,6 +2128,7 @@ export function AppsScreen() {
         <>
           <AppearanceCard />
           <AccountCard />
+          <PasswordsCard />
           <YourDataCard />
           <PeopleCard />
         </>

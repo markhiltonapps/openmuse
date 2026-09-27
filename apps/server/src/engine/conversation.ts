@@ -28,6 +28,7 @@ import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
+import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
@@ -441,6 +442,33 @@ export class ConversationAgent extends AbstractAgent {
         }),
       ),
     );
+    const logins = this.service.logins;
+    if (logins?.available)
+      tools.push(
+        ...signInToolSpecs(this.service.browser, logins, this.owner, input.threadId, (step) =>
+          this.service.actions.propose(
+            this.owner,
+            { kind: "browser.signin", data: step },
+            key("browser-signin", step),
+          ),
+        ).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) => {
+              browserAbort.signal.throwIfAborted();
+              try {
+                return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
+              } catch (error) {
+                browserAbort.signal.throwIfAborted();
+                return {
+                  error: error instanceof Error ? error.message : "The page didn't respond",
+                };
+              }
+            },
+          }),
+        ),
+      );
     tools.push(
       ...restaurantToolSpecs((url) =>
         this.service.browser.observeForThread(this.owner, input.threadId, url, browserAbort.signal),
@@ -491,6 +519,7 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.commitments ? commitmentInstructions : "") +
         restaurantInstructions +
         browserToolInstructions +
+        (logins?.available ? signInInstructions : "") +
         (mailAlerts ? mailAlertInstructions : "") +
         (this.service.appEvents?.available && mailAlerts ? appEventInstructions : "") +
         (search ? webSearchInstructions : "") +

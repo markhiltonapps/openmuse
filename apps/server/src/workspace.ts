@@ -331,7 +331,8 @@ export class WorkspaceService {
     if (
       input.kind === "app.action" ||
       input.kind === "agent_email.send" ||
-      input.kind === "browser.step"
+      input.kind === "browser.step" ||
+      input.kind === "browser.signin"
     )
       return { input };
     if (input.kind === "email.send") {
@@ -361,7 +362,8 @@ export class WorkspaceService {
     if (
       input.kind === "app.action" ||
       input.kind === "agent_email.send" ||
-      input.kind === "browser.step"
+      input.kind === "browser.step" ||
+      input.kind === "browser.signin"
     )
       throw new AppError("This action runs outside the Google account", 500);
     if (this.config.mode === "sample") {

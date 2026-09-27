@@ -163,11 +163,35 @@ export const browserStepSchema = z.object({
   value: z.string().max(40).optional(),
   summary: z.string().trim().min(1).max(500),
 });
+/**
+ * Signing in on a website with a saved password, or entering a one-time code. The password and
+ * code never appear here: the server types them into the page itself after the person approves.
+ */
+export const browserSignInSchema = z.object({
+  sessionId: z.uuid(),
+  url: z.url().max(4096),
+  site: z.string().trim().min(1).max(253),
+  pageTitle: z.string().max(300),
+  step: z.enum(["password", "code"]),
+  /** The saved sign-in used, when there is one. */
+  loginId: z.uuid().optional(),
+  username: z.string().max(200).optional(),
+  /** The code field, for a code step. */
+  ref: z
+    .string()
+    .regex(/^e\d{1,4}$/)
+    .optional(),
+  element: z.string().trim().max(200).optional(),
+  /** The code comes from the saved authenticator key rather than from the person. */
+  savedCode: z.boolean().optional(),
+  summary: z.string().trim().min(1).max(500),
+});
 export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email.send"), data: emailDraftSchema }),
   z.object({ kind: z.literal("agent_email.send"), data: agentEmailSchema }),
   z.object({ kind: z.literal("app.action"), data: appActionSchema }),
   z.object({ kind: z.literal("browser.step"), data: browserStepSchema }),
+  z.object({ kind: z.literal("browser.signin"), data: browserSignInSchema }),
   z.object({ kind: z.literal("calendar.create"), data: eventDraftSchema }),
   z.object({
     kind: z.literal("calendar.update"),
@@ -182,6 +206,7 @@ export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type EventDraft = z.infer<typeof eventDraftSchema>;
 export type AppAction = z.infer<typeof appActionSchema>;
 export type BrowserStep = z.infer<typeof browserStepSchema>;
+export type BrowserSignIn = z.infer<typeof browserSignInSchema>;
 export type AgentEmail = z.infer<typeof agentEmailSchema>;
 export type ProposalInput = z.infer<typeof proposalSchema>;
 export interface ActionProposal {

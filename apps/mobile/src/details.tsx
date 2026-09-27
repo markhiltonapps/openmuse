@@ -41,6 +41,7 @@ import { localDateTime, zonedInstant } from "./date-time";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import PdfReader from "./PdfReader";
 import { ShareLinkCard } from "./share-ui";
+import { codeReady, SignInReview } from "./sign-in-ui";
 import {
   Button,
   Card,
@@ -546,6 +547,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
   const pending = action.status === "awaiting_review";
   // "Always allow" for connected-app actions: this one action, or everything in the app.
   const [allow, setAllow] = useState<"none" | "hour" | "action" | "app">("none");
+  // A code the site sent, typed here for a sign-in: used once, never saved.
+  const [code, setCode] = useState("");
+  const needsCode = action.kind === "browser.signin" && d.step === "code" && !d.savedCode;
   async function decide(decision: "approve" | "deny") {
     setBusy(true);
     setError("");
@@ -559,7 +563,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       const result = await api.request<ActionProposal>(`/api/actions/${action.id}/decide`, {
         decision,
         hash: action.hash,
+        ...(needsCode && decision === "approve" ? { code } : {}),
       });
+      setCode("");
       setLocal(result);
       await refresh();
     } catch (e) {
@@ -600,7 +606,8 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
   const email = action.kind === "email.send" || agentMail;
   const app = action.kind === "app.action";
   const step = action.kind === "browser.step";
-  const stepBrowser = step ? w.browsers.find((b) => b.id === d.sessionId) : undefined;
+  const signin = action.kind === "browser.signin";
+  const stepBrowser = step || signin ? w.browsers.find((b) => b.id === d.sessionId) : undefined;
   return (
     <Sheet
       title={pending ? "One last look" : action.title}
@@ -627,7 +634,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         {agentMail ? (
           <ReviewLine label="From" value={`${String(d.from || "")} (your agent)`} />
         ) : (
-          !app && !step && <ReviewLine label="Account" value={action.account || w.profile.email} />
+          !app &&
+          !step &&
+          !signin && <ReviewLine label="Account" value={action.account || w.profile.email} />
         )}
         {step ? (
           <>
@@ -661,6 +670,17 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
               the browser card.
             </Text>
           </>
+        ) : signin ? (
+          <SignInReview
+            data={d}
+            previewUrl={
+              stepBrowser?.status === "active" && stepBrowser.previewUrl
+                ? api.url(stepBrowser.previewUrl)
+                : undefined
+            }
+            code={pending ? code : ""}
+            onCode={setCode}
+          />
         ) : app ? (
           <>
             <ReviewLine label="App" value={String(d.app || "")} />
@@ -804,20 +824,30 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
             </View>
           )}
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
-            <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
+            <Button
+              primary
+              icon={Check}
+              busy={busy}
+              disabled={needsCode && !codeReady(code)}
+              onPress={() => void decide("approve")}
+            >
               {app && typeof d.amountUsd === "number"
                 ? `Approve purchase · $${d.amountUsd.toFixed(2)}`
-                : step
-                  ? `Approve · ${d.action === "press" ? "send the form" : `click “${String(d.element || "")}”`}`
-                  : app
-                    ? "Approve & run"
-                    : w.mode === "sample"
-                      ? "Approve locally"
-                      : email
-                        ? "Approve & send"
-                        : "Approve change"}
+                : signin
+                  ? d.step === "code"
+                    ? "Approve · enter the code"
+                    : `Approve · sign in as ${String(d.username || "you")}`
+                  : step
+                    ? `Approve · ${d.action === "press" ? "send the form" : `click “${String(d.element || "")}”`}`
+                    : app
+                      ? "Approve & run"
+                      : w.mode === "sample"
+                        ? "Approve locally"
+                        : email
+                          ? "Approve & send"
+                          : "Approve change"}
             </Button>
-            {action.kind !== "calendar.delete" && !app && !step && !agentMail && (
+            {action.kind !== "calendar.delete" && !app && !step && !signin && !agentMail && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
                 Edit details
               </Button>

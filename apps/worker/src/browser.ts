@@ -548,7 +548,10 @@ export function listElements(max: number): PageElement[] {
     if (!html.getClientRects().length || style.visibility === "hidden" || style.display === "none")
       continue;
     const tag = el.tagName.toLowerCase();
-    const type = (el.getAttribute("type") ?? "").toLowerCase();
+    // A password box stays one after a "show password" toggle turns it into plain text.
+    const type = /password/i.test(el.getAttribute("autocomplete") ?? "")
+      ? "password"
+      : (el.getAttribute("type") ?? "").toLowerCase();
     const role =
       el.getAttribute("role") ??
       (tag === "a"

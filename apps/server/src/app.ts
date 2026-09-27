@@ -42,6 +42,8 @@ import {
 } from "./memory-import.ts";
 import { PushService } from "./push.ts";
 import { ReminderService } from "./reminders.ts";
+import { Logins } from "./sign-in.ts";
+import { cleanCode, runApprovedSignIn } from "./sign-in-tools.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
@@ -88,15 +90,26 @@ export async function createApp(
     apps = composio;
   }
   const spending = new SpendingService(db);
+  const logins = new Logins(db, config.encryptionKey);
   const actions = new ActionService(db, {
-    authorize: async (owner, input) => {
+    authorize: async (owner, input, approval) => {
+      // A code the person types is checked before the approval is used up.
+      if (
+        input.kind === "browser.signin" &&
+        input.data.step === "code" &&
+        !input.data.savedCode &&
+        !cleanCode(approval?.code)
+      )
+        throw new AppError("Type the code from your text message or authenticator app.", 400);
       if (input.kind !== "app.action" || !isPurchase(input.data.tool)) return;
       const problem = await spending.check(owner, input.data.amountUsd);
       if (problem) throw new AppError(problem, 409);
     },
-    execute: async (owner, input, connectionId, targetVersion): Promise<string> => {
+    execute: async (owner, input, connectionId, targetVersion, approval): Promise<string> => {
       if (input.kind === "agent_email.send") return inbox.send(owner, input.data);
       if (input.kind === "browser.step") return runApprovedStep(browser, owner, input.data);
+      if (input.kind === "browser.signin")
+        return runApprovedSignIn(browser, logins, owner, input.data, approval?.code);
       if (input.kind !== "app.action")
         return workspace.execute(owner, input, connectionId, targetVersion);
       if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
@@ -184,6 +197,7 @@ export async function createApp(
   agent.commitments = commitments;
   const approvals = new ApprovalRules(db);
   agent.approvals = approvals;
+  agent.logins = logins;
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
@@ -505,10 +519,16 @@ export async function createApp(
   });
   app.post("/api/actions/:id/decide", async (c) => {
     const body = z
-      .object({ hash: z.string(), decision: z.enum(["approve", "deny"]) })
+      .object({
+        hash: z.string(),
+        decision: z.enum(["approve", "deny"]),
+        code: z.string().max(40).optional(),
+      })
       .parse(await c.req.json());
     return c.json(
-      await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision),
+      await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision, {
+        ...(body.code ? { code: body.code } : {}),
+      }),
     );
   });
   app.get("/api/spending", async (c) => c.json(await spending.settings(c.get("owner"))));
@@ -805,6 +825,18 @@ export async function createApp(
   );
   app.post("/api/app-alerts/:id/stop", async (c) =>
     c.json(await appEvents.stop(c.get("owner"), c.req.param("id"))),
+  );
+  app.get("/api/logins", async (c) =>
+    c.json({ available: logins.available, logins: await logins.list(c.get("owner")) }),
+  );
+  app.post("/api/logins", async (c) =>
+    c.json(await logins.save(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/logins/:id", async (c) =>
+    c.json(await logins.change(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.post("/api/logins/:id/delete", async (c) =>
+    c.json(await logins.remove(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/people", async (c) => c.json({ people: await agent.people.list(c.get("owner")) }));
   app.post("/api/people", async (c) =>

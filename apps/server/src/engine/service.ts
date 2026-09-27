@@ -54,6 +54,7 @@ import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
 import { People } from "../people.ts";
 import type { ReminderService } from "../reminders.ts";
+import type { Logins } from "../sign-in.ts";
 import type { UsageMeter } from "../usage.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
@@ -901,6 +902,8 @@ export class AgentService {
   appEvents?: AppEvents;
   /** Connected-app actions the person always allows. */
   approvals?: ApprovalRules;
+  /** Passwords saved for websites, typed into the agent's browser by the server. */
+  logins?: Logins;
   /** Looks at pictures in Files; set when a vision model is configured. */
   look?: LookAtImage;
   /** Model usage per person, for costs and plan limits. */

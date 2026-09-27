@@ -10,7 +10,15 @@ import { AppError } from "./errors.ts";
 
 /** Gmail and Calendar actions run through the Google account; the others don't. */
 export const usesGoogle = (kind: ProposalInput["kind"]) =>
-  kind !== "app.action" && kind !== "agent_email.send" && kind !== "browser.step";
+  kind !== "app.action" &&
+  kind !== "agent_email.send" &&
+  kind !== "browser.step" &&
+  kind !== "browser.signin";
+
+/** Given with an approval and used once, never stored: a one-time code for a sign-in. */
+export interface Approval {
+  code?: string;
+}
 
 interface Options {
   execute: (
@@ -18,6 +26,7 @@ interface Options {
     input: ProposalInput,
     connectionId?: string,
     targetVersion?: string,
+    approval?: Approval,
   ) => Promise<string>;
   prepare?: (
     owner: string,
@@ -30,7 +39,7 @@ interface Options {
   }>;
   connected: (owner: string) => Promise<boolean>;
   /** Last check before an approved action runs; throws to refuse it. */
-  authorize?: (owner: string, input: ProposalInput) => Promise<void>;
+  authorize?: (owner: string, input: ProposalInput, approval?: Approval) => Promise<void>;
   connection?: (owner: string) => Promise<{ id: string; account: string } | null>;
   now?: () => number;
 }
@@ -67,7 +76,9 @@ export class ActionService {
       : undefined;
     const input = proposalSchema.parse(prepared?.input ?? parsed);
     const title =
-      input.kind === "app.action" || input.kind === "browser.step"
+      input.kind === "app.action" ||
+      input.kind === "browser.step" ||
+      input.kind === "browser.signin"
         ? input.data.summary.length > 120
           ? `${input.data.summary.slice(0, 119)}…`
           : input.data.summary
@@ -120,6 +131,7 @@ export class ActionService {
     id: string,
     hash: string,
     decision: "approve" | "deny",
+    approval?: Approval,
   ): Promise<ActionProposal> {
     const proposal = await this.db.get<ActionProposal>(owner, "actions", id);
     if (!proposal) throw new AppError("Action not found", 404);
@@ -168,6 +180,7 @@ export class ActionService {
       await this.options.authorize(
         owner,
         proposalSchema.parse({ kind: proposal.kind, data: proposal.data }),
+        approval,
       );
     const claimed = await this.db.claim<ActionProposal>(
       owner,
@@ -194,6 +207,7 @@ export class ActionService {
         input,
         claimed.connectionId,
         claimed.targetVersion,
+        approval,
       );
       finished = { ...claimed, status: "succeeded", result };
     } catch (error) {
