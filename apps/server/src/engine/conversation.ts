@@ -28,6 +28,7 @@ import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
+import { richCardInstructions, richCardToolSpecs } from "../rich-cards.ts";
 import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
@@ -442,6 +443,21 @@ export class ConversationAgent extends AbstractAgent {
         }),
       ),
     );
+    tools.push(
+      ...richCardToolSpecs(this.service.geocode).map((spec) =>
+        defineTool({
+          ...spec,
+          parameters: spec.parameters as z.ZodObject,
+          execute: async (args: unknown) => {
+            try {
+              return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
+            } catch (error) {
+              return { error: error instanceof Error ? error.message : "Couldn't show them" };
+            }
+          },
+        }),
+      ),
+    );
     const logins = this.service.logins;
     if (logins?.available)
       tools.push(
@@ -519,6 +535,7 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.commitments ? commitmentInstructions : "") +
         restaurantInstructions +
         browserToolInstructions +
+        richCardInstructions +
         (logins?.available ? signInInstructions : "") +
         (mailAlerts ? mailAlertInstructions : "") +
         (this.service.appEvents?.available && mailAlerts ? appEventInstructions : "") +

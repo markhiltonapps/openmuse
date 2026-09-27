@@ -45,6 +45,7 @@ import { runConversationTurn } from "./conversation-run";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
+import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -118,6 +119,28 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <MealToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "show_places",
+    description: "Show places on a map",
+    parameters: displayParameters,
+    render: ({ result, status }) => <PlacesCard result={result} loading={status !== "complete"} />,
+  });
+  useRenderTool({
+    name: "show_products",
+    description: "Show products as cards",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ProductsCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "search_web",
+    description: "Show pictures from an image search",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <SearchPicturesCard result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({

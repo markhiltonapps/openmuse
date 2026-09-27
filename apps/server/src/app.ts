@@ -42,6 +42,7 @@ import {
 } from "./memory-import.ts";
 import { PushService } from "./push.ts";
 import { ReminderService } from "./reminders.ts";
+import { nominatim } from "./rich-cards.ts";
 import { Logins } from "./sign-in.ts";
 import { cleanCode, runApprovedSignIn } from "./sign-in-tools.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
@@ -198,6 +199,11 @@ export async function createApp(
   const approvals = new ApprovalRules(db);
   agent.approvals = approvals;
   agent.logins = logins;
+  if (config.mode === "live")
+    agent.geocode = nominatim(
+      db,
+      `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; personal assistant maps)`,
+    );
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });

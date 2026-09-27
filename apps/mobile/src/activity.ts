@@ -118,6 +118,18 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "writing", label: "Making a note…" };
     case "agent_status":
       return { kind: "plan", label: "Checking on your tasks…" };
+    case "look_at_page":
+      return { kind: "browse", label: "Looking at the page…" };
+    case "use_page":
+      return { kind: "browse", label: "Working on the page…" };
+    case "sign_in_with_saved_login":
+      return { kind: "browse", label: "Signing in…" };
+    case "enter_sign_in_code":
+      return { kind: "browse", label: "Getting the sign-in code…" };
+    case "show_places":
+      return { kind: "search", label: "Putting them on a map…" };
+    case "show_products":
+      return { kind: "search", label: "Pulling up the products…" };
     default:
       if (/computer/.test(name)) return { kind: "computer", label: "Using the computer…" };
       return { kind: "thinking", label: "Working on it…" };

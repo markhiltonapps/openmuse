@@ -54,6 +54,7 @@ import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
 import { People } from "../people.ts";
 import type { ReminderService } from "../reminders.ts";
+import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
 import type { UsageMeter } from "../usage.ts";
 import type { WebSearch } from "../web-search.ts";
@@ -902,6 +903,8 @@ export class AgentService {
   appEvents?: AppEvents;
   /** Connected-app actions the person always allows. */
   approvals?: ApprovalRules;
+  /** Finds places on the map for show_places; set when the server can reach a geocoder. */
+  geocode: Geocoder = async () => undefined;
   /** Passwords saved for websites, typed into the agent's browser by the server. */
   logins?: Logins;
   /** Looks at pictures in Files; set when a vision model is configured. */
