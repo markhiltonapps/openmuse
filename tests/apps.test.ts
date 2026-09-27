@@ -444,16 +444,19 @@ test("apps Composio can't sign in to itself use the sign-in set up in its dashbo
       ),
     "POST /api/v3.1/tool_router/session/trs_brex_2/link": () =>
       Response.json({ redirect_url: "https://connect.composio.test/brex" }),
-    "GET /api/v3/auth_configs": () =>
-      Response.json({
-        items: configured
-          ? [
-              { id: "ac_managed", toolkit: { slug: "gmail" }, is_composio_managed: true },
-              { id: "ac_off", toolkit: { slug: "brex" }, status: "DISABLED" },
-              { id: "ac_brex", toolkit: { slug: "brex" }, status: "ENABLED" },
-            ]
-          : [],
-      }),
+    // This Composio doesn't accept the toolkit filter, so the whole list is read instead.
+    "GET /api/v3/auth_configs": (_body, url) =>
+      url.search.includes("toolkit_slug")
+        ? Response.json({ error: { message: "Unknown query parameter" } }, { status: 400 })
+        : Response.json({
+            items: configured
+              ? [
+                  { id: "ac_managed", toolkit: { slug: "gmail" }, is_composio_managed: true },
+                  { id: "ac_off", toolkit: { slug: "brex" }, status: "DISABLED" },
+                  { id: "ac_brex", toolkit: { slug: "brex" }, status: "ENABLED" },
+                ]
+              : [],
+          }),
   });
   const connector = new ComposioConnector(db, config(), fetcher);
   await assert.rejects(

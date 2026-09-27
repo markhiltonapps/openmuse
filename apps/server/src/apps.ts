@@ -208,28 +208,38 @@ export class ComposioConnector implements AppConnector {
     });
     return created.session_id;
   }
-  /** Sign-ins set up in the Composio dashboard ("auth configs"), by app. */
-  private async customAuthConfigs(): Promise<Record<string, string>> {
-    try {
-      const list = await this.request<{
-        items?: {
-          id?: string;
-          toolkit?: { slug?: string };
-          is_composio_managed?: boolean;
-          status?: string;
-        }[];
-      }>("GET", "/api/v3/auth_configs?is_composio_managed=false&limit=100");
-      const configs: Record<string, string> = {};
-      for (const item of list.items ?? []) {
-        const app = item.toolkit?.slug?.toLowerCase();
-        if (!app || !item.id || item.is_composio_managed === true) continue;
-        if (item.status && item.status.toUpperCase() !== "ENABLED") continue;
-        configs[app] ??= item.id;
+  /** The sign-in set up in the Composio dashboard ("auth config") for one app, if any. */
+  private async customAuthConfig(app: string): Promise<string | undefined> {
+    const seen: string[] = [];
+    // Filtered first; the whole list as a fallback, in case the filter isn't accepted.
+    for (const query of [`?toolkit_slug=${encodeURIComponent(app)}`, ""]) {
+      try {
+        const list = await this.request<{
+          items?: {
+            id?: string;
+            toolkit?: { slug?: string };
+            toolkit_slug?: string;
+            is_composio_managed?: boolean;
+            status?: string;
+          }[];
+        }>("GET", `/api/v3/auth_configs${query}`);
+        for (const item of list.items ?? []) {
+          const slug = (item.toolkit?.slug ?? item.toolkit_slug ?? "").toLowerCase();
+          seen.push(`${slug || "?"}${item.is_composio_managed ? " (managed)" : ""}`);
+          if (slug !== app || !item.id || item.is_composio_managed === true) continue;
+          if (item.status?.toUpperCase() === "DISABLED") continue;
+          return item.id;
+        }
+      } catch (error) {
+        console.warn(
+          `[OpenMuse] Could not list Composio auth configs${query ? " for " + app : ""}: ${error instanceof Error ? error.message : error}`,
+        );
       }
-      return configs;
-    } catch {
-      return {};
     }
+    console.warn(
+      `[OpenMuse] No Composio auth config for ${app}. Auth configs in this Composio project: ${[...new Set(seen)].join(", ") || "none"}`,
+    );
+    return undefined;
   }
   private async inSession<T>(owner: string, run: (session: string) => Promise<T>): Promise<T> {
     try {
@@ -321,7 +331,7 @@ export class ComposioConnector implements AppConnector {
       // dashboard, if there is one.
       if (!(error instanceof ComposioError) || !/does not manage auth/i.test(error.message))
         throw error;
-      const config = (await this.customAuthConfigs())[slug];
+      const config = await this.customAuthConfig(slug);
       const name = slug.charAt(0).toUpperCase() + slug.slice(1);
       if (!config)
         throw new AppError(
