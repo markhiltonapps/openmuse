@@ -89,6 +89,26 @@ export function listVoices(): Promise<VoiceOption[]> {
 }
 
 let generation = 0;
+// Whether the agent is speaking right now, so the avatar can move its mouth.
+let speakingNow = false;
+const speakingListeners = new Set<() => void>();
+function setSpeaking(value: boolean) {
+  if (speakingNow === value) return;
+  speakingNow = value;
+  for (const listener of speakingListeners) listener();
+}
+export function useSpeaking() {
+  return useSyncExternalStore(
+    (listener) => {
+      speakingListeners.add(listener);
+      return () => {
+        speakingListeners.delete(listener);
+      };
+    },
+    () => speakingNow,
+    () => false,
+  );
+}
 /** Reads text aloud; resolves when it finishes or is interrupted. */
 export function speak(text: string, override?: Partial<VoiceSettings>): Promise<void> {
   if (!speechAvailable()) return Promise.resolve();
@@ -103,7 +123,11 @@ export function speak(text: string, override?: Partial<VoiceSettings>): Promise<
     let index = 0;
     const next = () => {
       const chunk = chunks[index++];
-      if (current !== generation || chunk === undefined) return resolve();
+      if (current !== generation || chunk === undefined) {
+        if (current === generation) setSpeaking(false);
+        return resolve();
+      }
+      setSpeaking(true);
       const utterance = new SpeechSynthesisUtterance(chunk);
       if (chosen) {
         utterance.voice = chosen;
@@ -111,7 +135,10 @@ export function speak(text: string, override?: Partial<VoiceSettings>): Promise<
       }
       utterance.rate = rate;
       utterance.onend = next;
-      utterance.onerror = () => resolve();
+      utterance.onerror = () => {
+        if (current === generation) setSpeaking(false);
+        resolve();
+      };
       synth.speak(utterance);
     };
     next();
@@ -144,6 +171,7 @@ export function readAsWritten(onSpeaking?: (speaking: boolean) => void): ReplyRe
   const setAudible = (value: boolean) => {
     if (audible === value) return;
     audible = value;
+    if (current === generation) setSpeaking(value);
     onSpeaking?.(value);
   };
   const end = (complete: boolean) => {
@@ -196,6 +224,7 @@ export function readAsWritten(onSpeaking?: (speaking: boolean) => void): ReplyRe
 }
 export function stopSpeaking() {
   generation++;
+  setSpeaking(false);
   if (speechAvailable()) window.speechSynthesis.cancel();
 }
 let primed = false;

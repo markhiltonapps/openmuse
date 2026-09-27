@@ -170,6 +170,7 @@ export interface AgentNotification {
   read: boolean;
 }
 export const avatarCharacters = [
+  "todd",
   "capybara",
   "fox",
   "cat",

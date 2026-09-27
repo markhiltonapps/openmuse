@@ -12,6 +12,7 @@ import { agentConfigured, makeRuntime } from "./agent.ts";
 import { ApprovalRules } from "./approval-rules.ts";
 import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
+import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
@@ -252,6 +253,27 @@ export async function createApp(
     await google.callback(state, code);
     return c.html(
       "<h1>Google is connected</h1><p>Return to OpenMuse and refresh your workspace.</p>",
+    );
+  });
+  // Animated avatars are shared pictures and clips, loaded by <video> without a sign-in header.
+  const avatarMedia = new AvatarMedia(config.dataDir);
+  app.get("/api/avatar-media/:preset/:part", async (c) => {
+    const file = await avatarMedia.file(c.req.param("preset"), c.req.param("part"));
+    const { status, bytes, contentRange } = await avatarMedia.read(
+      file.path,
+      file.size,
+      c.req.header("range"),
+    );
+    return c.body(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) as ArrayBuffer,
+      status,
+      {
+        "content-type": file.type,
+        "accept-ranges": "bytes",
+        "cache-control": "public, max-age=86400",
+        ...(contentRange ? { "content-range": contentRange } : {}),
+        ...(status === 416 ? { "content-range": `bytes */${file.size}` } : {}),
+      },
     );
   });
   app.use("/api/*", async (c, next) => {

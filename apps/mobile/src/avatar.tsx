@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Animated, Easing, Image, Platform, Text, View } from "react-native";
 import type { AgentIdentity, AvatarImage } from "../../../packages/domain/src/agent";
+import AvatarVideo from "./AvatarVideo";
 import type { Activity, ActivityKind } from "./activity";
 import { ActivityProp } from "./activity-props";
 import { useAgentWorkspace } from "./agent-workspace";
 import type { MuseApi } from "./api";
-import { ART, type CharacterId } from "./avatar-art";
+import { ART, type CharacterId, VIDEO_CHARACTERS } from "./avatar-art";
 import SvgArt from "./SvgArt";
+import { useSpeaking } from "./voice";
 import { useWorkspace } from "./workspace";
 
 export type Mood = "idle" | "working" | "attention" | "celebrate";
@@ -205,6 +207,7 @@ export function Mascot({
   mood = "idle",
   activity,
   animated = true,
+  speaking = false,
 }: {
   size?: number;
   variant?: AvatarColor;
@@ -214,7 +217,10 @@ export function Mascot({
   /** Shown with a small prop while working: a laptop, magnifying glass, page and so on. */
   activity?: ActivityKind;
   animated?: boolean;
+  /** The agent is reading a reply aloud: characters made of clips switch to talking. */
+  speaking?: boolean;
 }) {
+  const video = character !== "custom" && VIDEO_CHARACTERS[character] === true;
   const reduce = useReducedMotion();
   const motion = animated && !reduce;
   const breathe = useRef(new Animated.Value(0)).current;
@@ -250,12 +256,17 @@ export function Mascot({
           ? Animated.loop(Animated.sequence([Animated.delay(1700), hop(1.4)]))
           : mood === "celebrate"
             ? Animated.sequence([hop(2), hop(1.3)])
-            : Animated.loop(Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]));
-    animation.start();
-    return () => animation.stop();
-  }, [mood, activity, motion, breathe, lift]);
+            : // Clips breathe on their own.
+              video
+              ? undefined
+              : Animated.loop(Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]));
+    animation?.start();
+    return () => animation?.stop();
+  }, [mood, activity, motion, breathe, lift, video]);
   const custom = character === "custom";
-  const art = custom ? (
+  const art = video ? (
+    <AvatarVideo id={character} size={size} speaking={speaking} still={!motion} />
+  ) : custom ? (
     image?.kind === "photo" ? (
       <Image
         source={{ uri: image.data }}
@@ -272,13 +283,15 @@ export function Mascot({
     ) : null
   ) : character === "capybara" ? (
     <Capybara size={size} blink={motion} />
-  ) : (
+  ) : character === "todd" ? null : (
     <SvgArt svg={ART[character]} size={size} />
   );
   const inset =
     character === "capybara"
       ? { top: 0.15, left: 0.12, size: 0.76 }
-      : { top: 0.04, left: 0.04, size: 0.92 };
+      : video
+        ? { top: 0, left: 0, size: 1 }
+        : { top: 0.04, left: 0.04, size: 0.92 };
   return (
     <View
       accessibilityLabel={
@@ -367,6 +380,7 @@ export function AgentAvatar({
   const identity = data?.identity;
   const custom = identity?.character === "custom";
   const image = useAvatarImage(api, custom ? identity?.avatarImageVersion : undefined);
+  const speaking = useSpeaking();
   return (
     <Mascot
       size={size}
@@ -375,6 +389,7 @@ export function AgentAvatar({
       image={image}
       mood={mood}
       activity={activity}
+      speaking={speaking}
     />
   );
 }
