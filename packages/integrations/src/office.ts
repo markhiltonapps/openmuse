@@ -9,9 +9,16 @@ export interface Sheet {
   rows: Cell[][];
 }
 
+/** Characters XML can't hold (control codes other than tab, newline and return) are dropped. */
+const printable = (value: string) =>
+  Array.from(value)
+    .filter((c) => {
+      const code = c.charCodeAt(0);
+      return code >= 32 || code === 9 || code === 10 || code === 13;
+    })
+    .join("");
 const xml = (value: string) =>
-  value
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+  printable(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
