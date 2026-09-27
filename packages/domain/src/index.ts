@@ -150,10 +150,24 @@ export const agentEmailSchema = z.object({
     .refine((s) => !/[\r\n]/.test(s), "Invalid message reference")
     .optional(),
 });
+/** One step in the agent's browser that commits to something: book, buy, send, submit. */
+export const browserStepSchema = z.object({
+  sessionId: z.uuid(),
+  url: z.url().max(4096),
+  site: z.string().trim().min(1).max(253),
+  pageTitle: z.string().max(300),
+  ref: z.string().regex(/^e\d{1,4}$/),
+  /** What the element says, such as "Reserve 7:15 PM". */
+  element: z.string().trim().min(1).max(200),
+  action: z.enum(["click", "press"]),
+  value: z.string().max(40).optional(),
+  summary: z.string().trim().min(1).max(500),
+});
 export const proposalSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email.send"), data: emailDraftSchema }),
   z.object({ kind: z.literal("agent_email.send"), data: agentEmailSchema }),
   z.object({ kind: z.literal("app.action"), data: appActionSchema }),
+  z.object({ kind: z.literal("browser.step"), data: browserStepSchema }),
   z.object({ kind: z.literal("calendar.create"), data: eventDraftSchema }),
   z.object({
     kind: z.literal("calendar.update"),
@@ -167,6 +181,7 @@ export const proposalSchema = z.discriminatedUnion("kind", [
 export type EmailDraft = z.infer<typeof emailDraftSchema>;
 export type EventDraft = z.infer<typeof eventDraftSchema>;
 export type AppAction = z.infer<typeof appActionSchema>;
+export type BrowserStep = z.infer<typeof browserStepSchema>;
 export type AgentEmail = z.infer<typeof agentEmailSchema>;
 export type ProposalInput = z.infer<typeof proposalSchema>;
 export interface ActionProposal {

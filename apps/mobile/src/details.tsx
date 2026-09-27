@@ -599,6 +599,8 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
   const agentMail = action.kind === "agent_email.send";
   const email = action.kind === "email.send" || agentMail;
   const app = action.kind === "app.action";
+  const step = action.kind === "browser.step";
+  const stepBrowser = step ? w.browsers.find((b) => b.id === d.sessionId) : undefined;
   return (
     <Sheet
       title={pending ? "One last look" : action.title}
@@ -625,9 +627,41 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         {agentMail ? (
           <ReviewLine label="From" value={`${String(d.from || "")} (your agent)`} />
         ) : (
-          !app && <ReviewLine label="Account" value={action.account || w.profile.email} />
+          !app && !step && <ReviewLine label="Account" value={action.account || w.profile.email} />
         )}
-        {app ? (
+        {step ? (
+          <>
+            <ReviewLine label="Website" value={String(d.site || "")} />
+            <ReviewLine label="Page" value={String(d.pageTitle || d.url || "")} />
+            <ReviewLine
+              label="Your agent will"
+              value={
+                d.action === "press"
+                  ? "Press Enter to send the form"
+                  : `Click “${String(d.element || "")}”`
+              }
+            />
+            <ReviewLine label="Why" value={String(d.summary || "")} />
+            {stepBrowser?.status === "active" && stepBrowser.previewUrl && (
+              <Image
+                source={{ uri: api.url(stepBrowser.previewUrl) }}
+                resizeMode="contain"
+                accessibilityLabel={`The page on ${String(d.site || "the site")} right now`}
+                style={{
+                  width: "100%",
+                  height: 220,
+                  borderRadius: 10,
+                  backgroundColor: colors.subtle,
+                }}
+              />
+            )}
+            <Text style={s.small}>
+              It only clicks if the page still shows “{String(d.element || "")}” on{" "}
+              {String(d.site || "the site")}. To check or change anything first, use Take control on
+              the browser card.
+            </Text>
+          </>
+        ) : app ? (
           <>
             <ReviewLine label="App" value={String(d.app || "")} />
             <ReviewLine label="Action" value={String(d.tool || "")} />
@@ -773,15 +807,17 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
             <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
               {app && typeof d.amountUsd === "number"
                 ? `Approve purchase · $${d.amountUsd.toFixed(2)}`
-                : app
-                  ? "Approve & run"
-                  : w.mode === "sample"
-                    ? "Approve locally"
-                    : email
-                      ? "Approve & send"
-                      : "Approve change"}
+                : step
+                  ? `Approve · ${d.action === "press" ? "send the form" : `click “${String(d.element || "")}”`}`
+                  : app
+                    ? "Approve & run"
+                    : w.mode === "sample"
+                      ? "Approve locally"
+                      : email
+                        ? "Approve & send"
+                        : "Approve change"}
             </Button>
-            {action.kind !== "calendar.delete" && !app && !agentMail && (
+            {action.kind !== "calendar.delete" && !app && !step && !agentMail && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
                 Edit details
               </Button>

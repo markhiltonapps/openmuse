@@ -370,6 +370,49 @@ export async function createBrowserManager(options: {
         else throw new WorkerError("INVALID_INPUT", "Unsupported browser input or coordinates.");
         return refresh(id);
       }),
+    elements: (id: string) =>
+      serial(id, async () => {
+        const { page } = active(id);
+        await validatePublicUrl(page.url());
+        // Fixed by the worker, like read: tags what can be used and says what each one is.
+        const elements = await page.evaluate(listElements, MAX_ELEMENTS);
+        return { ...(await refresh(id)), elements };
+      }),
+    act: (id: string, input: Record<string, unknown>) =>
+      serial(id, async () => {
+        const { page } = active(id);
+        await validatePublicUrl(page.url());
+        const step = pageAction(input);
+        const target = page.locator(`[data-om-ref="${step.ref}"]`).first();
+        if (!(await target.count()))
+          throw new WorkerError(
+            "ELEMENT_GONE",
+            "That part of the page is gone. Look at the page again for the current list.",
+            409,
+          );
+        try {
+          if (step.action === "click") await target.click({ timeout: 8000 });
+          else if (step.action === "fill") await target.fill(step.value, { timeout: 8000 });
+          else if (step.action === "select")
+            await target
+              .selectOption({ label: step.value }, { timeout: 8000 })
+              .catch(() => target.selectOption(step.value, { timeout: 8000 }));
+          else if (step.action === "check") await target.check({ timeout: 8000 });
+          else if (step.action === "uncheck") await target.uncheck({ timeout: 8000 });
+          else await target.press(step.value, { timeout: 8000 });
+        } catch (error) {
+          if (error instanceof WorkerError) throw error;
+          // Never echo what was typed: it may be a password.
+          throw new WorkerError(
+            "ACTION_FAILED",
+            `The browser couldn't ${step.action === "fill" ? "type into" : step.action} that part of the page. It may be covered, hidden or disabled.`,
+            409,
+          );
+        }
+        await page.waitForLoadState("domcontentloaded", { timeout: 10_000 }).catch(() => {});
+        await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+        return refresh(id);
+      }),
     downloads: async (id: string) => {
       const saved = await downloads(id);
       if (running.get(id)?.downloadError)
@@ -439,4 +482,117 @@ export function stalest(
   for (const session of sessions)
     if (!open.has(session.id) && (!found || session.updatedAt < found.updatedAt)) found = session;
   return found?.id;
+}
+
+const MAX_ELEMENTS = 200;
+export interface PageElement {
+  ref: string;
+  role: string;
+  name: string;
+  value?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  options?: string[];
+}
+const KEYS = /^(Enter|Tab|Escape|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Space)$/;
+/** One step the agent asked for, checked before it reaches the page. */
+export function pageAction(input: Record<string, unknown>) {
+  const ref = typeof input.ref === "string" && /^e\d{1,4}$/.test(input.ref) ? input.ref : "";
+  const action = String(input.action ?? "");
+  const value = typeof input.value === "string" ? input.value : "";
+  if (!ref) throw new WorkerError("INVALID_INPUT", "Choose an element from the page's list.");
+  if (!["click", "fill", "select", "check", "uncheck", "press"].includes(action))
+    throw new WorkerError("INVALID_INPUT", "Unsupported browser action.");
+  if ((action === "fill" || action === "select") && value.length > 2000)
+    throw new WorkerError("INVALID_INPUT", "That text is too long.");
+  if (action === "select" && !value) throw new WorkerError("INVALID_INPUT", "Say which option.");
+  if (action === "press" && !KEYS.test(value))
+    throw new WorkerError("INVALID_INPUT", "Only Enter, Tab, Escape, Space and arrow keys.");
+  return {
+    ref,
+    action: action as "click" | "fill" | "select" | "check" | "uncheck" | "press",
+    value,
+  };
+}
+
+/**
+ * Runs inside the page: the visible links, buttons and form fields, each tagged with a ref the
+ * agent acts on. Password values are never read back, only whether the field is filled.
+ */
+export function listElements(max: number): PageElement[] {
+  const selector =
+    'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="combobox"], [contenteditable="true"]';
+  const clean = (value: string | null | undefined, length = 120) =>
+    (value ?? "").replace(/\s+/g, " ").trim().slice(0, length);
+  const labelFor = (el: Element) => {
+    const labelled = el.getAttribute("aria-labelledby");
+    if (labelled)
+      return clean(
+        labelled
+          .split(/\s+/)
+          .map((id) => document.getElementById(id)?.textContent ?? "")
+          .join(" "),
+      );
+    const id = el.getAttribute("id");
+    const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+    return clean(label?.textContent ?? el.closest("label")?.textContent);
+  };
+  const found: PageElement[] = [];
+  document.querySelectorAll("[data-om-ref]").forEach((el) => {
+    el.removeAttribute("data-om-ref");
+  });
+  for (const el of Array.from(document.querySelectorAll(selector))) {
+    if (found.length >= max) break;
+    const html = el as HTMLElement;
+    const style = getComputedStyle(html);
+    if (!html.getClientRects().length || style.visibility === "hidden" || style.display === "none")
+      continue;
+    const tag = el.tagName.toLowerCase();
+    const type = (el.getAttribute("type") ?? "").toLowerCase();
+    const role =
+      el.getAttribute("role") ??
+      (tag === "a"
+        ? "link"
+        : tag === "select"
+          ? "select"
+          : tag === "textarea"
+            ? "textbox"
+            : tag === "input"
+              ? ["checkbox", "radio"].includes(type)
+                ? type
+                : ["submit", "button", "reset", "image"].includes(type)
+                  ? "button"
+                  : type === "password"
+                    ? "password"
+                    : "textbox"
+              : "button");
+    const input = el as HTMLInputElement;
+    const name =
+      clean(el.getAttribute("aria-label")) ||
+      labelFor(el) ||
+      clean(input.placeholder) ||
+      clean(html.innerText) ||
+      clean(el.getAttribute("title")) ||
+      (role === "button" ? clean(input.value) : "") ||
+      clean(el.getAttribute("name"));
+    if (!name && role !== "textbox" && role !== "password") continue;
+    const ref = `e${found.length + 1}`;
+    el.setAttribute("data-om-ref", ref);
+    const item: PageElement = { ref, role, name: name || type || role };
+    if (role === "password") item.value = input.value ? "(filled)" : "";
+    else if (role === "textbox" || role === "select") {
+      const value =
+        tag === "select" ? (el as HTMLSelectElement).selectedOptions[0]?.text : input.value;
+      if (value) item.value = clean(value, 100);
+    }
+    if (role === "checkbox" || role === "radio") item.checked = input.checked;
+    if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true")
+      item.disabled = true;
+    if (tag === "select")
+      item.options = Array.from((el as HTMLSelectElement).options)
+        .slice(0, 30)
+        .map((o) => clean(o.text, 60));
+    found.push(item);
+  }
+  return found;
 }

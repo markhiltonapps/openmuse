@@ -15,6 +15,7 @@ import {
 import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tools.ts";
 import { appEventInstructions, appEventToolSpecs } from "../app-events.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
+import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
 import { commitmentInstructions, commitmentToolSpecs } from "../commitments.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
@@ -418,6 +419,29 @@ export class ConversationAgent extends AbstractAgent {
         ),
       );
     tools.push(
+      ...browserToolSpecs(this.service.browser, this.owner, input.threadId, (step) =>
+        this.service.actions.propose(
+          this.owner,
+          { kind: "browser.step", data: step },
+          key("browser-step", step),
+        ),
+      ).map((spec) =>
+        defineTool({
+          ...spec,
+          parameters: spec.parameters as z.ZodObject,
+          execute: async (args: unknown) => {
+            browserAbort.signal.throwIfAborted();
+            try {
+              return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
+            } catch (error) {
+              browserAbort.signal.throwIfAborted();
+              return { error: error instanceof Error ? error.message : "The page didn't respond" };
+            }
+          },
+        }),
+      ),
+    );
+    tools.push(
       ...restaurantToolSpecs((url) =>
         this.service.browser.observeForThread(this.owner, input.threadId, url, browserAbort.signal),
       ).map((spec) =>
@@ -466,6 +490,7 @@ export class ConversationAgent extends AbstractAgent {
         peopleInstructions +
         (this.service.commitments ? commitmentInstructions : "") +
         restaurantInstructions +
+        browserToolInstructions +
         (mailAlerts ? mailAlertInstructions : "") +
         (this.service.appEvents?.available && mailAlerts ? appEventInstructions : "") +
         (search ? webSearchInstructions : "") +

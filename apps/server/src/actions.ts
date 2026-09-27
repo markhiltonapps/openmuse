@@ -10,7 +10,7 @@ import { AppError } from "./errors.ts";
 
 /** Gmail and Calendar actions run through the Google account; the others don't. */
 export const usesGoogle = (kind: ProposalInput["kind"]) =>
-  kind !== "app.action" && kind !== "agent_email.send";
+  kind !== "app.action" && kind !== "agent_email.send" && kind !== "browser.step";
 
 interface Options {
   execute: (
@@ -67,7 +67,7 @@ export class ActionService {
       : undefined;
     const input = proposalSchema.parse(prepared?.input ?? parsed);
     const title =
-      input.kind === "app.action"
+      input.kind === "app.action" || input.kind === "browser.step"
         ? input.data.summary.length > 120
           ? `${input.data.summary.slice(0, 119)}…`
           : input.data.summary

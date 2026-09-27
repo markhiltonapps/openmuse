@@ -29,6 +29,21 @@ const failureSchema = z.object({
   createdAt: z.string(),
 });
 type ChatBrowser = { id: string; sessionId: string };
+export const elementSchema = z.object({
+  ref: z.string().regex(/^e\d{1,4}$/),
+  role: z.string().max(40),
+  name: z.string().max(200),
+  value: z.string().max(200).optional(),
+  checked: z.boolean().optional(),
+  disabled: z.boolean().optional(),
+  options: z.array(z.string().max(80)).max(30).optional(),
+});
+export type PageElement = z.infer<typeof elementSchema>;
+export interface PageStep {
+  ref: string;
+  action: "click" | "fill" | "select" | "check" | "uncheck" | "press";
+  value?: string;
+}
 
 export class BrowserService {
   private readonly queues = new Map<string, Promise<unknown>>();
@@ -268,6 +283,36 @@ export class BrowserService {
       saved.push(file);
     }
     return { files: saved, failures };
+  }
+  /** The chat's browser session, when this chat has opened a page. */
+  async threadSession(owner: string, threadId: string) {
+    const association = await this.db.get<ChatBrowser>(owner, "chat-browsers", threadId);
+    return association ? this.get(owner, association.sessionId) : undefined;
+  }
+  /** The page's links, buttons and fields, each with a ref to act on. */
+  elements(owner: string, id: string) {
+    return this.serial(id, async () => {
+      const session = await this.get(owner, id);
+      const payload = z
+        .object({ url: z.string(), title: z.string(), elements: z.array(elementSchema).max(200) })
+        .loose()
+        .parse(await (await this.request(`/sessions/${id}/elements`)).json());
+      await this.db.put(owner, "browsers", {
+        ...session,
+        url: payload.url,
+        title: payload.title,
+        status: "active",
+        updatedAt: new Date().toISOString(),
+      });
+      return { url: payload.url, title: payload.title, elements: payload.elements };
+    });
+  }
+  /** Clicks, types or chooses on the page. What's typed is never kept or logged. */
+  act(owner: string, id: string, step: PageStep) {
+    return this.serial(id, async () => {
+      await this.get(owner, id);
+      return this.save(owner, await (await this.request(`/sessions/${id}/act`, step)).json(), id);
+    });
   }
   console(owner: string, id: string) {
     return browserConsole(this.auth.sign(owner, `/api/browsers/${id}/preview`));

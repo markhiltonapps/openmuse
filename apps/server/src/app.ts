@@ -15,6 +15,7 @@ import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
+import { runApprovedStep } from "./browser-tools.ts";
 import { ChatArchive } from "./chat-archive.ts";
 import { Commitments } from "./commitments.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
@@ -95,6 +96,7 @@ export async function createApp(
     },
     execute: async (owner, input, connectionId, targetVersion): Promise<string> => {
       if (input.kind === "agent_email.send") return inbox.send(owner, input.data);
+      if (input.kind === "browser.step") return runApprovedStep(browser, owner, input.data);
       if (input.kind !== "app.action")
         return workspace.execute(owner, input, connectionId, targetVersion);
       if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
