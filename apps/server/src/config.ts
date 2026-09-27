@@ -158,9 +158,13 @@ export function readConfig(): Config {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     adminEmail: process.env.ADMIN_EMAIL?.trim().toLowerCase() || undefined,
-    allowedOrigins: (
-      process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
-    ).split(","),
+    // EXTRA_ALLOWED_ORIGINS adds addresses, such as a custom domain, without restating the list.
+    allowedOrigins: [
+      ...(process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081").split(","),
+      ...(process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(","),
+    ]
+      .map((origin) => origin.trim().replace(/\/+$/, ""))
+      .filter(Boolean),
   };
   config.appUrl = process.env.APP_URL?.trim() || config.allowedOrigins[0]?.trim() || undefined;
   const senderDomain = config.agentEmail?.split("@")[1];
