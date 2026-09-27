@@ -363,6 +363,10 @@ export class ConversationAgent extends AbstractAgent {
                 return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
               } catch (error) {
                 browserAbort.signal.throwIfAborted();
+                // What went wrong, for diagnosing connected apps from the server log.
+                console.warn(
+                  `[OpenMuse] ${spec.name} failed: ${error instanceof Error ? error.message : error}`,
+                );
                 return {
                   error: error instanceof Error ? error.message : "The app did not respond",
                 };
