@@ -65,7 +65,7 @@ export async function makePdf(title: string, markdown: string): Promise<Uint8Arr
         .replace(/[–—]/g, "-")
         .replace(/…/g, "...")
         .replace(/\u00a0/g, " ")
-        .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, ""),
+        .replace(/\p{Extended_Pictographic}|\u{FE0F}|\u{200D}/gu, ""),
     )
       .map((c) => (supported.has(c.codePointAt(0) ?? 0) ? c : c.trim() ? "?" : " "))
       .join("");
