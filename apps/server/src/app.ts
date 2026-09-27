@@ -25,6 +25,7 @@ import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { FeedService } from "./feed.ts";
+import { FileShares } from "./file-shares.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { HealthService } from "./health.ts";
@@ -41,6 +42,7 @@ import { ReminderService } from "./reminders.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
+import { downloadToFiles } from "./web-download.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
 import { WorkspaceService } from "./workspace.ts";
 
@@ -298,6 +300,21 @@ export async function createApp(
     return c.body(new Uint8Array(bytes).buffer as ArrayBuffer, 200, {
       "content-type": "image/webp",
       "cache-control": "public, max-age=2592000, immutable",
+    });
+  });
+  // Share links: anyone with the link opens that one file until the link expires or is stopped.
+  const shares = new FileShares(db, files, config.publicUrl);
+  app.get("/api/share/:token", async (c) => {
+    const { file, bytes } = await shares.open(c.req.param("token"));
+    const inline = /^(application\/pdf|image\/)/.test(file.mimeType);
+    return c.body(new Uint8Array(bytes).buffer as ArrayBuffer, 200, {
+      "content-type": file.mimeType,
+      "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      "cache-control": "private, no-store",
+      "x-robots-tag": "noindex, nofollow",
+      "x-content-type-options": "nosniff",
+      "content-security-policy":
+        "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
     });
   });
   // Animated avatars are shared pictures and clips, loaded by <video> without a sign-in header.
@@ -741,6 +758,24 @@ export async function createApp(
       `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
     return c.body(await files.bytes(c.get("owner"), file.id));
+  });
+  app.get("/api/files/:id/share", async (c) =>
+    c.json({ links: await shares.list(c.get("owner"), c.req.param("id")) }),
+  );
+  app.post("/api/files/:id/share", async (c) => {
+    const body = z
+      .object({ days: z.union([z.literal(1), z.literal(7), z.literal(30)]).default(7) })
+      .parse(await c.req.json().catch(() => ({})));
+    return c.json(await shares.create(c.get("owner"), c.req.param("id"), body.days), 201);
+  });
+  app.post("/api/files/:id/unshare", async (c) =>
+    c.json(await shares.stop(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/files/download", async (c) => {
+    const body = z
+      .object({ url: z.url().max(4000), name: z.string().trim().max(180).optional() })
+      .parse(await c.req.json());
+    return c.json(await downloadToFiles(files, c.get("owner"), body), 201);
   });
   app.get("/api/files/:id/text", async (c) =>
     c.json(await files.read(c.get("owner"), c.req.param("id"), 1, 20000)),

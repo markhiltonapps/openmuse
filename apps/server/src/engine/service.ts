@@ -37,6 +37,7 @@ import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
 import { AppError } from "../errors.ts";
+import { FileShares } from "../file-shares.ts";
 import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import type { HealthService } from "../health.ts";
@@ -60,6 +61,8 @@ export class AgentService {
   readonly worker: TaskWorker;
   /** Summaries of the older part of long chats, written by the background model. */
   readonly chats: ChatSummaries;
+  /** Links to files that anyone with the link can open until they expire. */
+  readonly shares: FileShares;
   private maintenance?: ReturnType<typeof setInterval>;
   private refreshing = false;
   constructor(
@@ -73,6 +76,7 @@ export class AgentService {
     /** Third-party apps (Composio); absent when COMPOSIO_API_KEY is unset. */
     readonly apps?: AppConnector,
   ) {
+    this.shares = new FileShares(db, files, config.publicUrl);
     this.chats = new ChatSummaries(db, (owner, previous, transcript) => {
       const model = this.config.workerModel ?? this.config.model;
       if (this.config.agentBackend !== "model" || !model) return Promise.resolve("");

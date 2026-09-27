@@ -40,6 +40,7 @@ import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import PdfReader from "./PdfReader";
+import { ShareLinkCard } from "./share-ui";
 import {
   Button,
   Card,
@@ -881,6 +882,7 @@ function FileDetail({ file: f }: { file: Artifact }) {
           Attach to email
         </Button>
       </View>
+      <ShareLinkCard fileId={f.id} name={f.name} />
       {f.fields && f.fields.length > 0 && (
         <Card>
           <SectionHeading title="Fill this form" />

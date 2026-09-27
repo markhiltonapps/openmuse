@@ -18,6 +18,7 @@ import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
 import { hiddenMessages, withoutHidden } from "../data-controls.ts";
+import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
@@ -259,7 +260,10 @@ export class ConversationAgent extends AbstractAgent {
     ];
     const apps = this.service.apps;
     tools.push(
-      ...fileToolSpecs(this.service.files, this.owner, this.service.look).map((spec) =>
+      ...[
+        ...fileToolSpecs(this.service.files, this.owner, this.service.look),
+        ...shareToolSpecs(this.service.shares, this.owner),
+      ].map((spec) =>
         defineTool({
           ...spec,
           execute: async (args: unknown) => {
