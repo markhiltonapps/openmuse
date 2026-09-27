@@ -37,7 +37,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `AGENT_EMAIL_ALLOWED_SENDERS` | Comma-separated senders who may hand the agent work; editable later in Apps |
 | `ADMIN_EMAIL` | Your email. Turns on email sign-in links and lets you invite people; needs `RESEND_API_KEY` |
 | `AUTH_EMAIL_FROM` | Optional sender of sign-in emails; defaults to `OpenMuse <signin@` + the `AGENT_EMAIL` domain + `>`, which must be verified for sending in Resend |
-| `EXTRA_ALLOWED_ORIGINS` | Optional extra web addresses allowed to use the API, such as a custom domain (`https://muse.neatoventures.com`); comma-separated |
+| `EXTRA_ALLOWED_ORIGINS` | Optional extra web addresses allowed to use the API, comma-separated. Adding a custom domain to the web service changes what `${{web.RAILWAY_PUBLIC_DOMAIN}}` gives `ALLOWED_ORIGINS`, so list both the custom domain and the `*.up.railway.app` address here (for example `https://muse.neatoventures.com,https://web-production-16243.up.railway.app`) |
 | `APP_URL` | Optional web address used in sign-in links; defaults to the first `ALLOWED_ORIGINS` entry |
 
 The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
