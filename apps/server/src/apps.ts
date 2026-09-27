@@ -347,14 +347,13 @@ export class ComposioConnector implements AppConnector {
       return { connected: false, url: (await link()).redirect_url };
     } catch (error) {
       // Composio has no ready-made sign-in for some apps, such as Brex. Use one set up in its
-      // dashboard, if there is one.
+      // dashboard, or set one up in this project that asks for the app's API key.
       if (!(error instanceof ComposioError) || !/does not manage auth/i.test(error.message))
         throw error;
-      const config = await this.customAuthConfig(slug);
       const name = slug.charAt(0).toUpperCase() + slug.slice(1);
-      if (!config)
-        throw new AppError(
-          `${name} needs to be set up in Composio before it can be connected. In the Composio dashboard, open Auth Configs, create one for ${name} (for Brex, choose API Key), then tap Connect again.`,
+      const unavailable = () =>
+        new AppError(
+          `${name} needs its own sign-in set up in Composio, and it couldn't be created automatically. In the Composio project this app's API key belongs to, open Auth Configs, create one for ${name} (choose API Key if offered), then tap Connect again.`,
           409,
         );
       const saved = await this.db.get<{ authConfigs?: Record<string, string> }>(
@@ -362,10 +361,56 @@ export class ComposioConnector implements AppConnector {
         "app-connector",
         "session",
       );
+      const use = (config: string) =>
+        this.session(owner, true, { ...saved?.authConfigs, [slug]: config });
+      const config = (await this.customAuthConfig(slug)) ?? (await this.createAuthConfig(slug));
+      if (!config) throw unavailable();
       if (saved?.authConfigs?.[slug] === config) throw error;
-      await this.session(owner, true, { ...saved?.authConfigs, [slug]: config });
+      try {
+        await use(config);
+      } catch (failure) {
+        // A named auth config from another Composio project: set one up in this project instead.
+        if (!(failure instanceof ComposioError) || !/invalid auth config/i.test(failure.message))
+          throw failure;
+        const created = await this.createAuthConfig(slug);
+        if (!created) throw unavailable();
+        await use(created);
+      }
       return { connected: false, url: (await link()).redirect_url };
     }
+  }
+  /**
+   * Sets up a sign-in for an app in this Composio project that asks the person for the app's
+   * API key or token when they connect. Apps that only offer OAuth need it set up by hand.
+   */
+  private async createAuthConfig(app: string): Promise<string | undefined> {
+    let failure: unknown;
+    for (const scheme of ["API_KEY", "BEARER_TOKEN"])
+      for (const field of ["authScheme", "auth_scheme"]) {
+        try {
+          const created = await this.request<{ auth_config?: { id?: string }; id?: string }>(
+            "POST",
+            "/api/v3/auth_configs",
+            {
+              toolkit: { slug: app },
+              auth_config: {
+                type: "use_custom_auth",
+                [field]: scheme,
+                name: `OpenMuse ${app}`,
+                credentials: {},
+              },
+            },
+          );
+          console.info(`[OpenMuse] Set up a Composio auth config for ${app} (${scheme})`);
+          return created.auth_config?.id ?? created.id ?? (await this.customAuthConfig(app));
+        } catch (error) {
+          failure = error;
+        }
+      }
+    console.warn(
+      `[OpenMuse] Could not set up a Composio auth config for ${app}: ${failure instanceof Error ? failure.message : failure}`,
+    );
+    return undefined;
   }
   private async toolkits(owner: string, query: Record<string, string>) {
     const list = await this.inSession(owner, (session) =>

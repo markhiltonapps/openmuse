@@ -469,7 +469,10 @@ test("apps Composio can't sign in to itself use the sign-in set up in its dashbo
     connector.connect("brex-owner", "Brex"),
     (error: Error & { status?: number }) => {
       assert.equal(error.status, 409);
-      assert.match(error.message, /Brex needs to be set up in Composio.*Auth Configs.*API Key/);
+      assert.match(
+        error.message,
+        /Brex needs its own sign-in set up in Composio.*Auth Configs.*API Key/,
+      );
       return true;
     },
   );
@@ -517,5 +520,57 @@ test("an auth config named in the settings is used without looking it up", async
     {
       brex: "ac_named",
     },
+  );
+});
+
+test("Connect sets up an API-key sign-in in this Composio project when there's none", async () => {
+  let sessions = 0;
+  const { fetcher, calls } = fakeComposio({
+    "POST /api/v3.1/tool_router/session": (body) => {
+      // A setting names an auth config from another Composio project.
+      if ((body as { auth_configs?: { brex?: string } }).auth_configs?.brex === "ac_elsewhere")
+        return Response.json(
+          { error: { message: "Invalid auth config IDs: ac_elsewhere (for toolkit: brex)." } },
+          { status: 400 },
+        );
+      return Response.json({ session_id: `trs_made_${++sessions}` }, { status: 201 });
+    },
+    "GET /api/v3.1/tool_router/session/trs_made_1/toolkits": () => Response.json({ items: [] }),
+    "POST /api/v3.1/tool_router/session/trs_made_1/link": () =>
+      Response.json(
+        { error: { message: "Composio does not manage auth for toolkit brex." } },
+        { status: 400 },
+      ),
+    "POST /api/v3.1/tool_router/session/trs_made_2/link": () =>
+      Response.json({ redirect_url: "https://connect.composio.test/brex-key" }),
+    // The first shape isn't accepted; the second is.
+    "POST /api/v3/auth_configs": (body) =>
+      "authScheme" in ((body as { auth_config: object }).auth_config ?? {})
+        ? Response.json({ error: { message: "auth_scheme is required" } }, { status: 400 })
+        : Response.json({ toolkit: { slug: "brex" }, auth_config: { id: "ac_made" } }),
+  });
+  const connector = new ComposioConnector(
+    db,
+    { ...config(), composioAuthConfigs: { brex: "ac_elsewhere" } },
+    fetcher,
+  );
+  assert.deepEqual(await connector.connect("made-owner", "brex"), {
+    connected: false,
+    url: "https://connect.composio.test/brex-key",
+  });
+  const created = calls.filter((c) => c.method === "POST" && c.path === "/api/v3/auth_configs");
+  assert.deepEqual(created.at(-1)?.body, {
+    toolkit: { slug: "brex" },
+    auth_config: {
+      type: "use_custom_auth",
+      auth_scheme: "API_KEY",
+      name: "OpenMuse brex",
+      credentials: {},
+    },
+  });
+  const sessions_ = calls.filter((c) => c.path === "/api/v3.1/tool_router/session");
+  assert.deepEqual(
+    (sessions_.at(-1)?.body as { auth_configs?: unknown } | undefined)?.auth_configs,
+    { brex: "ac_made" },
   );
 });
