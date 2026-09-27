@@ -75,6 +75,8 @@ export class DataControls {
       messageId,
       createdAt: new Date().toISOString(),
     });
+    // A long chat's summary may quote the message: the next one is written without it.
+    await this.db.remove(owner, "chat-summaries", threadId);
     return { messageIds: await this.hidden(owner, threadId) };
   }
   private async allThreads(owner: string) {

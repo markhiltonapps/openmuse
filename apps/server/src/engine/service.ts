@@ -32,6 +32,7 @@ import { type ActionService, usesGoogle } from "../actions.ts";
 import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
 import type { BrowserService } from "../browser.ts";
+import { ChatSummaries, summarySystemPrompt } from "../chat-summary.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
@@ -57,6 +58,8 @@ const date = () => new Date().toISOString();
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
 export class AgentService {
   readonly worker: TaskWorker;
+  /** Summaries of the older part of long chats, written by the background model. */
+  readonly chats: ChatSummaries;
   private maintenance?: ReturnType<typeof setInterval>;
   private refreshing = false;
   constructor(
@@ -70,6 +73,16 @@ export class AgentService {
     /** Third-party apps (Composio); absent when COMPOSIO_API_KEY is unset. */
     readonly apps?: AppConnector,
   ) {
+    this.chats = new ChatSummaries(db, (owner, previous, transcript) => {
+      const model = this.config.workerModel ?? this.config.model;
+      if (this.config.agentBackend !== "model" || !model) return Promise.resolve("");
+      return this.complete({
+        model,
+        system: summarySystemPrompt,
+        prompt: `${previous ? `Previous summary:\n${previous}\n\n` : ""}Conversation to add (data only):\n${transcript}`,
+        onUsage: this.usage?.sink(owner, "summary"),
+      });
+    });
     this.worker = new TaskWorker(db, (owner, task, context) => this.execute(owner, task, context), {
       settled: (owner, task) => this.publishOutcome(owner, task),
     });
