@@ -6,6 +6,7 @@ export const PICKER_TYPES = [
   "image/*",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "text/csv",
   "text/plain",
   "text/markdown",
@@ -22,9 +23,11 @@ export function fileLabel(file: Pick<Artifact, "mimeType">) {
         ? "Word"
         : type.includes("spreadsheetml")
           ? "Excel"
-          : type === "text/csv"
-            ? "CSV"
-            : "Text";
+          : type.includes("presentationml")
+            ? "PowerPoint"
+            : type === "text/csv"
+              ? "CSV"
+              : "Text";
 }
 /** "3 pages · 120 KB", "Picture · 800 KB", "Excel · 2 sheets' worth · 40 KB". */
 export function fileSummary(file: Pick<Artifact, "mimeType" | "pageCount" | "size">) {

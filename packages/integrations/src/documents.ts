@@ -1,5 +1,15 @@
 // File types Files accepts besides PDFs, recognised by their contents rather than their names.
-export type FileKind = "pdf" | "png" | "jpeg" | "webp" | "gif" | "docx" | "xlsx" | "csv" | "text";
+export type FileKind =
+  | "pdf"
+  | "png"
+  | "jpeg"
+  | "webp"
+  | "gif"
+  | "docx"
+  | "xlsx"
+  | "pptx"
+  | "csv"
+  | "text";
 export const FILE_KINDS: Record<FileKind, { mime: string; ext: string; label: string }> = {
   pdf: { mime: "application/pdf", ext: "pdf", label: "PDF" },
   png: { mime: "image/png", ext: "png", label: "Picture" },
@@ -16,12 +26,17 @@ export const FILE_KINDS: Record<FileKind, { mime: string; ext: string; label: st
     ext: "xlsx",
     label: "Excel",
   },
+  pptx: {
+    mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ext: "pptx",
+    label: "PowerPoint",
+  },
   csv: { mime: "text/csv", ext: "csv", label: "CSV" },
   text: { mime: "text/plain", ext: "txt", label: "Text" },
 };
 export const IMAGE_KINDS = new Set<FileKind>(["png", "jpeg", "webp", "gif"]);
 export const SUPPORTED_FILES =
-  "PDFs, pictures (JPEG, PNG, WebP or GIF), Word (.docx), Excel (.xlsx), CSV and text files";
+  "PDFs, pictures (JPEG, PNG, WebP or GIF), Word (.docx), Excel (.xlsx), PowerPoint (.pptx), CSV and text files";
 
 export function kindOfMime(mime: string): FileKind | undefined {
   return (Object.keys(FILE_KINDS) as FileKind[]).find((kind) => FILE_KINDS[kind].mime === mime);
@@ -33,9 +48,9 @@ const starts = (bytes: Uint8Array, ...signature: number[]) =>
 /** Whether a file with this name or media type is worth downloading to try. */
 export function acceptsFile(name: string, type = "") {
   return (
-    /pdf|image\/(png|jpe?g|webp|gif)|wordprocessingml|spreadsheetml|text\/(csv|plain|markdown)/i.test(
+    /pdf|image\/(png|jpe?g|webp|gif)|wordprocessingml|spreadsheetml|presentationml|text\/(csv|plain|markdown)/i.test(
       type,
-    ) || /^(pdf|png|jpe?g|webp|gif|docx|xlsx|csv|txt|md)$/.test(extension(name))
+    ) || /^(pdf|png|jpe?g|webp|gif|docx|xlsx|pptx|csv|txt|md)$/.test(extension(name))
   );
 }
 
@@ -51,6 +66,7 @@ export function detectKind(name: string, bytes: Uint8Array): FileKind | undefine
   if (starts(bytes, 0x50, 0x4b, 0x03, 0x04)) {
     if (ext === "docx") return "docx";
     if (ext === "xlsx") return "xlsx";
+    if (ext === "pptx") return "pptx";
     return undefined;
   }
   if (["csv", "txt", "md"].includes(ext) && !bytes.includes(0)) {
@@ -91,6 +107,10 @@ export async function documentPages(kind: FileKind, bytes: Uint8Array): Promise<
     const mammoth = await import("mammoth");
     const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
     return paginate(result.value);
+  }
+  if (kind === "pptx") {
+    const { pptxPages } = await import("./office.ts");
+    return pptxPages(bytes);
   }
   if (kind === "xlsx") {
     const { default: readXlsxFile } = await import("read-excel-file/node");
