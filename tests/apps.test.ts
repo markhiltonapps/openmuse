@@ -485,3 +485,37 @@ test("apps Composio can't sign in to itself use the sign-in set up in its dashbo
     brex: "ac_brex",
   });
 });
+
+test("an auth config named in the settings is used without looking it up", async () => {
+  const { fetcher, calls } = fakeComposio({
+    "POST /api/v3.1/tool_router/session": () =>
+      Response.json({ session_id: "trs_named" }, { status: 201 }),
+    "GET /api/v3.1/tool_router/session/trs_named/toolkits": () => Response.json({ items: [] }),
+    "POST /api/v3.1/tool_router/session/trs_named/link": (body) =>
+      calls.filter((c) => c.path.endsWith("/link")).length === 1
+        ? Response.json(
+            { error: { message: "Composio does not manage auth for toolkit brex." } },
+            { status: 400 },
+          )
+        : Response.json({
+            redirect_url: `https://connect.composio.test/${(body as { toolkit: string }).toolkit}`,
+          }),
+  });
+  const connector = new ComposioConnector(
+    db,
+    { ...config(), composioAuthConfigs: { brex: "ac_named" } },
+    fetcher,
+  );
+  assert.deepEqual(await connector.connect("named-owner", "brex"), {
+    connected: false,
+    url: "https://connect.composio.test/brex",
+  });
+  assert.ok(!calls.some((c) => c.path.startsWith("/api/v3/auth_configs")));
+  const sessions = calls.filter((c) => c.path === "/api/v3.1/tool_router/session");
+  assert.deepEqual(
+    (sessions.at(-1)?.body as { auth_configs?: unknown } | undefined)?.auth_configs,
+    {
+      brex: "ac_named",
+    },
+  );
+});

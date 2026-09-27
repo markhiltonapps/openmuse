@@ -210,12 +210,16 @@ export class ComposioConnector implements AppConnector {
   }
   /** The sign-in set up in the Composio dashboard ("auth config") for one app, if any. */
   private async customAuthConfig(app: string): Promise<string | undefined> {
+    const named = this.config.composioAuthConfigs?.[app];
+    if (named) return named;
     const seen: string[] = [];
-    // The list comes in pages; a project with many auth configs has this one on a later page.
+    const pages: string[] = [];
+    // The whole list, page by page: with many auth configs this one may be on a later page, and
+    // filtering by app has returned nothing even when a match exists.
     const cursors = new Set<string>();
     let cursor: string | undefined;
     for (let page = 0; page < 30; page++) {
-      const query = new URLSearchParams({ toolkit_slug: app, limit: "50" });
+      const query = new URLSearchParams({ limit: "50" });
       if (cursor) query.set("cursor", cursor);
       let list: {
         items?: {
@@ -226,6 +230,8 @@ export class ComposioConnector implements AppConnector {
           status?: string;
         }[];
         next_cursor?: string | null;
+        total_items?: number;
+        total_pages?: number;
       };
       try {
         list = await this.request("GET", `/api/v3/auth_configs?${query}`);
@@ -235,6 +241,9 @@ export class ComposioConnector implements AppConnector {
         );
         break;
       }
+      pages.push(
+        `${list.items?.length ?? 0} items${list.total_items !== undefined ? ` of ${list.total_items}` : ""}${list.next_cursor ? ", more" : ""}`,
+      );
       for (const item of list.items ?? []) {
         const slug = (item.toolkit?.slug ?? item.toolkit_slug ?? "").toLowerCase();
         seen.push(`${slug || "?"}${item.is_composio_managed ? " (managed)" : ""}`);
@@ -243,11 +252,11 @@ export class ComposioConnector implements AppConnector {
         return item.id;
       }
       cursor = list.next_cursor ?? undefined;
-      if (!cursor || !list.items?.length || cursors.has(cursor)) break;
+      if (!cursor || cursors.has(cursor)) break;
       cursors.add(cursor);
     }
     console.warn(
-      `[OpenMuse] No Composio auth config for ${app}. Auth configs in this Composio project: ${[...new Set(seen)].join(", ") || "none"}`,
+      `[OpenMuse] No Composio auth config for ${app}. Pages read: ${pages.join("; ") || "none"}. Auth configs seen: ${[...new Set(seen)].join(", ") || "none"}`,
     );
     return undefined;
   }
