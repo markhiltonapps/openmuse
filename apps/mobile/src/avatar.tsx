@@ -5,8 +5,8 @@ import AvatarVideo from "./AvatarVideo";
 import type { Activity, ActivityKind } from "./activity";
 import { ActivityProp } from "./activity-props";
 import { useAgentWorkspace } from "./agent-workspace";
-import { API_URL, type MuseApi } from "./api";
-import { ART, type CharacterId, PICTURE_CHARACTERS, VIDEO_CHARACTERS } from "./avatar-art";
+import type { MuseApi } from "./api";
+import { ART, type CharacterId, VIDEO_CHARACTERS } from "./avatar-art";
 import SvgArt from "./SvgArt";
 import { colors } from "./ui";
 import { useSpeaking } from "./voice";
@@ -222,7 +222,6 @@ export function Mascot({
   speaking?: boolean;
 }) {
   const video = character !== "custom" && VIDEO_CHARACTERS[character] === true;
-  const picture = character !== "custom" && PICTURE_CHARACTERS[character] === true;
   const reduce = useReducedMotion();
   const motion = animated && !reduce;
   const breathe = useRef(new Animated.Value(0)).current;
@@ -268,13 +267,6 @@ export function Mascot({
   const custom = character === "custom";
   const art = video ? (
     <AvatarVideo id={character} size={size} speaking={speaking} still={!motion} />
-  ) : picture ? (
-    <Image
-      source={{ uri: `${API_URL}/api/avatar-media/${character}/poster` }}
-      resizeMode="cover"
-      accessible={false}
-      style={{ width: size, height: size, borderRadius: size, backgroundColor: "#F6F5EE" }}
-    />
   ) : custom ? (
     image?.kind === "photo" ? (
       <Image
@@ -298,7 +290,7 @@ export function Mascot({
   const inset =
     character === "capybara"
       ? { top: 0.15, left: 0.12, size: 0.76 }
-      : video || picture
+      : video
         ? { top: 0, left: 0, size: 1 }
         : { top: 0.04, left: 0.04, size: 0.92 };
   return (

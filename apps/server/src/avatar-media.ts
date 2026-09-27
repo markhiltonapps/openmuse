@@ -6,14 +6,14 @@ import { AppError } from "./errors.ts";
  * Animated avatars made from a photo: a still for the first moment and two short clips that
  * loop, one idle and one talking. The files are fetched once and kept with the server's data.
  */
-export const avatarPresets: Record<
-  string,
-  Partial<Record<"poster" | "idle" | "talking", string>>
-> = {
-  // Neddy, the Neato_Meca mascot: his head-and-shoulders render with the background removed.
+export const avatarPresets: Record<string, Record<"poster" | "idle" | "talking", string>> = {
+  // Neddy, the Neato_Meca mascot: he looks around and blinks, and his eyes glow as he talks.
   neddy: {
     poster:
-      "https://d8j0ntlcm91z4.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/hf_20260923_014139_0be7a81c-8ba1-42da-b625-56f443db7ecb_min.png",
+      "https://d2ol7oe51mr4n9.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/3d7842c2-486b-40f7-84e5-e2bafb5ac2f4.webp",
+    idle: "https://d8j0ntlcm91z4.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/hf_20260927_142255_89a9c4d3-7692-4cd1-b143-54d661652bcb.mp4",
+    talking:
+      "https://d8j0ntlcm91z4.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/hf_20260927_142255_c95d4580-3360-4f63-a3e5-de126b97b233.mp4",
   },
   todd: {
     poster:
