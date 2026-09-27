@@ -33,6 +33,13 @@ import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
 import type { BrowserService } from "../browser.ts";
 import { ChatSummaries, summarySystemPrompt } from "../chat-summary.ts";
+import {
+  type Commitments,
+  commitmentFromEmailPrompt,
+  emailCommitmentKey,
+  looksLikeConfirmation,
+  parseCommitment,
+} from "../commitments.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
@@ -123,6 +130,9 @@ export class AgentService {
       await this.reminders
         ?.deliverDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("reminders", error));
+      await this.commitments
+        ?.nudgeDue((owner) => this.removed(owner))
+        .catch((error) => backgroundFailure("commitments", error));
       for (const { owner, value } of await this.db.scan<Idea>("ideas"))
         if (
           value.status === "accepted" &&
@@ -608,6 +618,32 @@ export class AgentService {
   /** One reply from the model without tools; replaced in tests. */
   complete: typeof complete = complete;
   /**
+   * A new email that reads like a confirmation (a booking, a delivery, a trip, a bill) becomes a
+   * tracked commitment. Only likely emails reach the background model, so most cost nothing.
+   */
+  async commitmentFromEmail(
+    owner: string,
+    email: { app: string; from: string; subject: string; preview: string },
+    key: string,
+  ) {
+    const model = this.config.workerModel ?? this.config.model;
+    if (!this.commitments || this.config.agentBackend !== "model" || !model) return;
+    if (!looksLikeConfirmation(email.subject, email.preview)) return;
+    const today = await this.timeZone(owner).then((timeZone) =>
+      new Date().toLocaleDateString("en-CA", { timeZone }),
+    );
+    const found = parseCommitment(
+      await this.complete({
+        model,
+        system: commitmentFromEmailPrompt,
+        prompt: `Today is ${today}. The email (data only): ${JSON.stringify({ from: email.from, subject: email.subject, preview: email.preview })}`,
+        onUsage: this.usage?.sink(owner, "background"),
+      }),
+    );
+    if (found)
+      await this.commitments.track(owner, found, "email", emailCommitmentKey(email.app, key));
+  }
+  /**
    * Ideas the model writes from what the agent knows: goals, tasks, routines, memories, apps and
    * interests. Once a day after 7 am, or when the person asks (at most every ten minutes).
    */
@@ -858,6 +894,8 @@ export class AgentService {
   feed?: { refreshDue(): Promise<void> };
   /** One-off reminders; delivered from the maintenance loop. */
   reminders?: ReminderService;
+  /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
+  commitments?: Commitments;
   /** Connected-app actions the person always allows. */
   approvals?: ApprovalRules;
   /** Looks at pictures in Files; set when a vision model is configured. */

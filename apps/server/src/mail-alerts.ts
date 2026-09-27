@@ -161,6 +161,8 @@ export class MailAlerts {
     private readonly agent: {
       notify(owner: string, title: string, body: string, taskId?: string, key?: string): unknown;
       createTask(owner: string, input: unknown, key?: string): Promise<{ id: string }>;
+      /** Tracks a booking, delivery, trip or bill the email confirms. */
+      commitmentFromEmail?(owner: string, email: IncomingEmail, key: string): Promise<unknown>;
     },
     private readonly webhook?: { url: string; encryptionKey?: string },
   ) {}
@@ -379,6 +381,14 @@ export class MailAlerts {
           `New email in ${LABELS[email.app]}`,
         undefined,
         `mail:${email.app}:${key}`,
+      );
+    // Confirmations (bookings, deliveries, trips, bills) are tracked; a failure never loses the alert.
+    await this.agent
+      .commitmentFromEmail?.(watch.owner, email, key)
+      .catch((error: unknown) =>
+        console.warn(
+          `[OpenMuse] Couldn't check an email for a commitment: ${error instanceof Error ? error.message : String(error)}`,
+        ),
       );
     return { ok: true, rules: matched.length, notified: notify };
   }

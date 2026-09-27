@@ -1,5 +1,6 @@
 import {
   ArrowUp,
+  Check,
   ExternalLink,
   MessageCircle,
   Plus,
@@ -42,6 +43,23 @@ interface Reminder {
   text: string;
   when: string;
 }
+interface Commitment {
+  id: string;
+  kind: "reservation" | "delivery" | "trip" | "appointment" | "bill" | "event" | "other";
+  title: string;
+  when: string;
+  where?: string;
+  link?: string;
+}
+const COMMITMENT_EMOJI: Record<Commitment["kind"], string> = {
+  reservation: "🍽️",
+  delivery: "📦",
+  trip: "✈️",
+  appointment: "🩺",
+  bill: "💳",
+  event: "🎟️",
+  other: "📌",
+};
 interface FeedState {
   topics: string[];
   refreshedAt?: string;
@@ -140,6 +158,18 @@ export function FeedScreen() {
   useEffect(() => {
     void loadReminders();
   }, [loadReminders]);
+  const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const loadCommitments = useCallback(
+    () =>
+      api.request<{ commitments: Commitment[] }>("/api/commitments").then(
+        (list) => setCommitments(list.commitments),
+        () => undefined,
+      ),
+    [api],
+  );
+  useEffect(() => {
+    void loadCommitments();
+  }, [loadCommitments]);
   const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -325,6 +355,39 @@ export function FeedScreen() {
             <Text style={s.muted}>Nothing else on your calendar today.</Text>
           )}
         </DayRow>
+        {commitments.slice(0, 3).map((item) => (
+          <DayRow key={item.id} emoji={COMMITMENT_EMOJI[item.kind] ?? "📌"}>
+            <View style={[s.row, { gap: 8 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.text} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                {!!(item.when || item.where) && (
+                  <Text style={s.small}>{[item.when, item.where].filter(Boolean).join(" · ")}</Text>
+                )}
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Mark done: ${item.title}`}
+                hitSlop={8}
+                onPress={() =>
+                  void api
+                    .request(`/api/commitments/${item.id}`, { status: "done" })
+                    .then(loadCommitments, (e) =>
+                      setError(e instanceof Error ? e.message : String(e)),
+                    )
+                }
+              >
+                <Check size={16} color={colors.muted} />
+              </Pressable>
+            </View>
+          </DayRow>
+        ))}
+        {commitments.length > 3 && (
+          <Text style={[s.small, { marginLeft: 48 }]}>
+            + {commitments.length - 3} more coming up
+          </Text>
+        )}
         {reminders.slice(0, 3).map((reminder) => (
           <DayRow key={reminder.id} emoji="⏰">
             <View style={[s.row, { gap: 8 }]}>

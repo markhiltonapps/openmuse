@@ -15,6 +15,7 @@ import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
 import { ChatArchive } from "./chat-archive.ts";
+import { Commitments } from "./commitments.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
 import { assertApiDeploymentConfig, type Config } from "./config.ts";
@@ -164,6 +165,12 @@ export async function createApp(
       }),
   );
   agent.reminders = reminders;
+  const commitments = new Commitments(
+    db,
+    (owner) => agent.timeZone(owner),
+    (owner, note) => agent.notify(owner, note.title, note.body, undefined, note.key),
+  );
+  agent.commitments = commitments;
   const approvals = new ApprovalRules(db);
   agent.approvals = approvals;
   const inbox = new AgentInbox(db, config, agent, accounts);
@@ -509,6 +516,20 @@ export async function createApp(
     c.json(await approvals.remove(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/reminders", async (c) => c.json(await reminders.list(c.get("owner"))));
+  app.get("/api/commitments", async (c) =>
+    c.json({ commitments: await commitments.list(c.get("owner"), c.req.query("all") === "1") }),
+  );
+  app.post("/api/commitments/:id", async (c) =>
+    c.json(
+      await commitments.change(c.get("owner"), {
+        ...(await c.req.json()),
+        id: c.req.param("id"),
+      }),
+    ),
+  );
+  app.post("/api/commitments/:id/delete", async (c) =>
+    c.json(await commitments.remove(c.get("owner"), c.req.param("id"))),
+  );
   app.post("/api/reminders/:id/cancel", async (c) =>
     c.json(await reminders.cancel(c.get("owner"), c.req.param("id"))),
   );
