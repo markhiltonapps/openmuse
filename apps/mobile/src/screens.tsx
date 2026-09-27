@@ -1,5 +1,3 @@
-import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import {
   ArrowDownToLine,
   ArrowUpRight,
@@ -25,23 +23,16 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  Platform,
   Pressable,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
-import type {
-  Artifact,
-  BrowserSession,
-  CalendarEvent,
-  EmailDraft,
-} from "../../../packages/domain/src";
-import { API_URL } from "./api";
+import type { BrowserSession, CalendarEvent, EmailDraft } from "../../../packages/domain/src";
 import { Mascot } from "./avatar";
 import { localDateTime, zonedInstant } from "./date-time";
-import { fileLabel, fileSummary, isPicture, PICKER_TYPES } from "./file-kinds";
+import { fileLabel, fileSummary, isPicture } from "./file-kinds";
 import {
   Button,
   Card,
@@ -59,7 +50,7 @@ import {
   s,
   timeLabel,
 } from "./ui";
-import { shrinkPicture } from "./web-app";
+import { chooseAndUpload } from "./upload";
 import { useWorkspace } from "./workspace";
 
 function todayDate() {
@@ -933,33 +924,8 @@ export function FilesScreen() {
     setError("");
     setBusy(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: PICKER_TYPES,
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-      const file = result.assets[0];
-      let artifact: Artifact;
-      if (Platform.OS === "web") {
-        const form = new FormData();
-        if (!file.file)
-          throw new Error("The selected file could not be read. Please choose it again.");
-        const upload = await shrinkPicture(file.file);
-        form.append("file", upload, upload.name);
-        artifact = await api.request<Artifact>("/api/files", form);
-      } else {
-        const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
-          httpMethod: "POST",
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          fieldName: "file",
-          mimeType: file.mimeType ?? "application/octet-stream",
-          headers: { Authorization: `Bearer ${api.token}` },
-        });
-        const payload = JSON.parse(result.body);
-        if (result.status < 200 || result.status >= 300)
-          throw new Error(payload.error || "Could not add this file.");
-        artifact = payload;
-      }
+      const artifact = await chooseAndUpload(api);
+      if (!artifact) return;
       await refresh();
       open({ type: "file", file: artifact });
     } catch (e) {

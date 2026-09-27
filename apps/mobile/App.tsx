@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import {
   Bell,
   Check,
+  FolderOpen,
   Lightbulb,
   type LucideIcon,
   Menu,
@@ -69,6 +70,7 @@ const nav: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "activity", label: "Activity", icon: PanelsTopLeft },
   { id: "ideas", label: "Ideas", icon: Lightbulb },
   { id: "goals", label: "Goals", icon: SquareCheck },
+  { id: "files", label: "Files & media", icon: FolderOpen },
   { id: "apps", label: "Apps", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
@@ -87,7 +89,7 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   mail: { title: "Mail", subtitle: "The conversations behind your work." },
   calendar: { title: "Calendar", subtitle: "Time for what matters." },
   browser: { title: "Browser", subtitle: "Your connected browsing sessions." },
-  files: { title: "Files", subtitle: "Documents, forms and filled copies." },
+  files: { title: "Files & media", subtitle: "Photos, documents, forms and filled copies." },
 };
 export default function App() {
   const [token, setToken] = useState("");
@@ -359,7 +361,7 @@ function WorkspaceShell({
                   : section === "goals"
                     ? GoalsScreen
                     : AppsScreen;
-  const utility = ["mail", "calendar", "browser", "files"].includes(section);
+  const utility = ["mail", "calendar", "browser"].includes(section);
   return (
     <>
       <WorkspaceTools />

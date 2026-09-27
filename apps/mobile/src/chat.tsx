@@ -11,8 +11,10 @@ import {
   ArrowDown,
   ArrowUp,
   AudioLines,
+  Camera,
   FileText,
   Mic,
+  Paperclip,
   RotateCcw,
   Square,
   Volume2,
@@ -43,6 +45,7 @@ import { MailToolCard } from "./mail-tool-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { chooseAndUpload } from "./upload";
 import { primeSpeech, speak, speechAvailable, stopSpeaking, voiceSettings } from "./voice";
 import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
@@ -291,6 +294,23 @@ export function ChatScreen({
   const [loaded, setLoaded] = useState(false);
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [uploading, setUploading] = useState<"photos" | "any">();
+  /** Uploads a new photo or file to Files and attaches it to the message being written. */
+  async function addNew(kind: "photos" | "any") {
+    setUploading(kind);
+    setError("");
+    try {
+      const file = await chooseAndUpload(api, kind);
+      if (!file) return;
+      await refresh();
+      setAttachments((current) => [...current, file.id]);
+      setPicking(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(undefined);
+    }
+  }
   const list = useRef<ScrollView>(null);
   const [queue] = useState(() => new ConversationQueue());
   const outbox = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
@@ -459,7 +479,7 @@ export function ChatScreen({
     enqueue(
       text +
         (files.length
-          ? `\n\nAttached documents: ${files.map((f) => `${f.name} (artifact ID: ${f.id})`).join(", ")}`
+          ? `\n\nAttached files: ${files.map((f) => `${f.name} (file ID: ${f.id})`).join(", ")}`
           : ""),
     );
     setDraft("");
@@ -824,7 +844,29 @@ export function ChatScreen({
         )}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15 }}>
-            <Text style={s.heading}>Add a document</Text>
+            <Text style={s.heading}>Add a photo or file</Text>
+            <View style={[s.row, { gap: 8, flexWrap: "wrap", marginVertical: 10 }]}>
+              <Button
+                small
+                primary
+                icon={Camera}
+                busy={uploading === "photos"}
+                disabled={!!uploading}
+                onPress={() => void addNew("photos")}
+              >
+                {Platform.OS === "web" ? "Photo" : "Take or choose a photo"}
+              </Button>
+              <Button
+                small
+                icon={Paperclip}
+                busy={uploading === "any"}
+                disabled={!!uploading}
+                onPress={() => void addNew("any")}
+              >
+                Upload a file
+              </Button>
+            </View>
+            <Text style={s.small}>Or pick something already in Files:</Text>
             <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
               {w.files.length ? (
                 w.files.map((f) => (
@@ -842,7 +884,7 @@ export function ChatScreen({
                   />
                 ))
               ) : (
-                <Text style={s.muted}>Add a file in Files to use it in a conversation.</Text>
+                <Text style={s.muted}>Nothing in Files yet.</Text>
               )}
             </ScrollView>
             <Button
