@@ -46,11 +46,11 @@ export function siteOf(input: string) {
   try {
     host = new URL(/^[a-z][a-z0-9+.-]*:\/\//.test(text) ? text : `https://${text}`).hostname;
   } catch {
-    throw new AppError("Enter the website, like amazon.com", 400);
+    throw new AppError("That doesn’t look like a website. Enter it like amazon.com.", 400);
   }
   host = host.replace(/^www\./, "").replace(/\.$/, "");
   if (!/^(?=.{3,253}$)([a-z0-9-]{1,63}\.)+[a-z]{2,63}$/.test(host))
-    throw new AppError("Enter the website, like amazon.com", 400);
+    throw new AppError("That doesn’t look like a website. Enter it like amazon.com.", 400);
   return host;
 }
 
@@ -71,7 +71,10 @@ const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 function base32(text: string) {
   const clean = text.toUpperCase().replace(/[\s-]/g, "").replace(/=+$/, "");
   if (!clean || /[^A-Z2-7]/.test(clean))
-    throw new AppError("That authenticator key isn't valid", 400);
+    throw new AppError(
+      "That authenticator key doesn’t look right. Copy it from the website again and paste the whole key.",
+      400,
+    );
   let bits = 0;
   let value = 0;
   const bytes: number[] = [];
@@ -83,7 +86,11 @@ function base32(text: string) {
       bits -= 8;
     }
   }
-  if (bytes.length < 10) throw new AppError("That authenticator key is too short", 400);
+  if (bytes.length < 10)
+    throw new AppError(
+      "That authenticator key is too short. Copy the whole key from the website.",
+      400,
+    );
   return Buffer.from(bytes);
 }
 
@@ -93,14 +100,17 @@ export function authenticatorFrom(input: string): Authenticator {
   if (/^otpauth:\/\//i.test(text)) {
     const url = new URL(text);
     if (url.hostname !== "totp")
-      throw new AppError("Only time-based authenticator codes are supported", 400);
+      throw new AppError(
+        "This kind of authenticator key isn’t supported. Leave the box empty, and you’ll type the site’s codes yourself when asked.",
+        400,
+      );
     const algorithm = (url.searchParams.get("algorithm") ?? "SHA1").toLowerCase();
     const digits = Number(url.searchParams.get("digits") ?? 6);
     const period = Number(url.searchParams.get("period") ?? 30);
     if (!["sha1", "sha256", "sha512"].includes(algorithm) || ![6, 7, 8].includes(digits))
-      throw new AppError("That authenticator link isn't supported", 400);
+      throw new AppError("That authenticator link isn’t supported.", 400);
     if (!Number.isInteger(period) || period < 15 || period > 120)
-      throw new AppError("That authenticator link isn't supported", 400);
+      throw new AppError("That authenticator link isn’t supported.", 400);
     const secret = url.searchParams.get("secret") ?? "";
     base32(secret);
     return {
@@ -130,10 +140,18 @@ export function totp(auth: Authenticator, at: number) {
 }
 
 const saveSchema = z.object({
-  site: z.string().trim().min(3).max(300),
-  username: z.string().trim().min(1).max(200),
-  password: z.string().min(1).max(500),
-  authenticator: z.string().trim().max(1000).optional(),
+  site: z
+    .string()
+    .trim()
+    .min(3, "Enter the website, like amazon.com.")
+    .max(300, "That website address is too long."),
+  username: z
+    .string()
+    .trim()
+    .min(1, "Enter your username or email.")
+    .max(200, "That username is too long."),
+  password: z.string().min(1, "Enter the password.").max(500, "That password is too long."),
+  authenticator: z.string().trim().max(1000, "That authenticator key is too long.").optional(),
   askFirst: z.boolean().default(true),
 });
 const changeSchema = z.object({
@@ -184,18 +202,24 @@ export class Logins {
       site,
       username: input.username,
       secret: encryptSecret(input.password, key),
-      ...(auth ? { authenticator: encryptSecret(JSON.stringify(auth), key) } : {}),
+      // Saving the same sign-in again keeps its authenticator key unless a new one is given.
+      ...(auth
+        ? { authenticator: encryptSecret(JSON.stringify(auth), key) }
+        : existing?.authenticator
+          ? { authenticator: existing.authenticator }
+          : {}),
       askFirst: input.askFirst,
       createdAt: existing?.createdAt ?? new Date(this.now()).toISOString(),
+      ...(existing?.lastUsedAt ? { lastUsedAt: existing.lastUsedAt } : {}),
     };
     await this.db.put(owner, "logins", login);
-    return this.view(login);
+    return { ...this.view(login), replaced: !!existing };
   }
   async change(owner: string, id: string, raw: unknown) {
     const key = this.secretKey();
     const input = changeSchema.parse(raw);
     const login = await this.db.get<SavedLogin>(owner, "logins", id);
-    if (!login) throw new AppError("Saved sign-in not found", 404);
+    if (!login) throw new AppError("This saved password was already deleted.", 404);
     const next: SavedLogin = { ...login };
     if (input.password !== undefined) next.secret = encryptSecret(input.password, key);
     if (input.askFirst !== undefined) next.askFirst = input.askFirst;
@@ -226,10 +250,14 @@ export class Logins {
    */
   async password(owner: string, id: string, url: string) {
     const login = await this.db.get<SavedLogin>(owner, "logins", id);
-    if (!login) throw new AppError("That saved sign-in was deleted", 404);
+    if (!login)
+      throw new AppError(
+        "That saved password was deleted. Add it again under Apps → Account → Passwords, then ask your agent to try again.",
+        404,
+      );
     if (!sameSite(url, login.site))
       throw new AppError(
-        `This page isn't on ${login.site}, so its saved password wasn't used. Saved passwords are only typed on the site they were saved for.`,
+        `This page isn’t on ${login.site}, so its saved password wasn’t used. Saved passwords are only typed on the site they were saved for.`,
         409,
       );
     return decryptSecret(login.secret, this.secretKey());
@@ -240,7 +268,7 @@ export class Logins {
     if (!login?.authenticator)
       throw new AppError("No authenticator key is saved for this sign-in", 409);
     if (!sameSite(url, login.site))
-      throw new AppError(`This page isn't on ${login.site}, so no code was entered.`, 409);
+      throw new AppError(`This page isn’t on ${login.site}, so no code was entered.`, 409);
     const auth = JSON.parse(decryptSecret(login.authenticator, this.secretKey())) as Authenticator;
     return totp(auth, this.now());
   }

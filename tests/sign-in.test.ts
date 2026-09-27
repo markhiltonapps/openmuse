@@ -25,14 +25,17 @@ test("one-time codes match the standard's test values", () => {
     "otpauth://totp/Example:me?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8&issuer=Example",
   );
   assert.equal(totp(eight, 59_000), "94287082");
-  assert.throws(() => authenticatorFrom("not a key!"), /isn't valid/);
-  assert.throws(() => authenticatorFrom("otpauth://hotp/x?secret=GEZDGNBVGY3TQOJQ"), /time-based/);
+  assert.throws(() => authenticatorFrom("not a key!"), /doesn’t look right/);
+  assert.throws(
+    () => authenticatorFrom("otpauth://hotp/x?secret=GEZDGNBVGY3TQOJQ"),
+    /isn’t supported/,
+  );
 });
 
 test("a saved password is only for its own site", () => {
   assert.equal(siteOf("https://www.Amazon.com/ap/signin?x=1"), "amazon.com");
   assert.equal(siteOf("chase.com"), "chase.com");
-  assert.throws(() => siteOf("not a site"), /Enter the website/);
+  assert.throws(() => siteOf("not a site"), /doesn’t look like a website/);
   assert.equal(sameSite("https://www.amazon.com/ap/signin", "amazon.com"), true);
   assert.equal(sameSite("https://signin.aws.amazon.com/", "amazon.com"), true);
   assert.equal(sameSite("https://amazon.com.evil.example/", "amazon.com"), false);
@@ -53,9 +56,11 @@ test("passwords are stored encrypted and never listed", async () => {
     "createdAt",
     "hasAuthenticator",
     "id",
+    "replaced",
     "site",
     "username",
   ]);
+  assert.equal(saved.replaced, false);
   assert.equal(saved.askFirst, true, "asks before each use unless turned off");
   const raw = JSON.stringify(await db.list("owner", "logins"));
   assert.doesNotMatch(raw, /correct horse/);
@@ -81,6 +86,7 @@ test("passwords are stored encrypted and never listed", async () => {
     askFirst: false,
   });
   assert.equal(again.id, saved.id);
+  assert.equal(again.replaced, true);
   assert.equal((await logins.list("owner")).length, 1);
   await logins.remove("owner", saved.id);
   assert.deepEqual(await logins.list("owner"), []);
@@ -176,7 +182,7 @@ test("the agent signs in without ever seeing the password", async () => {
     "t",
     propose,
   ) as unknown as Tool[];
-  assert.match(String((await lookAlike?.execute({ why: "Sign in" }))?.error), /No saved sign-in/);
+  assert.match(String((await lookAlike?.execute({ why: "Sign in" }))?.error), /No saved password/);
   await assert.rejects(
     runApprovedSignIn(fake.browser, logins, "owner", {
       ...(proposals[0] as BrowserSignIn),
@@ -251,7 +257,10 @@ test("a verification code goes from the person's app straight into the page", as
   assert.match(String(waiting?.next), /type the code .* not in chat/);
   const step = proposals[0] as BrowserSignIn;
   assert.equal(step.step, "code");
-  await assert.rejects(runApprovedSignIn(browser, logins, "owner", step), /Type the code/);
+  await assert.rejects(
+    runApprovedSignIn(browser, logins, "owner", step),
+    /That code doesn’t look right/,
+  );
   assert.match(
     await runApprovedSignIn(browser, logins, "owner", step, "482 913"),
     /Entered the code/,
@@ -272,6 +281,14 @@ test("a saved authenticator key makes the code itself", async () => {
     authenticator: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
     askFirst: false,
   });
+  // Saving the password again doesn't lose the authenticator key.
+  const again = await logins.save("owner", {
+    site: "bank.example.com",
+    username: "mark",
+    password: "pw2",
+    askFirst: false,
+  });
+  assert.equal(again.hasAuthenticator, true);
   const codePage = {
     url: "https://bank.example.com/verify",
     title: "Verify",
@@ -345,7 +362,7 @@ test("approving a code step needs the code, and it's never stored", async () => 
       });
     const missing = await decide({});
     assert.equal(missing.status, 400);
-    assert.match(await missing.text(), /Type the code/);
+    assert.match(await missing.text(), /That code doesn’t look right/);
     const still = (await db.get("local-user", "actions", proposal.id)) as { status: string };
     assert.equal(still.status, "awaiting_review", "a missing code doesn't use up the approval");
     // With the code it runs (and fails here only because sample mode has no browser).

@@ -84,7 +84,9 @@ export function AppsTabs({
                   backgroundColor: colors.danger,
                 }}
               >
-                <Text style={{ fontSize: 11, fontWeight: "700", color: "#FFFFFF" }}>{badge}</Text>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: colors.onInverse }}>
+                  {badge}
+                </Text>
               </View>
             )}
           </Pressable>

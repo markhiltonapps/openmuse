@@ -74,7 +74,10 @@ export class FileShares {
   }
   /** The file a link opens, while the link works and the file still exists. */
   async open(token: string) {
-    const gone = new AppError("This link has expired or was turned off", 404);
+    const gone = new AppError(
+      "This link has expired or was turned off. Ask the person who sent it for a new one.",
+      404,
+    );
     if (!/^[\w-]{20,64}$/.test(token)) throw gone;
     const share = await this.db.get<SharedFile>("system", "file-shares", hash(token));
     if (!share || share.expiresAt <= new Date(this.now()).toISOString()) throw gone;

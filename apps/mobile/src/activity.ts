@@ -125,9 +125,13 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
     case "sign_in_with_saved_login":
       return { kind: "browse", label: "Signing in…" };
     case "enter_sign_in_code":
-      return { kind: "browse", label: "Getting the sign-in code…" };
+      return { kind: "browse", label: "Entering the sign-in code…" };
+    case "make_mini_app":
+      return { kind: "writing", label: "Building your mini app…" };
+    case "share_mini_app":
+      return { kind: "writing", label: "Making a share link…" };
     case "show_places":
-      return { kind: "search", label: "Putting them on a map…" };
+      return { kind: "search", label: "Finding the places on a map…" };
     case "show_products":
       return { kind: "search", label: "Pulling up the products…" };
     default:

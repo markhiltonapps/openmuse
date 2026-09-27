@@ -33,6 +33,7 @@ import type { BrowserSession, CalendarEvent, EmailDraft } from "../../../package
 import { Mascot } from "./avatar";
 import { localDateTime, zonedInstant } from "./date-time";
 import { fileLabel, fileSummary, isPicture } from "./file-kinds";
+import { MiniAppsCard } from "./mini-apps-ui";
 import {
   Button,
   Card,
@@ -945,6 +946,7 @@ export function FilesScreen() {
         </Button>
       </View>
       <ErrorNotice error={error} />
+      <MiniAppsCard />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 18 }}>
         {w.files.map((f) => (
           <Pressable

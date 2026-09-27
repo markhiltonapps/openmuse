@@ -31,6 +31,8 @@ const light = {
   card: "#FFFFFF",
   text: "#11191C",
   muted: "#697176",
+  /** Small grey text on tinted surfaces, where muted falls short of AA. */
+  mutedStrong: "#565E63",
   line: "#EEEEF0",
   blue: "#C8E7FF",
   blueDark: "#1473C8",
@@ -57,6 +59,7 @@ const night: typeof light = {
   card: "#151517",
   text: "#F3F3F5",
   muted: "#9C9CA3",
+  mutedStrong: "#ADADB4",
   line: "#26262A",
   blue: "#1C4E7D",
   blueDark: "#55AAFF",

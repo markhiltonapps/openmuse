@@ -363,7 +363,9 @@ export function FeedScreen() {
                   {item.title}
                 </Text>
                 {!!(item.when || item.where) && (
-                  <Text style={s.small}>{[item.when, item.where].filter(Boolean).join(" · ")}</Text>
+                  <Text style={[s.small, { color: colors.mutedStrong }]}>
+                    {[item.when, item.where].filter(Boolean).join(" · ")}
+                  </Text>
                 )}
               </View>
               <Pressable
@@ -384,7 +386,7 @@ export function FeedScreen() {
           </DayRow>
         ))}
         {commitments.length > 3 && (
-          <Text style={[s.small, { marginLeft: 48 }]}>
+          <Text style={[s.small, { marginLeft: 48, color: colors.mutedStrong }]}>
             + {commitments.length - 3} more coming up
           </Text>
         )}
@@ -395,7 +397,7 @@ export function FeedScreen() {
                 <Text style={s.text} numberOfLines={2}>
                   {reminder.text}
                 </Text>
-                <Text style={s.small}>{reminder.when}</Text>
+                <Text style={[s.small, { color: colors.mutedStrong }]}>{reminder.when}</Text>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -415,7 +417,9 @@ export function FeedScreen() {
           </DayRow>
         ))}
         {reminders.length > 3 && (
-          <Text style={[s.small, { marginLeft: 48 }]}>+ {reminders.length - 3} more reminders</Text>
+          <Text style={[s.small, { marginLeft: 48, color: colors.mutedStrong }]}>
+            + {reminders.length - 3} more reminders
+          </Text>
         )}
         {!!healthLine && (
           <Pressable onPress={() => navigate("goals")}>

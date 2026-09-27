@@ -1,4 +1,4 @@
-import { ExternalLink, Navigation, ShoppingBag } from "lucide-react-native";
+import { ExternalLink, type LucideIcon, Navigation, ShoppingBag } from "lucide-react-native";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +13,7 @@ import {
 import { z } from "zod";
 import { directionsUrl, fitMap, MAP_CREDIT, tileUrl } from "./map-math";
 import { dark } from "./theme";
-import { Button, Card, colors, s } from "./ui";
+import { Card, colors, s } from "./ui";
 
 const web = z.url().refine((u) => /^https?:\/\//i.test(u));
 const placesSchema = z.object({
@@ -79,9 +79,10 @@ export function PlacesCard({ result, loading }: { result: unknown; loading: bool
   const map = fitMap(value.places, width, MAP_HEIGHT);
   return (
     <Card style={{ gap: 12, padding: 14 }}>
-      {!!value.title && <Text style={[s.heading, { paddingHorizontal: 4 }]}>{value.title}</Text>}
+      {!!value.title && <Text style={[s.heading, { paddingHorizontal: 10 }]}>{value.title}</Text>}
       <View
         onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}
+        role="group"
         accessibilityLabel={`Map of ${value.places.length} place${value.places.length === 1 ? "" : "s"}`}
         style={{
           height: MAP_HEIGHT,
@@ -106,8 +107,18 @@ export function PlacesCard({ result, loading }: { result: unknown; loading: bool
           />
         ))}
         {failed && (
-          <View style={{ position: "absolute", left: 12, top: 12 }}>
-            <Text style={s.small}>The map pictures didn’t load.</Text>
+          <View
+            style={{
+              position: "absolute",
+              left: 12,
+              top: 12,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 8,
+              backgroundColor: dark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.8)",
+            }}
+          >
+            <Text style={s.small}>The map didn’t load. The places below still work.</Text>
           </View>
         )}
         {map?.pins.map((pin, i) => {
@@ -116,36 +127,40 @@ export function PlacesCard({ result, loading }: { result: unknown; loading: bool
           const on = chosen === i;
           const size = on ? 32 : 26;
           return (
+            // A 44-point target around the smaller drawn pin.
             <Pressable
               key={`${place.name}-${place.lat}-${place.lng}`}
               accessibilityRole="button"
               accessibilityLabel={`${i + 1}. ${place.name}`}
+              aria-pressed={on}
               onPress={() => setChosen(on ? undefined : i)}
-              hitSlop={8}
               style={{
                 position: "absolute",
-                left: pin.x - size / 2,
-                top: pin.y - size / 2,
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                backgroundColor: on ? colors.inverse : colors.blueDark,
-                borderWidth: 2,
-                borderColor: "#FFFFFF",
+                left: pin.x - 22,
+                top: pin.y - 22,
+                width: 44,
+                height: 44,
                 alignItems: "center",
                 justifyContent: "center",
                 zIndex: on ? 2 : 1,
               }}
             >
-              <Text
+              <View
                 style={{
-                  color: on ? colors.onInverse : "#FFFFFF",
-                  fontSize: 12,
-                  fontWeight: "700",
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  backgroundColor: on ? colors.inverse : colors.blueDark,
+                  borderWidth: 2,
+                  borderColor: "#FFFFFF",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                {i + 1}
-              </Text>
+                <Text style={{ color: colors.onInverse, fontSize: 12, fontWeight: "700" }}>
+                  {i + 1}
+                </Text>
+              </View>
             </Pressable>
           );
         })}
@@ -167,55 +182,107 @@ export function PlacesCard({ result, loading }: { result: unknown; loading: bool
         </Pressable>
       </View>
       {value.places.map((place, i) => (
-        <Pressable
+        <View
           key={`${place.name}-${place.lat}-${place.lng}`}
-          onPress={() => setChosen(chosen === i ? undefined : i)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: chosen === i }}
-          accessibilityLabel={`${i + 1}. ${place.name}${place.address ? `, ${place.address}` : ""}`}
           style={{
-            flexDirection: "row",
-            gap: 12,
             padding: 10,
+            gap: 4,
             borderRadius: 14,
             backgroundColor: chosen === i ? colors.sky : "transparent",
           }}
         >
-          <View
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 12,
-              backgroundColor: colors.blueDark,
-              alignItems: "center",
-              justifyContent: "center",
-              marginTop: 1,
-            }}
+          <Pressable
+            onPress={() => setChosen(chosen === i ? undefined : i)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: chosen === i }}
+            aria-pressed={chosen === i}
+            accessibilityHint="Shows it on the map"
+            style={{ flexDirection: "row", gap: 12 }}
           >
-            <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "700" }}>{i + 1}</Text>
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[s.text, { fontWeight: "600" }]}>{place.name}</Text>
-            {!!place.address && <Text style={s.small}>{place.address}</Text>}
-            {!!place.note && <Text style={[s.muted, { fontSize: 13 }]}>{place.note}</Text>}
-            <View style={[s.row, { gap: 8, marginTop: 6, flexWrap: "wrap" }]}>
-              <Button
-                small
-                icon={Navigation}
-                onPress={() => open(directionsUrl(place, Platform.OS === "ios"))}
-              >
-                Directions
-              </Button>
-              {!!place.url && (
-                <Button small icon={ExternalLink} onPress={() => open(place.url as string)}>
-                  {host(place.url) || "Website"}
-                </Button>
-              )}
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: chosen === i ? colors.inverse : colors.blueDark,
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 1,
+              }}
+            >
+              <Text style={{ color: colors.onInverse, fontSize: 12, fontWeight: "700" }}>
+                {i + 1}
+              </Text>
             </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[s.text, { fontWeight: "600" }]}>{place.name}</Text>
+              {!!place.address && <Text style={s.small}>{place.address}</Text>}
+              {!!place.note && <Text style={s.muted}>{place.note}</Text>}
+            </View>
+          </Pressable>
+          <View style={[s.row, { columnGap: 8, marginLeft: 36, flexWrap: "wrap" }]}>
+            <Pill
+              icon={Navigation}
+              label="Directions"
+              hint={`Directions to ${place.name}`}
+              onPress={() => open(directionsUrl(place, Platform.OS === "ios"))}
+            />
+            {!!place.url && (
+              <Pill
+                icon={ExternalLink}
+                label={host(place.url) || "Website"}
+                hint={`${host(place.url) || "Website"}, ${place.name} website`}
+                onPress={() => open(place.url as string)}
+              />
+            )}
           </View>
-        </Pressable>
+        </View>
       ))}
     </Card>
+  );
+}
+
+/** A compact link button for a place: a 32-point pill inside a 44-point target. */
+function Pill({
+  icon: Icon,
+  label,
+  hint,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  hint: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={hint}
+      onPress={onPress}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
+        minHeight: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.7 : hovered ? 0.85 : 1,
+      })}
+    >
+      <View
+        style={[
+          s.row,
+          {
+            gap: 6,
+            height: 32,
+            paddingHorizontal: 12,
+            borderRadius: 16,
+            backgroundColor: colors.subtle,
+          },
+        ]}
+      >
+        <Icon size={14} color={colors.text} />
+        <Text numberOfLines={1} style={{ color: colors.text, fontSize: 13, fontWeight: "600" }}>
+          {label}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -230,7 +297,7 @@ export function ProductsCard({ result, loading }: { result: unknown; loading: bo
       {!!value.title && <Text style={s.heading}>{value.title}</Text>}
       <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={false}
+        showsHorizontalScrollIndicator={Platform.OS === "web"}
         contentContainerStyle={{ gap: 12, paddingRight: 8 }}
       >
         {value.products.map((product) => (
@@ -265,7 +332,8 @@ function ProductTile({ product }: { product: z.infer<typeof productsSchema>["pro
       <View
         style={{
           height: 148,
-          backgroundColor: "#FFFFFF",
+          // White behind product photos, which are shot on white; the card's own grey without one.
+          backgroundColor: product.image && !broken ? "#FFFFFF" : colors.subtle,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -279,18 +347,18 @@ function ProductTile({ product }: { product: z.infer<typeof productsSchema>["pro
             style={{ width: "100%", height: "100%" }}
           />
         ) : (
-          <ShoppingBag size={34} color="#9C9CA3" />
+          <ShoppingBag size={34} color={colors.muted} />
         )}
       </View>
-      <View style={{ padding: 12, gap: 4 }}>
+      <View style={{ padding: 12, gap: 4, flex: 1 }}>
         <Text
           numberOfLines={2}
-          style={[s.text, { fontSize: 14, lineHeight: 19, fontWeight: "600" }]}
+          style={[s.text, { fontSize: 14, lineHeight: 19, fontWeight: "600", minHeight: 38 }]}
         >
           {product.title}
         </Text>
         {!!product.price && (
-          <Text style={[s.text, { fontSize: 17, fontWeight: "700" }]}>{product.price}</Text>
+          <Text style={[s.text, { fontSize: 16, fontWeight: "700" }]}>{product.price}</Text>
         )}
         {!!store && <Text style={s.small}>{store}</Text>}
         {!!product.note && (
@@ -298,9 +366,12 @@ function ProductTile({ product }: { product: z.infer<typeof productsSchema>["pro
             {product.note}
           </Text>
         )}
-        <View style={[s.row, { gap: 6, marginTop: 4 }]}>
+        <View style={[s.row, { gap: 6, marginTop: "auto", paddingTop: 4 }]}>
           <ExternalLink size={13} color={colors.blueDark} />
-          <Text style={{ color: colors.blueDark, fontSize: 13, fontWeight: "600" }}>
+          <Text
+            numberOfLines={1}
+            style={{ color: colors.blueDark, fontSize: 13, fontWeight: "600", flexShrink: 1 }}
+          >
             View at {store || "the store"}
           </Text>
         </View>
@@ -316,7 +387,7 @@ export function SearchPicturesCard({ result, loading }: { result: unknown; loadi
   return (
     <ScrollView
       horizontal
-      showsHorizontalScrollIndicator={false}
+      showsHorizontalScrollIndicator={Platform.OS === "web"}
       contentContainerStyle={{ gap: 10, paddingRight: 8 }}
     >
       {value.pictures.map((picture) => (
@@ -338,7 +409,7 @@ function SearchPicture({
       accessibilityRole="link"
       accessibilityLabel={`${picture.title}, from ${host(picture.page)}`}
       onPress={() => open(picture.page)}
-      style={{ width: 150, gap: 6 }}
+      style={({ pressed }) => ({ width: 150, gap: 6, opacity: pressed ? 0.85 : 1 })}
     >
       <Image
         source={{ uri: picture.image }}

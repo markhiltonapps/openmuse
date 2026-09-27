@@ -45,6 +45,7 @@ import { runConversationTurn } from "./conversation-run";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
+import { MiniAppToolCard } from "./mini-apps-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
@@ -126,6 +127,14 @@ export function WorkspaceTools() {
     description: "Show places on a map",
     parameters: displayParameters,
     render: ({ result, status }) => <PlacesCard result={result} loading={status !== "complete"} />,
+  });
+  useRenderTool({
+    name: "make_mini_app",
+    description: "Show the mini app the agent built",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <MiniAppToolCard result={result} loading={status !== "complete"} />
+    ),
   });
   useRenderTool({
     name: "show_products",

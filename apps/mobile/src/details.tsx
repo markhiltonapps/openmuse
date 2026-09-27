@@ -614,7 +614,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       subtitle={
         w.mode === "sample"
           ? "This action stays in your local workspace."
-          : "Review this exact action before it changes your connected account."
+          : step || signin
+            ? "Your agent does this on the website only after you approve."
+            : "Review this exact action before it changes your connected account."
       }
       onClose={close}
     >
@@ -624,7 +626,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={s.heading}>{action.title}</Text>
-          <Text style={s.small}>{action.kind.replace(".", " · ")}</Text>
+          <Text style={s.small}>
+            {step ? "Website step" : signin ? "Website sign-in" : action.kind.replace(".", " · ")}
+          </Text>
         </View>
         <Chip tint={pending ? colors.lavender : colors.green}>
           {action.status.replace(/_/g, " ")}
@@ -650,7 +654,6 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
                   : `Click “${String(d.element || "")}”`
               }
             />
-            <ReviewLine label="Why" value={String(d.summary || "")} />
             {stepBrowser?.status === "active" && stepBrowser.previewUrl && (
               <Image
                 source={{ uri: api.url(stepBrowser.previewUrl) }}
@@ -665,10 +668,22 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
               />
             )}
             <Text style={s.small}>
-              It only clicks if the page still shows “{String(d.element || "")}” on{" "}
-              {String(d.site || "the site")}. To check or change anything first, use Take control on
-              the browser card.
+              Your agent does this only if the page still shows “{String(d.element || "")}” on{" "}
+              {String(d.site || "the site")}.
+              {stepBrowser?.status === "active"
+                ? " To check or change anything first, take control of the browser."
+                : ""}
             </Text>
+            {stepBrowser?.status === "active" && (
+              <Button
+                small
+                icon={Globe2}
+                style={{ alignSelf: "flex-start" }}
+                onPress={() => open({ type: "browser", browser: stepBrowser })}
+              >
+                Take control
+              </Button>
+            )}
           </>
         ) : signin ? (
           <SignInReview
@@ -679,7 +694,8 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
                 : undefined
             }
             code={pending ? code : ""}
-            onCode={setCode}
+            onCode={pending ? setCode : undefined}
+            onSubmit={() => !busy && void decide("approve")}
           />
         ) : app ? (
           <>

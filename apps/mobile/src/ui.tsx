@@ -71,7 +71,7 @@ export const s = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: colors.canvas,
   },
-  chipText: { fontSize: 10, fontWeight: "600", color: colors.muted },
+  chipText: { fontSize: 10, fontWeight: "600", color: colors.mutedStrong },
   iconBox: {
     width: 42,
     height: 42,
@@ -115,6 +115,7 @@ export function Button({
   small,
   danger,
   style,
+  accessibilityLabel,
 }: {
   children: ReactNode;
   onPress: () => void;
@@ -125,11 +126,14 @@ export function Button({
   small?: boolean;
   danger?: boolean;
   style?: ViewStyle;
+  /** When the words alone don't say what it acts on, such as a row's "Edit". */
+  accessibilityLabel?: string;
 }) {
   const color = danger ? colors.danger : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       disabled={disabled || busy}
       accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
       onPress={onPress}
@@ -316,8 +320,9 @@ export function CheckRow({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
+      aria-checked={checked}
       onPress={onPress}
-      style={[s.row, { gap: 10, paddingVertical: 9 }]}
+      style={[s.row, { gap: 10, paddingVertical: 11 }]}
     >
       <View
         style={{

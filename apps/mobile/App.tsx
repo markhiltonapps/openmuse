@@ -16,8 +16,10 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   AppState,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -211,6 +213,7 @@ function WorkspaceApp({ token }: { token: string }) {
   }, [refresh]);
   useEffect(() => {
     if (!toast) return;
+    if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(toast);
     const timer = setTimeout(() => setToast(""), 5500);
     return () => clearTimeout(timer);
   }, [toast]);
@@ -606,11 +609,14 @@ function WorkspaceShell({
             </View>
           </View>
         </View>
-        {!!toast && (
-          <View
-            pointerEvents="box-none"
-            style={{ position: "absolute", bottom: 94, left: 20, right: 20, alignItems: "center" }}
-          >
+        {/* Always there, so screen readers hear each confirmation as it appears. */}
+        <View
+          pointerEvents="box-none"
+          role="status"
+          aria-live="polite"
+          style={{ position: "absolute", bottom: 94, left: 20, right: 20, alignItems: "center" }}
+        >
+          {!!toast && (
             <View
               style={[
                 s.row,
@@ -633,8 +639,8 @@ function WorkspaceShell({
                 <X size={16} color={colors.onInverse} />
               </Pressable>
             </View>
-          </View>
-        )}
+          )}
+        </View>
         {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
         {detail && (
           <Details

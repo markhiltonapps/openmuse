@@ -25,6 +25,7 @@ import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
+import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
@@ -269,6 +270,7 @@ export class ConversationAgent extends AbstractAgent {
       ...[
         ...fileToolSpecs(this.service.files, this.owner, this.service.look),
         ...shareToolSpecs(this.service.shares, this.owner),
+        ...miniAppToolSpecs(this.service.miniApps, this.owner),
         ...peopleToolSpecs(this.service.people, this.owner),
         ...(this.service.commitments
           ? commitmentToolSpecs(this.service.commitments, this.owner)
@@ -536,6 +538,7 @@ export class ConversationAgent extends AbstractAgent {
         restaurantInstructions +
         browserToolInstructions +
         richCardInstructions +
+        miniAppInstructions +
         (logins?.available ? signInInstructions : "") +
         (mailAlerts ? mailAlertInstructions : "") +
         (this.service.appEvents?.available && mailAlerts ? appEventInstructions : "") +

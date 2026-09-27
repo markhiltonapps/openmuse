@@ -52,6 +52,7 @@ import type { HealthService } from "../health.ts";
 import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
 import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
+import { MiniApps } from "../mini-apps.ts";
 import { People } from "../people.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
@@ -74,6 +75,8 @@ export class AgentService {
   readonly chats: ChatSummaries;
   /** Links to files that anyone with the link can open until they expire. */
   readonly shares: FileShares;
+  /** Small pages and dashboards Neddy builds, shareable by link. */
+  readonly miniApps: MiniApps;
   /** Pages on the people and groups the person deals with. */
   readonly people: People;
   private maintenance?: ReturnType<typeof setInterval>;
@@ -90,6 +93,7 @@ export class AgentService {
     readonly apps?: AppConnector,
   ) {
     this.shares = new FileShares(db, files, config.publicUrl);
+    this.miniApps = new MiniApps(db, config.publicUrl);
     this.people = new People(db);
     this.chats = new ChatSummaries(db, (owner, previous, transcript) => {
       const model = this.config.workerModel ?? this.config.model;

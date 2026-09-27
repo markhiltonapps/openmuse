@@ -40,6 +40,7 @@ import {
   listedMemories,
   recentHistory,
 } from "./memory-import.ts";
+import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.ts";
 import { PushService } from "./push.ts";
 import { ReminderService } from "./reminders.ts";
 import { nominatim } from "./rich-cards.ts";
@@ -101,7 +102,10 @@ export async function createApp(
         !input.data.savedCode &&
         !cleanCode(approval?.code)
       )
-        throw new AppError("Type the code from your text message or authenticator app.", 400);
+        throw new AppError(
+          "That code doesn’t look right. Check the code the site sent you and type it again.",
+          400,
+        );
       if (input.kind !== "app.action" || !isPurchase(input.data.tool)) return;
       const problem = await spending.check(owner, input.data.amountUsd);
       if (problem) throw new AppError(problem, 409);
@@ -343,7 +347,11 @@ export async function createApp(
   // Share links: anyone with the link opens that one file until the link expires or is stopped.
   const shares = new FileShares(db, files, config.publicUrl);
   app.get("/api/share/:token", async (c) => {
-    const { file, bytes } = await shares.open(c.req.param("token"));
+    const opened = await shares.open(c.req.param("token")).catch((error: unknown) => error);
+    if (opened instanceof AppError)
+      return c.html(goneDocument(opened.message), 404, { "x-robots-tag": "noindex, nofollow" });
+    if (opened instanceof Error) throw opened;
+    const { file, bytes } = opened as Awaited<ReturnType<typeof shares.open>>;
     const inline = /^(application\/pdf|image\/)/.test(file.mimeType);
     return c.body(new Uint8Array(bytes).buffer as ArrayBuffer, 200, {
       "content-type": file.mimeType,
@@ -353,6 +361,18 @@ export async function createApp(
       "x-content-type-options": "nosniff",
       "content-security-policy":
         "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+    });
+  });
+  // Mini apps opened from a link: sandboxed, no network requests, the latest version.
+  app.get("/api/mini/:token", async (c) => {
+    const found = await agent.miniApps.open(c.req.param("token")).catch((error: unknown) => error);
+    if (found instanceof AppError)
+      return c.html(goneDocument(found.message), 404, { "x-robots-tag": "noindex, nofollow" });
+    if (found instanceof Error) throw found;
+    return c.html(appDocument(found as Awaited<ReturnType<typeof agent.miniApps.open>>), 200, {
+      "cache-control": "private, no-store",
+      "x-robots-tag": "noindex, nofollow",
+      "content-security-policy": MINI_APP_HEADER_POLICY,
     });
   });
   // Animated avatars are shared pictures and clips, loaded by <video> without a sign-in header.
@@ -831,6 +851,29 @@ export async function createApp(
   );
   app.post("/api/app-alerts/:id/stop", async (c) =>
     c.json(await appEvents.stop(c.get("owner"), c.req.param("id"))),
+  );
+  app.get("/api/mini-apps", async (c) =>
+    c.json({ apps: await agent.miniApps.list(c.get("owner")) }),
+  );
+  app.get("/api/mini-apps/:id", async (c) => {
+    const found = await agent.miniApps.get(c.get("owner"), c.req.param("id"));
+    const { html: _html, ...view } = found;
+    return c.json({ ...view, document: appDocument(found) });
+  });
+  app.post("/api/mini-apps/:id/delete", async (c) =>
+    c.json(await agent.miniApps.remove(c.get("owner"), c.req.param("id"))),
+  );
+  app.get("/api/mini-apps/:id/share", async (c) =>
+    c.json({ links: await agent.miniApps.links(c.get("owner"), c.req.param("id")) }),
+  );
+  app.post("/api/mini-apps/:id/share", async (c) => {
+    const body = z
+      .object({ days: z.union([z.literal(1), z.literal(7), z.literal(30)]).default(7) })
+      .parse(await c.req.json().catch(() => ({})));
+    return c.json(await agent.miniApps.share(c.get("owner"), c.req.param("id"), body.days), 201);
+  });
+  app.post("/api/mini-apps/:id/unshare", async (c) =>
+    c.json(await agent.miniApps.unshare(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/logins", async (c) =>
     c.json({ available: logins.available, logins: await logins.list(c.get("owner")) }),

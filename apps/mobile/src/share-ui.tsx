@@ -33,7 +33,21 @@ async function handOver(url: string, name: string) {
 }
 
 /** A link anyone can open until it expires, and a way to turn it off. */
-export function ShareLinkCard({ fileId, name }: { fileId: string; name: string }) {
+export function ShareLinkCard({
+  fileId,
+  name,
+  base = `/api/files/${fileId}`,
+  what = "file",
+  note,
+}: {
+  fileId: string;
+  name: string;
+  /** Where its links are made: a file's, or a mini app's. */
+  base?: string;
+  what?: string;
+  /** What else someone with the link gets, said before and after sharing. */
+  note?: string;
+}) {
   const { api, notify } = useWorkspace();
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [days, setDays] = useState<1 | 7 | 30>(7);
@@ -41,11 +55,11 @@ export function ShareLinkCard({ fileId, name }: { fileId: string; name: string }
   const [error, setError] = useState("");
   const load = useCallback(
     () =>
-      api.request<{ links: ShareLink[] }>(`/api/files/${fileId}/share`).then(
+      api.request<{ links: ShareLink[] }>(`${base}/share`).then(
         (value) => setLinks(value.links),
         () => undefined,
       ),
-    [api, fileId],
+    [api, base],
   );
   useEffect(() => {
     void load();
@@ -67,7 +81,9 @@ export function ShareLinkCard({ fileId, name }: { fileId: string; name: string }
       <SectionHeading title="Share link" />
       {current ? (
         <>
-          <Text style={s.text}>Anyone with the link can open this file.</Text>
+          <Text style={s.text}>
+            Anyone with the link can open this {what}.{note ? ` ${note}` : ""}
+          </Text>
           <Text selectable style={[s.small, { color: colors.text }]} numberOfLines={1}>
             {current.url}
           </Text>
@@ -90,7 +106,7 @@ export function ShareLinkCard({ fileId, name }: { fileId: string; name: string }
               busy={busy === "stop"}
               onPress={() =>
                 void run("stop", async () => {
-                  await api.request(`/api/files/${fileId}/unshare`, {});
+                  await api.request(`${base}/unshare`, {});
                   await load();
                   notify("Sharing stopped. The link no longer works.");
                 })
@@ -103,8 +119,8 @@ export function ShareLinkCard({ fileId, name }: { fileId: string; name: string }
       ) : (
         <>
           <Text style={s.muted}>
-            Make a link to send this file to anyone. It stops working after the time you choose, and
-            you can turn it off sooner.
+            Make a link to send this {what} to anyone.{note ? ` ${note}` : ""} It stops working
+            after the time you choose, and you can turn it off sooner.
           </Text>
           <Text style={s.small}>Link works for</Text>
           <View style={[s.row, { gap: 8 }]}>
@@ -119,7 +135,7 @@ export function ShareLinkCard({ fileId, name }: { fileId: string; name: string }
             busy={busy === "make"}
             onPress={() =>
               void run("make", async () => {
-                const link = await api.request<ShareLink>(`/api/files/${fileId}/share`, { days });
+                const link = await api.request<ShareLink>(`${base}/share`, { days });
                 await load();
                 const done = await handOver(link.url, name);
                 notify(done || "Share link ready.");

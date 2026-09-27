@@ -45,13 +45,17 @@ export async function fillSignIn(
   loginId: string,
 ) {
   const login = await logins.get(owner, loginId);
-  if (!login) throw new AppError("That saved sign-in was deleted", 404);
+  if (!login)
+    throw new AppError(
+      "That saved password was deleted. Add it again under Apps → Account → Passwords, then ask your agent to try again.",
+      404,
+    );
   let page = await browser.elements(owner, sessionId);
   let password = passwordField(page.elements);
   const username = usernameField(page.elements, password);
   if (!password && !username)
     throw new AppError(
-      "This page has no sign-in form. Open the site's Sign in page first, then try again.",
+      "This page doesn’t show a sign-in form. Ask your agent to open the site’s sign-in page and try again.",
       409,
     );
   if (!sameSite(page.url, login.site))
@@ -79,7 +83,7 @@ export async function fillSignIn(
     password = passwordField(page.elements);
     if (!password) {
       listings.delete(sessionId);
-      return `Entered ${login.username} on ${login.site}, but the site hasn't asked for the password yet. Look at the page to see what it wants next.`;
+      return `Entered ${login.username} on ${login.site}, but the site hasn’t asked for the password yet.`;
     }
   }
   if (!password) throw new AppError("This page has no password box.", 409);
@@ -112,7 +116,7 @@ async function fillCode(
     page.elements.find((e) => e.ref === step.ref && e.role === "textbox" && !e.disabled);
   if (!field)
     throw new AppError(
-      "The code box isn't on the page anymore. Ask your agent to look again.",
+      "The code box isn’t on the page anymore. Ask your agent to look again.",
       409,
     );
   typedSecret(step.sessionId, code);
@@ -140,7 +144,8 @@ export async function runApprovedSignIn(
   step: BrowserSignIn,
   typedCode?: string,
 ) {
-  if (!logins?.available) throw new AppError("Saved sign-ins aren't set up on this server", 503);
+  if (!logins?.available)
+    throw new AppError("Saved passwords aren’t turned on for this app yet.", 503);
   if (step.step === "password") {
     if (!step.loginId) throw new AppError("No saved sign-in was chosen", 409);
     return fillSignIn(browser, logins, owner, step.sessionId, step.loginId);
@@ -150,7 +155,11 @@ export async function runApprovedSignIn(
     return fillCode(browser, owner, step, await logins.code(owner, step.loginId, page.url));
   }
   const code = cleanCode(typedCode);
-  if (!code) throw new AppError("Type the code from your text message or authenticator app.", 400);
+  if (!code)
+    throw new AppError(
+      "That code doesn’t look right. Check the code the site sent you and type it again.",
+      400,
+    );
   return fillCode(browser, owner, step, code);
 }
 
@@ -191,12 +200,12 @@ export function signInToolSpecs(
         const saved = await logins.forPage(owner, page.url);
         if (!saved.length)
           return {
-            error: `No saved sign-in for ${site(page.url)}. Ask the person to save one in the app (Apps → Account → Passwords), never in chat, or to sign in with Take control on the browser card.`,
+            error: `No saved password for ${site(page.url)}. Ask the person to save one in the app (Apps → Account → Passwords), never in chat, or to sign in with Take control on the browser card.`,
           };
         const login = choose(saved, input.username);
         if (!login)
           return {
-            error: "More than one sign-in is saved for this site: say which username.",
+            error: "More than one password is saved for this site: say which username.",
             usernames: saved.map((l) => l.username),
           };
         if (!passwordField(page.elements) && !usernameField(page.elements))
@@ -268,11 +277,7 @@ export function signInToolSpecs(
           ...(saved ? { loginId: saved.id, username: saved.username, savedCode: true } : {}),
           ref: field.ref,
           element: field.name.slice(0, 200),
-          summary:
-            `Enter the ${saved ? "authenticator" : "verification"} code on ${site(listing.url)}: ${input.why}`.slice(
-              0,
-              500,
-            ),
+          summary: `Enter the sign-in code on ${site(listing.url)}: ${input.why}`.slice(0, 500),
         });
         return {
           needsApproval: true,
