@@ -34,6 +34,7 @@ const KINDS: Record<string, string> = {
   pictures: "Looking at pictures",
   import: "Memory import",
   avatar: "Avatar design",
+  ideas: "Ideas",
 };
 const dollars = (value: number) =>
   value > 0 && value < 0.01 ? "under $0.01" : `$${value.toFixed(2)}`;

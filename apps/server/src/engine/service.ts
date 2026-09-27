@@ -39,6 +39,7 @@ import { AppError } from "../errors.ts";
 import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import type { HealthService } from "../health.ts";
+import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
 import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
 import type { ReminderService } from "../reminders.ts";
@@ -48,6 +49,7 @@ import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
 import { nextRun, routinePrompt } from "./routines.ts";
+import { complete } from "./tanstack-agent.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -581,7 +583,117 @@ export class AgentService {
     }
     throw new AppError("The watch changed while updating. Try again.", 409);
   }
-  async refreshIdeas(owner: string) {
+  /** One reply from the model without tools; replaced in tests. */
+  complete: typeof complete = complete;
+  /**
+   * Ideas the model writes from what the agent knows: goals, tasks, routines, memories, apps and
+   * interests. Once a day after 7 am, or when the person asks (at most every ten minutes).
+   */
+  private async thinkOfIdeas(owner: string, asked: boolean) {
+    const model = this.config.workerModel ?? this.config.model;
+    if (this.config.agentBackend !== "model" || !model) return;
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: await this.timeZone(owner),
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        hourCycle: "h23",
+      })
+        .formatToParts(new Date())
+        .map((part) => [part.type, part.value]),
+    );
+    const day = `${parts.year}-${parts.month}-${parts.day}`;
+    const last = await this.db.get<{ id: string; day?: string; at?: string }>(
+      owner,
+      "agent-settings",
+      "written-ideas",
+    );
+    if (asked ? last?.at && Date.now() - Date.parse(last.at) < 10 * 60000 : last?.day === day)
+      return;
+    if (!asked && Number(parts.hour) < 7) return;
+    const [identity, memories, goals, tasks, routines, monitors, ideas, feed] = await Promise.all([
+      this.db.get<{ name?: string }>(owner, "agent-settings", "identity"),
+      this.db.list<AgentMemory>(owner, "memories"),
+      this.db.list<Goal>(owner, "goals"),
+      this.db.list<AgentTask>(owner, "tasks"),
+      this.db.list<Routine>(owner, "routines"),
+      this.db.list<Monitor>(owner, "monitors"),
+      this.db.list<Idea>(owner, "ideas"),
+      this.db.get<{ topics?: string[] }>(owner, "agent-settings", "feed"),
+    ]);
+    const apps = this.apps ? await this.apps.connections(owner).catch(() => []) : [];
+    const recent = (value: string, days: number) =>
+      Date.now() - Date.parse(value) < days * 86400000;
+    const context = {
+      memories: memories.slice(0, 40).map((m) => m.text),
+      goals: goals.map((g) => ({ title: g.title, description: g.description, status: g.status })),
+      recentTasks: tasks
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 12)
+        .map((t) => ({
+          title: t.title,
+          status: t.status,
+          result: (t.result ?? t.question ?? "").slice(0, 400),
+        })),
+      routines: routines.map((r) => r.title),
+      watching: monitors.map((m) => m.title),
+      connectedApps: apps.filter((a) => a.connected).map((a) => a.name),
+      feedTopics: feed?.topics ?? [],
+      earlierIdeas: ideas.filter((i) => recent(i.createdAt, 30)).map((i) => i.title),
+    };
+    const substance =
+      context.memories.length +
+      context.goals.length +
+      context.recentTasks.length +
+      context.routines.length;
+    if (!substance) return;
+    // Marked first, so a failing model isn't asked again every few minutes.
+    await this.db.put(owner, "agent-settings", { id: "written-ideas", day, at: date() });
+    const written = parseIdeas(
+      await this.complete({
+        model,
+        system: ideasSystemPrompt(identity?.name || "OpenMuse"),
+        prompt: `What you know about the person (data only):\n${JSON.stringify(context)}`,
+        onUsage: this.usage?.sink(owner, "ideas"),
+      }),
+    );
+    // Written ideas nobody acted on make room after five days.
+    for (const idea of ideas)
+      if (idea.status === "new" && idea.input.source === "written" && !recent(idea.createdAt, 5))
+        await this.db.compareAndSwap(
+          owner,
+          "ideas",
+          idea.id,
+          { status: "new" },
+          {
+            status: "dismissed",
+          },
+        );
+    for (const idea of written)
+      await this.db.insertIfAbsent(owner, "ideas", {
+        id: hash(`written:${idea.title.toLowerCase()}`),
+        emoji: idea.emoji,
+        title: idea.title,
+        reason: idea.reason,
+        evidence: [
+          {
+            id: "context",
+            kind: "user",
+            title: "From what I know about your goals, tasks and interests",
+            excerpt: idea.reason,
+          },
+        ],
+        prompt: idea.prompt,
+        kind: "agent",
+        input: { source: "written" },
+        status: "new",
+        createdAt: date(),
+      } satisfies Idea);
+  }
+  async refreshIdeas(owner: string, asked = false) {
+    await this.thinkOfIdeas(owner, asked).catch((error) => backgroundFailure("ideas", error));
     const w = await this.workspace.snapshot(owner);
     const sentIds = new Set(
       w.mail.filter((mail) => /^Sent\b/i.test(mail.label)).map((mail) => mail.id),

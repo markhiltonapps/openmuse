@@ -2,19 +2,21 @@ import {
   ArrowRight,
   Bell,
   CalendarDays,
+  Check,
   ChevronRight,
   CircleDollarSign,
   FileText,
   Globe2,
+  GraduationCap,
   Heart,
   Lightbulb,
   ListChecks,
   Mail,
+  MoreVertical,
   Pause,
   Play,
   Plus,
   RefreshCw,
-  Square,
   Target,
   Users,
   X,
@@ -1028,7 +1030,7 @@ export function IdeasScreen() {
     <View style={{ gap: 20 }}>
       <AgentStatus />
       <View style={s.between}>
-        <Text style={s.small}>Inspired by your connected apps</Text>
+        <Text style={[s.small, { flex: 1 }]}>From your goals, tasks, apps and interests</Text>
         <Button small icon={RefreshCw} busy={busy} onPress={() => void refreshIdeas()}>
           Find ideas
         </Button>
@@ -1101,7 +1103,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
         style={{ flexDirection: "row", gap: 14 }}
       >
         <View style={{ width: 48, paddingTop: 2 }}>
-          <Emoji char={topicEmoji(`${idea.title} ${idea.reason}`)} size={48} />
+          <Emoji char={idea.emoji ?? topicEmoji(`${idea.title} ${idea.reason}`)} size={48} />
         </View>
         <View style={{ flex: 1, gap: 5 }}>
           <Text style={[s.heading, { fontSize: 18, lineHeight: 25 }]}>{idea.title}</Text>
@@ -1186,304 +1188,423 @@ const ROUTINE_TEMPLATES = [
   },
 ];
 /** Recurring jobs; each run is a normal task in Activity with a notification when done. */
-function RoutinesSection({ routines }: { routines: Routine[] }) {
+/** A section title like Meta Muse's: a colored dot in a soft ring, and a plus to add. */
+function SectionHead({
+  title,
+  tint,
+  ring,
+  onAdd,
+  addLabel,
+}: {
+  title: string;
+  tint: string;
+  ring: string;
+  onAdd?: () => void;
+  addLabel?: string;
+}) {
+  return (
+    <View style={[s.between, { paddingVertical: 8 }]}>
+      <View style={[s.row, { gap: 14 }]}>
+        <View
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            backgroundColor: ring,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <View style={{ width: 13, height: 13, borderRadius: 7, backgroundColor: tint }} />
+        </View>
+        <Text style={{ color: tint, fontSize: 24, fontWeight: "600", letterSpacing: -0.5 }}>
+          {title}
+        </Text>
+      </View>
+      {onAdd && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={addLabel}
+          hitSlop={10}
+          onPress={onAdd}
+        >
+          <Plus size={28} strokeWidth={1.6} color={colors.muted} />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+/** A goal or something tracked: a check box, a bold title, where it stands, and more. */
+function ListRow({
+  title,
+  subtitle,
+  done,
+  label,
+  onPress,
+}: {
+  title: string;
+  subtitle?: string;
+  done?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 16,
+        paddingVertical: 14,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 26,
+          height: 26,
+          marginTop: 3,
+          borderRadius: 7,
+          borderWidth: 2,
+          borderColor: done ? colors.greenDark : colors.muted,
+          backgroundColor: done ? colors.greenDark : "transparent",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {done && <Check size={16} strokeWidth={3} color={colors.canvas} />}
+      </View>
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text
+          style={{
+            color: colors.text,
+            fontSize: 20,
+            lineHeight: 26,
+            fontWeight: "600",
+            letterSpacing: -0.3,
+          }}
+        >
+          {title}
+        </Text>
+        {!!subtitle && (
+          <Text numberOfLines={2} style={{ color: colors.muted, fontSize: 16, lineHeight: 23 }}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
+      <View style={{ paddingTop: 4 }}>
+        <MoreVertical size={22} color={colors.muted} />
+      </View>
+    </Pressable>
+  );
+}
+/** "every 15 minutes", "every hour", "every 6 hours", "daily". */
+function every(minutes: number) {
+  if (minutes % 1440 === 0) return minutes === 1440 ? "daily" : `every ${minutes / 1440} days`;
+  if (minutes % 60 === 0) return minutes === 60 ? "every hour" : `every ${minutes / 60} hours`;
+  return `every ${minutes} minutes`;
+}
+/** The first line of what a task found, for a row's subtitle. */
+function taskLine(task?: AgentTask) {
+  const text = (task?.result || task?.question || "").replace(/[#*_`>]/g, "").replace(/\s+/g, " ");
+  return text.trim().slice(0, 160) || undefined;
+}
+/** A new routine: a template to start from, what to do, when and on which days. */
+function RoutineForm({ onDone }: { onDone: () => void }) {
   const { mutate } = useAgentWorkspace();
-  const [draft, setDraft] = useState<(typeof ROUTINE_TEMPLATES)[number]>();
+  const [draft, setDraft] = useState<(typeof ROUTINE_TEMPLATES)[number]>({ ...MORNING_BRIEF });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const timeValid = /^([01]\d|2[0-3]):[0-5]\d$/.test(draft.time);
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      await mutate("/routines", {
+        ...draft,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      onDone();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        {ROUTINE_TEMPLATES.map((t) => (
+          <Button
+            key={t.title}
+            small
+            primary={draft.title === t.title}
+            onPress={() => setDraft({ ...t })}
+          >
+            {t.title}
+          </Button>
+        ))}
+      </View>
+      <Field
+        label="Name"
+        value={draft.title}
+        onChangeText={(title) => setDraft({ ...draft, title })}
+      />
+      <Field
+        label="What should it do?"
+        value={draft.prompt}
+        onChangeText={(prompt) => setDraft({ ...draft, prompt })}
+        multiline
+      />
+      <Field
+        label="Time (24-hour, your time zone)"
+        value={draft.time}
+        onChangeText={(time) => setDraft({ ...draft, time })}
+        placeholder="07:30"
+      />
+      <View style={[s.row, { gap: 6, flexWrap: "wrap" }]}>
+        {DAY_NAMES.map((name, day) => (
+          <Button
+            key={name}
+            small
+            primary={draft.days.includes(day)}
+            onPress={() =>
+              setDraft({
+                ...draft,
+                days: draft.days.includes(day)
+                  ? draft.days.filter((d) => d !== day)
+                  : [...draft.days, day],
+              })
+            }
+          >
+            {name}
+          </Button>
+        ))}
+      </View>
+      <ErrorNotice error={error} />
+      <Button
+        primary
+        busy={busy}
+        disabled={!timeValid || !draft.days.length || !draft.title.trim() || !draft.prompt.trim()}
+        onPress={() => void save()}
+      >
+        Save routine
+      </Button>
+    </View>
+  );
+}
+/** A routine's details: what it does, its last result, and run, pause or remove. */
+function RoutineDetail({ routine, onDone }: { routine: Routine; onDone: () => void }) {
+  const { data, mutate } = useAgentWorkspace();
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  async function run(key: string, path: string, body: unknown = {}) {
+  const last = data?.tasks.find((t) => t.id === routine.lastTaskId);
+  async function run(key: string, path: string, body: unknown = {}, close = false) {
     setBusy(key);
     setError("");
     try {
       await mutate(path, body);
-      return true;
+      if (close) onDone();
     } catch (e) {
       setError(errorText(e));
-      return false;
     } finally {
       setBusy("");
     }
   }
-  const timeValid = !!draft && /^([01]\d|2[0-3]):[0-5]\d$/.test(draft.time);
   return (
-    <View style={{ gap: 8 }}>
-      <View style={[s.between, { marginBottom: 5 }]}>
-        <View style={[s.row, { gap: 10 }]}>
-          <View
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              borderWidth: 5,
-              borderColor: colors.lavender,
-              backgroundColor: "#8C6BE0",
-            }}
-          />
-          <Text style={[s.heading, { color: dark ? "#A58BFF" : "#6E4FC4" }]}>Routines</Text>
-        </View>
-        {!draft && (
-          <Button small icon={Plus} onPress={() => setDraft({ ...MORNING_BRIEF })}>
-            Add
-          </Button>
-        )}
-      </View>
-      {routines.map((r) => (
-        <View
-          key={r.id}
-          style={{ gap: 8, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line }}
-        >
-          <Text style={s.text}>{r.title}</Text>
-          <Text style={s.muted}>
-            {r.enabled ? scheduleLabel(r) : "Paused"}
-            {r.lastRunAt ? ` · last ran ${stamp(r.lastRunAt)}` : ""}
-          </Text>
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            <Button
-              small
-              busy={busy === `run:${r.id}`}
-              disabled={!!busy}
-              onPress={() => void run(`run:${r.id}`, `/routines/${r.id}/run`)}
-            >
-              Run now
-            </Button>
-            <Button
-              small
-              busy={busy === `toggle:${r.id}`}
-              disabled={!!busy}
-              onPress={() =>
-                void run(`toggle:${r.id}`, `/routines/${r.id}`, { enabled: !r.enabled })
-              }
-            >
-              {r.enabled ? "Pause" : "Resume"}
-            </Button>
-            <Button
-              small
-              busy={busy === `delete:${r.id}`}
-              disabled={!!busy}
-              onPress={() => void run(`delete:${r.id}`, `/routines/${r.id}/delete`)}
-            >
-              Remove
-            </Button>
-          </View>
-        </View>
-      ))}
-      {!routines.length && !draft && (
-        <Text style={[s.muted, { paddingVertical: 10 }]}>
-          A morning brief, an afternoon inbox check, Friday follow-ups.
-        </Text>
-      )}
-      {draft && (
-        <Card style={{ gap: 12 }}>
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            {ROUTINE_TEMPLATES.map((t) => (
-              <Button
-                key={t.title}
-                small
-                primary={draft.title === t.title}
-                onPress={() => setDraft({ ...t })}
-              >
-                {t.title}
-              </Button>
-            ))}
-          </View>
-          <Field
-            label="Name"
-            value={draft.title}
-            onChangeText={(title) => setDraft({ ...draft, title })}
-          />
-          <Field
-            label="What should it do?"
-            value={draft.prompt}
-            onChangeText={(prompt) => setDraft({ ...draft, prompt })}
-            multiline
-          />
-          <Field
-            label="Time (24-hour, your time zone)"
-            value={draft.time}
-            onChangeText={(time) => setDraft({ ...draft, time })}
-            placeholder="07:30"
-          />
-          <View style={[s.row, { gap: 6, flexWrap: "wrap" }]}>
-            {DAY_NAMES.map((name, day) => (
-              <Button
-                key={name}
-                small
-                primary={draft.days.includes(day)}
-                onPress={() =>
-                  setDraft({
-                    ...draft,
-                    days: draft.days.includes(day)
-                      ? draft.days.filter((d) => d !== day)
-                      : [...draft.days, day],
-                  })
-                }
-              >
-                {name}
-              </Button>
-            ))}
-          </View>
-          <View style={[s.row, { gap: 8 }]}>
-            <Button
-              primary
-              busy={busy === "create"}
-              disabled={
-                !timeValid || !draft.days.length || !draft.title.trim() || !draft.prompt.trim()
-              }
-              onPress={() =>
-                void run("create", "/routines", {
-                  ...draft,
-                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                }).then((ok) => ok && setDraft(undefined))
-              }
-            >
-              Save routine
-            </Button>
-            <Button disabled={!!busy} onPress={() => setDraft(undefined)}>
-              Cancel
-            </Button>
-          </View>
-        </Card>
-      )}
+    <View style={{ gap: 14 }}>
+      <Text style={s.muted}>
+        {routine.enabled ? scheduleLabel(routine) : "Paused"}
+        {routine.lastRunAt ? ` · last ran ${stamp(routine.lastRunAt)}` : ""}
+      </Text>
+      <Text style={s.text}>{routine.prompt}</Text>
+      {last && <TaskCard task={last} compact onOpen={onDone} />}
       <ErrorNotice error={error} />
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        <Button
+          primary
+          busy={busy === "run"}
+          disabled={!!busy}
+          onPress={() => void run("run", `/routines/${routine.id}/run`)}
+        >
+          Run now
+        </Button>
+        <Button
+          busy={busy === "toggle"}
+          disabled={!!busy}
+          onPress={() =>
+            void run("toggle", `/routines/${routine.id}`, { enabled: !routine.enabled })
+          }
+        >
+          {routine.enabled ? "Pause" : "Resume"}
+        </Button>
+        <Button
+          busy={busy === "delete"}
+          disabled={!!busy}
+          onPress={() => void run("delete", `/routines/${routine.id}/delete`, {}, true)}
+        >
+          Remove
+        </Button>
+      </View>
     </View>
   );
 }
+const GOAL_KINDS = [
+  { name: "Health", icon: Heart },
+  { name: "Relationships", icon: Users },
+  { name: "Finances", icon: CircleDollarSign },
+  { name: "Learning", icon: GraduationCap },
+  { name: "Something else", icon: Target },
+];
+/**
+ * Goals like Meta Muse's: what the agent keeps track of (routines and watched pages), your
+ * goals with where each stands, and ways to start a new one.
+ */
 export function GoalsScreen() {
   const { data } = useAgentWorkspace();
   const [adding, setAdding] = useState<string>();
+  const [tracking, setTracking] = useState<"schedule" | "page">("schedule");
   const [selectedGoal, setSelectedGoal] = useState<string>();
   const [selectedMonitor, setSelectedMonitor] = useState<string>();
-  const [showAll, setShowAll] = useState(false);
+  const [selectedRoutine, setSelectedRoutine] = useState<string>();
   const goal = data?.goals.find((item) => item.id === selectedGoal);
   const monitor = data?.monitors.find((item) => item.id === selectedMonitor);
-  const monitors = data?.monitors || [];
+  const routine = data?.routines.find((item) => item.id === selectedRoutine);
+  const tasks = data?.tasks ?? [];
+  const routines = data?.routines ?? [];
+  const monitors = data?.monitors ?? [];
+  const goals = data?.goals ?? [];
+  const divider = <View style={{ height: 1, backgroundColor: colors.line, marginVertical: 14 }} />;
+  const goalLine = (item: Goal) => {
+    const latest = tasks
+      .filter((t) => t.goalId === item.id)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    const steps = item.milestones.length
+      ? `${item.milestones.filter((m) => m.done).length} of ${item.milestones.length} steps done`
+      : "";
+    return taskLine(latest) || item.description || steps || statusLabel(item.status);
+  };
   return (
-    <View style={{ gap: 22 }}>
+    <View>
       <AgentStatus />
-      <RoutinesSection routines={data?.routines || []} />
-      <HealthSection />
-      <SubscriptionsCard />
-      <View style={{ height: 1, backgroundColor: colors.line }} />
-      <View style={{ gap: 8 }}>
-        <View style={[s.between, { marginBottom: 5 }]}>
-          <View style={[s.row, { gap: 10 }]}>
-            <View
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                borderWidth: 5,
-                borderColor: colors.green,
-                backgroundColor: "#24A46B",
-              }}
-            />
-            <Text style={[s.heading, { color: colors.greenDark }]}>Tracking</Text>
-          </View>
-          <Button small icon={Plus} onPress={() => setAdding("Tracking")}>
-            Track
-          </Button>
-        </View>
-        {(showAll ? monitors : monitors.slice(0, 3)).map((item) => (
-          <Pressable
-            key={item.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Open tracking: ${item.title}`}
-            onPress={() => setSelectedMonitor(item.id)}
-            style={[s.row, { gap: 12, paddingVertical: 13 }]}
-          >
-            <Square size={21} color={colors.muted} />
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={s.text}>{item.title}</Text>
-              <Text numberOfLines={1} style={s.muted}>
-                {item.status === "active"
-                  ? `Checking every ${item.intervalMinutes} minutes`
-                  : statusLabel(item.status)}
-              </Text>
-            </View>
-            <ChevronRight size={18} color={colors.muted} />
-          </Pressable>
-        ))}
-        {!monitors.length && (
-          <Text style={[s.muted, { paddingVertical: 10 }]}>
-            Ticket prices, a reservation, a page you’re watching.
-          </Text>
-        )}
-        {monitors.length > 3 && (
-          <Button small onPress={() => setShowAll(!showAll)}>
-            {showAll ? "Show less" : `Show ${monitors.length - 3} more`}
-          </Button>
-        )}
-      </View>
-      <View style={{ height: 1, backgroundColor: colors.line }} />
-      <View style={{ gap: 8 }}>
-        <View style={[s.row, { gap: 10, marginBottom: 5 }]}>
-          <View
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              borderWidth: 5,
-              borderColor: colors.sky,
-              backgroundColor: "#3D9BDE",
-            }}
-          />
-          <Text style={[s.heading, { color: colors.blueDark }]}>Goals</Text>
-        </View>
-        {data?.goals.map((item) => (
-          <Pressable
-            key={item.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Open goal: ${item.title}`}
-            onPress={() => setSelectedGoal(item.id)}
-            style={[s.row, { gap: 12, paddingVertical: 13 }]}
-          >
-            <Square
-              size={21}
-              color={colors.muted}
-              fill={item.status === "completed" ? colors.green : "transparent"}
-            />
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={s.text}>{item.title}</Text>
-              <Text numberOfLines={2} style={s.muted}>
-                {item.description || statusLabel(item.status)}
-              </Text>
-            </View>
-            <ChevronRight size={18} color={colors.muted} />
-          </Pressable>
-        ))}
-        {!data?.goals.length && (
-          <Text style={[s.muted, { paddingVertical: 10 }]}>
-            Big plans start with one small step.
-          </Text>
-        )}
-      </View>
-      <View style={{ height: 1, backgroundColor: colors.line }} />
-      <Text style={s.heading}>Create a goal</Text>
-      {[
-        { name: "Health", icon: Heart },
-        { name: "Relationships", icon: Users },
-        { name: "Finances", icon: CircleDollarSign },
-        { name: "Something else", icon: Target },
-      ].map((item) => (
+      <SectionHead
+        title="Tracking"
+        tint={colors.greenDark}
+        ring={dark ? "#0E3620" : "#DDF3E6"}
+        onAdd={() => setAdding("Tracking")}
+        addLabel="Track something new"
+      />
+      {routines.map((r) => (
+        <ListRow
+          key={r.id}
+          title={r.title}
+          label={`Open routine: ${r.title}`}
+          subtitle={
+            taskLine(tasks.find((t) => t.id === r.lastTaskId)) ??
+            (r.enabled ? `${scheduleLabel(r)} · next ${stamp(r.nextRunAt)}` : "Paused")
+          }
+          onPress={() => setSelectedRoutine(r.id)}
+        />
+      ))}
+      {monitors.map((item) => (
+        <ListRow
+          key={item.id}
+          title={item.title}
+          label={`Open tracking: ${item.title}`}
+          subtitle={
+            item.error ??
+            (item.status === "active"
+              ? `Checking ${every(item.intervalMinutes)}${item.lastCheckedAt ? ` · last checked ${stamp(item.lastCheckedAt)}` : ""}`
+              : statusLabel(item.status))
+          }
+          onPress={() => setSelectedMonitor(item.id)}
+        />
+      ))}
+      {!routines.length && !monitors.length && (
+        <Text style={[s.muted, { fontSize: 16, paddingVertical: 10 }]}>
+          A morning briefing, an inbox check, ticket prices or a page you're watching.
+        </Text>
+      )}
+      {divider}
+      <SectionHead
+        title="Goals"
+        tint={colors.blueDark}
+        ring={dark ? "#0E2A47" : "#DCEEFF"}
+        onAdd={() => setAdding("Something else")}
+        addLabel="Create a goal"
+      />
+      {goals.map((item) => (
+        <ListRow
+          key={item.id}
+          title={item.title}
+          label={`Open goal: ${item.title}`}
+          done={item.status === "completed"}
+          subtitle={goalLine(item)}
+          onPress={() => setSelectedGoal(item.id)}
+        />
+      ))}
+      {!goals.length && (
+        <Text style={[s.muted, { fontSize: 16, paddingVertical: 10 }]}>
+          Big plans start with one small step.
+        </Text>
+      )}
+      {divider}
+      <Text
+        style={{
+          color: colors.text,
+          fontSize: 24,
+          fontWeight: "600",
+          letterSpacing: -0.5,
+          marginBottom: 6,
+        }}
+      >
+        Create a goal
+      </Text>
+      {GOAL_KINDS.map((item) => (
         <Pressable
           key={item.name}
           accessibilityRole="button"
           accessibilityLabel={`Create ${item.name.toLowerCase()} goal`}
           onPress={() => setAdding(item.name)}
-          style={[s.row, { gap: 12, minHeight: 38 }]}
+          style={({ pressed }) => [s.row, { gap: 16, minHeight: 58, opacity: pressed ? 0.7 : 1 }]}
         >
-          <item.icon size={23} color={colors.muted} />
-          <Text style={[s.text, { flex: 1, color: colors.muted }]}>{item.name}</Text>
-          <Plus size={18} color={colors.muted} />
+          <item.icon size={28} strokeWidth={1.6} color={colors.text} />
+          <Text style={{ flex: 1, color: colors.text, fontSize: 20 }}>{item.name}</Text>
+          <Plus size={26} strokeWidth={1.6} color={colors.muted} />
         </Pressable>
       ))}
+      {divider}
+      <View style={{ gap: 22 }}>
+        <HealthSection />
+        <SubscriptionsCard />
+      </View>
       {adding && (
         <Sheet
           title={adding === "Tracking" ? "Track something" : "Create a goal"}
           onClose={() => setAdding(undefined)}
         >
           {adding === "Tracking" ? (
-            <MonitorForm onDone={() => setAdding(undefined)} />
+            <View style={{ gap: 14 }}>
+              <View style={[s.row, { gap: 8 }]}>
+                <Button
+                  small
+                  primary={tracking === "schedule"}
+                  onPress={() => setTracking("schedule")}
+                >
+                  On a schedule
+                </Button>
+                <Button small primary={tracking === "page"} onPress={() => setTracking("page")}>
+                  A web page
+                </Button>
+              </View>
+              {tracking === "schedule" ? (
+                <RoutineForm onDone={() => setAdding(undefined)} />
+              ) : (
+                <MonitorForm onDone={() => setAdding(undefined)} />
+              )}
+            </View>
           ) : (
             <GoalForm category={adding} onDone={() => setAdding(undefined)} />
           )}
@@ -1497,6 +1618,11 @@ export function GoalsScreen() {
       {monitor && (
         <Sheet title={monitor.title} onClose={() => setSelectedMonitor(undefined)}>
           <MonitorCard monitor={monitor} onOpenTask={() => setSelectedMonitor(undefined)} />
+        </Sheet>
+      )}
+      {routine && (
+        <Sheet title={routine.title} onClose={() => setSelectedRoutine(undefined)}>
+          <RoutineDetail routine={routine} onDone={() => setSelectedRoutine(undefined)} />
         </Sheet>
       )}
     </View>

@@ -98,6 +98,32 @@ const stateTools = [
   }),
 ];
 
+/** Tells `onUsage` the tokens of each model call, to track what each person costs. */
+function usageMiddleware(model: string, onUsage: UsageSink) {
+  return {
+    name: "usage",
+    onUsage: (_ctx: unknown, usage: Parameters<typeof fromTanstack>[1]) =>
+      onUsage(model, fromTanstack(model, usage)),
+  };
+}
+
+/** One reply without tools, for small background jobs such as writing ideas. */
+export async function complete(options: {
+  model: string;
+  system: string;
+  prompt: string;
+  onUsage?: UsageSink;
+}) {
+  const reply = await chat({
+    adapter: adapter(options.model),
+    messages: [{ role: "user", content: options.prompt }],
+    systemPrompts: [options.system],
+    stream: false,
+    ...(options.onUsage ? { middleware: [usageMiddleware(options.model, options.onUsage)] } : {}),
+  } as never);
+  return String(reply ?? "");
+}
+
 /** Anthropic prompt caching: a cache read costs a tenth of the normal input price. */
 const CACHE = { type: "ephemeral" } as const;
 export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
@@ -159,15 +185,7 @@ export function tanstackAgent(options: {
         ],
         agentLoopStrategy: maxIterations(options.maxSteps),
         ...(options.onUsage
-          ? {
-              middleware: [
-                {
-                  name: "usage",
-                  onUsage: (_ctx: unknown, usage: Parameters<typeof fromTanstack>[1]) =>
-                    options.onUsage?.(options.model, fromTanstack(options.model, usage)),
-                },
-              ],
-            }
+          ? { middleware: [usageMiddleware(options.model, options.onUsage)] }
           : {}),
         abortController,
       });

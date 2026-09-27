@@ -22,7 +22,8 @@ export type UsageKind =
   | "feed"
   | "pictures"
   | "import"
-  | "avatar";
+  | "avatar"
+  | "ideas";
 
 /** Dollars per million tokens. */
 export interface Price {

@@ -81,6 +81,8 @@ export interface Monitor {
 }
 export interface Idea {
   id: string;
+  /** Drawn in 3D next to the idea; picked from its words when missing. */
+  emoji?: string;
   title: string;
   reason: string;
   evidence: Evidence[];
