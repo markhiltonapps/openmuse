@@ -1,5 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { AppError } from "./errors.ts";
+import { type AnthropicUsage, fromAnthropic, type UsageSink } from "./usage.ts";
 
 /** How much of someone's ChatGPT history is read to find what's worth remembering. */
 const MAX_HISTORY = 60000;
@@ -98,7 +99,13 @@ export function listedMemories(text: string): string[] | undefined {
 /** Asks the model which lasting facts about the person are worth remembering. */
 export async function extractMemories(
   text: string,
-  options: { apiKey: string; model: string; baseUrl?: string; fetcher?: typeof fetch },
+  options: {
+    apiKey: string;
+    model: string;
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+    onUsage?: UsageSink;
+  },
 ): Promise<string[]> {
   const base = (options.baseUrl ?? "https://api.anthropic.com")
     .replace(/\/$/, "")
@@ -121,8 +128,11 @@ export async function extractMemories(
   });
   const payload = (await response.json().catch(() => ({}))) as {
     content?: { type: string; text?: string }[];
+    usage?: AnthropicUsage;
     error?: { message?: string };
   };
+  const tokens = fromAnthropic(payload.usage);
+  if (tokens) options.onUsage?.(options.model, tokens);
   if (!response.ok)
     throw new AppError(
       `Couldn't read your history: ${payload.error?.message ?? `error ${response.status}`}`,

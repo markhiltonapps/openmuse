@@ -1,4 +1,5 @@
 import { AppError } from "./errors.ts";
+import { type AnthropicUsage, fromAnthropic, type UsageSink } from "./usage.ts";
 
 /** Pictures larger than this are refused by the model API. */
 const MAX_IMAGE = 5 * 1024 * 1024;
@@ -7,7 +8,13 @@ const MAX_IMAGE = 5 * 1024 * 1024;
 export async function lookAtImage(
   image: { bytes: Uint8Array; mimeType: string },
   question: string,
-  options: { apiKey: string; model: string; baseUrl?: string; fetcher?: typeof fetch },
+  options: {
+    apiKey: string;
+    model: string;
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+    onUsage?: UsageSink;
+  },
 ) {
   if (image.bytes.length > MAX_IMAGE)
     throw new AppError("This picture is too large to look at (over 5 MB)", 422);
@@ -48,8 +55,11 @@ export async function lookAtImage(
   });
   const payload = (await response.json().catch(() => ({}))) as {
     content?: { type: string; text?: string }[];
+    usage?: AnthropicUsage;
     error?: { message?: string };
   };
+  const tokens = fromAnthropic(payload.usage);
+  if (tokens) options.onUsage?.(options.model, tokens);
   if (!response.ok)
     throw new AppError(
       `Could not look at the picture: ${payload.error?.message ?? `status ${response.status}`}`,

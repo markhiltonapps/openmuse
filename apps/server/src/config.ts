@@ -36,6 +36,8 @@ export interface Config {
   accessKey?: string;
   encryptionKey?: string;
   model?: string;
+  /** Model for background work (tasks, routines, scans); MODEL when unset. */
+  workerModel?: string;
   agentBackend: "sample" | "model" | "agui";
   agentUrl?: string;
   agentToken?: string;
@@ -120,6 +122,7 @@ export function readConfig(): Config {
     accessKey: process.env.OPENMUSE_ACCESS_KEY,
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
+    workerModel: process.env.WORKER_MODEL?.trim() || undefined,
     agentBackend: backend,
     agentUrl: process.env.AGENT_URL,
     agentToken: process.env.AGENT_TOKEN,

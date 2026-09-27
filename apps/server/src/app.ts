@@ -37,6 +37,7 @@ import {
 import { PushService } from "./push.ts";
 import { ReminderService } from "./reminders.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
+import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
 import { WorkspaceService } from "./workspace.ts";
@@ -119,7 +120,14 @@ export async function createApp(
           baseUrl: process.env.ANTHROPIC_BASE_URL,
         }
       : undefined;
-  if (claude) agent.look = (image, question) => lookAtImage(image, question, claude);
+  const usage = new UsageMeter(db);
+  agent.usage = usage;
+  if (claude)
+    agent.look = (image, question, owner) =>
+      lookAtImage(image, question, {
+        ...claude,
+        onUsage: owner ? usage.sink(owner, "pictures") : undefined,
+      });
   agent.search =
     options.search ??
     (config.agentBackend === "model" && config.anthropicApiKey
@@ -129,6 +137,7 @@ export async function createApp(
         })
       : undefined);
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
+  feed.usage = (owner) => usage.sink(owner, "feed");
   agent.feed = feed;
   const health = new HealthService(db, (owner) => agent.timeZone(owner));
   agent.health = health;
@@ -298,6 +307,49 @@ export async function createApp(
     const me = await accounts.me(c.get("owner"));
     if (!me) throw new AppError("Account not found", 404);
     return c.json({ ...me, emailSignIn: accounts.emailSignIn });
+  });
+  // Model usage and its estimated cost: your own, and everyone's for the admin.
+  app.get("/api/usage", async (c) => {
+    const owner = c.get("owner");
+    const month = z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .optional()
+      .parse(c.req.query("month"));
+    return c.json({
+      ...(await usage.month(owner, month)),
+      history: await usage.history(owner),
+      models: { chat: config.model, background: config.workerModel ?? config.model },
+    });
+  });
+  app.get("/api/usage/people", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can see everyone's usage", 403);
+    const month = z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .optional()
+      .parse(c.req.query("month"));
+    const listed = (await accounts.list()).map((account) => ({
+      id: account.id,
+      name: account.name,
+      email: account.email as string | undefined,
+    }));
+    // The access key signs in as the admin workspace, which has no account without ADMIN_EMAIL.
+    const people = listed.some((person) => person.id === ADMIN_OWNER)
+      ? listed
+      : [{ id: ADMIN_OWNER, name: "Admin", email: undefined }, ...listed];
+    const rows = await Promise.all(
+      people.map(async (person) => {
+        const { month: shown, cost, calls } = await usage.month(person.id, month);
+        return { ...person, month: shown, cost, calls };
+      }),
+    );
+    return c.json({
+      month: rows[0]?.month,
+      people: rows.filter((row) => row.calls > 0 || row.id !== ADMIN_OWNER),
+      cost: rows.reduce((sum, row) => sum + row.cost, 0),
+    });
   });
   app.get("/api/accounts", async (c) => {
     if (!(await accounts.isAdmin(c.get("owner"))))
@@ -553,7 +605,7 @@ export async function createApp(
           "Reading ChatGPT history needs the Anthropic API key on the server",
           503,
         );
-      return extractMemories(text, claude);
+      return extractMemories(text, { ...claude, onUsage: usage.sink(owner, "import") });
     };
     let memories: string[];
     if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {

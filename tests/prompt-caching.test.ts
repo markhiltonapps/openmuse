@@ -32,7 +32,13 @@ async function anthropicFixture(t: import("node:test").TestContext) {
     send("content_block_stop", { index: 0 });
     send("message_delta", {
       delta: { stop_reason: "end_turn", stop_sequence: null },
-      usage: { output_tokens: 2 },
+      // Like the API: cumulative counts, input included.
+      usage: {
+        input_tokens: 12,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        output_tokens: 2,
+      },
     });
     send("message_stop", {});
     response.end();
@@ -60,11 +66,13 @@ test("Claude reuses the fixed instructions and the conversation from its cache",
   assert.equal(caches("anthropic/claude-sonnet-5"), true);
   assert.equal(caches("openai/gpt-5"), false);
   const bodies = await anthropicFixture(t);
+  const usage: unknown[] = [];
   const agent = tanstackAgent({
     model: "anthropic/claude-fixture",
     maxSteps: 2,
     tools: [],
     prompt: "You are a helpful agent. These instructions never change.",
+    onUsage: (model, tokens) => usage.push({ model, ...tokens }),
   });
   const input: RunAgentInput = {
     threadId: "cache-fixture",
@@ -105,4 +113,15 @@ test("Claude reuses the fixed instructions and the conversation from its cache",
   assert.equal(body.system[1]?.cache_control, undefined);
   // The growing conversation is cached automatically.
   assert.deepEqual(body.cache_control, { type: "ephemeral" });
+  // Each model call's tokens are reported, for usage tracking.
+  assert.deepEqual(usage, [
+    {
+      model: "anthropic/claude-fixture",
+      input: 12,
+      cacheRead: 0,
+      cacheWrite: 0,
+      output: 2,
+      searches: 0,
+    },
+  ]);
 });

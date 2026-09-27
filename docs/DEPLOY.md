@@ -16,6 +16,8 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `AGENT_BACKEND` | `model` |
 | `MODEL` | For example `anthropic/claude-sonnet-5` |
 | `ANTHROPIC_API_KEY` | Provider key matching `MODEL` (or `OPENAI_API_KEY` / `GOOGLE_API_KEY`) |
+| `WORKER_MODEL` | Optional. Model for background work (delegated tasks, routines, subscription scans), for example `anthropic/claude-haiku-4-5` to cut costs while chat keeps `MODEL`. Defaults to `MODEL`; its provider key must be set too |
+| `MODEL_PRICES` | Optional. Adds or corrects the list prices used for cost estimates in Apps → Usage, in dollars per million input/output tokens: `claude-opus-5=5/25,gpt-5.6-terra=2/12` |
 | `WEB_SEARCH_MODEL` | Optional. With `ANTHROPIC_API_KEY` set, agents search the web through Anthropic's web search tool using this model (default `claude-haiku-4-5-20251001`) |
 | `VISION_MODEL` | Optional. Model that looks at pictures in Files; defaults to the Anthropic model in `MODEL` |
 | `AVATAR_MODEL` | Optional. Model that draws avatars from a description; defaults to the Anthropic model in `MODEL` |

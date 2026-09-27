@@ -7,6 +7,8 @@ export const fileToolInstructions =
 export type LookAtImage = (
   image: { bytes: Uint8Array; mimeType: string },
   question: string,
+  /** Whose usage it is. */
+  owner?: string,
 ) => Promise<string>;
 
 interface FileToolSpec {
@@ -35,6 +37,7 @@ export function fileToolSpecs(files: Files, owner: string, look?: LookAtImage): 
         const answer = await look(
           { bytes: await files.bytes(owner, fileId), mimeType: file.mimeType },
           question,
+          owner,
         );
         return { id: file.id, name: file.name, answer };
       },

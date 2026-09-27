@@ -225,6 +225,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       ...options,
       baseUrl: process.env.ANTHROPIC_BASE_URL,
       fetcher: service.avatarFetcher,
+      onUsage: service.usage?.sink(c.get("owner"), "avatar"),
     });
     return c.json(await saveAvatar(c.get("owner"), "svg", svg));
   });

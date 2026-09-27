@@ -13,6 +13,7 @@ import { type OpenAIChatModel, openaiText } from "@tanstack/ai-openai";
 import { map, mergeMap, type Observable } from "rxjs";
 import { z } from "zod";
 import { MODEL_MAX_RETRIES } from "../config.ts";
+import { fromTanstack, type UsageSink } from "../usage.ts";
 
 // Same "provider/model" strings, env vars and base URL formats as the AI SDK resolver in
 // @copilotkit/runtime. Each provider SDK retries transient failures up to MODEL_MAX_RETRIES times.
@@ -109,6 +110,8 @@ export function tanstackAgent(options: {
   prompt: string;
   /** Said when the step limit, not the model, ends a run; otherwise the reply just stops. */
   stepLimitNote?: string;
+  /** Told the tokens of each model call, to track what each person costs. */
+  onUsage?: UsageSink;
 }) {
   const agent = new BuiltInAgent({
     type: "tanstack",
@@ -155,6 +158,17 @@ export function tanstackAgent(options: {
           ),
         ],
         agentLoopStrategy: maxIterations(options.maxSteps),
+        ...(options.onUsage
+          ? {
+              middleware: [
+                {
+                  name: "usage",
+                  onUsage: (_ctx: unknown, usage: Parameters<typeof fromTanstack>[1]) =>
+                    options.onUsage?.(options.model, fromTanstack(options.model, usage)),
+                },
+              ],
+            }
+          : {}),
         abortController,
       });
     },

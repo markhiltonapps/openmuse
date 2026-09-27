@@ -1,4 +1,5 @@
 import { AppError } from "./errors.ts";
+import { type AnthropicUsage, fromAnthropic, type UsageSink } from "./usage.ts";
 
 const ALLOWED = new Set([
   "svg",
@@ -41,7 +42,13 @@ export function sanitizeSvg(raw: string): string | undefined {
 /** Draws an avatar from a description with Claude, as a small blinking-ready SVG. */
 export async function designAvatar(
   description: string,
-  options: { apiKey: string; model: string; baseUrl?: string; fetcher?: typeof fetch },
+  options: {
+    apiKey: string;
+    model: string;
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+    onUsage?: UsageSink;
+  },
 ) {
   const base = (options.baseUrl ?? "https://api.anthropic.com")
     .replace(/\/$/, "")
@@ -74,8 +81,11 @@ Reply with only one SVG and nothing else:
   });
   const payload = (await response.json().catch(() => ({}))) as {
     content?: { type: string; text?: string }[];
+    usage?: AnthropicUsage;
     error?: { message?: string };
   };
+  const tokens = fromAnthropic(payload.usage);
+  if (tokens) options.onUsage?.(options.model, tokens);
   if (!response.ok)
     throw new AppError(
       `Could not design the avatar: ${payload.error?.message ?? `status ${response.status}`}`,

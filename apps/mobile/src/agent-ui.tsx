@@ -58,6 +58,7 @@ import {
   Sheet,
   s,
 } from "./ui";
+import { UsageCard } from "./usage-ui";
 import { VoiceCard } from "./voice-ui";
 import { disablePush, enablePush, isInstalled, isIos, type PushState, pushState } from "./web-app";
 import { useWorkspace } from "./workspace";
@@ -1983,6 +1984,7 @@ export function AppsScreen() {
       <VoiceCard name={data?.identity.name || "OpenMuse"} />
       <AccountCard />
       <YourDataCard />
+      <UsageCard />
       <PeopleCard />
       <Button onPress={() => setSettings(!settings)}>
         {settings

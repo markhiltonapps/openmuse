@@ -41,6 +41,7 @@ import type { Files } from "../files.ts";
 import type { HealthService } from "../health.ts";
 import { backgroundFailure } from "../log.ts";
 import type { ReminderService } from "../reminders.ts";
+import type { UsageMeter } from "../usage.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
@@ -726,6 +727,8 @@ export class AgentService {
   approvals?: ApprovalRules;
   /** Looks at pictures in Files; set when a vision model is configured. */
   look?: LookAtImage;
+  /** Model usage per person, for costs and plan limits. */
+  usage?: UsageMeter;
   /** The agent's own email address; set when agent email is configured. */
   mail?: { address(owner: string): Promise<string | undefined> };
   /** Lets tests stand in for the Anthropic API when designing avatars. */

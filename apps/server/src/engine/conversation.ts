@@ -328,7 +328,7 @@ export class ConversationAgent extends AbstractAgent {
     const search = this.service.search;
     if (search)
       tools.push(
-        ...webSearchToolSpecs(search).map((spec) =>
+        ...webSearchToolSpecs(search, this.service.usage?.sink(this.owner, "search")).map((spec) =>
           defineTool({
             ...spec,
             execute: async (args) => {
@@ -384,6 +384,7 @@ export class ConversationAgent extends AbstractAgent {
     const agent = tanstackAgent({
       model: this.config.model ?? "openai/unconfigured",
       maxSteps: 6,
+      onUsage: this.service.usage?.sink(this.owner, "chat"),
       stepLimitNote:
         "I reached my step limit for this reply before finishing. Say “continue” and I’ll pick up where I left off.",
       tools,

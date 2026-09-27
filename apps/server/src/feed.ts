@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import type { UsageSink } from "./usage.ts";
 import type { SearchSource, WebSearch } from "./web-search.ts";
 
 export const feedTopicsSchema = z.object({
@@ -48,6 +49,8 @@ function local(now: number, timeZone: string) {
  */
 export class FeedService {
   private refreshing = new Set<string>();
+  /** Where each person's search usage is recorded. */
+  usage?: (owner: string) => UsageSink;
   constructor(
     private readonly db: Store,
     private readonly search: WebSearch | undefined,
@@ -104,6 +107,7 @@ export class FeedService {
         const found = await this.search
           .search(
             `What's new about ${topic}? The most important news and developments from the past few days.`,
+            this.usage?.(owner),
           )
           .catch(() => undefined);
         if (!found || found.answer === "No results found.") continue;

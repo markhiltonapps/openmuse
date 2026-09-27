@@ -21,6 +21,7 @@ const KEEP_ON_RESET = [
   "push-subscriptions",
   "app-connector",
   "agent-inbox",
+  "usage",
 ];
 /** Never exported: sign-in secrets and internal bookkeeping. */
 const NOT_EXPORTED = ["credentials", "push-subscriptions", "app-connector", "computer-state"];
