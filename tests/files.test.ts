@@ -176,3 +176,40 @@ test("pictures, Word, Excel and text files can be saved and read", async () => {
   };
   assert.match(notPicture.error, /isn't a picture/);
 });
+
+test("the agent writes documents to Files as PDF or Word", async () => {
+  const owner = "writer";
+  const create = (
+    fileToolSpecs(server.files, owner) as unknown as {
+      name: string;
+      execute: (args: unknown) => Promise<{ id: string; name: string }>;
+    }[]
+  ).find((s) => s.name === "create_document");
+  assert.ok(create);
+  const content = `# Weekend in Austin
+
+A **two-day** plan for Oct 4–5 — with “good” food 🍜.
+
+## Saturday
+- Breakfast at Paperboy
+- Barton Springs
+
+1. Book the hotel
+2. Pack sunscreen
+
+${"A long paragraph that keeps going to test wrapping across the page width. ".repeat(40)}`;
+  const pdf = await create.execute({ title: "Austin trip", content });
+  assert.equal(pdf.name, "Austin trip.pdf");
+  const pdfText = (await server.files.read(owner, pdf.id)).text;
+  assert.match(pdfText, /Austin trip/);
+  assert.match(pdfText, /two-day/);
+  assert.match(pdfText, /Breakfast at Paperboy/);
+  assert.match(pdfText, /2\.\s*Pack sunscreen/);
+  assert.doesNotMatch(pdfText, /\*\*/);
+  const docx = await create.execute({ title: "Austin trip", content, format: "docx" });
+  assert.equal(docx.name, "Austin trip.docx");
+  const docText = (await server.files.read(owner, docx.id)).text;
+  assert.match(docText, /Weekend in Austin/);
+  assert.match(docText, /Barton Springs/);
+  assert.match(docText, /good.*food/);
+});
