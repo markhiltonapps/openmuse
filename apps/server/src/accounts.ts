@@ -4,6 +4,7 @@ import { ADMIN_OWNER, type Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { signInEmail } from "./sign-in-email.ts";
 
 export interface Account {
   id: string;
@@ -254,24 +255,17 @@ export class AccountService {
     } satisfies LoginLink);
     const appUrl = (this.config.appUrl ?? this.config.publicUrl).replace(/\/$/, "");
     const link = `${appUrl}/#login=${token}`;
-    const address = this.address(account);
-    const intro = invite
-      ? `You've been invited to Neato_Meca, a personal assistant for your email, calendar, apps and errands.`
-      : "Here's your link to sign in to Neato_Meca.";
-    const expiry = invite ? "within 3 days" : "within 15 minutes";
-    const help = `${appUrl}/help.html`;
-    const extra =
-      invite && address
-        ? `\n\nYour assistant's email address is ${address}. Send or forward email there from ${account.email} to hand it work.`
-        : "";
-    const guide = invite ? `\n\nNew to Neato_Meca? See how it works: ${help}` : "";
     await this.mailer.send({
       to: account.email,
-      subject: invite ? "You're invited to Neato_Meca" : "Your Neato_Meca sign-in link",
-      text: `${intro}\n\nSign in: ${link}\n\nThe link works once and expires ${expiry}.${extra}${guide}`,
-      html: `<p>${intro}</p><p><a href="${link}">Sign in to Neato_Meca</a></p><p style="color:#666">The link works once and expires ${expiry}. If you didn't ask for it, you can ignore this email.</p>${
-        extra ? `<p>${extra.trim()}</p>` : ""
-      }${invite ? `<p>New to Neato_Meca? <a href="${help}">See how it works, with pictures</a>.</p>` : ""}`,
+      ...signInEmail({
+        invite,
+        link,
+        appUrl,
+        expiry: invite ? "within 3 days" : "within 15 minutes",
+        name: account.name,
+        email: account.email,
+        address: this.address(account),
+      }),
     });
   }
   /** Uses a sign-in link once and returns a session for its account. */
