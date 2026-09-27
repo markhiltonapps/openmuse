@@ -213,6 +213,12 @@ export class AgentService {
   }
   async createTask(owner: string, raw: unknown, idempotencyKey?: string, held = false) {
     const input = createTaskSchema.parse(raw);
+    // Document tasks fill a PDF form attached to an email; they can't run without that email.
+    if (input.kind === "document" && typeof input.input.messageId !== "string")
+      throw new AppError(
+        "Document tasks fill a PDF form attached to an email; choose the email first. To read or summarize a file, use read_file.",
+        422,
+      );
     if (input.kind === "monitor" && !held)
       throw new AppError(
         "To watch a web page, create a watch; for recurring checks of email or apps, create a routine",
@@ -267,8 +273,19 @@ export class AgentService {
     await this.db.insertIfAbsent(owner, "tasks", task);
     return (await this.db.get<AgentTask>(owner, "tasks", id)) ?? task;
   }
+  /** Marks every unread update about a task as read; returns how many there were. */
+  async readTaskNotifications(owner: string, taskId: string) {
+    const unread = (await this.db.list<AgentNotification>(owner, "notifications")).filter(
+      (item) => item.taskId === taskId && !item.read,
+    );
+    for (const item of unread)
+      await this.db.compareAndSwap(owner, "notifications", item.id, {}, { read: true });
+    return unread.length;
+  }
   async control(owner: string, id: string, action: "pause" | "resume" | "cancel" | "retry") {
     const task = await this.getTask(owner, id);
+    // Stopping or retrying a task answers the updates about it.
+    if (action === "cancel" || action === "retry") await this.readTaskNotifications(owner, id);
     if (action === "cancel" && task.status === "succeeded")
       throw new AppError("This task is already complete", 409);
     if (action === "retry" && task.status !== "failed")

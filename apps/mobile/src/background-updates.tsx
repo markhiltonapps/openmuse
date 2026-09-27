@@ -12,12 +12,16 @@ export function BackgroundUpdates() {
   const [busy, setBusy] = useState(false);
   const updates = data?.notifications.filter((item) => !item.read && item.taskId) || [];
   const update = updates[0];
+  // One card per task: repeated updates about the same task are dismissed together.
+  const otherTasks = new Set(
+    updates.map((item) => item.taskId).filter((id) => id !== update?.taskId),
+  ).size;
   if (!update || data?.identity.showChatUpdates === false) return null;
   async function dismiss() {
     if (!update) return;
     setBusy(true);
     try {
-      await mutate(`/notifications/${update.id}/read`, {});
+      await mutate("/notifications/read", { taskId: update.taskId });
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -53,9 +57,9 @@ export function BackgroundUpdates() {
         >
           View task
         </Button>
-        {updates.length > 1 && (
+        {otherTasks > 0 && (
           <Button small onPress={() => open({ type: "notifications" })}>
-            {updates.length - 1} more updates
+            {otherTasks} more {otherTasks === 1 ? "update" : "updates"}
           </Button>
         )}
       </View>
