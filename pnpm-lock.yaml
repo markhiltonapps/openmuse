@@ -23,6 +23,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.0
         version: 1.19.17(hono@4.13.7)
+      '@lobehub/fluent-emoji-3d':
+        specifier: 1.1.0
+        version: 1.1.0
       '@tanstack/ai':
         specifier: ^0.59.0
         version: 0.59.0(@opentelemetry/api@1.9.1)(zod@4.6.5)
@@ -1597,6 +1600,9 @@ packages:
 
   '@lit/reactive-element@2.1.2':
     resolution: {integrity: sha512-pbCDiVMnne1lYUIaYNN5wrwQXDtHaYtg7YEFPeW+hws6U47WeFvISGUWekPGKWOP1ygrs0ef0o1VJMk1exos5A==}
+
+  '@lobehub/fluent-emoji-3d@1.1.0':
+    resolution: {integrity: sha512-Wlq2lVStTnr8BDpIJ0pEnTKO4LuDxxqTEhTvRtD1DLRF0me7ogeRQjKoehDHXuVJ2Qaecgl5wRBv60lUAG3h7g==}
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -8363,6 +8369,8 @@ snapshots:
   '@lit/reactive-element@2.1.2':
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.6.0
+
+  '@lobehub/fluent-emoji-3d@1.1.0': {}
 
   '@lukeed/csprng@1.1.0': {}
 

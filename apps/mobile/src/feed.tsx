@@ -1,13 +1,11 @@
 import {
-  AlarmClock,
   ArrowUp,
-  CalendarDays,
-  CircleCheck,
-  Clock,
-  type LucideIcon,
+  ExternalLink,
+  MessageCircle,
   Plus,
   RefreshCw,
-  Utensils,
+  ThumbsDown,
+  ThumbsUp,
   X,
 } from "lucide-react-native";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
@@ -15,17 +13,20 @@ import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AssistantResponse } from "./assistant-response";
+import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
 import { dark } from "./theme";
 import { Button, Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
+type Feedback = "up" | "down";
 interface FeedStory {
   emoji: string;
   headline: string;
   summary: string;
   url?: string;
   image?: string;
+  feedback?: Feedback;
 }
 interface FeedItem {
   id: string;
@@ -55,6 +56,24 @@ const SUGGESTIONS = [
   "Mortgage rates",
   "Tech stocks",
 ];
+/** Covers for stories without a picture, picked by topic so each topic keeps its colors. */
+const COVERS: [string, string][] = dark
+  ? [
+      ["#1F5AA6", "#0B1A33"],
+      ["#6A35A8", "#1A0E2E"],
+      ["#10805A", "#07261B"],
+      ["#B4521A", "#2A1206"],
+      ["#A8285E", "#2A0A18"],
+      ["#3552C4", "#0E1633"],
+    ]
+  : [
+      ["#CFE8FF", "#EAF4FF"],
+      ["#E9DDFF", "#F6F0FF"],
+      ["#D2F2E0", "#EDFAF2"],
+      ["#FFE2C7", "#FFF3E6"],
+      ["#FFD9E6", "#FFF0F5"],
+      ["#DCE4FF", "#F0F3FF"],
+    ];
 const localDay = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 function dayHeading(day: string) {
@@ -75,6 +94,33 @@ const site = (url: string) => {
     return url;
   }
 };
+function ago(value: string) {
+  const minutes = Math.max(1, Math.round((Date.now() - Date.parse(value)) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours} hr` : `${Math.round(hours / 24)} d`;
+}
+/** A story saved before the Feed told news as stories: its first real paragraph, never a wall. */
+function legacyStory(item: FeedItem): FeedStory {
+  return {
+    emoji: "📰",
+    headline: item.topic,
+    summary: shortSummary(item.summary),
+    url: item.sources[0]?.url,
+  };
+}
+export function shortSummary(text: string) {
+  const paragraph =
+    text
+      .replace(/\*\*[^*\n]+:\*\*/g, "\n")
+      .split(/\n+/)
+      .map((line) => line.replace(/[#*]/g, "").trim())
+      .find((line) => line.length >= 60 && !/:$/.test(line) && !/^I'll search/i.test(line)) ??
+    text.slice(0, 280);
+  if (paragraph.length <= 280) return paragraph;
+  return `${paragraph.slice(0, 280).replace(/\s+\S*$/, "")}…`;
+}
+const hash = (text: string) => [...text].reduce((sum, c) => (sum * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 /** Your day at a glance, then what's new on the topics you follow. */
 export function FeedScreen() {
@@ -126,7 +172,6 @@ export function FeedScreen() {
   }
   const saveTopics = (topics: string[]) =>
     run(() => api.request<FeedState>("/api/feed/topics", { topics }));
-
   function addTopics(text: string) {
     if (!feed) return;
     const wanted = text
@@ -137,6 +182,35 @@ export function FeedScreen() {
     if (next.length === feed.topics.length) return;
     setTopic("");
     void saveTopics(next);
+  }
+  function rate(item: FeedItem, story: FeedStory, value: Feedback) {
+    const feedback = story.feedback === value ? null : value;
+    // Shown at once; the server remembers it for the next stories.
+    setFeed(
+      (current) =>
+        current && {
+          ...current,
+          items: current.items.map((i) =>
+            i.id !== item.id
+              ? i
+              : {
+                  ...i,
+                  stories: i.stories?.map((st) =>
+                    st.headline === story.headline
+                      ? { ...st, feedback: feedback ?? undefined }
+                      : st,
+                  ),
+                },
+          ),
+        },
+    );
+    void api
+      .request<FeedState>("/api/feed/feedback", {
+        itemId: item.id,
+        headline: story.headline,
+        feedback,
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }
 
   const now = new Date();
@@ -156,9 +230,10 @@ export function FeedScreen() {
   const healthLine = health.summary ? todayLine(health.summary.today) : "";
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const sky = hour < 6 || hour >= 20 ? "🌙" : hour < 10 ? "🌅" : hour < 17 ? "☀️" : "🌇";
 
   return (
-    <View style={{ gap: 22 }}>
+    <View style={{ gap: 24 }}>
       {(feed?.topics.length ?? 0) < 8 && (
         <View
           style={[
@@ -203,30 +278,37 @@ export function FeedScreen() {
         </View>
       )}
 
-      <View style={{ borderRadius: 26, overflow: "hidden", padding: 22, gap: 14 }}>
+      <View style={{ borderRadius: 28, overflow: "hidden", padding: 22, gap: 14 }}>
         <View style={{ position: "absolute", inset: 0 }} pointerEvents="none">
           <Svg width="100%" height="100%">
             <Defs>
               <LinearGradient id="day" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor={dark ? "#12263A" : "#DDF0FF"} />
-                <Stop offset="0.55" stopColor={dark ? "#1B1A38" : "#EEE9FF"} />
-                <Stop offset="1" stopColor={dark ? "#2A1830" : "#FFEFE6"} />
+                <Stop offset="0" stopColor={dark ? "#12263A" : "#D6EDFF"} />
+                <Stop offset="0.55" stopColor={dark ? "#1B1A38" : "#ECE5FF"} />
+                <Stop offset="1" stopColor={dark ? "#2A1830" : "#FFE9DD"} />
               </LinearGradient>
             </Defs>
             <Rect width="100%" height="100%" fill="url(#day)" />
           </Svg>
         </View>
-        <View style={{ gap: 2 }}>
-          <Text
-            style={{ color: colors.text, fontSize: 26, fontWeight: "700", letterSpacing: -0.8 }}
-          >
-            {greeting}
-          </Text>
-          <Text style={[s.muted, { fontSize: 15 }]}>
-            {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-          </Text>
+        <View style={[s.row, { gap: 12 }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={{ color: colors.text, fontSize: 27, fontWeight: "700", letterSpacing: -0.8 }}
+            >
+              {greeting}
+            </Text>
+            <Text style={[s.muted, { fontSize: 15 }]}>
+              {now.toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </Text>
+          </View>
+          <Emoji char={sky} size={64} />
         </View>
-        <DayRow icon={CalendarDays} tint="#4AA3FF">
+        <DayRow emoji="📅">
           {events.length ? (
             events.map((e) => (
               <Text key={e.id} style={s.text}>
@@ -244,7 +326,7 @@ export function FeedScreen() {
           )}
         </DayRow>
         {reminders.slice(0, 3).map((reminder) => (
-          <DayRow key={reminder.id} icon={AlarmClock} tint="#F5A524">
+          <DayRow key={reminder.id} emoji="⏰">
             <View style={[s.row, { gap: 8 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={s.text} numberOfLines={2}>
@@ -270,18 +352,18 @@ export function FeedScreen() {
           </DayRow>
         ))}
         {reminders.length > 3 && (
-          <Text style={[s.small, { marginLeft: 46 }]}>+ {reminders.length - 3} more reminders</Text>
+          <Text style={[s.small, { marginLeft: 48 }]}>+ {reminders.length - 3} more reminders</Text>
         )}
         {!!healthLine && (
           <Pressable onPress={() => navigate("goals")}>
-            <DayRow icon={Utensils} tint="#2BD46E">
+            <DayRow emoji="🥗">
               <Text style={s.text}>{healthLine}</Text>
             </DayRow>
           </Pressable>
         )}
         {approvals > 0 && (
           <Pressable onPress={() => navigate("activity")}>
-            <DayRow icon={CircleCheck} tint="#B58CFF">
+            <DayRow emoji="✅">
               <Text style={[s.text, { textDecorationLine: "underline" }]}>
                 {approvals} waiting for your approval
               </Text>
@@ -290,7 +372,7 @@ export function FeedScreen() {
         )}
         {working > 0 && (
           <Pressable onPress={() => navigate("activity")}>
-            <DayRow icon={Clock} tint="#4AA3FF">
+            <DayRow emoji="⏳">
               <Text style={[s.text, { textDecorationLine: "underline" }]}>
                 {working} {working === 1 ? "task" : "tasks"} in progress
               </Text>
@@ -300,7 +382,7 @@ export function FeedScreen() {
         <Pressable
           accessibilityRole="button"
           onPress={() => ask("I'd like to set a reminder.")}
-          style={{ alignSelf: "flex-start", marginLeft: 46 }}
+          style={{ alignSelf: "flex-start", marginLeft: 48 }}
         >
           <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
             + Add a reminder
@@ -311,28 +393,23 @@ export function FeedScreen() {
       {days.map((day) => (
         <View key={day}>
           <Text
-            style={{ color: colors.text, fontSize: 22, fontWeight: "700", letterSpacing: -0.5 }}
+            style={{ color: colors.text, fontSize: 24, fontWeight: "700", letterSpacing: -0.6 }}
           >
             {dayHeading(day)}
           </Text>
           {(feed?.items ?? [])
             .filter((item) => item.day === day)
             .flatMap((item) =>
-              (
-                item.stories ?? [
-                  {
-                    emoji: "📰",
-                    headline: item.topic,
-                    summary: item.summary,
-                    url: item.sources[0]?.url,
-                  },
-                ]
-              ).map((story) => (
+              (item.stories ?? [legacyStory(item)]).map((story) => (
                 <StoryRow
                   key={`${item.id}-${story.headline}`}
                   story={story}
                   topic={item.topic}
-                  onAsk={() => ask(`Tell me more about this: ${story.headline} (${item.topic}).`)}
+                  when={ago(item.createdAt)}
+                  onRate={item.stories ? (value) => rate(item, story, value) : undefined}
+                  onAsk={() =>
+                    ask(`Let's talk about this story: ${story.headline} (${item.topic}).`)
+                  }
                 />
               )),
             )}
@@ -392,7 +469,7 @@ export function FeedScreen() {
         )}
         <Text style={s.small}>
           Your agent looks up what's new on each topic every morning, about 1–3¢ per topic. Tap a
-          topic to stop following it.
+          topic to stop following it. Thumbs up or down on a story shapes the next ones.
           {feed?.refreshedAt
             ? ` Last updated ${new Date(feed.refreshedAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}.`
             : ""}
@@ -403,96 +480,156 @@ export function FeedScreen() {
   );
 }
 
-function DayRow({
-  icon: Icon,
-  tint,
-  children,
-}: {
-  icon: LucideIcon;
-  tint: string;
-  children: ReactNode;
-}) {
+function DayRow({ emoji, children }: { emoji: string; children: ReactNode }) {
   return (
     <View style={[s.row, { gap: 12, alignItems: "flex-start" }]}>
-      <View
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          backgroundColor: `${tint}26`,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Icon size={17} color={tint} />
-      </View>
-      <View style={{ flex: 1, gap: 3, paddingTop: 5 }}>{children}</View>
+      <Emoji char={emoji} size={36} />
+      <View style={{ flex: 1, gap: 3, paddingTop: 6 }}>{children}</View>
     </View>
   );
 }
 
-/** One news story: an emoji, a headline, what happened, and the article's picture. */
-function StoryRow({ story, topic, onAsk }: { story: FeedStory; topic: string; onAsk: () => void }) {
+/** A story's picture, or a cover in the topic's colors with its emoji when there's none. */
+function StoryPicture({ story, topic }: { story: FeedStory; topic: string }) {
   const [broken, setBroken] = useState(false);
+  const shape = { width: "100%" as const, aspectRatio: 16 / 10, borderRadius: 20 };
+  if (story.image && !broken)
+    return (
+      <Image
+        source={{ uri: story.image }}
+        onError={() => setBroken(true)}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+        style={[shape, { backgroundColor: colors.subtle }]}
+      />
+    );
+  const [from, to] = COVERS[hash(topic) % COVERS.length] ?? COVERS[0] ?? ["#333", "#111"];
+  const id = `cover-${hash(topic + story.headline)}`;
+  return (
+    <View style={[shape, { overflow: "hidden", justifyContent: "flex-end", padding: 18 }]}>
+      <View style={{ position: "absolute", inset: 0 }} pointerEvents="none">
+        <Svg width="100%" height="100%">
+          <Defs>
+            <LinearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={from} />
+              <Stop offset="1" stopColor={to} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill={`url(#${id})`} />
+        </Svg>
+      </View>
+      <View style={{ position: "absolute", right: 18, top: 14 }}>
+        <Emoji char={story.emoji} size={112} />
+      </View>
+      <Text
+        style={{
+          color: colors.text,
+          opacity: 0.75,
+          fontSize: 12,
+          fontWeight: "700",
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+        }}
+      >
+        {topic}
+      </Text>
+    </View>
+  );
+}
+
+/** One news story, Meta style: emoji, headline, what happened, a picture and quick reactions. */
+function StoryRow({
+  story,
+  topic,
+  when,
+  onRate,
+  onAsk,
+}: {
+  story: FeedStory;
+  topic: string;
+  when: string;
+  onRate?: (value: Feedback) => void;
+  onAsk: () => void;
+}) {
   const open = () => story.url && void Linking.openURL(story.url).catch(() => undefined);
+  const reaction = (value: Feedback) => {
+    const Icon = value === "up" ? ThumbsUp : ThumbsDown;
+    const chosen = story.feedback === value;
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={value === "up" ? "More like this" : "Less like this"}
+        accessibilityState={{ selected: chosen }}
+        hitSlop={8}
+        onPress={() => onRate?.(value)}
+      >
+        <Icon
+          size={22}
+          strokeWidth={1.8}
+          color={chosen ? colors.blueDark : colors.text}
+          fill={chosen ? colors.blueDark : "transparent"}
+        />
+      </Pressable>
+    );
+  };
   return (
     <View
       style={{
         flexDirection: "row",
         gap: 14,
-        paddingVertical: 20,
+        paddingVertical: 22,
         borderBottomWidth: 1,
         borderBottomColor: colors.line,
       }}
     >
-      <Text style={{ fontSize: 30, lineHeight: 38, width: 40, textAlign: "center" }}>
-        {story.emoji}
-      </Text>
-      <View style={{ flex: 1, gap: 8 }}>
+      <View style={{ width: 42, paddingTop: 2 }}>
+        <Emoji char={story.emoji} size={42} />
+      </View>
+      <View style={{ flex: 1, gap: 10 }}>
         <Text
           style={{
             color: colors.text,
-            fontSize: 19,
-            lineHeight: 25,
+            fontSize: 20,
+            lineHeight: 26,
             fontWeight: "700",
-            letterSpacing: -0.3,
+            letterSpacing: -0.4,
           }}
         >
           {story.headline}
         </Text>
         <AssistantResponse content={story.summary} />
-        {!!story.image && !broken && (
+        <Pressable
+          accessibilityRole={story.url ? "link" : undefined}
+          accessibilityLabel={story.url ? `Open the article: ${story.headline}` : undefined}
+          disabled={!story.url}
+          onPress={open}
+        >
+          <StoryPicture story={story} topic={topic} />
+        </Pressable>
+        <View style={[s.row, { gap: 22, marginTop: 4 }]}>
+          {onRate && reaction("up")}
+          {onRate && reaction("down")}
           <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={`Open the article: ${story.headline}`}
-            onPress={open}
+            accessibilityRole="button"
+            onPress={onAsk}
+            style={[s.row, { gap: 7 }]}
+            hitSlop={6}
           >
-            <Image
-              source={{ uri: story.image }}
-              onError={() => setBroken(true)}
-              resizeMode="cover"
-              accessibilityIgnoresInvertColors
-              style={{
-                width: "100%",
-                aspectRatio: 16 / 10,
-                borderRadius: 18,
-                backgroundColor: colors.subtle,
-              }}
-            />
+            <MessageCircle size={21} strokeWidth={1.8} color={colors.text} />
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: "500" }}>Discuss</Text>
           </Pressable>
-        )}
-        <View style={[s.row, { gap: 14, flexWrap: "wrap" }]}>
+          <View style={{ flex: 1 }} />
+          <Text style={[s.muted, { fontSize: 14 }]}>{when}</Text>
           {!!story.url && (
-            <Pressable accessibilityRole="link" onPress={open}>
-              <Text style={[s.small, { textDecorationLine: "underline" }]}>{site(story.url)}</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Open ${site(story.url)}`}
+              onPress={open}
+              hitSlop={8}
+            >
+              <ExternalLink size={19} strokeWidth={1.8} color={colors.muted} />
             </Pressable>
           )}
-          <Text style={s.small}>{topic}</Text>
-          <Pressable accessibilityRole="button" onPress={onAsk}>
-            <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
-              Ask about this
-            </Text>
-          </Pressable>
         </View>
       </View>
     </View>

@@ -20,6 +20,7 @@ import { computerRoutes } from "./computer-routes.ts";
 import { assertApiDeploymentConfig, type Config } from "./config.ts";
 import { DataControls, type ThreadStore } from "./data-controls.ts";
 import type { Store } from "./db.ts";
+import { emojiPicture } from "./emoji.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
@@ -281,6 +282,15 @@ export async function createApp(
       "<h1>Google is connected</h1><p>Return to OpenMuse and refresh your workspace.</p>",
     );
   });
+  // 3D emoji pictures, shared by everyone and loaded by <img> without a sign-in header.
+  app.get("/api/emoji/:code", async (c) => {
+    const bytes = await emojiPicture(c.req.param("code").replace(/\.webp$/, ""));
+    if (!bytes) throw new AppError("Emoji not found", 404);
+    return c.body(new Uint8Array(bytes).buffer as ArrayBuffer, 200, {
+      "content-type": "image/webp",
+      "cache-control": "public, max-age=2592000, immutable",
+    });
+  });
   // Animated avatars are shared pictures and clips, loaded by <video> without a sign-in header.
   const avatarMedia = new AvatarMedia(config.dataDir);
   app.get("/api/avatar-media/:preset/:part", async (c) => {
@@ -502,6 +512,9 @@ export async function createApp(
     c.json(await feed.setTopics(c.get("owner"), await c.req.json())),
   );
   app.post("/api/feed/refresh", async (c) => c.json(await feed.refreshNow(c.get("owner"))));
+  app.post("/api/feed/feedback", async (c) =>
+    c.json(await feed.feedback(c.get("owner"), await c.req.json())),
+  );
   app.get("/api/agent-email", async (c) => c.json(await inbox.settings(c.get("owner"))));
   app.post("/api/agent-email", async (c) =>
     c.json(await inbox.updateSettings(c.get("owner"), await c.req.json())),

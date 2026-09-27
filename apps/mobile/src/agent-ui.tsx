@@ -41,6 +41,7 @@ import { AppearanceCard } from "./appearance-ui";
 import { AlwaysAllowedCard } from "./approvals-ui";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
+import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
@@ -1099,24 +1100,16 @@ function IdeaCard({ idea }: { idea: Idea }) {
         onPress={() => setExpanded(!expanded)}
         style={{ flexDirection: "row", gap: 14 }}
       >
-        <Text style={{ fontSize: 34, lineHeight: 42, width: 44, textAlign: "center" }}>
-          {/document|permission|form/i.test(idea.title)
-            ? "📋"
-            : /money|spend|saving/i.test(idea.title)
-              ? "💸"
-              : /goal|plan|training/i.test(idea.title)
-                ? "👟"
-                : /dinner|table/i.test(idea.title)
-                  ? "🍽️"
-                  : "💡"}
-        </Text>
+        <View style={{ width: 48, paddingTop: 2 }}>
+          <Emoji char={topicEmoji(`${idea.title} ${idea.reason}`)} size={48} />
+        </View>
         <View style={{ flex: 1, gap: 5 }}>
           <Text style={[s.heading, { fontSize: 18, lineHeight: 25 }]}>{idea.title}</Text>
           <Text style={s.muted}>{idea.reason}</Text>
         </View>
       </Pressable>
       {expanded && (
-        <View style={{ gap: 15, marginTop: 18, paddingLeft: 58 }}>
+        <View style={{ gap: 15, marginTop: 18, paddingLeft: 62 }}>
           <EvidenceList items={idea.evidence} />
           {editing && (
             <Field

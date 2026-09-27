@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import type { Section, Workspace } from "../../packages/domain/src";
 import { taskActivity } from "./src/activity";
 import {
@@ -364,20 +365,49 @@ function WorkspaceShell({
                     : AppsScreen;
   const utility = ["mail", "calendar", "browser"].includes(section);
   const chat = section === "chat";
+  const headerHeight = chat ? (desktop ? 150 : 128) : desktop ? 158 : 132;
   return (
     <>
       <WorkspaceTools />
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
         <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
           <View
-            style={{
-              height: chat ? (desktop ? 150 : 128) : desktop ? 158 : 132,
-              paddingTop: desktop ? 14 : 4,
-              marginHorizontal: 20,
-            }}
+            pointerEvents="box-none"
+            style={
+              chat
+                ? { height: headerHeight, paddingTop: desktop ? 14 : 4, marginHorizontal: 20 }
+                : {
+                    // Floats over the page, which scrolls underneath, like Meta Muse.
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 5,
+                    height: headerHeight,
+                    paddingTop: desktop ? 14 : 4,
+                    paddingHorizontal: 20,
+                  }
+            }
           >
+            {!chat && (
+              <View
+                pointerEvents="none"
+                style={{ position: "absolute", top: 0, left: 0, right: 0, height: headerHeight }}
+              >
+                <Svg width="100%" height="100%">
+                  <Defs>
+                    <LinearGradient id="header-fade" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={0.96} />
+                      <Stop offset="0.62" stopColor={colors.canvas} stopOpacity={0.8} />
+                      <Stop offset="1" stopColor={colors.canvas} stopOpacity={0} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" fill="url(#header-fade)" />
+                </Svg>
+              </View>
+            )}
             {/* Above the centered title, which spans the full header width and would take the tap. */}
-            <View style={{ position: "absolute", left: 0, top: 16, zIndex: 2 }}>
+            <View style={{ position: "absolute", left: chat ? 0 : 20, top: 16, zIndex: 2 }}>
               <IconButton
                 icon={Menu}
                 label="Open conversations and menu"
@@ -432,7 +462,7 @@ function WorkspaceShell({
               </Pressable>
               {section === "chat" && <ComputerEntry />}
             </View>
-            <View style={{ position: "absolute", right: 0, top: 16, zIndex: 2 }}>
+            <View style={{ position: "absolute", right: chat ? 0 : 20, top: 16, zIndex: 2 }}>
               <IconButton
                 icon={Bell}
                 label={`Notifications, ${pending} unread or pending`}
@@ -459,7 +489,11 @@ function WorkspaceShell({
               <ScrollView
                 key={section}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: desktop ? 42 : 22, paddingBottom: 28 }}
+                contentContainerStyle={{
+                  paddingHorizontal: desktop ? 42 : 22,
+                  paddingTop: headerHeight,
+                  paddingBottom: 28,
+                }}
                 keyboardShouldPersistTaps="handled"
               >
                 {utility && (

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Store } from "./db.ts";
+import { hasEmojiPicture } from "./emoji.ts";
 import { AppError } from "./errors.ts";
 import { previewImage } from "./link-preview.ts";
 import type { UsageSink } from "./usage.ts";
@@ -9,17 +10,30 @@ import type { SearchSource, Story, WebSearch } from "./web-search.ts";
 export const feedTopicsSchema = z.object({
   topics: z.array(z.string().trim().min(2).max(80)).max(8),
 });
+/** Items saved before the Feed told news as stories are fetched again once. */
+const FORMAT = 2;
 interface FeedSettings {
   id: "feed";
   topics: string[];
   /** The person's local date of the last full refresh. */
   refreshedOn?: string;
   refreshedAt?: string;
+  format?: number;
+  /** Headlines the person gave a thumbs up or down, newest first, to steer later stories. */
+  liked?: string[];
+  disliked?: string[];
 }
 export interface FeedStory extends Story {
   /** The article's share picture, when it has one. */
   image?: string;
+  feedback?: "up" | "down";
 }
+export const feedFeedbackSchema = z.object({
+  itemId: z.string().min(1).max(100),
+  headline: z.string().min(1).max(200),
+  feedback: z.enum(["up", "down"]).nullable(),
+});
+const TASTE = 15;
 export interface FeedItem {
   id: string;
   topic: string;
@@ -126,7 +140,7 @@ export class FeedService {
       const latest = await this.settings(owner);
       await this.db.put(owner, "agent-settings", {
         ...latest,
-        ...(only ? {} : { refreshedOn: day }),
+        ...(only ? {} : { refreshedOn: day, format: FORMAT }),
         refreshedAt: new Date(this.now()).toISOString(),
       });
       const cutoff = this.now() - KEEP_DAYS * 24 * 60 * 60 * 1000;
@@ -141,14 +155,20 @@ export class FeedService {
     const search = this.search;
     if (!search) return undefined;
     if (search.stories) {
-      const found = await search.stories(topic, this.usage?.(owner));
+      const settings = await this.settings(owner);
+      const found = await search.stories(topic, this.usage?.(owner), {
+        liked: settings.liked ?? [],
+        disliked: settings.disliked ?? [],
+      });
       if (found.stories.length) {
         const stories = await Promise.all(
           found.stories.map(async (story) => {
-            const image = story.url
-              ? await this.preview(story.url).catch(() => undefined)
-              : undefined;
-            return { ...story, ...(image ? { image } : {}) } satisfies FeedStory;
+            const image = await this.picture(story);
+            return {
+              ...story,
+              emoji: hasEmojiPicture(story.emoji) ? story.emoji : "📰",
+              ...(image ? { image } : {}),
+            } satisfies FeedStory;
           }),
         );
         return {
@@ -157,13 +177,66 @@ export class FeedService {
           sources: found.sources.slice(0, 4),
         };
       }
+      console.warn(`[OpenMuse] Feed stories for a topic couldn't be read; using a summary`);
     }
     const found = await search.search(
       `What's new about ${topic}? The most important news and developments from the past few days.`,
       this.usage?.(owner),
     );
     if (found.answer === "No results found.") return undefined;
-    return { summary: found.answer, sources: found.sources.slice(0, 4) };
+    // Never a wall of text: the first real paragraph, as one story.
+    const paragraph =
+      found.answer
+        .replace(/\*\*[^*\n]+:\*\*/g, "\n")
+        .split(/\n+/)
+        .map((line) => line.replace(/[#*]/g, "").trim())
+        .find((line) => line.length >= 60 && !/:$/.test(line) && !/^I'll search/i.test(line)) ??
+      found.answer.slice(0, 400);
+    const short =
+      paragraph.length <= 400 ? paragraph : `${paragraph.slice(0, 400).replace(/\s+\S*$/, "")}…`;
+    return {
+      stories: [
+        {
+          emoji: "📰",
+          headline: topic,
+          summary: short,
+          ...(found.sources[0] ? { url: found.sources[0].url } : {}),
+        },
+      ],
+      summary: found.answer,
+      sources: found.sources.slice(0, 4),
+    };
+  }
+  /** The story's own picture, or one from an article its summary links to. */
+  private async picture(story: Story) {
+    const pages = [
+      story.url,
+      ...[...story.summary.matchAll(/\]\((https:[^)\s]+)\)/g)].map((match) => match[1]),
+    ].filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index);
+    for (const page of pages.slice(0, 3)) {
+      const image = await this.preview(page).catch(() => undefined);
+      if (image) return image;
+    }
+    return undefined;
+  }
+  /** A thumbs up or down on a story: remembered on the story and used for later ones. */
+  async feedback(owner: string, raw: unknown) {
+    const { itemId, headline, feedback } = feedFeedbackSchema.parse(raw);
+    const item = await this.db.get<FeedItem>(owner, "feed-items", itemId);
+    const story = item?.stories?.find((s) => s.headline === headline);
+    if (!item || !story) throw new AppError("Story not found", 404);
+    if (feedback) story.feedback = feedback;
+    else delete story.feedback;
+    await this.db.put(owner, "feed-items", item);
+    const settings = await this.settings(owner);
+    const line = `${headline} (${item.topic})`;
+    const without = (list?: string[]) => (list ?? []).filter((entry) => entry !== line);
+    settings.liked = without(settings.liked);
+    settings.disliked = without(settings.disliked);
+    if (feedback === "up") settings.liked = [line, ...settings.liked].slice(0, TASTE);
+    if (feedback === "down") settings.disliked = [line, ...settings.disliked].slice(0, TASTE);
+    await this.db.put(owner, "agent-settings", settings);
+    return this.get(owner);
   }
   /** Called from the agent's maintenance loop: each person's first refresh of their day. */
   async refreshDue() {
@@ -175,7 +248,8 @@ export class FeedService {
       const account = await this.db.get<{ status: string }>("system", "accounts", owner);
       if (account?.status === "disabled") continue;
       const { day, hour } = local(this.now(), await this.timeZone(owner));
-      if (value.refreshedOn !== day && hour >= 6) await this.refresh(owner);
+      const outdated = value.format !== FORMAT && Boolean(this.search.stories);
+      if ((value.refreshedOn !== day && hour >= 6) || outdated) await this.refresh(owner);
     }
   }
 }

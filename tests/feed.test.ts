@@ -154,3 +154,112 @@ test("story replies are read safely, and pictures come only from public pages", 
   assert.equal(await previewImage("https://news.example:8443/", { fetcher, resolve }), undefined);
   assert.deepEqual(fetched, ["https://news.example/a", "https://news.example/moved"]);
 });
+
+test("thumbs up and down steer later stories, and old text items are fetched again once", async () => {
+  const tastes: unknown[] = [];
+  let now = Date.parse("2026-09-28T14:00:00Z");
+  const feed = new FeedService(
+    db,
+    {
+      search: async () => ({
+        answer:
+          "I'll search for that. **Weather:** A storm is flooding the coast. Thousands lost power. Roads are closed. More rain is coming Monday.",
+        sources: [{ title: "NPR", url: "https://npr.example/storm" }],
+      }),
+      stories: async (topic, _usage, taste) => {
+        tastes.push(taste);
+        return {
+          stories: [
+            { emoji: "🦄🦄", headline: `${topic} one`, summary: "First story here." },
+            { emoji: "🌧️", headline: `${topic} two`, summary: "Second story here." },
+          ],
+          sources: [],
+        };
+      },
+    },
+    async () => "UTC",
+    () => now,
+  );
+  feed.preview = async () => undefined;
+  const owner = "taste";
+  // An item saved the old way, before stories.
+  await db.put(owner, "agent-settings", {
+    id: "feed",
+    topics: ["Weather"],
+    refreshedOn: "2026-09-28",
+  });
+  await db.put(owner, "feed-items", {
+    id: "old",
+    topic: "Weather",
+    summary: "A wall of text",
+    sources: [],
+    day: "2026-09-28",
+    createdAt: new Date(now).toISOString(),
+  });
+  await feed.refreshDue();
+  let state = await feed.get(owner);
+  const fresh = state.items.find((item) => item.stories);
+  assert.ok(fresh, "today's news was fetched again as stories");
+  // An emoji without a 3D picture becomes the newspaper.
+  assert.equal(fresh.stories?.[0]?.emoji, "📰");
+  assert.equal(fresh.stories?.[1]?.emoji, "🌧️");
+  // Once upgraded, it isn't fetched again the same day.
+  const calls = tastes.length;
+  await feed.refreshDue();
+  assert.equal(tastes.length, calls);
+
+  state = await feed.feedback(owner, { itemId: fresh.id, headline: "Weather one", feedback: "up" });
+  await feed.feedback(owner, { itemId: fresh.id, headline: "Weather two", feedback: "down" });
+  const saved = state.items.find((item) => item.id === fresh.id);
+  assert.equal(saved?.stories?.[0]?.feedback, "up");
+  now = Date.parse("2026-09-29T14:00:00Z");
+  await feed.refreshDue();
+  assert.deepEqual(tastes.at(-1), {
+    liked: ["Weather one (Weather)"],
+    disliked: ["Weather two (Weather)"],
+  });
+  // Taking a thumbs back removes it.
+  await feed.feedback(owner, { itemId: fresh.id, headline: "Weather one", feedback: null });
+  await assert.rejects(
+    feed.feedback(owner, { itemId: fresh.id, headline: "Missing", feedback: "up" }),
+    /Story not found/,
+  );
+
+  // A search that can't tell stories apart still gives a short story, not a wall of text.
+  const plain = new FeedService(
+    db,
+    {
+      search: async () => ({
+        answer:
+          "I'll search for that. **Weather:** A storm is flooding the coast. Thousands lost power. Roads are closed. More rain is coming Monday.",
+        sources: [{ title: "NPR", url: "https://npr.example/storm" }],
+      }),
+      stories: async () => ({ stories: [], sources: [] }),
+    },
+    async () => "UTC",
+    () => now,
+  );
+  await plain.setTopics("plain", { topics: ["Storms"] });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const [item] = (await plain.get("plain")).items;
+  assert.deepEqual(item?.stories, [
+    {
+      emoji: "📰",
+      headline: "Storms",
+      summary:
+        "A storm is flooding the coast. Thousands lost power. Roads are closed. More rain is coming Monday.",
+      url: "https://npr.example/storm",
+    },
+  ]);
+});
+
+test("emoji are drawn from the 3D set when there's a picture", async () => {
+  const { emojiCode, emojiPicture, hasEmojiPicture } = await import("../apps/server/src/emoji.ts");
+  assert.equal(emojiCode("📰"), "1f4f0");
+  assert.equal(emojiCode("🌧️"), "1f327");
+  assert.equal(hasEmojiPicture("⚾"), true);
+  assert.equal(hasEmojiPicture("🦄🦄"), false);
+  const picture = await emojiPicture("1f4f0");
+  assert.ok(picture && picture.length > 500);
+  assert.equal(await emojiPicture("../../etc/passwd"), undefined);
+});
