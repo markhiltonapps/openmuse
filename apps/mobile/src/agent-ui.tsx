@@ -41,6 +41,7 @@ import { AlwaysAllowedCard } from "./approvals-ui";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { HealthSection } from "./health-ui";
+import { MailAlertsCard } from "./mail-alerts-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { SubscriptionsCard } from "./subscriptions-ui";
 import {
@@ -1978,6 +1979,7 @@ export function AppsScreen() {
           ))}
       </Card>
       <AlwaysAllowedCard />
+      <MailAlertsCard />
       <SpendingCard />
       <AgentEmailCard />
       <PhoneAppCard />

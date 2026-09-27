@@ -1149,6 +1149,7 @@ interface DirectoryApp {
   app: string;
   name: string;
   connected: boolean;
+  needsReconnect?: boolean;
   logo?: string;
   description?: string;
 }
@@ -1254,7 +1255,12 @@ function MoreApps() {
             )}
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={s.text}>{app.name}</Text>
-              {!!app.description && (
+              {app.needsReconnect && !app.connected ? (
+                <Text style={[s.small, { color: colors.danger }]}>
+                  Sign-in expired. Reconnect to keep using it.
+                </Text>
+              ) : null}
+              {!!app.description && !app.needsReconnect && (
                 <Text style={s.small} numberOfLines={1}>
                   {app.description}
                 </Text>
@@ -1278,7 +1284,7 @@ function MoreApps() {
                 disabled={!!busy}
                 onPress={() => void act(app, "connect")}
               >
-                Connect
+                {app.needsReconnect ? "Reconnect" : "Connect"}
               </Button>
             )}
           </View>

@@ -28,6 +28,7 @@ import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
+import { MAIL_APPS, MailAlerts } from "./mail-alerts.ts";
 import {
   chatgptMessages,
   extractMemories,
@@ -136,6 +137,10 @@ export async function createApp(
           baseUrl: process.env.ANTHROPIC_BASE_URL,
         })
       : undefined);
+  const mailAlerts = apps
+    ? new MailAlerts(db, apps, config.composioWebhookSecret, agent)
+    : undefined;
+  agent.mailAlerts = mailAlerts;
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   feed.usage = (owner) => usage.sink(owner, "feed");
   agent.feed = feed;
@@ -244,6 +249,17 @@ export async function createApp(
     await agent.ensure(account.id);
     return c.json(session);
   });
+  // Composio reports new email here; its webhook signature, not a session, authenticates it.
+  app.post("/api/webhooks/composio", async (c) => {
+    if (!mailAlerts) throw new AppError("Connected apps aren't set up", 503);
+    return c.json(
+      await mailAlerts.receive(await c.req.text(), {
+        id: c.req.header("webhook-id") ?? c.req.header("svix-id"),
+        timestamp: c.req.header("webhook-timestamp") ?? c.req.header("svix-timestamp"),
+        signature: c.req.header("webhook-signature") ?? c.req.header("svix-signature"),
+      }),
+    );
+  });
   // Resend calls this directly; the Svix signature, not a session, authenticates it.
   app.post("/api/inbound/resend", async (c) =>
     c.json(
@@ -308,6 +324,28 @@ export async function createApp(
     if (!me) throw new AppError("Account not found", 404);
     return c.json({ ...me, emailSignIn: accounts.emailSignIn });
   });
+  // New-email alerts and "when X emails me, do Y" rules.
+  const alerts = () => {
+    if (!mailAlerts) throw new AppError("Connected apps aren't set up on the server", 503);
+    return mailAlerts;
+  };
+  app.get("/api/mail-alerts", async (c) => c.json(await alerts().status(c.get("owner"))));
+  app.post("/api/mail-alerts/watch", async (c) => {
+    const { app: mail, enabled } = z
+      .object({ app: z.enum(MAIL_APPS), enabled: z.boolean() })
+      .parse(await c.req.json());
+    return c.json(await alerts().watch(c.get("owner"), mail, enabled));
+  });
+  app.post("/api/mail-alerts/notify", async (c) => {
+    const { notify } = z.object({ notify: z.unknown() }).parse(await c.req.json());
+    return c.json(await alerts().setNotify(c.get("owner"), notify));
+  });
+  app.post("/api/mail-alerts/rules", async (c) =>
+    c.json(await alerts().addRule(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/mail-alerts/rules/:id/delete", async (c) =>
+    c.json(await alerts().removeRule(c.get("owner"), c.req.param("id"))),
+  );
   // Model usage and its estimated cost: your own, and everyone's for the admin.
   app.get("/api/usage", async (c) => {
     const owner = c.get("owner");

@@ -213,3 +213,72 @@ ${"A long paragraph that keeps going to test wrapping across the page width. ".r
   assert.match(docText, /Barton Springs/);
   assert.match(docText, /good.*food/);
 });
+
+test("documents from Google Drive, OneDrive or Dropbox are saved to Files to read", async () => {
+  const owner = "drive";
+  const pdf = await brochure(["Q3 plan: grow Frontline to 400 customers."]);
+  const fetched: string[] = [];
+  const fetcher = (async (url: string | URL | Request) => {
+    fetched.push(String(url));
+    if (String(url).startsWith("https://www.dropbox.com/evil"))
+      return new Response(null, { status: 302, headers: { location: "http://10.0.0.1/" } });
+    if (String(url).startsWith("https://www.dropbox.com/"))
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://dl.dropboxusercontent.com/s/q3.pdf" },
+      });
+    return new Response(Buffer.from(pdf), { headers: { "content-type": "application/pdf" } });
+  }) as typeof fetch;
+  const specs = fileToolSpecs(server.files, owner, undefined, fetcher) as unknown as {
+    name: string;
+    execute: (args: unknown) => Promise<unknown>;
+  }[];
+  const save = specs.find((s) => s.name === "save_to_files");
+  const read = specs.find((s) => s.name === "read_file");
+  const saved = (await save?.execute({
+    url: "https://composio-files.s3.us-east-1.amazonaws.com/abc/Q3.pdf?X-Amz-Signature=1",
+    name: "Q3 plan.pdf",
+    app: "Google Drive",
+  })) as { id: string; name: string; pageCount: number };
+  assert.equal(saved.name, "Q3 plan.pdf");
+  const text = (await read?.execute({ fileId: saved.id })) as { text: string };
+  assert.match(text.text, /grow Frontline to 400 customers/);
+  // Dropbox links redirect to its download host.
+  await save?.execute({ url: "https://www.dropbox.com/s/q3.pdf?dl=1", name: "Q3 copy.pdf" });
+  assert.equal(fetched.at(-1), "https://dl.dropboxusercontent.com/s/q3.pdf");
+  // Only a connected app's download hosts, never the server's own network.
+  await assert.rejects(
+    save?.execute({ url: "https://169.254.169.254/latest", name: "x.pdf" }) ?? Promise.resolve(),
+    /Only download links/,
+  );
+  await assert.rejects(
+    save?.execute({ url: "https://ec2-10-0-0-1.compute-1.amazonaws.com/", name: "x.pdf" }) ??
+      Promise.resolve(),
+    /Only download links/,
+  );
+  await assert.rejects(
+    save?.execute({ url: "http://files.composio.dev/a.pdf", name: "x.pdf" }) ?? Promise.resolve(),
+    /Only download links/,
+  );
+  await assert.rejects(
+    save?.execute({ url: "https://www.dropbox.com/evil", name: "x.pdf" }) ?? Promise.resolve(),
+    /isn't allowed/,
+  );
+});
+
+test("download links in an app's answer are found for the agent", async () => {
+  const { fileLinks } = await import("../apps/server/src/cloud-import.ts");
+  assert.deepEqual(
+    fileLinks({
+      data: {
+        downloaded_file_content: {
+          name: "Budget.xlsx",
+          mimetype: "application/vnd.ms-excel",
+          s3url: "https://bucket.s3.amazonaws.com/Budget.xlsx",
+        },
+        other: { s3url: "https://attacker.test/x" },
+      },
+    }),
+    [{ name: "Budget.xlsx", url: "https://bucket.s3.amazonaws.com/Budget.xlsx" }],
+  );
+});

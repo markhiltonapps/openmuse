@@ -59,6 +59,8 @@ export interface Config {
   composioBaseUrl?: string;
   /** Auth configs to use by app, "brex=ac_…,other=ac_…", when Composio can't sign in to it itself. */
   composioAuthConfigs?: Record<string, string>;
+  /** Signs Composio's webhook calls for new-email triggers. */
+  composioWebhookSecret?: string;
   resendApiKey?: string;
   resendWebhookSecret?: string;
   agentEmail?: string;
@@ -141,6 +143,7 @@ export function readConfig(): Config {
     composioApiKey: process.env.COMPOSIO_API_KEY?.trim() || undefined,
     composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
     composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,
+    composioWebhookSecret: process.env.COMPOSIO_WEBHOOK_SECRET?.trim() || undefined,
     composioAuthConfigs: Object.fromEntries(
       (process.env.COMPOSIO_AUTH_CONFIGS ?? "")
         .split(",")

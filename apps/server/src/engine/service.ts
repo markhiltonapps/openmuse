@@ -40,6 +40,7 @@ import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import type { HealthService } from "../health.ts";
 import { backgroundFailure } from "../log.ts";
+import type { MailAlerts } from "../mail-alerts.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { UsageMeter } from "../usage.ts";
 import type { WebSearch } from "../web-search.ts";
@@ -729,6 +730,8 @@ export class AgentService {
   look?: LookAtImage;
   /** Model usage per person, for costs and plan limits. */
   usage?: UsageMeter;
+  /** New-email alerts and "when X emails me" rules. */
+  mailAlerts?: MailAlerts;
   /** The agent's own email address; set when agent email is configured. */
   mail?: { address(owner: string): Promise<string | undefined> };
   /** Lets tests stand in for the Anthropic API when designing avatars. */

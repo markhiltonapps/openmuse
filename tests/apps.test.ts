@@ -179,10 +179,10 @@ test("Composio search, connection links and provider errors", async () => {
     url: "https://connect.test/googledrive",
   });
   assert.deepEqual(
-    (await connector.connections("search")).map((c) => [c.app, c.connected]),
+    (await connector.connections("search")).map((c) => [c.app, c.connected, c.needsReconnect]),
     [
-      ["slack", true],
-      ["notion", false],
+      ["slack", true, undefined],
+      ["notion", false, true],
     ],
   );
   await assert.rejects(
@@ -208,6 +208,61 @@ test("a failed write connection is reported as an unknown outcome", async () => 
     assert.equal((error as Error & { outcomeUnknown?: boolean }).outcomeUnknown, true);
     return true;
   });
+});
+
+test("too many requests are tried again after a pause; expired sign-ins say to reconnect", async () => {
+  let sessions = 0;
+  let executes = 0;
+  const { fetcher } = fakeComposio({
+    "POST /api/v3.1/tool_router/session": () => {
+      // The connector itself is busy the first time.
+      if (++sessions === 1)
+        return Response.json(
+          { error: { message: "Rate limit exceeded" } },
+          { status: 429, headers: { "retry-after": "2" } },
+        );
+      return Response.json({ session_id: "trs_busy" }, { status: 201 });
+    },
+    "GET /api/v3.1/tools/OUTLOOK_SEND_EMAIL": () => tool("OUTLOOK_SEND_EMAIL"),
+    "GET /api/v3.1/tools/OUTLOOK_LIST_MESSAGES": () =>
+      tool("OUTLOOK_LIST_MESSAGES", ["readOnlyHint"]),
+    "POST /api/v3.1/tool_router/session/trs_busy/execute": (body) => {
+      executes++;
+      if ((body as { tool_slug: string }).tool_slug === "OUTLOOK_LIST_MESSAGES")
+        return Response.json({
+          data: {},
+          error: "Error 401: invalid_grant, the refresh token has expired",
+        });
+      // The app is busy the first time.
+      return Response.json(
+        executes === 1
+          ? { data: {}, error: "429 Too Many Requests" }
+          : { data: { sent: true }, error: null },
+      );
+    },
+  });
+  const waits: number[] = [];
+  const connector = new ComposioConnector(db, config(), fetcher, async (ms) => {
+    waits.push(ms);
+  });
+  assert.deepEqual(await connector.execute("busy", "OUTLOOK_SEND_EMAIL", {}), { sent: true });
+  assert.deepEqual(waits, [2000, 1000]);
+  assert.equal(executes, 2);
+  await assert.rejects(
+    connector.execute("busy", "OUTLOOK_LIST_MESSAGES", {}),
+    /sign-in to outlook has expired. Reconnect it in Apps/,
+  );
+  // Always busy: gives up after three tries.
+  const { fetcher: busy } = fakeComposio({
+    "POST /api/v3.1/tool_router/session": () =>
+      Response.json({ error: { message: "Rate limit exceeded" } }, { status: 429 }),
+  });
+  waits.length = 0;
+  const gaveUp = new ComposioConnector(db, config(), busy, async (ms) => {
+    waits.push(ms);
+  });
+  await assert.rejects(gaveUp.search("always-busy", "email"), /Rate limit exceeded/);
+  assert.deepEqual(waits, [1000, 2000]);
 });
 
 function fakeApps(overrides: Partial<AppConnector> = {}) {
