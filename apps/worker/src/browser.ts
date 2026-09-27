@@ -36,9 +36,10 @@ export function validateSessionId(id: unknown): string {
 export async function createBrowserManager(options: {
   dataDir: string;
   maxSessions?: number;
+  maxProfiles?: number;
   idleTimeoutMs?: number;
 }) {
-  const { dataDir, maxSessions = 3, idleTimeoutMs = 30 * 60_000 } = options;
+  const { dataDir, maxSessions = 3, maxProfiles = 20, idleTimeoutMs = 30 * 60_000 } = options;
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   const sessions = new Map<string, Session>();
   const running = new Map<string, Running>();
@@ -152,18 +153,29 @@ export async function createBrowserManager(options: {
   async function createSession(id: string, url: string) {
     await validatePublicUrl(url);
     if (running.has(id)) return navigate(id, url);
-    if (running.size >= maxSessions)
-      throw new WorkerError(
-        "SESSION_LIMIT",
-        `Close an active session before opening another (limit ${maxSessions}).`,
-        409,
-      );
-    if (!sessions.has(id) && sessions.size >= 20)
-      throw new WorkerError(
-        "PROFILE_LIMIT",
-        "The worker has reached its 20 saved-profile limit.",
-        409,
-      );
+    if (running.size >= maxSessions) {
+      // Shared by everyone: make room by closing the page left alone longest.
+      const idle = idlest(running, Date.now());
+      if (!idle)
+        throw new WorkerError(
+          "SESSION_LIMIT",
+          `The agent's browser is busy with ${maxSessions} pages right now. Try again in a minute.`,
+          409,
+        );
+      await serial(idle, () => closeSession(idle));
+    }
+    if (!sessions.has(id) && sessions.size >= maxProfiles) {
+      // Forget the saved profile used longest ago; it starts fresh if that chat browses again.
+      const stale = stalest(sessions.values(), running);
+      if (!stale)
+        throw new WorkerError(
+          "PROFILE_LIMIT",
+          `The worker has reached its ${maxProfiles} saved-profile limit.`,
+          409,
+        );
+      sessions.delete(stale);
+      await rm(directory(stale), { recursive: true, force: true });
+    }
     const previous = sessions.get(id);
     const profileDir = join(directory(id), "profile");
     const tempDirectory = join("/tmp", `openmuse-downloads-${id}`);
@@ -404,4 +416,27 @@ export function navigationFailure(error: unknown) {
     return "The site's address couldn't be reached.";
   if (/ERR_CERT|ERR_SSL/.test(message)) return "The site's security certificate isn't valid.";
   return "The page could not be loaded. It may be unreachable or contain a blocked destination.";
+}
+
+/** The open page left alone longest, when nobody has used it for a minute. */
+export function idlest(
+  running: Iterable<[string, { touched: number }]>,
+  now: number,
+  minIdleMs = 60_000,
+) {
+  let found: { id: string; touched: number } | undefined;
+  for (const [id, { touched }] of running)
+    if (now - touched >= minIdleMs && (!found || touched < found.touched)) found = { id, touched };
+  return found?.id;
+}
+
+/** The saved profile used longest ago among those not open right now. */
+export function stalest(
+  sessions: Iterable<{ id: string; updatedAt: string }>,
+  open: { has(id: string): boolean },
+) {
+  let found: { id: string; updatedAt: string } | undefined;
+  for (const session of sessions)
+    if (!open.has(session.id) && (!found || session.updatedAt < found.updatedAt)) found = session;
+  return found?.id;
 }

@@ -609,3 +609,23 @@ test("the worker says why a page didn't load", async () => {
   );
   assert.match(navigationFailure(new Error("something else")), /could not be loaded/);
 });
+
+test("a full browser makes room from the page and profile left alone longest", async () => {
+  const { idlest, stalest } = await import("../apps/worker/src/browser.ts");
+  const now = 1_000_000;
+  const running = new Map([
+    ["busy", { touched: now - 5_000 }],
+    ["quiet", { touched: now - 300_000 }],
+    ["quieter", { touched: now - 900_000 }],
+  ]);
+  assert.equal(idlest(running, now), "quieter");
+  // Everyone is using theirs: nothing is closed.
+  assert.equal(idlest(new Map([["busy", { touched: now - 5_000 }]]), now), undefined);
+  const sessions = [
+    { id: "open-old", updatedAt: "2026-01-01T00:00:00.000Z" },
+    { id: "old", updatedAt: "2026-02-01T00:00:00.000Z" },
+    { id: "new", updatedAt: "2026-09-01T00:00:00.000Z" },
+  ];
+  assert.equal(stalest(sessions, new Set(["open-old"])), "old");
+  assert.equal(stalest([sessions[0] as (typeof sessions)[0]], new Set(["open-old"])), undefined);
+});
