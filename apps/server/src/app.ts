@@ -22,6 +22,7 @@ import { AppError } from "./errors.ts";
 import { FeedService } from "./feed.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
 import { PushService } from "./push.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
@@ -114,6 +115,8 @@ export async function createApp(
       : undefined);
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   agent.feed = feed;
+  const health = new HealthService(db, (owner) => agent.timeZone(owner));
+  agent.health = health;
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
@@ -312,6 +315,25 @@ export async function createApp(
   app.post("/api/spending", async (c) =>
     c.json(await spending.update(c.get("owner"), await c.req.json())),
   );
+  app.get("/api/health-log", async (c) => c.json(await health.summary(c.get("owner"))));
+  app.post("/api/health-log/meals", async (c) =>
+    c.json(await health.logMeal(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/health-log/:id/delete", async (c) =>
+    c.json(await health.remove(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/workouts/:id/complete", async (c) => {
+    const { seconds } = z
+      .object({
+        seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(4 * 3600),
+      })
+      .parse(await c.req.json());
+    return c.json(await health.completeWorkout(c.get("owner"), c.req.param("id"), seconds), 201);
+  });
   app.get("/api/feed", async (c) => c.json(await feed.get(c.get("owner"))));
   app.post("/api/feed/topics", async (c) =>
     c.json(await feed.setTopics(c.get("owner"), await c.req.json())),

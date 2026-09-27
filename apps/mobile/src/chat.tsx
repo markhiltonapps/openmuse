@@ -42,6 +42,7 @@ import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
 import { isPicture } from "./file-kinds";
+import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -92,6 +93,22 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ args, result, status }) => (
       <BrowserToolCard url={args.url} result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "create_workout",
+    description: "Show the guided workout the agent designed",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <WorkoutToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "log_meal",
+    description: "Show the meal the agent logged",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <MealToolCard result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({

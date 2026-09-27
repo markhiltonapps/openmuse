@@ -67,6 +67,10 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "read", label: "Looking through your files…" };
     case "read_file":
       return { kind: "read", label: "Reading your document…" };
+    case "log_meal":
+      return { kind: "writing", label: "Logging your meal…" };
+    case "create_workout":
+      return { kind: "plan", label: "Planning your workout…" };
     case "create_document":
       return { kind: "writing", label: "Writing your document…" };
     case "look_at_image":

@@ -17,6 +17,7 @@ import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
+import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
@@ -252,6 +253,23 @@ export class ConversationAgent extends AbstractAgent {
         }),
       ),
     );
+    const health = this.service.health;
+    if (health)
+      tools.push(
+        ...healthToolSpecs(health, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) => {
+              try {
+                return await spec.execute(args);
+              } catch (error) {
+                return { error: error instanceof Error ? error.message : "Could not save it" };
+              }
+            },
+          }),
+        ),
+      );
     const mail = this.service.mail;
     if (mail)
       tools.push(
@@ -335,6 +353,7 @@ export class ConversationAgent extends AbstractAgent {
         fileToolInstructions +
         (search ? webSearchInstructions : "") +
         (mail ? agentEmailInstructions : "") +
+        (health ? healthToolInstructions : "") +
         computerInstructions,
     });
     return new Observable((subscriber) => {

@@ -38,6 +38,7 @@ import type {
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AvatarPicker } from "./avatar-settings";
+import { HealthSection } from "./health-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import {
   Button,
@@ -1360,6 +1361,7 @@ export function GoalsScreen() {
     <View style={{ gap: 22 }}>
       <AgentStatus />
       <RoutinesSection routines={data?.routines || []} />
+      <HealthSection />
       <View style={{ height: 1, backgroundColor: colors.line }} />
       <View style={{ gap: 8 }}>
         <View style={[s.between, { marginBottom: 5 }]}>

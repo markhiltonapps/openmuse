@@ -1,8 +1,17 @@
-import { CalendarDays, CircleCheck, Clock, Plus, RefreshCw, X } from "lucide-react-native";
+import {
+  CalendarDays,
+  CircleCheck,
+  Clock,
+  Plus,
+  RefreshCw,
+  Utensils,
+  X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AssistantResponse } from "./assistant-response";
+import { todayLine, useHealth } from "./health-ui";
 import { Button, Card, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -53,6 +62,7 @@ const site = (url: string) => {
 export function FeedScreen() {
   const { workspace: w, api, navigate, ask } = useWorkspace();
   const { data } = useAgentWorkspace();
+  const health = useHealth();
   const [feed, setFeed] = useState<FeedState>();
   const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,6 +117,7 @@ export function FeedScreen() {
     ["queued", "running", "waiting_input", "waiting_approval"].includes(t.status),
   ).length;
   const days = [...new Set((feed?.items ?? []).map((item) => item.day))];
+  const healthLine = health.summary ? todayLine(health.summary.today) : "";
 
   return (
     <View style={{ gap: 20 }}>
@@ -138,6 +149,12 @@ export function FeedScreen() {
             )}
           </View>
         </View>
+        {!!healthLine && (
+          <Pressable style={[s.row, { gap: 10 }]} onPress={() => navigate("goals")}>
+            <Utensils size={18} color={colors.blueDark} />
+            <Text style={s.text}>{healthLine}</Text>
+          </Pressable>
+        )}
         {approvals > 0 && (
           <Pressable style={[s.row, { gap: 10 }]} onPress={() => navigate("activity")}>
             <CircleCheck size={18} color={colors.blueDark} />
