@@ -80,3 +80,40 @@ test("web search reports provider errors", async () => {
     /max_uses_exceeded/,
   );
 });
+
+test("social searches stay on forums and social sites; picture searches return each page's picture", async () => {
+  const result = {
+    content: [
+      {
+        type: "web_search_tool_result",
+        tool_use_id: "s1",
+        content: [
+          {
+            type: "web_search_result",
+            url: "https://www.reddit.com/r/espresso/1",
+            title: "Thread",
+          },
+          { type: "web_search_result", url: "https://shop.example/grinder", title: "Grinder" },
+        ],
+      },
+      { type: "text", text: "People like it." },
+    ],
+  };
+  const social = fakeAnthropic(200, result);
+  const search = new AnthropicWebSearch("k", {
+    fetcher: social.fetcher,
+    pictureOf: async (page) => (page.includes("shop") ? "https://shop.example/g.jpg" : undefined),
+  });
+  await search.search("Baratza Encore owners", undefined, "social");
+  const body = JSON.parse(String(social.calls[0]?.init.body));
+  assert.ok(body.tools[0].allowed_domains.includes("reddit.com"));
+  assert.match(body.messages[0].content, /firsthand/);
+
+  const [tool] = webSearchToolSpecs(search);
+  const pictures = await tool?.execute({ query: "Baratza Encore", kind: "images" });
+  assert.deepEqual(pictures?.pictures, [
+    { image: "https://shop.example/g.jpg", page: "https://shop.example/grinder", title: "Grinder" },
+  ]);
+  const plain = await tool?.execute({ query: "Baratza Encore" });
+  assert.equal(plain?.pictures, undefined);
+});

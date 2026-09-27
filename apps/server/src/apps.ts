@@ -77,6 +77,7 @@ export const FEATURED_APPS = [
   "instagram",
   "facebook",
   "google_maps",
+  "spotify",
 ];
 
 const READ_VERBS =
