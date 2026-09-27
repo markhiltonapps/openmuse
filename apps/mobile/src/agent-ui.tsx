@@ -37,10 +37,12 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { AlwaysAllowedCard } from "./approvals-ui";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { HealthSection } from "./health-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
+import { SubscriptionsCard } from "./subscriptions-ui";
 import {
   Button,
   Card,
@@ -1363,6 +1365,7 @@ export function GoalsScreen() {
       <AgentStatus />
       <RoutinesSection routines={data?.routines || []} />
       <HealthSection />
+      <SubscriptionsCard />
       <View style={{ height: 1, backgroundColor: colors.line }} />
       <View style={{ gap: 8 }}>
         <View style={[s.between, { marginBottom: 5 }]}>
@@ -1973,6 +1976,7 @@ export function AppsScreen() {
             />
           ))}
       </Card>
+      <AlwaysAllowedCard />
       <SpendingCard />
       <AgentEmailCard />
       <PhoneAppCard />

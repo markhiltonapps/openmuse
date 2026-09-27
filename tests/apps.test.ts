@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { ActionService } from "../apps/server/src/actions.ts";
 import { createApp } from "../apps/server/src/app.ts";
+import { ApprovalRules, destructiveAction } from "../apps/server/src/approval-rules.ts";
 import {
   type AppConnector,
   appToolSpecs,
@@ -573,4 +574,89 @@ test("Connect sets up an API-key sign-in in this Composio project when there's n
     (sessions_.at(-1)?.body as { auth_configs?: unknown } | undefined)?.auth_configs,
     { brex: "ac_made" },
   );
+});
+
+test("actions the person always allows run straight away; purchases and deletes still ask", async () => {
+  assert.equal(destructiveAction("OUTLOOK_DELETE_MESSAGE", "outlook"), true);
+  assert.equal(destructiveAction("STRIPE_CANCEL_SUBSCRIPTION", "stripe"), true);
+  assert.equal(destructiveAction("GOOGLECALENDAR_CREATE_EVENT", "googlecalendar"), false);
+  assert.equal(destructiveAction("SLACK_SEND_MESSAGE", "slack", ["destructiveHint"]), true);
+
+  const rules = new ApprovalRules(db);
+  const owner = "allower";
+  await rules.add(owner, { app: "GoogleCalendar" });
+  await rules.add(owner, { app: "outlook", tool: "outlook_delete_message" });
+  assert.deepEqual(
+    (await rules.list(owner)).map((r) => r.id),
+    ["app:googlecalendar", "tool:OUTLOOK_DELETE_MESSAGE"],
+  );
+  const destructive = (slug: string) => ({
+    slug,
+    app: slug.split("_")[0]?.toLowerCase() ?? "",
+    destructive: destructiveAction(slug, slug.split("_")[0] ?? ""),
+  });
+  assert.equal(
+    await rules.allows(owner, destructive("GOOGLECALENDAR_CREATE_EVENT")),
+    "Googlecalendar actions",
+  );
+  assert.equal(await rules.allows(owner, destructive("GOOGLECALENDAR_DELETE_EVENT")), undefined);
+  assert.match(
+    (await rules.allows(owner, destructive("OUTLOOK_DELETE_MESSAGE"))) ?? "",
+    /OUTLOOK_DELETE_MESSAGE/,
+  );
+  assert.equal(await rules.allows(owner, destructive("OUTLOOK_SEND_EMAIL")), undefined);
+  assert.equal(
+    await rules.allows("someone-else", destructive("GOOGLECALENDAR_CREATE_EVENT")),
+    undefined,
+  );
+
+  const { apps } = fakeApps({
+    tool: async (_owner, slug) => ({
+      slug,
+      name: slug,
+      description: "",
+      app: slug.split("_")[0]?.toLowerCase() ?? "",
+      readOnly: false,
+      destructive: destructiveAction(slug, slug.split("_")[0] ?? ""),
+    }),
+  });
+  const approved: string[] = [];
+  const specs = appToolSpecs(
+    apps,
+    owner,
+    async (action) => ({ id: `action-${action.tool}`, title: action.summary, hash: "h" }),
+    { check: async () => undefined },
+    {
+      allowed: (tool) => rules.allows(owner, tool),
+      approve: async ({ id }) => {
+        approved.push(id);
+        return { status: "succeeded", result: "Event created" };
+      },
+    },
+  );
+  const run = specs.find((s) => s.name === "use_app")?.execute as (
+    args: unknown,
+  ) => Promise<Record<string, unknown>>;
+  const created = await run({
+    tool: "GOOGLECALENDAR_CREATE_EVENT",
+    arguments: { title: "Dentist" },
+    summary: "Add the dentist to the calendar",
+  });
+  assert.equal(created.status, "done");
+  assert.match(String(created.message), /always allows Googlecalendar actions/);
+  const removed = await run({
+    tool: "GOOGLECALENDAR_DELETE_EVENT",
+    arguments: { id: "e1" },
+    summary: "Delete the dentist event",
+  });
+  assert.equal(removed.status, "awaiting_review");
+  await rules.add(owner, { app: "shopify" });
+  const bought = await run({
+    tool: "SHOPIFY_CREATE_ORDER",
+    arguments: { item: "mug" },
+    summary: "Order a mug",
+    amountUsd: 12,
+  });
+  assert.equal(bought.status, "awaiting_review", "purchases always ask");
+  assert.deepEqual(approved, ["action-GOOGLECALENDAR_CREATE_EVENT"]);
 });

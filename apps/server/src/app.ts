@@ -9,6 +9,7 @@ import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/i
 import { AccountService, type Mailer, ResendMailer } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
+import { ApprovalRules } from "./approval-rules.ts";
 import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { BrowserService } from "./browser.ts";
@@ -138,6 +139,8 @@ export async function createApp(
       }),
   );
   agent.reminders = reminders;
+  const approvals = new ApprovalRules(db);
+  agent.approvals = approvals;
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
@@ -348,6 +351,13 @@ export async function createApp(
   app.get("/api/health-log", async (c) => c.json(await health.summary(c.get("owner"))));
   app.post("/api/health-log/meals", async (c) =>
     c.json(await health.logMeal(c.get("owner"), await c.req.json()), 201),
+  );
+  app.get("/api/approval-rules", async (c) => c.json(await approvals.list(c.get("owner"))));
+  app.post("/api/approval-rules", async (c) =>
+    c.json(await approvals.add(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/approval-rules/:id/delete", async (c) =>
+    c.json(await approvals.remove(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/reminders", async (c) => c.json(await reminders.list(c.get("owner"))));
   app.post("/api/reminders/:id/cancel", async (c) =>

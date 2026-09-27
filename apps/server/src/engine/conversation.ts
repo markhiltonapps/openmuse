@@ -354,6 +354,12 @@ export class ConversationAgent extends AbstractAgent {
               key("app", data),
             ),
           this.service.spending,
+          this.service.approvals && {
+            allowed: (tool) =>
+              this.service.approvals?.allows(this.owner, tool) ?? Promise.resolve(undefined),
+            approve: (proposal) =>
+              this.service.actions.decide(this.owner, proposal.id, proposal.hash, "approve"),
+          },
         ).map((spec) =>
           defineTool({
             ...spec,

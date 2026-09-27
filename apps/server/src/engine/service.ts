@@ -29,6 +29,7 @@ import type {
   ProposalInput,
 } from "../../../../packages/domain/src/index.ts";
 import { type ActionService, usesGoogle } from "../actions.ts";
+import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
 import type { BrowserService } from "../browser.ts";
 import { ComputerService } from "../computer.ts";
@@ -721,6 +722,8 @@ export class AgentService {
   feed?: { refreshDue(): Promise<void> };
   /** One-off reminders; delivered from the maintenance loop. */
   reminders?: ReminderService;
+  /** Connected-app actions the person always allows. */
+  approvals?: ApprovalRules;
   /** Looks at pictures in Files; set when a vision model is configured. */
   look?: LookAtImage;
   /** The agent's own email address; set when agent email is configured. */

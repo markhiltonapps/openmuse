@@ -543,10 +543,17 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
     local.status !== initial.status ? local : w.actions.find((a) => a.id === initial.id) || local;
   const d = action.data;
   const pending = action.status === "awaiting_review";
+  // "Always allow" for connected-app actions: this one action, or everything in the app.
+  const [allow, setAllow] = useState<"none" | "action" | "app">("none");
   async function decide(decision: "approve" | "deny") {
     setBusy(true);
     setError("");
     try {
+      if (decision === "approve" && allow !== "none")
+        await api.request("/api/approval-rules", {
+          app: String(d.app || ""),
+          ...(allow === "action" ? { tool: String(d.tool || "") } : {}),
+        });
       const result = await api.request<ActionProposal>(`/api/actions/${action.id}/decide`, {
         decision,
         hash: action.hash,
@@ -738,6 +745,23 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
             })}
             . Your approval applies only to the details shown above.
           </Text>
+          {app && typeof d.amountUsd !== "number" && (
+            <View style={{ gap: 4, marginBottom: 14 }}>
+              <CheckRow
+                label={`Always allow ${String(d.tool || "this action")} without asking`}
+                checked={allow === "action"}
+                onPress={() => setAllow(allow === "action" ? "none" : "action")}
+              />
+              <CheckRow
+                label={`Always allow everything in ${appLabel(String(d.app || ""))}, except deleting or cancelling things`}
+                checked={allow === "app"}
+                onPress={() => setAllow(allow === "app" ? "none" : "app")}
+              />
+              <Text style={s.small}>
+                Purchases always ask. Change this any time under Apps → Always allowed.
+              </Text>
+            </View>
+          )}
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
             <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
               {app && typeof d.amountUsd === "number"
@@ -768,6 +792,8 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
     </Sheet>
   );
 }
+const appLabel = (app: string) =>
+  app.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "this app";
 function arrayText(value: unknown) {
   return Array.isArray(value) ? value.map(String).join(", ") : "";
 }

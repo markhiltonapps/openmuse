@@ -369,6 +369,15 @@ export async function executeModelTask(
           return action;
         },
         service.spending,
+        service.approvals && {
+          allowed: (tool) => service.approvals?.allows(owner, tool) ?? Promise.resolve(undefined),
+          approve: async (proposal) => {
+            const done = await service.actions.decide(owner, proposal.id, proposal.hash, "approve");
+            // Allowed without review: the task carries on instead of waiting.
+            outcome = undefined;
+            return done;
+          },
+        },
       ).map(
         (spec) =>
           tool(
