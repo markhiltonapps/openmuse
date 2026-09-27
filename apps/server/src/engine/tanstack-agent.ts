@@ -97,6 +97,10 @@ const stateTools = [
   }),
 ];
 
+/** Anthropic prompt caching: a cache read costs a tenth of the normal input price. */
+const CACHE = { type: "ephemeral" } as const;
+export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
+
 /** A BuiltInAgent in TanStack factory mode with the options of the classic AI SDK mode. */
 export function tanstackAgent(options: {
   model: string;
@@ -111,7 +115,9 @@ export function tanstackAgent(options: {
     factory: ({ input, abortController }) => {
       const converted = convertInputToTanStackAI(input);
       // Build the system prompt like the classic mode. It does not forward system messages.
-      let system = options.prompt;
+      // The instructions come first and never change, so Claude can reuse them from its cache;
+      // the context after them (the time, memories) changes between turns.
+      let system = "";
       if (input.context.length) {
         system += "\n## Context from the application\n";
         for (const ctx of input.context) system += `${ctx.description}:\n${ctx.value}\n`;
@@ -122,10 +128,22 @@ export function tanstackAgent(options: {
         !(typeof input.state === "object" && Object.keys(input.state).length === 0)
       )
         system += `\n## Application State\nThis is state from the application that you can edit by calling AGUISendStateSnapshot or AGUISendStateDelta.\n\`\`\`json\n${JSON.stringify(input.state, null, 2)}\n\`\`\`\n`;
+      const cached = caches(options.model);
       return chat({
         adapter: adapter(options.model),
         messages: converted.messages,
-        systemPrompts: system ? [system] : [],
+        systemPrompts: [
+          ...(options.prompt
+            ? [
+                cached
+                  ? { content: options.prompt, metadata: { cache_control: CACHE } }
+                  : options.prompt,
+              ]
+            : []),
+          ...(system.trim() ? [system.trim()] : []),
+        ] as never,
+        // The conversation so far is cached too, so each step of a reply rereads it cheaply.
+        ...(cached ? { modelOptions: { cache_control: CACHE } as never } : {}),
         tools: [
           ...converted.tools,
           ...[...options.tools, ...stateTools].map((tool) =>
