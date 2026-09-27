@@ -184,7 +184,7 @@ export async function executeModelTask(
           evidence: [
             ...task.evidence,
             {
-              id: page.sessionId,
+              id: randomUUID(),
               kind: "web",
               title: page.title,
               url: page.url,
@@ -227,6 +227,13 @@ export async function executeModelTask(
       async (data) => {
         const key = createHash("sha256").update(JSON.stringify(data)).digest("hex");
         const action = await service.prepare(owner, task, { kind: "email.send", data }, key, ctx);
+        if (action.status === "succeeded") {
+          task = await ctx.checkpoint({
+            state: { ...task.state, approvalResult: action.result },
+            actionId: null,
+          });
+          return { status: "succeeded", actionId: action.id, result: action.result };
+        }
         outcome = { status: "waiting_approval", actionId: action.id };
         return { status: "waiting_approval", actionId: action.id };
       },
@@ -244,6 +251,13 @@ export async function executeModelTask(
           key,
           ctx,
         );
+        if (action.status === "succeeded") {
+          task = await ctx.checkpoint({
+            state: { ...task.state, approvalResult: action.result },
+            actionId: null,
+          });
+          return { status: "succeeded", actionId: action.id, result: action.result };
+        }
         outcome = { status: "waiting_approval", actionId: action.id };
         return { status: "waiting_approval", actionId: action.id };
       },

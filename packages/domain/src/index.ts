@@ -205,7 +205,7 @@ export interface ActivityEntry {
 export interface Connection {
   id: string;
   name: string;
-  status: "connected" | "disconnected" | "sample" | "unconfigured";
+  status: "connected" | "disconnected" | "sample" | "unconfigured" | "unavailable";
   account?: string;
   capabilities: string[];
 }
