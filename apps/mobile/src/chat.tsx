@@ -41,6 +41,7 @@ import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
+import { isPicture } from "./file-kinds";
 import { MailToolCard } from "./mail-tool-card";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -51,6 +52,17 @@ import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 const displayParameters = z.record(z.string(), z.unknown());
+/** One-tap requests offered when a photo is attached. */
+const PHOTO_ACTIONS = [
+  { label: "What is this?", prompt: "What is in this photo?" },
+  {
+    label: "Find where to buy it",
+    prompt:
+      "Find this product for me: identify it, show me where to buy it with prices, and offer to order it.",
+  },
+  { label: "Log this meal", prompt: "Log this meal for me." },
+  { label: "Read the text", prompt: "Read the text in this photo." },
+];
 export function WorkspaceTools() {
   const { workspace, section } = useWorkspace();
   useAgentContext({
@@ -466,8 +478,9 @@ export function ChatScreen({
       setError(`Could not stop response: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  function send() {
-    const text = draft.trim();
+  /** Sends the draft, or a quick-action prompt that goes with the current attachments. */
+  function send(prompt?: string) {
+    const text = (prompt ?? draft).trim();
     if (!text || !isReady || !loaded) return;
     primeSpeech();
     stopSpeaking();
@@ -944,6 +957,22 @@ export function ChatScreen({
                 ))}
             </View>
           )}
+          {w.files.some((f) => attachments.includes(f.id) && isPicture(f)) && !draft.trim() && (
+            <View
+              style={[s.row, { gap: 6, flexWrap: "wrap", paddingHorizontal: 9, paddingBottom: 6 }]}
+            >
+              {PHOTO_ACTIONS.map((action) => (
+                <Button
+                  key={action.label}
+                  small
+                  disabled={replying || !loaded || !isReady}
+                  onPress={() => send(action.prompt)}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </View>
+          )}
           <View style={[s.row, { gap: 7, alignItems: "flex-end" }]}>
             <Pressable
               accessibilityRole="button"
@@ -1059,7 +1088,7 @@ export function ChatScreen({
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}
               disabled={!replying && (!draft.trim() || !loaded || !isReady)}
-              onPress={replying ? () => void stop() : send}
+              onPress={replying ? () => void stop() : () => send()}
               style={({ pressed }) => ({
                 width: 44,
                 height: 44,
