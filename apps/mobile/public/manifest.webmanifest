@@ -1,6 +1,6 @@
 {
-  "name": "OpenMuse",
-  "short_name": "OpenMuse",
+  "name": "Neato_Meca",
+  "short_name": "Neato_Meca",
   "description": "A personal agent for your mail, calendar, apps and errands.",
   "start_url": "/",
   "scope": "/",

@@ -6,7 +6,15 @@ import { AppError } from "./errors.ts";
  * Animated avatars made from a photo: a still for the first moment and two short clips that
  * loop, one idle and one talking. The files are fetched once and kept with the server's data.
  */
-export const avatarPresets: Record<string, Record<"poster" | "idle" | "talking", string>> = {
+export const avatarPresets: Record<
+  string,
+  Partial<Record<"poster" | "idle" | "talking", string>>
+> = {
+  // Neddy, the Neato_Meca mascot: his head-and-shoulders render with the background removed.
+  neddy: {
+    poster:
+      "https://d8j0ntlcm91z4.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/hf_20260923_014139_0be7a81c-8ba1-42da-b625-56f443db7ecb_min.png",
+  },
   todd: {
     poster:
       "https://d8j0ntlcm91z4.cloudfront.net/user_3Gsk2DZG9U3IEagXO8Pr1iSOQPK/hf_20260927_033225_0136e55a-3b06-4024-a90f-af0a67686023_min.webp",

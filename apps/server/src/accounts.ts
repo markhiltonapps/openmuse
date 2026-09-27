@@ -256,8 +256,8 @@ export class AccountService {
     const link = `${appUrl}/#login=${token}`;
     const address = this.address(account);
     const intro = invite
-      ? `You've been invited to OpenMuse, a personal assistant for your email, calendar, apps and errands.`
-      : "Here's your link to sign in to OpenMuse.";
+      ? `You've been invited to Neato_Meca, a personal assistant for your email, calendar, apps and errands.`
+      : "Here's your link to sign in to Neato_Meca.";
     const expiry = invite ? "within 3 days" : "within 15 minutes";
     const extra =
       invite && address
@@ -265,9 +265,9 @@ export class AccountService {
         : "";
     await this.mailer.send({
       to: account.email,
-      subject: invite ? "You're invited to OpenMuse" : "Your OpenMuse sign-in link",
+      subject: invite ? "You're invited to Neato_Meca" : "Your Neato_Meca sign-in link",
       text: `${intro}\n\nSign in: ${link}\n\nThe link works once and expires ${expiry}.${extra}`,
-      html: `<p>${intro}</p><p><a href="${link}">Sign in to OpenMuse</a></p><p style="color:#666">The link works once and expires ${expiry}. If you didn't ask for it, you can ignore this email.</p>${
+      html: `<p>${intro}</p><p><a href="${link}">Sign in to Neato_Meca</a></p><p style="color:#666">The link works once and expires ${expiry}. If you didn't ask for it, you can ignore this email.</p>${
         extra ? `<p>${extra.trim()}</p>` : ""
       }`,
     });

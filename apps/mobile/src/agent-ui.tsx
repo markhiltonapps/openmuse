@@ -918,7 +918,7 @@ export function DelegateSheet() {
   return (
     <Sheet
       title="Hand over an outcome"
-      subtitle="OpenMuse saves a plan and keeps working on the server."
+      subtitle="Your agent saves a plan and keeps working on the server."
       onClose={close}
     >
       <View style={[s.row, { flexWrap: "wrap", gap: 8, marginBottom: 20 }]}>
@@ -1115,7 +1115,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
           <EvidenceList items={idea.evidence} />
           {editing && (
             <Field
-              label="What should OpenMuse do?"
+              label="What should your agent do?"
               value={prompt}
               onChangeText={setPrompt}
               multiline
@@ -1857,7 +1857,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       <Text style={[s.small, { marginBottom: 14 }]}>
         {sample
           ? "Changes to this built-in page stay in your workspace."
-          : "OpenMuse checks this public page on the server and saves meaningful changes in Notifications."}
+          : "Your agent checks this public page on the server and saves meaningful changes in Notifications."}
       </Text>
       <ErrorNotice error={error} />
       <Button
@@ -2009,10 +2009,10 @@ export function AppsScreen() {
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState(false);
-  const [name, setName] = useState(data?.identity.name || "OpenMuse");
+  const [name, setName] = useState(data?.identity.name || "Neddy");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
-  const [character, setCharacter] = useState(data?.identity.character || "capybara");
+  const [character, setCharacter] = useState(data?.identity.character || "neddy");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
   const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
@@ -2022,7 +2022,7 @@ export function AppsScreen() {
       setName(data.identity.name);
       setTone(data.identity.tone);
       setAvatar(data.identity.avatar || "sky");
-      setCharacter(data.identity.character || "capybara");
+      setCharacter(data.identity.character || "neddy");
       setShowChatUpdates(data.identity.showChatUpdates !== false);
     }
   }, [
@@ -2104,7 +2104,7 @@ export function AppsScreen() {
       <SpendingCard />
       <AgentEmailCard />
       <PhoneAppCard />
-      <VoiceCard name={data?.identity.name || "OpenMuse"} />
+      <VoiceCard name={data?.identity.name || "Neddy"} />
       <AppearanceCard />
       <AccountCard />
       <YourDataCard />
@@ -2391,19 +2391,19 @@ function PhoneAppCard() {
       {!isInstalled() && (
         <Text style={s.muted}>
           {isIos()
-            ? "Add OpenMuse to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
-            : "Install OpenMuse from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
+            ? "Add Neato_Meca to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
+            : "Install Neato_Meca from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
         </Text>
       )}
       <Text style={s.muted}>
         {state === "on"
           ? "This device gets a notification when a routine finishes, a task needs your details, or something is ready for review."
           : state === "install-first"
-            ? "Notifications work once OpenMuse is on your Home Screen."
+            ? "Notifications work once Neato_Meca is on your Home Screen."
             : state === "blocked"
               ? "Notifications are blocked for this site. Allow them in your browser settings, then come back."
               : state === "unsupported"
-                ? "This browser can't show notifications from OpenMuse."
+                ? "This browser can't show notifications from Neato_Meca."
                 : "Get a notification when a routine finishes or something needs your review."}
       </Text>
       {(state === "on" || state === "off") && (

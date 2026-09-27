@@ -463,7 +463,7 @@ export class ConversationAgent extends AbstractAgent {
               ...input.context,
               {
                 description: "Who you are",
-                value: `Your name is ${identity?.name?.trim() || "OpenMuse"}. Your tone is ${identity?.tone?.trim() || "warm"}.`,
+                value: `Your name is ${identity?.name?.trim() || "Neddy"}. Your tone is ${identity?.tone?.trim() || "warm"}.`,
               },
               { description: "Current date and time", value: localNow(timeZone) },
               ...(memories.length

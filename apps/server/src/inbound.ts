@@ -189,7 +189,7 @@ export class AgentInbox {
     if (!address || address.toLowerCase() !== email.from.toLowerCase())
       throw new AppError("Your agent's email address changed. Prepare the email again.", 409);
     const identity = await this.db.get<{ name?: string }>(owner, "agent-settings", "identity");
-    const name = (identity?.name ?? "OpenMuse").replace(/["<>\r\n,;]/g, "").trim() || "OpenMuse";
+    const name = (identity?.name ?? "Neddy").replace(/["<>\r\n,;]/g, "").trim() || "Neddy";
     const response = await this.fetcher("https://api.resend.com/emails", {
       method: "POST",
       headers: {

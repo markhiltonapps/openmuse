@@ -142,7 +142,7 @@ test("the agent's emails wait for approval and go out from its own address", asy
     /^Sent from muse@agent\.test to friend@example\.com/,
   );
   const request = JSON.parse(String(sent[0]?.body));
-  assert.equal(request.from, "OpenMuse <muse@agent.test>");
+  assert.equal(request.from, "Neddy <muse@agent.test>");
   assert.deepEqual(request.headers, {
     "In-Reply-To": "<abc123@mail.example.com>",
     References: "<abc123@mail.example.com>",

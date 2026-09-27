@@ -75,7 +75,7 @@ test("agent API requires a session and reports the actual worker state", async (
   );
   const workspace = await read<AgentWorkspace>("");
   assert.equal(workspace.worker.running, false);
-  assert.equal(workspace.identity.name, "OpenMuse");
+  assert.equal(workspace.identity.name, "Neddy");
   assert.equal(workspace.identity.tone, "warm");
 });
 

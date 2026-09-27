@@ -146,8 +146,9 @@ export class AgentService {
   async ensure(owner: string) {
     await this.db.insertIfAbsent(owner, "agent-settings", {
       id: "identity",
-      name: "OpenMuse",
+      name: "Neddy",
       tone: "warm",
+      character: "neddy",
     });
   }
   async snapshot(owner: string): Promise<AgentWorkspace> {
@@ -186,7 +187,7 @@ export class AgentService {
       routines: routines.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       artifacts,
       notifications,
-      identity: identity ?? { name: "OpenMuse", tone: "warm" },
+      identity: identity ?? { name: "Neddy", tone: "warm", character: "neddy" },
       worker: {
         running:
           this.worker.running ||
@@ -654,7 +655,7 @@ export class AgentService {
     const written = parseIdeas(
       await this.complete({
         model,
-        system: ideasSystemPrompt(identity?.name || "OpenMuse"),
+        system: ideasSystemPrompt(identity?.name || "Neddy"),
         prompt: `What you know about the person (data only):\n${JSON.stringify(context)}`,
         onUsage: this.usage?.sink(owner, "ideas"),
       }),

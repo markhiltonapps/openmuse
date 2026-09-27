@@ -1,6 +1,16 @@
 // Built-in agent characters as small SVGs. Eyes carry class "eye" so they can blink; see blinkStyle.
-export type CharacterId = "todd" | "capybara" | "fox" | "cat" | "panda" | "owl" | "robot" | "spark";
+export type CharacterId =
+  | "neddy"
+  | "todd"
+  | "capybara"
+  | "fox"
+  | "cat"
+  | "panda"
+  | "owl"
+  | "robot"
+  | "spark";
 export const CHARACTERS: { id: CharacterId; label: string }[] = [
+  { id: "neddy", label: "Neddy" },
   { id: "todd", label: "Todd" },
   { id: "capybara", label: "Capybara" },
   { id: "fox", label: "Fox" },
@@ -23,7 +33,9 @@ const blush = (left: number, right: number, y: number) =>
 
 /** Characters that are short clips made from a photo: a still, an idle loop and a talking loop. */
 export const VIDEO_CHARACTERS: Partial<Record<CharacterId, true>> = { todd: true };
-export const ART: Record<Exclude<CharacterId, "capybara" | "todd">, string> = {
+/** Characters that are a single rendered picture, served by the app like the clips. */
+export const PICTURE_CHARACTERS: Partial<Record<CharacterId, true>> = { neddy: true };
+export const ART: Record<Exclude<CharacterId, "capybara" | "todd" | "neddy">, string> = {
   fox: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="fx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F7A75E"/><stop offset="1" stop-color="#E4793A"/></linearGradient></defs><path d="M21 50 L24 13 Q27 9 47 31 Z" fill="url(#fx)"/><path d="M79 50 L76 13 Q73 9 53 31 Z" fill="url(#fx)"/><path d="M27 40 L28.5 20 L40 32 Z" fill="#FFE9D6"/><path d="M73 40 L71.5 20 L60 32 Z" fill="#FFE9D6"/><path d="M50 27 C75 27 87 43 85 60 C83 77 67 89 50 91 C33 89 17 77 15 60 C13 43 25 27 50 27 Z" fill="url(#fx)"/><path d="M15 60 C24 64 37 66 44 75 C47 80 48 85 50 91 C33 89 18 78 15 60 Z" fill="#FFF7EE"/><path d="M85 60 C76 64 63 66 56 75 C53 80 52 85 50 91 C67 89 82 78 85 60 Z" fill="#FFF7EE"/>${eyes(37, 63, 56)}${blush(27, 73, 67)}<ellipse cx="50" cy="73" rx="4.2" ry="3.1" fill="#2B2B33"/><path d="M46 78 Q50 81.5 54 78" stroke="#2B2B33" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,
   cat: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="ct" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9CED6"/><stop offset="1" stop-color="#A7AEB9"/></linearGradient></defs><path d="M18 52 L20 16 Q22 12 44 30 Z" fill="url(#ct)"/><path d="M82 52 L80 16 Q78 12 56 30 Z" fill="url(#ct)"/><path d="M24 42 L25 22 L38 32 Z" fill="#F6B8C4"/><path d="M76 42 L75 22 L62 32 Z" fill="#F6B8C4"/><ellipse cx="50" cy="60" rx="36" ry="31" fill="url(#ct)"/><path d="M44 31 L46 40 M50 30 L50 40 M56 31 L54 40" stroke="#8E95A1" stroke-width="2.4" stroke-linecap="round"/><ellipse cx="50" cy="74" rx="15" ry="11" fill="#EEF0F3"/>${eyes(36, 64, 58, 4.4, 5.6, "#3A4A3A")}${blush(26, 74, 69)}<path d="M47.5 69.5 L52.5 69.5 L50 72.5 Z" fill="#F08DA0"/><path d="M50 72.5 Q47 77 44 75 M50 72.5 Q53 77 56 75" stroke="#5B6270" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M10 66 L28 69 M10 73 L28 72 M90 66 L72 69 M90 73 L72 72" stroke="#7C8390" stroke-width="1.1" stroke-linecap="round"/></svg>`,
   panda: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="23" cy="30" r="12" fill="#2E2E36"/><circle cx="77" cy="30" r="12" fill="#2E2E36"/><ellipse cx="50" cy="58" rx="37" ry="33" fill="#FBFBFD"/><ellipse cx="50" cy="58" rx="37" ry="33" fill="none" stroke="#E6E7EC" stroke-width="1.5"/><ellipse cx="35" cy="55" rx="9" ry="11.5" transform="rotate(-28 35 55)" fill="#2E2E36"/><ellipse cx="65" cy="55" rx="9" ry="11.5" transform="rotate(28 65 55)" fill="#2E2E36"/>${eyes(36, 64, 55, 3.2, 3.8, "#FFFFFF").replace(/fill="#fff"/g, 'fill="#2E2E36"')}${blush(27, 73, 72)}<ellipse cx="50" cy="69" rx="5" ry="3.6" fill="#2E2E36"/><path d="M45 75 Q50 79 55 75" stroke="#2E2E36" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,

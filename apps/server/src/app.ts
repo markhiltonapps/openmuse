@@ -279,13 +279,16 @@ export async function createApp(
   );
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
-      return c.html("<h1>Google connection cancelled</h1><p>You can return to OpenMuse.</p>", 400);
+      return c.html(
+        "<h1>Google connection cancelled</h1><p>You can return to Neato_Meca.</p>",
+        400,
+      );
     const state = c.req.query("state"),
       code = c.req.query("code");
     if (!state || !code) throw new AppError("Google callback is incomplete");
     await google.callback(state, code);
     return c.html(
-      "<h1>Google is connected</h1><p>Return to OpenMuse and refresh your workspace.</p>",
+      "<h1>Google is connected</h1><p>Return to Neato_Meca and refresh your workspace.</p>",
     );
   });
   // 3D emoji pictures, shared by everyone and loaded by <img> without a sign-in header.
