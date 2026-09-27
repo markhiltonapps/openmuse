@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
-import { speakableChunks } from "./speakable";
+import { SpokenReply, speakableChunks } from "./speakable";
 
 // Spoken replies use the device's own voices (Web Speech API): free, and private to the device.
 export interface VoiceSettings {
@@ -116,6 +116,83 @@ export function speak(text: string, override?: Partial<VoiceSettings>): Promise<
     };
     next();
   });
+}
+export interface ReplyReader {
+  /** The reply so far: each sentence is read out as soon as it's finished. */
+  update(markdown: string): void;
+  /** The finished reply; resolves true once all of it has been said, false if it was cut off. */
+  finish(markdown: string): Promise<boolean>;
+}
+/**
+ * Reads a reply aloud while it's still being written, starting with its first sentence instead
+ * of waiting for the whole reply. `onSpeaking` tells when it is audible, not between sentences.
+ */
+export function readAsWritten(onSpeaking?: (speaking: boolean) => void): ReplyReader {
+  if (!speechAvailable()) return { update: () => undefined, finish: async () => true };
+  const synth = window.speechSynthesis;
+  const current = ++generation;
+  synth.cancel();
+  const reply = new SpokenReply();
+  const voices = ranked();
+  const chosen = voices.find((v) => v.voiceURI === settings.voice) ?? voices[0];
+  const { rate } = settings;
+  let speaking = false;
+  let audible = false;
+  let finished = false;
+  let result: boolean | undefined;
+  const waiting: ((complete: boolean) => void)[] = [];
+  const setAudible = (value: boolean) => {
+    if (audible === value) return;
+    audible = value;
+    onSpeaking?.(value);
+  };
+  const end = (complete: boolean) => {
+    if (result !== undefined) return;
+    result = complete;
+    setAudible(false);
+    for (const resolve of waiting) resolve(complete);
+  };
+  const play = () => {
+    if (speaking || result !== undefined) return;
+    if (current !== generation) return end(false);
+    const chunk = reply.next();
+    if (chunk === undefined) {
+      if (finished) end(true);
+      else setAudible(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(chunk);
+    if (chosen) {
+      utterance.voice = chosen;
+      utterance.lang = chosen.lang;
+    }
+    utterance.rate = rate;
+    // An error, such as being cut off, ends this piece; play() then stops if it was cut off.
+    utterance.onend = utterance.onerror = () => {
+      speaking = false;
+      play();
+    };
+    speaking = true;
+    setAudible(true);
+    synth.speak(utterance);
+  };
+  return {
+    update(markdown) {
+      if (result !== undefined || current !== generation) return;
+      reply.update(markdown);
+      play();
+    },
+    finish(markdown) {
+      if (current !== generation) end(false);
+      if (result === undefined) {
+        reply.update(markdown, true);
+        finished = true;
+        play();
+      }
+      if (result !== undefined) return Promise.resolve(result);
+      return new Promise((resolve) => waiting.push(resolve));
+    },
+  };
 }
 export function stopSpeaking() {
   generation++;

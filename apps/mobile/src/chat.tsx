@@ -44,11 +44,19 @@ import { runConversationTurn } from "./conversation-run";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
+import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
 import { chooseAndUpload } from "./upload";
-import { primeSpeech, speak, speechAvailable, stopSpeaking, voiceSettings } from "./voice";
+import {
+  primeSpeech,
+  readAsWritten,
+  speak,
+  speechAvailable,
+  stopSpeaking,
+  voiceSettings,
+} from "./voice";
 import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
 
@@ -282,11 +290,27 @@ export function ChatScreen({
     await speak(text);
     setSpeakingId((current) => (current === id ? undefined : current));
   }, []);
-  const replied = useRef<(id: string, text: string) => void>(() => undefined);
-  replied.current = (id, text) => {
-    if (!voiceModeRef.current && !voiceSettings().readAloud) return;
-    void readAloud(id, text).then(listenForTurn);
-  };
+  /** Reads a reply aloud from its first finished sentence while the rest is still being written. */
+  const followReply = useCallback(() => {
+    let latest = "reply";
+    let shown: string | undefined;
+    const reader = readAsWritten((speaking) => {
+      if (speaking) {
+        shown = latest;
+        setSpeakingId(latest);
+      } else setSpeakingId((current) => (current === shown ? undefined : current));
+    });
+    return {
+      update(reply: Message[]) {
+        const writing = reply.filter(
+          (m) => m.role === "assistant" && typeof m.content === "string",
+        );
+        latest = writing.at(-1)?.id ?? latest;
+        reader.update(replyText(reply));
+      },
+      finish: (reply: Message[]) => reader.finish(replyText(reply)),
+    };
+  }, []);
   useEffect(() => endVoiceMode, [endVoiceMode]);
   /** Cuts the agent off mid-sentence; in voice mode it listens to the person right away. */
   const interrupt = useCallback(() => {
@@ -412,20 +436,27 @@ export function ChatScreen({
       setError("");
       if (message) agent.addMessage({ id: message.id, role: "user", content: message.text });
       const before = agent.messages.length;
+      const reading = voiceModeRef.current || voiceSettings().readAloud ? followReply() : undefined;
+      const following = reading
+        ? agent.subscribe({
+            onMessagesChanged: ({ messages }) => reading.update(messages.slice(before)),
+          })
+        : undefined;
       try {
         await runConversationTurn(
           agentId,
           () => copilotkit.runAgent({ agent }),
           (onError) => copilotkit.subscribe({ onError }),
         );
-        const reply = agent.messages
-          .slice(before)
-          .reverse()
-          .find((m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim());
-        if (reply) replied.current(reply.id, String(reply.content));
-        else if (voiceModeRef.current) listenForTurn();
+        // In voice mode, listen again once the whole reply has been said. If the person cut it
+        // off, the interruption is already listening.
+        if (reading)
+          void reading.finish(agent.messages.slice(before)).then((complete) => {
+            if (complete) listenForTurn();
+          });
         await Promise.all([refresh(), refreshAgent()]);
       } finally {
+        following?.unsubscribe();
         try {
           await saveHistory();
         } catch (e) {
@@ -450,6 +481,7 @@ export function ChatScreen({
       saveHistory,
       queue,
       listenForTurn,
+      followReply,
     ],
   );
   const flush = useCallback(() => {
