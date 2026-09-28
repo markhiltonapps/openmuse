@@ -1038,7 +1038,7 @@ export function ChatScreen({
             </Button>
           </View>
         )}
-        {(!richThreads || selection.id === mainId) && !voiceMode && <MealCheckInCard />}
+        {!voiceMode && <MealCheckInCard replying={replying} />}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15 }}>
             <Text style={s.heading}>Add a photo or file</Text>

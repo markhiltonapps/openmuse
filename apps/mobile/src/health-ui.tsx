@@ -280,7 +280,11 @@ export function HealthSection() {
   const line = todayLine(summary.today);
   return (
     <Card style={{ gap: 12 }}>
-      <SectionHeading title="Health" action="Food log" onPress={() => open({ type: "food" })} />
+      <SectionHeading
+        title="Health"
+        action="View food log"
+        onPress={() => open({ type: "food" })}
+      />
       <Text style={s.text}>{line ? `Today: ${line}` : "Nothing logged today yet."}</Text>
       <Text style={s.small}>
         Snap a meal in chat and tap "Log this meal", or ask for a workout like "a 15-minute workout

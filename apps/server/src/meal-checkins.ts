@@ -329,7 +329,7 @@ export function checkInToolSpecs(checkIns: MealCheckIns, owner: string) {
           times: settings.times,
           meals: settings.meals,
           days: settings.days,
-          next: "Confirm the times in plain words (for example 8:30 am, 12:30 pm and 6:30 pm). Tell them the questions show up as a notification and as a card at the top of chat, and their food log is in Feed under Today's meals.",
+          next: "Confirm the times in plain words (for example 8:30 am, 12:30 pm and 6:30 pm). Tell them the questions show up as a notification and as a card just above the chat box, and their food log is in Feed under Today: tap View food log.",
         };
       },
     },

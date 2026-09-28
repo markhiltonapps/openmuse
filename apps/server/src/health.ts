@@ -51,10 +51,11 @@ export interface HealthEntry {
 export const mealChangeSchema = z.object({
   title: z.string().trim().min(1).max(160).optional(),
   meal: z.enum(["breakfast", "lunch", "dinner", "snack"]).optional(),
-  calories: amount(10000),
-  protein: amount(1000),
-  carbs: amount(1000),
-  fat: amount(1000),
+  /** null clears a number the person isn't sure of. */
+  calories: amount(10000).nullable(),
+  protein: amount(1000).nullable(),
+  carbs: amount(1000).nullable(),
+  fat: amount(1000).nullable(),
 });
 export interface Workout extends z.infer<typeof workoutSchema> {
   id: string;
@@ -97,12 +98,13 @@ export class HealthService {
     const current = await this.db.get<HealthEntry>(owner, "health-log", id);
     if (current?.kind !== "meal") throw new AppError("Entry not found", 404);
     const numbers = ["calories", "protein", "carbs", "fat"] as const;
-    const entry: HealthEntry = {
-      ...current,
-      ...change,
-      // Numbers the person typed are theirs, not an estimate.
-      estimated: numbers.some((key) => key in change) ? false : current.estimated,
-    };
+    const { calories, protein, carbs, fat, ...words } = change;
+    const entry: HealthEntry = { ...current, ...words };
+    for (const [key, value] of Object.entries({ calories, protein, carbs, fat }))
+      if (value === null) delete entry[key as (typeof numbers)[number]];
+      else if (value !== undefined) entry[key as (typeof numbers)[number]] = value;
+    // Numbers the person typed are theirs, not an estimate.
+    if (numbers.some((key) => change[key] !== undefined)) entry.estimated = false;
     await this.db.put(owner, "health-log", entry);
     await this.onMeal?.(owner, entry);
     return entry;

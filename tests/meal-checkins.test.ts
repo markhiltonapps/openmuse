@@ -145,6 +145,9 @@ test("fixing a logged meal keeps the numbers the person typed", async () => {
   assert.equal(fixed.meal, "lunch");
   assert.equal(fixed.calories, 700);
   assert.equal(fixed.estimated, false);
+  const cleared = await health.changeMeal("me", entry.id, { calories: null });
+  assert.equal("calories" in cleared, false, "cleared, not kept");
+  assert.equal(cleared.title, "Burrito");
   await assert.rejects(health.changeMeal("someone-else", entry.id, { calories: 1 }), /not found/);
   await db.close();
 });

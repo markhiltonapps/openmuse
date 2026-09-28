@@ -142,7 +142,11 @@ export function dictate(
         ? "Allow microphone access to use voice input."
         : event.error === "no-speech" || event.error === "aborted"
           ? undefined
-          : "Voice input stopped.";
+          : event.error === "network" ||
+              event.error === "service-not-allowed" ||
+              event.error === "audio-capture"
+            ? "Voice isn’t working in this browser. Tap the mic on your keyboard to talk instead."
+            : "Voice input stopped.";
     finish();
   };
   recognition.onend = finish;

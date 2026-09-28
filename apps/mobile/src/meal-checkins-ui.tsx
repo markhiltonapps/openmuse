@@ -176,7 +176,7 @@ export function SayOrType({
         shadowOffset: { width: 0, height: 4 },
       }}
     >
-      <Mic size={size * 0.43} color={listening ? "#FFFFFF" : colors.onInverse} />
+      <Mic size={size * 0.43} color={listening ? colors.canvas : colors.onInverse} />
     </View>
   );
   const box = (
@@ -320,11 +320,17 @@ export function SayOrType({
  * "What did you have for lunch?" just above the chat box, ready to answer by voice or text, until
  * it's answered, skipped or put off.
  */
-export function MealCheckInCard() {
+export function MealCheckInCard({ replying }: { replying?: boolean }) {
   const { api, ask, notify } = useWorkspace();
   const { state, load } = useCheckIns();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState("");
+  // A meal logged in chat (a photo, "had soup for lunch") answers its check-in on the server.
+  const wasReplying = useRef(false);
+  useEffect(() => {
+    if (wasReplying.current && !replying) void load();
+    wasReplying.current = !!replying;
+  }, [replying, load]);
   const checkIn = state?.open[0];
   if (!checkIn) return null;
   const others = state.open.slice(1).map((c) => MEAL_NAMES[c.meal]?.toLowerCase());
@@ -345,17 +351,13 @@ export function MealCheckInCard() {
   }
   async function answer(text: string) {
     if (!checkIn) return;
-    setBusy("answer");
     setError("");
-    try {
-      await api.request(`/api/meal-checkins/${checkIn.id}/answer`, {});
-      ask(`Log my ${meal}: ${text}`);
-      await load();
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setBusy(undefined);
-    }
+    // The words go to the agent first, so nothing said is lost; logging the meal also closes it.
+    ask(`Log my ${meal}: ${text}`);
+    await api
+      .request(`/api/meal-checkins/${checkIn.id}/answer`, {})
+      .catch(() => undefined)
+      .then(load);
   }
   const yesterday = checkIn.yesterday;
   return (
@@ -381,7 +383,6 @@ export function MealCheckInCard() {
         inline
         placeholder={`What you had for ${meal}`}
         action={`Log ${meal}`}
-        busy={busy === "answer"}
         onSubmit={(text) => void answer(text)}
       />
       {yesterday && (
@@ -395,10 +396,10 @@ export function MealCheckInCard() {
           style={({ pressed }) => [
             s.row,
             {
-              gap: 8,
-              minHeight: 40,
-              paddingHorizontal: 13,
-              borderRadius: 20,
+              gap: 10,
+              minHeight: 44,
+              paddingHorizontal: 14,
+              borderRadius: 22,
               backgroundColor: pressed ? colors.blue : colors.card,
               opacity: busy && busy !== "same" ? 0.5 : 1,
             },
@@ -409,11 +410,22 @@ export function MealCheckInCard() {
           ) : (
             <Repeat size={15} color={colors.text} />
           )}
-          <Text style={[s.buttonText, { color: colors.text }]}>Same as yesterday</Text>
-          <Text numberOfLines={1} style={[s.small, { flex: 1, color: colors.mutedStrong }]}>
-            {yesterday.title}
-            {yesterday.calories !== undefined ? ` · ${kcal(yesterday.calories)}` : ""}
-          </Text>
+          <View style={{ flex: 1, paddingVertical: 6 }}>
+            <Text style={[s.buttonText, { color: colors.text }]}>Same as yesterday</Text>
+            <View style={s.row}>
+              <Text
+                numberOfLines={1}
+                style={[s.small, { flexShrink: 1, color: colors.mutedStrong }]}
+              >
+                {yesterday.title}
+              </Text>
+              {yesterday.calories !== undefined && (
+                <Text style={[s.small, { flexShrink: 0, color: colors.mutedStrong }]}>
+                  {` · ${kcal(yesterday.calories)}`}
+                </Text>
+              )}
+            </View>
+          </View>
         </Pressable>
       )}
       <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
@@ -499,13 +511,25 @@ export function MealsToday({
           {line || "Nothing logged today yet"}
         </Text>
       </Pressable>
-      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+      <View style={[s.row, { gap: 12, flexWrap: "wrap" }]}>
         <Button small icon={Mic} onPress={() => open({ type: "food", log: true })}>
           Log a meal
         </Button>
-        <Button small onPress={() => open({ type: "food" })}>
-          Food log
-        </Button>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => open({ type: "food" })}
+          hitSlop={6}
+          style={({ pressed }) => ({
+            minHeight: 38,
+            justifyContent: "center",
+            paddingHorizontal: 4,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Text style={[s.buttonText, { color: colors.text, textDecorationLine: "underline" }]}>
+            View food log
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -525,7 +549,7 @@ function TimeStepper({
   const step = (minutes: number, Icon: typeof Plus, label: string) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${label} ${meal} check-in 15 minutes`}
+      accessibilityLabel={`${meal} 15 minutes ${label}`}
       disabled={disabled}
       onPress={() => onChange(shiftTime(time, minutes))}
       style={({ pressed }) => ({
@@ -543,7 +567,7 @@ function TimeStepper({
   );
   return (
     <View style={[s.row, { gap: 6 }]}>
-      {step(-15, Minus, "Earlier:")}
+      {step(-15, Minus, "earlier")}
       <Text
         accessibilityLiveRegion="polite"
         style={[
@@ -554,7 +578,7 @@ function TimeStepper({
       >
         {clockTime(time)}
       </Text>
-      {step(15, Plus, "Later:")}
+      {step(15, Plus, "later")}
     </View>
   );
 }
@@ -607,7 +631,7 @@ function CheckInSettings({ state, reload }: { state: CheckIns; reload: () => Pro
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={s.heading}>Ask me what I ate</Text>
           <Text style={[s.small, { color: colors.mutedStrong }]}>
-            A notification at each meal, answered from chat.
+            A notification at each meal. Answer by voice or text.
           </Text>
         </View>
         <View
@@ -679,9 +703,9 @@ function CheckInSettings({ state, reload }: { state: CheckIns; reload: () => Pro
       {switchedOff.length > 0 && (
         <View style={{ gap: 8, marginTop: 12 }}>
           <Text style={[s.small, { color: colors.mutedStrong }]}>
-            So you’re not asked twice, check-ins replaced{" "}
-            {switchedOff.length === 1 ? "this routine" : `these ${switchedOff.length} routines`}:{" "}
-            {switchedOff.map((r) => r.title).join(", ")}. They’re paused, not deleted.
+            {switchedOff.length === 1
+              ? `To avoid asking twice, I paused a routine that asked what you ate: ${switchedOff[0]?.title}. It’s not deleted.`
+              : `To avoid asking twice, I paused ${switchedOff.length} routines that asked what you ate: ${switchedOff.map((r) => r.title).join(", ")}. They’re not deleted.`}
           </Text>
           <Button
             small
@@ -723,8 +747,8 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
     minute: "2-digit",
   });
   async function save() {
-    const number = calories.trim() === "" ? undefined : Number(calories);
-    if (number !== undefined && (!Number.isFinite(number) || number < 0 || number > 10000))
+    const number = calories.trim() === "" ? null : Number(calories);
+    if (number !== null && (!Number.isFinite(number) || number < 0 || number > 10000))
       return setError("Calories should be a number from 0 to 10,000.");
     setBusy(true);
     setError("");
@@ -732,7 +756,14 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
       await api.request(`/api/health-log/${entry.id}`, {
         title: title.trim() || entry.title,
         ...(meal ? { meal } : {}),
-        ...(number !== undefined && number !== entry.calories ? { calories: number } : {}),
+        // Empty clears the estimate; an unchanged number stays an estimate.
+        ...(number === null
+          ? entry.calories === undefined
+            ? {}
+            : { calories: null }
+          : number !== Math.round(entry.calories ?? -1)
+            ? { calories: number }
+            : {}),
       });
       setEditing(false);
       await onChanged();
@@ -758,15 +789,12 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
     <View style={{ paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.line, gap: 10 }}>
       <View style={[s.row, { gap: 12, alignItems: "flex-start" }]}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[s.small, { color: colors.mutedStrong, fontWeight: "600" }]}>
-            {MEAL_NAMES[entry.meal ?? ""] ?? "Meal"} · {time}
-          </Text>
           <Text style={s.text}>{entry.title}</Text>
-          {!!entry.items?.length && (
-            <Text style={[s.small, { color: colors.mutedStrong }]} numberOfLines={2}>
-              {entry.items.join(", ")}
-            </Text>
-          )}
+          <Text style={[s.small, { color: colors.mutedStrong }]} numberOfLines={2}>
+            {[MEAL_NAMES[entry.meal ?? ""] ?? "Meal", time, entry.items?.join(", ")]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
         </View>
         <View style={{ alignItems: "flex-end", gap: 2 }}>
           <Text style={[s.text, { fontVariant: ["tabular-nums"] }]}>{kcal(entry.calories)}</Text>
@@ -774,7 +802,9 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
             <Text style={s.small}>{entry.estimated === false ? "yours" : "estimate"}</Text>
           )}
         </View>
-        {!editing && (
+        {editing ? (
+          <View style={{ width: 36 }} />
+        ) : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Change ${entry.title}`}
@@ -794,7 +824,15 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
         )}
       </View>
       {editing && (
-        <View style={{ gap: 4 }}>
+        <View
+          style={{
+            gap: 4,
+            marginTop: 4,
+            padding: 14,
+            borderRadius: 19,
+            backgroundColor: colors.subtle,
+          }}
+        >
           <Field label="What you had" value={title} onChangeText={setTitle} />
           <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>Which meal</Text>
           <View style={[s.row, { gap: 8, flexWrap: "wrap", marginTop: 7, marginBottom: 16 }]}>
@@ -810,7 +848,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
                   paddingHorizontal: 14,
                   borderRadius: 19,
                   justifyContent: "center",
-                  backgroundColor: meal === option ? colors.inverse : colors.subtle,
+                  backgroundColor: meal === option ? colors.inverse : colors.surface,
                 }}
               >
                 <Text
@@ -831,6 +869,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
             keyboardType="numeric"
             inputMode="numeric"
             placeholder="Leave empty if you’re not sure"
+            accessibilityHint="Leave it empty to clear the number"
           />
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
             <Button small primary busy={busy} onPress={() => void save()}>
@@ -861,7 +900,15 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
             )}
           </View>
           {confirming && (
-            <View style={{ gap: 10, marginTop: 10 }}>
+            <View
+              style={{
+                gap: 10,
+                marginTop: 12,
+                padding: 14,
+                borderRadius: 16,
+                backgroundColor: colors.errorBg,
+              }}
+            >
               <Text role="alert" style={s.text}>
                 Remove {entry.title} from your food log? This can’t be undone.
               </Text>
@@ -939,7 +986,7 @@ export function FoodLogSheet({ log }: { log?: boolean }) {
           <Empty
             icon={Utensils}
             title="Nothing logged yet"
-            detail="Answer a check-in, say what you ate with Log a meal, or send a photo of your plate in chat and tap Log this meal."
+            detail="Answer when I ask what you ate, tap Log a meal, or send a photo of your plate in chat and tap Log this meal."
           />
         ) : (
           history.days.map((day) => (
