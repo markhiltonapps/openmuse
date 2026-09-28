@@ -123,6 +123,8 @@ export async function createApp(
         return workspace.execute(owner, input, connectionId, targetVersion);
       if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
       const data = await apps.execute(owner, input.data.tool, input.data.arguments);
+      // A meeting added or moved shows on the Feed's day card straight away.
+      if (/calendar|outlook/i.test(input.data.app)) calendarToday.forget(owner);
       if (isPurchase(input.data.tool) && input.data.amountUsd)
         await spending.record(owner, "", input.data.amountUsd);
       const detail = data === undefined ? "" : JSON.stringify(data).slice(0, 300);
@@ -753,6 +755,7 @@ export async function createApp(
       .object({ app: z.string().trim().min(1).max(100) })
       .parse(await c.req.json());
     await apps.disconnect(c.get("owner"), slug);
+    calendarToday.forget(c.get("owner"));
     return c.json({ ok: true });
   });
   app.post("/api/apps/connect", async (c) => {

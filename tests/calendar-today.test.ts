@@ -197,6 +197,13 @@ test("today's events come from each connected calendar app, for the person's own
   const failed = await calendar.today("me");
   assert.deepEqual(failed.failed, ["outlook"]);
   assert.deepEqual(failed.events, []);
+  // A failure isn't kept: the next look tries again, and a fix shows at once.
+  broken = false;
+  assert.deepEqual((await calendar.today("me")).failed, []);
+  const before = calls.length;
+  calendar.forget("me");
+  await calendar.today("me");
+  assert.equal(calls.length, before + 1, "forgotten after a calendar change");
   // No app connector (sample mode): nothing to check.
   assert.deepEqual(await new CalendarToday(undefined, async () => ZONE).today("me"), {
     events: [],

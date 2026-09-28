@@ -142,6 +142,10 @@ export class CalendarToday {
     private readonly timeZone: (owner: string) => Promise<string>,
     private readonly now: () => number = Date.now,
   ) {}
+  /** Forgets what was read, after a calendar changes (an app connected, an event added). */
+  forget(owner: string) {
+    this.cache.delete(owner);
+  }
   /** Today's events in the person's time zone, from every connected calendar app. */
   async today(owner: string, fresh = false): Promise<TodayCalendar> {
     const zone = await this.timeZone(owner);
@@ -166,8 +170,10 @@ export class CalendarToday {
         backgroundFailure(`today's ${app} calendar`, error);
       }
     }
-    value.events.sort((a, b) => a.start.localeCompare(b.start));
-    this.cache.set(owner, { at: this.now(), day, value });
+    value.events.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    // Only a full answer is kept: a failure or a calendar still to be connected is asked again.
+    if (value.checked.length && !value.failed.length)
+      this.cache.set(owner, { at: this.now(), day, value });
     return value;
   }
   private async read(owner: string, app: string, from: string, to: string, zone: string) {

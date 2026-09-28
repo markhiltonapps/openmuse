@@ -62,6 +62,10 @@ const COMMITMENT_EMOJI: Record<Commitment["kind"], string> = {
   event: "🎟️",
   other: "📌",
 };
+const CALENDAR_NAMES: Record<string, string> = {
+  outlook: "Outlook",
+  googlecalendar: "Google Calendar",
+};
 interface AppDay {
   events: { id: string; title: string; start: string; end: string; allDay: boolean }[];
   checked: string[];
@@ -275,8 +279,13 @@ export function FeedScreen() {
       e.allDay ? e.start.slice(0, 10) === today : localDay(new Date(e.start)) === today,
     )
     .filter((e) => e.allDay || new Date(e.end) > now)
-    .sort((a, b) => a.start.localeCompare(b.start))
-    .slice(0, 3);
+    // By time, whatever each calendar's way of writing it; all-day ones first.
+    .sort(
+      (a, b) =>
+        (a.allDay ? 0 : Date.parse(a.start)) - (b.allDay ? 0 : Date.parse(b.start)) ||
+        a.title.localeCompare(b.title),
+    );
+  const unread = (appDay?.failed ?? []).map((app) => CALENDAR_NAMES[app] ?? "your calendar");
   const approvals = w.actions.filter((a) => a.status === "awaiting_review").length;
   const working = (data?.tasks ?? []).filter((t) =>
     ["queued", "running", "waiting_input", "waiting_approval"].includes(t.status),
@@ -370,25 +379,29 @@ export function FeedScreen() {
           <Emoji char={sky} size={64} />
         </View>
         <DayRow emoji="📅">
-          {events.length ? (
-            events.map((e) => (
-              <Text key={e.id} style={s.text}>
-                {e.allDay
-                  ? "All day"
-                  : new Date(e.start).toLocaleTimeString(undefined, {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}{" "}
-                · {e.title}
-              </Text>
-            ))
-          ) : !appDay ? (
-            <Text style={s.muted}>Checking your calendar…</Text>
-          ) : appDay.failed.length ? (
-            <Text style={s.muted}>
-              Couldn’t read your calendar just now. Ask in chat what’s on it today.
+          {events.slice(0, 3).map((e) => (
+            <Text key={`${e.id}-${e.start}`} style={s.text}>
+              {e.allDay
+                ? "All day"
+                : new Date(e.start).toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}{" "}
+              · {e.title}
             </Text>
-          ) : !appDay.checked.length &&
+          ))}
+          {events.length > 3 && (
+            <Text style={[s.small, { color: colors.mutedStrong }]}>
+              + {events.length - 3} more today
+            </Text>
+          )}
+          {!appDay ? (
+            !events.length && <Text style={s.muted}>Checking your calendar…</Text>
+          ) : unread.length ? (
+            <Text style={events.length ? [s.small, { color: colors.mutedStrong }] : s.muted}>
+              Couldn’t read {unread.join(" or ")} just now. Ask in chat what’s on it today.
+            </Text>
+          ) : events.length ? null : !appDay.checked.length &&
             !w.connections.some((c) => c.id === "google" && c.status !== "disconnected") ? (
             <Pressable accessibilityRole="button" onPress={() => navigate("apps")}>
               <Text style={[s.text, { textDecorationLine: "underline" }]}>
