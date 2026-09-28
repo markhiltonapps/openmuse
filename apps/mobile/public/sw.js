@@ -25,7 +25,10 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
-      return open ? open.focus() : self.clients.openWindow(url);
+      if (!open) return self.clients.openWindow(url);
+      // Already open: tell the app what was tapped (a meal check-in opens chat), then show it.
+      open.postMessage({ type: "notification-open", url });
+      return open.focus();
     }),
   );
 });

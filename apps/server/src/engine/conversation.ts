@@ -25,6 +25,7 @@ import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
+import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
 import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { reminderToolSpecs } from "../reminders.ts";
@@ -326,15 +327,19 @@ export class ConversationAgent extends AbstractAgent {
         ),
       );
     const health = this.service.health;
+    const checkIns = this.service.checkIns;
     if (health)
       tools.push(
-        ...healthToolSpecs(health, this.owner).map((spec) =>
+        ...[
+          ...healthToolSpecs(health, this.owner),
+          ...(checkIns ? checkInToolSpecs(checkIns, this.owner) : []),
+        ].map((spec) =>
           defineTool({
             ...spec,
             parameters: spec.parameters as z.ZodObject,
             execute: async (args: unknown) => {
               try {
-                return await spec.execute(args);
+                return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
               } catch (error) {
                 return { error: error instanceof Error ? error.message : "Could not save it" };
               }
@@ -545,6 +550,7 @@ export class ConversationAgent extends AbstractAgent {
         (search ? webSearchInstructions : "") +
         (mail ? agentEmailInstructions : "") +
         (health ? healthToolInstructions : "") +
+        (health && this.service.checkIns ? checkInInstructions : "") +
         computerInstructions,
     });
     return new Observable((subscriber) => {

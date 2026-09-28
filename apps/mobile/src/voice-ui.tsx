@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { Mic } from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Button, Card, CheckRow, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import {
@@ -10,8 +11,53 @@ import {
   updateVoiceSettings,
   useVoiceSettings,
   type VoiceOption,
+  voiceSettings,
 } from "./voice";
-import { dictationAvailable, isIos, microphones } from "./web-app";
+import { dictate, dictationAvailable, isIos, microphones } from "./web-app";
+
+/** "Say it" for an answer box: what's heard is added to the box, to check before sending. */
+export function DictateButton({
+  onText,
+  label = "Say it",
+}: {
+  onText: (text: string) => void;
+  label?: string;
+}) {
+  const [listening, setListening] = useState(false);
+  const [error, setError] = useState("");
+  const stop = useRef<() => void>(undefined);
+  useEffect(() => () => stop.current?.(), []);
+  if (!dictationAvailable()) return null;
+  return (
+    <View style={{ gap: 6 }}>
+      <Button
+        small
+        icon={Mic}
+        style={{
+          alignSelf: "flex-start",
+          ...(listening ? { backgroundColor: colors.lavender } : {}),
+        }}
+        onPress={() => {
+          if (listening) return stop.current?.();
+          setError("");
+          setListening(true);
+          stop.current = dictate(
+            onText,
+            (problem) => {
+              setListening(false);
+              stop.current = undefined;
+              if (problem) setError(problem);
+            },
+            voiceSettings().microphone,
+          );
+        }}
+      >
+        {listening ? "Listening… tap to stop" : label}
+      </Button>
+      <ErrorNotice error={error} />
+    </View>
+  );
+}
 
 const SPEEDS = [
   { label: "Slower", rate: 0.85 },

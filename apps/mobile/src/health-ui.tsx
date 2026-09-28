@@ -32,6 +32,8 @@ interface Entry {
 export interface HealthSummary {
   today: {
     meals: number;
+    /** Meals logged today: breakfast, lunch, dinner, snack. */
+    logged?: string[];
     calories: number;
     protein: number;
     carbs: number;
@@ -270,7 +272,7 @@ export function MealToolCard({ result, loading }: { result: unknown; loading: bo
 
 /** Goals → Health: today's totals, the week's log, and workouts to start again. */
 export function HealthSection() {
-  const { api, ask } = useWorkspace();
+  const { api, open } = useWorkspace();
   const { summary, reload } = useHealth();
   const [playing, setPlaying] = useState<Workout>();
   const [error, setError] = useState("");
@@ -278,11 +280,7 @@ export function HealthSection() {
   const line = todayLine(summary.today);
   return (
     <Card style={{ gap: 12 }}>
-      <SectionHeading
-        title="Health"
-        action="Log a meal"
-        onPress={() => ask("I'd like to log a meal.")}
-      />
+      <SectionHeading title="Health" action="Food log" onPress={() => open({ type: "food" })} />
       <Text style={s.text}>{line ? `Today: ${line}` : "Nothing logged today yet."}</Text>
       <Text style={s.small}>
         Snap a meal in chat and tap "Log this meal", or ask for a workout like "a 15-minute workout

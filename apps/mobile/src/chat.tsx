@@ -45,6 +45,7 @@ import { runConversationTurn } from "./conversation-run";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
+import { MealCheckInCard } from "./meal-checkins-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { replyText } from "./speakable";
@@ -1037,6 +1038,7 @@ export function ChatScreen({
             </Button>
           </View>
         )}
+        {(!richThreads || selection.id === mainId) && !voiceMode && <MealCheckInCard />}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15 }}>
             <Text style={s.heading}>Add a photo or file</Text>

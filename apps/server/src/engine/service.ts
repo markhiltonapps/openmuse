@@ -52,6 +52,7 @@ import type { HealthService } from "../health.ts";
 import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
 import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
+import type { MealCheckIns } from "../meal-checkins.ts";
 import { MiniApps } from "../mini-apps.ts";
 import { People } from "../people.ts";
 import type { ReminderService } from "../reminders.ts";
@@ -140,6 +141,9 @@ export class AgentService {
       await this.commitments
         ?.nudgeDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("commitments", error));
+      await this.checkIns
+        ?.due((owner) => this.removed(owner))
+        .catch((error) => backgroundFailure("meal check-ins", error));
       for (const { owner, value } of await this.db.scan<Idea>("ideas"))
         if (
           value.status === "accepted" &&
@@ -897,6 +901,8 @@ export class AgentService {
   }
   /** Meal log and guided workouts. */
   health?: HealthService;
+  /** "What did you have for lunch?" at meal times; asked from the maintenance loop. */
+  checkIns?: MealCheckIns;
   /** The Feed's morning refresh; runs from the maintenance loop. */
   feed?: { refreshDue(): Promise<void> };
   /** One-off reminders; delivered from the maintenance loop. */
@@ -927,7 +933,10 @@ export class AgentService {
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
   /** Phone and browser notifications; set when web push is available. */
   push?: {
-    notify(owner: string, message: { title: string; body: string; tag?: string }): Promise<void>;
+    notify(
+      owner: string,
+      message: { title: string; body: string; tag?: string; url?: string },
+    ): Promise<void>;
   };
   async notify(
     owner: string,
@@ -935,7 +944,7 @@ export class AgentService {
     body: string,
     taskId?: string,
     key?: string,
-    extra: Pick<AgentNotification, "reminderId"> = {},
+    extra: Pick<AgentNotification, "reminderId" | "checkInId"> = {},
   ) {
     const value: AgentNotification = {
       id: key ? hash(key) : randomUUID(),
@@ -948,7 +957,13 @@ export class AgentService {
     };
     if ((await this.db.insertIfAbsent(owner, "notifications", value)) && this.push)
       void this.push
-        .notify(owner, { title, body, tag: value.id })
+        .notify(owner, {
+          title,
+          body,
+          tag: value.id,
+          // A check-in opens chat with its card, ready to answer.
+          ...(extra.checkInId ? { url: `/?checkin=${encodeURIComponent(extra.checkInId)}` } : {}),
+        })
         .catch((error) => backgroundFailure("push notification", error));
   }
   async timeZone(owner: string) {

@@ -39,6 +39,7 @@ import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
+import { FoodLogSheet } from "./meal-checkins-ui";
 import PdfReader from "./PdfReader";
 import { ShareLinkCard } from "./share-ui";
 import { codeReady, SignInReview } from "./sign-in-ui";
@@ -66,6 +67,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "task") return <TaskDetail taskId={detail.taskId} />;
   if (detail.type === "delegate") return <DelegateSheet />;
   if (detail.type === "notifications") return <NotificationsSheet />;
+  if (detail.type === "food") return <FoodLogSheet log={detail.log} />;
   if (detail.type === "mail") return <MailDetail mail={detail.mail} />;
   if (detail.type === "email") return <EmailEditor draft={detail.draft} />;
   if (detail.type === "event")

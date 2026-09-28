@@ -47,6 +47,15 @@ export interface HealthEntry {
   minutes?: number;
   workoutId?: string;
 }
+/** Fixing a logged meal: its name, which meal it was, or the numbers. */
+export const mealChangeSchema = z.object({
+  title: z.string().trim().min(1).max(160).optional(),
+  meal: z.enum(["breakfast", "lunch", "dinner", "snack"]).optional(),
+  calories: amount(10000),
+  protein: amount(1000),
+  carbs: amount(1000),
+  fat: amount(1000),
+});
 export interface Workout extends z.infer<typeof workoutSchema> {
   id: string;
   minutes: number;
@@ -54,7 +63,7 @@ export interface Workout extends z.infer<typeof workoutSchema> {
 }
 
 /** The local date (YYYY-MM-DD) of an instant in a time zone. */
-const localDay = (at: string | number, timeZone: string) =>
+export const localDay = (at: string | number, timeZone: string) =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -69,6 +78,8 @@ export class HealthService {
     private readonly timeZone: (owner: string) => Promise<string>,
     private readonly now: () => number = Date.now,
   ) {}
+  /** Told about each meal logged, so a check-in for that meal is answered too. */
+  onMeal?: (owner: string, entry: HealthEntry) => Promise<void>;
   async logMeal(owner: string, raw: unknown) {
     const meal = mealSchema.parse(raw);
     const entry: HealthEntry = {
@@ -78,7 +89,49 @@ export class HealthService {
       ...meal,
     };
     await this.db.put(owner, "health-log", entry);
+    await this.onMeal?.(owner, entry);
     return { entry, today: (await this.summary(owner)).today };
+  }
+  async changeMeal(owner: string, id: string, raw: unknown) {
+    const change = mealChangeSchema.parse(raw);
+    const current = await this.db.get<HealthEntry>(owner, "health-log", id);
+    if (current?.kind !== "meal") throw new AppError("Entry not found", 404);
+    const numbers = ["calories", "protein", "carbs", "fat"] as const;
+    const entry: HealthEntry = {
+      ...current,
+      ...change,
+      // Numbers the person typed are theirs, not an estimate.
+      estimated: numbers.some((key) => key in change) ? false : current.estimated,
+    };
+    await this.db.put(owner, "health-log", entry);
+    await this.onMeal?.(owner, entry);
+    return entry;
+  }
+  /** The food log by local day, newest first, with each day's totals. */
+  async history(owner: string, days = 30) {
+    const zone = await this.timeZone(owner);
+    const since = this.now() - Math.min(Math.max(days, 1), 366) * 24 * 60 * 60 * 1000;
+    const meals = (await this.db.list<HealthEntry>(owner, "health-log"))
+      .filter((entry) => entry.kind === "meal" && Date.parse(entry.at) >= since)
+      .sort((a, b) => b.at.localeCompare(a.at));
+    const byDay = new Map<string, HealthEntry[]>();
+    for (const meal of meals) {
+      const day = localDay(meal.at, zone);
+      byDay.set(day, [...(byDay.get(day) ?? []), meal]);
+    }
+    const sum = (entries: HealthEntry[], key: "calories" | "protein" | "carbs" | "fat") =>
+      Math.round(entries.reduce((total, entry) => total + (entry[key] ?? 0), 0));
+    return {
+      today: localDay(this.now(), zone),
+      days: [...byDay].map(([day, entries]) => ({
+        day,
+        meals: entries,
+        calories: sum(entries, "calories"),
+        protein: sum(entries, "protein"),
+        carbs: sum(entries, "carbs"),
+        fat: sum(entries, "fat"),
+      })),
+    };
   }
   async saveWorkout(owner: string, raw: unknown) {
     const plan = workoutSchema.parse(raw);
@@ -129,6 +182,8 @@ export class HealthService {
     return {
       today: {
         meals: todays.filter((e) => e.kind === "meal").length,
+        /** Which meals are logged today: breakfast, lunch, dinner, snack. */
+        logged: [...new Set(todays.flatMap((e) => (e.kind === "meal" && e.meal ? [e.meal] : [])))],
         calories: total("calories"),
         protein: total("protein"),
         carbs: total("carbs"),

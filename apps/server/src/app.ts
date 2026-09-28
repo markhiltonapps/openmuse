@@ -33,7 +33,9 @@ import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
+import { backgroundFailure } from "./log.ts";
 import { MAIL_APPS, MailAlerts } from "./mail-alerts.ts";
+import { MealCheckIns } from "./meal-checkins.ts";
 import {
   chatgptMessages,
   extractMemories,
@@ -185,6 +187,18 @@ export async function createApp(
   agent.feed = feed;
   const health = new HealthService(db, (owner) => agent.timeZone(owner));
   agent.health = health;
+  const checkIns = new MealCheckIns(
+    db,
+    health,
+    (owner) => agent.timeZone(owner),
+    (owner, note) =>
+      agent.notify(owner, note.title, note.body, undefined, note.key, { checkInId: note.id }),
+  );
+  health.onMeal = (owner, entry) => checkIns.mealLogged(owner, entry);
+  agent.checkIns = checkIns;
+  void checkIns
+    .adoptMealRoutines()
+    .catch((error) => backgroundFailure("meal check-ins from routines", error));
   const reminders = new ReminderService(
     db,
     (owner) => agent.timeZone(owner),
@@ -619,6 +633,41 @@ export async function createApp(
   });
   app.post("/api/health-log/:id/delete", async (c) =>
     c.json(await health.remove(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/health-log/:id", async (c) =>
+    c.json(await health.changeMeal(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.get("/api/food-log", async (c) => {
+    const days = z.coerce.number().int().min(1).max(366).catch(30).parse(c.req.query("days"));
+    return c.json(await health.history(c.get("owner"), days));
+  });
+  app.get("/api/meal-checkins", async (c) => {
+    const owner = c.get("owner");
+    return c.json({
+      settings: await checkIns.settings(owner),
+      replaced: await checkIns.replaced(owner),
+      ...(await checkIns.current(owner)),
+    });
+  });
+  app.post("/api/meal-checkins/settings", async (c) =>
+    c.json(await checkIns.update(c.get("owner"), await c.req.json())),
+  );
+  const checkInId = (id: string) =>
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}:(breakfast|lunch|dinner)$/)
+      .parse(id);
+  app.post("/api/meal-checkins/:id/answer", async (c) =>
+    c.json(await checkIns.answer(c.get("owner"), checkInId(c.req.param("id")))),
+  );
+  app.post("/api/meal-checkins/:id/skip", async (c) =>
+    c.json(await checkIns.skip(c.get("owner"), checkInId(c.req.param("id")))),
+  );
+  app.post("/api/meal-checkins/:id/snooze", async (c) =>
+    c.json(await checkIns.snooze(c.get("owner"), checkInId(c.req.param("id")))),
+  );
+  app.post("/api/meal-checkins/:id/same", async (c) =>
+    c.json(await checkIns.sameAsYesterday(c.get("owner"), checkInId(c.req.param("id"))), 201),
   );
   app.post("/api/workouts/:id/complete", async (c) => {
     const { seconds } = z

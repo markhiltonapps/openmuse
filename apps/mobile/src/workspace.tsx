@@ -21,6 +21,7 @@ export type Detail =
   | { type: "task"; taskId: string }
   | { type: "delegate" }
   | { type: "notifications" }
+  | { type: "food"; log?: boolean }
   | { type: "computer" }
   | { type: "menu" };
 export interface WorkspaceContextValue {

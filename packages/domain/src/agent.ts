@@ -166,6 +166,8 @@ export interface AgentNotification {
   taskId?: string;
   /** Set on a reminder going off. */
   reminderId?: string;
+  /** Set on a meal check-in ("What did you have for lunch?"); answered from chat. */
+  checkInId?: string;
   title: string;
   body: string;
   createdAt: string;

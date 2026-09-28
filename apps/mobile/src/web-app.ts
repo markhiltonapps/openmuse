@@ -10,6 +10,32 @@ export function registerServiceWorker() {
   void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
 }
 
+/** Heard when a tapped notification asks for a meal check-in; the chat card reloads on it. */
+export const CHECK_IN_OPENED = "muse-checkin-opened";
+/**
+ * A tapped check-in notification opens the app at /?checkin=… (or, when it's already open, the
+ * service worker says so). Calls `onOpen` for either, and tidies the address bar.
+ */
+export function listenForCheckIns(onOpen: () => void) {
+  if (!web()) return () => undefined;
+  const opened = () => {
+    onOpen();
+    window.dispatchEvent(new Event(CHECK_IN_OPENED));
+  };
+  const url = new URL(window.location.href);
+  if (url.searchParams.has("checkin")) {
+    url.searchParams.delete("checkin");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    opened();
+  }
+  const message = (event: MessageEvent) => {
+    const data = event.data as { type?: string; url?: string } | undefined;
+    if (data?.type === "notification-open" && data.url?.includes("checkin=")) opened();
+  };
+  navigator.serviceWorker?.addEventListener("message", message);
+  return () => navigator.serviceWorker?.removeEventListener("message", message);
+}
+
 export function isInstalled() {
   if (!web()) return false;
   return (

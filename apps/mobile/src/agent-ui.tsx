@@ -70,7 +70,7 @@ import {
   s,
 } from "./ui";
 import { UsageCard } from "./usage-ui";
-import { VoiceCard } from "./voice-ui";
+import { DictateButton, VoiceCard } from "./voice-ui";
 import { disablePush, enablePush, isInstalled, isIos, type PushState, pushState } from "./web-app";
 import { useWorkspace } from "./workspace";
 
@@ -485,13 +485,23 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 ),
               )}
               {!fieldNames.length && (
-                <Field
-                  label="Your answer"
-                  value={answer}
-                  onChangeText={setAnswer}
-                  multiline
-                  placeholder="Add the missing details…"
-                />
+                <>
+                  <Field
+                    label="Your answer"
+                    value={answer}
+                    onChangeText={setAnswer}
+                    multiline
+                    placeholder="Add the missing details…"
+                  />
+                  <DictateButton
+                    label="Say your answer"
+                    onText={(text) =>
+                      setAnswer((current) =>
+                        current.trim() ? `${current.trimEnd()} ${text}` : text,
+                      )
+                    }
+                  />
+                </>
               )}
               {task.kind === "document" && !fieldNames.length && (
                 <>
@@ -1964,12 +1974,16 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
 }
 export function NotificationsSheet() {
   const { data, mutate } = useAgentWorkspace();
-  const { close, open } = useWorkspace();
+  const { close, open, navigate } = useWorkspace();
   const [error, setError] = useState("");
-  async function read(id: string, taskId?: string) {
+  async function read(id: string, taskId?: string, checkInId?: string) {
     try {
       await mutate(`/notifications/${id}/read`, {});
       if (taskId) open({ type: "task", taskId });
+      else if (checkInId) {
+        close();
+        navigate("chat");
+      }
     } catch (e) {
       setError(errorText(e));
     }
@@ -1993,8 +2007,14 @@ export function NotificationsSheet() {
             </View>
             <Text style={s.muted}>{item.body}</Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
-            <Button small onPress={() => void read(item.id, item.taskId)}>
-              {item.taskId ? "View task" : item.read ? "Read" : "Mark read"}
+            <Button small onPress={() => void read(item.id, item.taskId, item.checkInId)}>
+              {item.taskId
+                ? "View task"
+                : item.checkInId
+                  ? "Answer in chat"
+                  : item.read
+                    ? "Read"
+                    : "Mark read"}
             </Button>
           </Card>
         ))}

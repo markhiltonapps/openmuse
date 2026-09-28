@@ -16,6 +16,7 @@ import { useAgentWorkspace } from "./agent-workspace";
 import { AssistantResponse } from "./assistant-response";
 import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
+import { MealsToday } from "./meal-checkins-ui";
 import { dark } from "./theme";
 import { Button, Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -421,12 +422,10 @@ export function FeedScreen() {
             + {reminders.length - 3} more reminders
           </Text>
         )}
-        {!!healthLine && (
-          <Pressable onPress={() => navigate("goals")}>
-            <DayRow emoji="🥗">
-              <Text style={s.text}>{healthLine}</Text>
-            </DayRow>
-          </Pressable>
+        {health.summary && (
+          <DayRow emoji="🥗">
+            <MealsToday logged={health.summary.today.logged ?? []} line={healthLine} />
+          </DayRow>
         )}
         {approvals > 0 && (
           <Pressable onPress={() => navigate("activity")}>

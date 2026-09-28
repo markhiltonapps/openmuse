@@ -66,7 +66,7 @@ import { SignInCard } from "./src/sign-in";
 import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
-import { registerServiceWorker } from "./src/web-app";
+import { listenForCheckIns, registerServiceWorker } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
@@ -230,6 +230,15 @@ function WorkspaceApp({ token }: { token: string }) {
     setPrompt({ id: Date.now(), text });
     setSection("chat");
   }, []);
+  // A tapped meal check-in opens chat, where its card is waiting.
+  useEffect(
+    () =>
+      listenForCheckIns(() => {
+        setDetail(undefined);
+        setSection("chat");
+      }),
+    [],
+  );
   if (!workspace)
     return (
       <SafeAreaView

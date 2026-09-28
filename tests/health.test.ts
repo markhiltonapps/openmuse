@@ -50,6 +50,7 @@ test("meals add up for the person's own day and workouts are logged when finishe
   const summary = await health.summary(owner);
   assert.deepEqual(summary.today, {
     meals: 1,
+    logged: ["breakfast"],
     calories: 350,
     protein: 20,
     carbs: 25,
