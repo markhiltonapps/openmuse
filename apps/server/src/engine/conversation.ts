@@ -38,6 +38,13 @@ import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
 
 /** "Sunday, September 27, 2026 at 8:45 PM (America/Chicago)", so the agent can place "tomorrow at 3". */
+/**
+ * Tool steps one chat reply may take. Ordinary requests now take several: finding an app action
+ * and running it, or opening a page, looking at it and clicking through a site. Each step after
+ * the first rereads the conversation from the prompt cache, so a long reply costs little more.
+ */
+export const CHAT_STEPS = 20;
+
 export function localNow(timeZone: string, now = Date.now()) {
   const text = new Date(now).toLocaleString("en-US", {
     timeZone,
@@ -547,7 +554,7 @@ export class ConversationAgent extends AbstractAgent {
     );
     const agent = tanstackAgent({
       model: this.config.model ?? "openai/unconfigured",
-      maxSteps: 6,
+      maxSteps: CHAT_STEPS,
       onUsage: this.service.usage?.sink(this.owner, "chat"),
       stepLimitNote:
         "I reached my step limit for this reply before finishing. Say “continue” and I’ll pick up where I left off.",
