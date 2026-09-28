@@ -108,6 +108,11 @@ export class AccountService {
     const existing = await this.db.get<Account>("system", "accounts", ADMIN_OWNER);
     if (existing?.email === email) return;
     if (existing) await this.db.remove("system", "account-emails", hash(existing.email));
+    // The owner's email may already belong to a member account (say, one invited to try it).
+    // That account is switched off, keeping its data, so the email opens the owner workspace.
+    const taken = await this.byEmail(email);
+    if (taken && taken.id !== ADMIN_OWNER)
+      await this.db.put("system", "accounts", { ...taken, status: "disabled" });
     const admin: Account = {
       ...(existing ?? {
         id: ADMIN_OWNER,
