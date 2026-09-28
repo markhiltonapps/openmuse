@@ -781,6 +781,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
             : {}),
       });
       setEditing(false);
+      changed();
       await onChanged();
     } catch (e) {
       setError(message(e));
@@ -794,6 +795,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
     try {
       await api.request(`/api/health-log/${entry.id}/delete`, {});
       notify(`Removed ${entry.title} from your food log.`);
+      changed();
       await onChanged();
     } catch (e) {
       setError(message(e));
