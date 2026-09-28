@@ -128,6 +128,7 @@ test("a job runs in the person's own sandbox, with their file in and the chart i
   );
   assert.equal((await files.get("me", result.files[0]?.id ?? "")).name, "spend chart.png");
   assert.match(result.output[0]?.text ?? "", /Total: \$1,234\.50/);
+  assert.equal(result.copiedIn, 1, "the card can say a copy stays in the sandbox");
   assert.deepEqual(used, ["claude-sonnet-5"], "usage is recorded");
   const message = calls.find((c) => c.path === "/v1/messages");
   assert.deepEqual(((message?.body?.tools ?? []) as unknown[])[0], {
@@ -217,5 +218,34 @@ test("one job at a time per person", async () => {
   await new Promise((resolve) => setTimeout(resolve, 10));
   release();
   await first;
+  await done();
+});
+
+test("clearing the sandbox empties and forgets it, even if the sandbox can't be reached", async () => {
+  const { db, files, done } = await setUp();
+  await db.put("me", "agent-settings", {
+    id: "sandbox",
+    container: "cntr_1",
+    startedAt: "2026-09-27T12:00:00Z",
+  });
+  const { calls, fetcher } = fakeApi([
+    () => ({ body: { content: [{ type: "text", text: "done" }], stop_reason: "end_turn" } }),
+    () => ({ status: 500, body: { error: { message: "overloaded" } } }),
+  ]);
+  const sandbox = new CodeSandbox(db, files, "k", { fetcher });
+  assert.deepEqual(await sandbox.clear("me"), { cleared: true });
+  const message = calls.find((c) => c.path === "/v1/messages");
+  assert.equal(message?.body?.container, "cntr_1");
+  assert.match(JSON.stringify(message?.body?.messages), /rm -rf/);
+  assert.equal(await db.get("me", "agent-settings", "sandbox"), null);
+  // Nothing saved: nothing to clear.
+  assert.deepEqual(await sandbox.clear("me"), { cleared: true });
+  await db.put("me", "agent-settings", {
+    id: "sandbox",
+    container: "cntr_2",
+    startedAt: "2026-09-27T12:00:00Z",
+  });
+  assert.deepEqual(await sandbox.clear("me"), { cleared: false });
+  assert.equal(await db.get("me", "agent-settings", "sandbox"), null, "forgotten anyway");
   await done();
 });

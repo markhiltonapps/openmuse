@@ -332,6 +332,9 @@ export function ChatScreen({
   }, [endVoiceMode]);
   // Copies one message, not the whole chat a text selection would take.
   const [copiedId, setCopiedId] = useState<string>();
+  // Browsers copy; phones hand the text to the share sheet, which has Copy.
+  const canCopy =
+    Platform.OS === "web" && typeof navigator !== "undefined" && !!navigator.clipboard;
   const copyMessage = useCallback(async (id: string, text: string) => {
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
@@ -816,7 +819,9 @@ export function ChatScreen({
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={
-                        copiedId === message.id ? "Copied" : user ? "Copy message" : "Copy reply"
+                        copiedId === message.id
+                          ? "Copied"
+                          : `${canCopy ? "Copy" : "Share"} ${user ? "message" : "reply"}`
                       }
                       hitSlop={8}
                       onPress={() => void copyMessage(message.id, user ? text : plainText(text))}
@@ -827,7 +832,9 @@ export function ChatScreen({
                       ) : (
                         <Copy size={14} color={colors.muted} />
                       )}
-                      <Text style={s.small}>{copiedId === message.id ? "Copied" : "Copy"}</Text>
+                      <Text style={s.small} accessibilityLiveRegion="polite">
+                        {copiedId === message.id ? "Copied" : canCopy ? "Copy" : "Share"}
+                      </Text>
                     </Pressable>
                     {confirmingDelete === message.id ? (
                       <>

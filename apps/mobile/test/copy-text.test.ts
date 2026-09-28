@@ -35,4 +35,25 @@ test("a copied reply keeps its words and shape, without formatting marks", () =>
   );
   assert.equal(plainText("snake_case_name stays"), "snake_case_name stays");
   assert.equal(plainText("```\nprint(1)\n```"), "print(1)");
+  // Code is copied exactly as written.
+  assert.equal(
+    plainText(
+      [
+        "Run this:",
+        "```bash",
+        "ps aux | grep node",
+        "# start again",
+        "- item: yes",
+        "```",
+        "Then call `__init__` and `a | b`.",
+      ].join("\n"),
+    ),
+    [
+      "Run this:",
+      "ps aux | grep node",
+      "# start again",
+      "- item: yes",
+      "Then call __init__ and a | b.",
+    ].join("\n"),
+  );
 });

@@ -68,6 +68,8 @@ export interface RunCodeResult {
   notSaved: string[];
   /** The last few commands' output, trimmed. */
   output: { ok: boolean; text: string }[];
+  /** How many of the person's files were copied in; they stay in the sandbox until it's cleared. */
+  copiedIn: number;
 }
 
 export class CodeSandbox {
@@ -224,14 +226,41 @@ export class CodeSandbox {
         if (reply.stop_reason !== "pause_turn") break;
         messages.push({ role: "assistant", content: reply.content ?? [] });
       }
-      return await this.collect(owner, blocks);
+      return { ...(await this.collect(owner, blocks)), copiedIn: uploaded.length };
     } finally {
       this.running.delete(owner);
       for (const id of uploaded) void this.remove(id);
     }
   }
   /** The summary, the commands' output, and the files it made, saved to Files. */
-  private async collect(owner: string, blocks: Block[]): Promise<RunCodeResult> {
+  /**
+   * Empties the person's sandbox and forgets it, so copies of their files don't wait out the
+   * 30 days. The next job starts a new one.
+   */
+  async clear(owner: string, onUsage?: UsageSink) {
+    const saved = await this.db.get<{ container: string }>(owner, "agent-settings", "sandbox");
+    await this.db.remove(owner, "agent-settings", "sandbox");
+    if (!saved?.container) return { cleared: true };
+    try {
+      const reply = await this.message(
+        [
+          {
+            role: "user",
+            content:
+              'Delete every file in this sandbox: run `rm -rf -- "$HOME"/* "$HOME"/.[!.]* /tmp/* ./* 2>/dev/null; ls -A` and reply with one word: done.',
+          },
+        ],
+        saved.container,
+      );
+      const tokens = fromAnthropic(reply.usage);
+      if (tokens) onUsage?.(this.model, tokens);
+      return { cleared: true };
+    } catch {
+      // Forgotten either way: nothing uses it again, and it expires within 30 days.
+      return { cleared: false };
+    }
+  }
+  private async collect(owner: string, blocks: Block[]): Promise<Omit<RunCodeResult, "copiedIn">> {
     const summary = blocks
       .filter((block) => block.type === "text")
       .map((block) => block.text ?? "")

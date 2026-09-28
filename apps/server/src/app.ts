@@ -705,6 +705,11 @@ export async function createApp(
     return c.json(await health.completeWorkout(c.get("owner"), c.req.param("id"), seconds), 201);
   });
   app.get("/api/feed", async (c) => c.json(await feed.get(c.get("owner"))));
+  app.post("/api/sandbox/clear", async (c) => {
+    const owner = c.get("owner");
+    if (!agent.sandbox) return c.json({ cleared: true });
+    return c.json(await agent.sandbox.clear(owner, usage.sink(owner, "code")));
+  });
   app.get("/api/calendar/today", async (c) =>
     c.json(await calendarToday.today(c.get("owner"), c.req.query("fresh") === "1")),
   );
