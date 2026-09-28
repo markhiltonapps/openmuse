@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Routine } from "../../../packages/domain/src/agent.ts";
+import type { AgentTask, Routine } from "../../../packages/domain/src/agent.ts";
 import type { Store } from "./db.ts";
 import { localInstant } from "./engine/routines.ts";
 import { AppError } from "./errors.ts";
@@ -113,6 +113,23 @@ export class MealCheckIns {
     return (await this.db.list<Routine>(owner, "routines"))
       .filter((routine) => ids.has(routine.id))
       .map(({ id, title, time, enabled }) => ({ id, title, time, enabled }));
+  }
+  /**
+   * Runs of the replaced routines still waiting for an answer ("Needs your input · Dinner check ·
+   * Sep 27"), while those routines stay off: check-ins ask now, so these can be closed.
+   */
+  async replacedAsks() {
+    const found: { owner: string; taskId: string }[] = [];
+    for (const { owner } of await this.db.scan<CheckInSettings>("meal-checkin-settings")) {
+      const runs = (await this.replaced(owner))
+        .filter((routine) => !routine.enabled)
+        .map((routine) => `${routine.title} · `);
+      if (!runs.length) continue;
+      for (const task of await this.db.list<AgentTask>(owner, "tasks"))
+        if (task.status === "waiting_input" && runs.some((run) => task.title.startsWith(run)))
+          found.push({ owner, taskId: task.id });
+    }
+    return found;
   }
   /**
    * For people who asked to be reminded what they ate before check-ins existed: turns check-ins on

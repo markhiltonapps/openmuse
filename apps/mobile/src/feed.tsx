@@ -15,6 +15,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AreaPrompt, AreaRow, areaPromptDismissed, LOCAL_TOPIC } from "./area-ui";
 import { AssistantResponse } from "./assistant-response";
+import { type AppDay, calendarName } from "./calendar-apps";
 import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
 import { MealsToday } from "./meal-checkins-ui";
@@ -62,15 +63,6 @@ const COMMITMENT_EMOJI: Record<Commitment["kind"], string> = {
   event: "🎟️",
   other: "📌",
 };
-const CALENDAR_NAMES: Record<string, string> = {
-  outlook: "Outlook",
-  googlecalendar: "Google Calendar",
-};
-interface AppDay {
-  events: { id: string; title: string; start: string; end: string; allDay: boolean }[];
-  checked: string[];
-  failed: string[];
-}
 interface FeedState {
   topics: string[];
   /** Where local news is for, such as "Houston, Texas". */
@@ -285,7 +277,7 @@ export function FeedScreen() {
         (a.allDay ? 0 : Date.parse(a.start)) - (b.allDay ? 0 : Date.parse(b.start)) ||
         a.title.localeCompare(b.title),
     );
-  const unread = (appDay?.failed ?? []).map((app) => CALENDAR_NAMES[app] ?? "your calendar");
+  const unread = (appDay?.failed ?? []).map(calendarName);
   const approvals = w.actions.filter((a) => a.status === "awaiting_review").length;
   const working = (data?.tasks ?? []).filter((t) =>
     ["queued", "running", "waiting_input", "waiting_approval"].includes(t.status),

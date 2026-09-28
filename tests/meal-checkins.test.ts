@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createStore } from "../apps/server/src/db.ts";
 import { HealthService } from "../apps/server/src/health.ts";
 import { asksAboutMeals, MealCheckIns } from "../apps/server/src/meal-checkins.ts";
-import type { Routine } from "../packages/domain/src/agent.ts";
+import type { AgentTask, Routine } from "../packages/domain/src/agent.ts";
 
 const ZONE = "America/Chicago";
 async function setUp(start: string) {
@@ -183,9 +183,18 @@ test("routines that asked what the person ate hand over to check-ins, once", asy
   assert.equal(await enabled("r3"), true, "cooking dinner isn't asking what they ate");
   assert.equal(await enabled("r4"), true);
   assert.deepEqual((await checkIns.replaced("me")).map((r) => r.id).sort(), ["r1", "r2"]);
-  // Switched back on by the person: never switched off again.
+  // Their runs still waiting for an answer can be closed; other tasks stay.
+  const task = (id: string, title: string, status: AgentTask["status"]) =>
+    db.put("me", "tasks", { id, title, status } as AgentTask);
+  await task("t1", "Breakfast check · Sep 27", "waiting_input");
+  await task("t2", "Lunch check · Sep 27", "succeeded");
+  await task("t3", "Morning brief · Sep 27", "waiting_input");
+  await task("t4", "Breakfast check list", "waiting_input");
+  assert.deepEqual(await checkIns.replacedAsks(), [{ owner: "me", taskId: "t1" }]);
+  // Switched back on by the person: never switched off again, and its runs are left alone.
   await db.compareAndSwap("me", "routines", "r1", {}, { enabled: true });
   await checkIns.adoptMealRoutines();
   assert.equal(await enabled("r1"), true);
+  assert.deepEqual(await checkIns.replacedAsks(), []);
   await db.close();
 });

@@ -204,10 +204,74 @@ test("today's events come from each connected calendar app, for the person's own
   calendar.forget("me");
   await calendar.today("me");
   assert.equal(calls.length, before + 1, "forgotten after a calendar change");
+  // Not knowing which apps are connected is a failure, not an empty calendar.
+  const offline = new CalendarToday(
+    {
+      ...apps,
+      connections: async () => {
+        throw new Error("Composio is unavailable");
+      },
+    } as unknown as AppConnector,
+    async () => ZONE,
+    () => now,
+  );
+  assert.deepEqual(await offline.today("me"), { events: [], checked: [], failed: ["calendar"] });
   // No app connector (sample mode): nothing to check.
   assert.deepEqual(await new CalendarToday(undefined, async () => ZONE).today("me"), {
     events: [],
     checked: [],
     failed: [],
   });
+});
+
+test("the Calendar screen's month comes from the same apps, with a bigger page the action allows", async () => {
+  const calls: Record<string, unknown>[] = [];
+  const capped: AppTool = {
+    ...OUTLOOK_VIEW,
+    parameters: {
+      properties: { start_datetime: {}, end_datetime: {}, top: { maximum: 100 } },
+      required: ["start_datetime", "end_datetime"],
+    },
+  };
+  const apps = {
+    connections: async () => [{ app: "outlook", name: "Outlook", connected: true }],
+    tool: async () => capped,
+    search: async () => ({ tools: [], apps: [], guidance: [] }),
+    execute: async (_owner: string, _slug: string, args: Record<string, unknown>) => {
+      calls.push(args);
+      return {
+        value: [
+          {
+            subject: "Quarterly review",
+            start: { dateTime: "2026-10-14T15:00:00", timeZone: "UTC" },
+            end: { dateTime: "2026-10-14T16:00:00", timeZone: "UTC" },
+          },
+          // After the stretch asked for: left out.
+          {
+            subject: "Next month",
+            start: { dateTime: "2026-11-20T15:00:00", timeZone: "UTC" },
+            end: { dateTime: "2026-11-20T16:00:00", timeZone: "UTC" },
+          },
+        ],
+      };
+    },
+  } as unknown as AppConnector;
+  const calendar = new CalendarToday(
+    apps,
+    async () => ZONE,
+    () => Date.parse("2026-09-28T13:00:00Z"),
+  );
+  const from = "2026-09-27T05:00:00.000Z";
+  const to = "2026-10-28T05:00:00.000Z";
+  const month = await calendar.between("me", from, to);
+  assert.deepEqual(
+    month.events.map((e) => e.title),
+    ["Quarterly review"],
+  );
+  assert.deepEqual(calls[0], { start_datetime: from, end_datetime: to, top: 100 });
+  // Kept a few minutes, like today's.
+  await calendar.between("me", from, to);
+  assert.equal(calls.length, 1);
+  await calendar.between("me", from, to, true);
+  assert.equal(calls.length, 2, "unless asked fresh");
 });

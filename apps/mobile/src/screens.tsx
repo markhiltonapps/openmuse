@@ -31,6 +31,7 @@ import {
 } from "react-native";
 import type { BrowserSession, CalendarEvent, EmailDraft } from "../../../packages/domain/src";
 import { Mascot } from "./avatar";
+import { type AppCalendarEvent, type AppDay, calendarName } from "./calendar-apps";
 import { localDateTime, zonedInstant } from "./date-time";
 import { fileLabel, fileSummary, isPicture } from "./file-kinds";
 import { MiniAppsCard } from "./mini-apps-ui";
@@ -403,15 +404,19 @@ export function AgendaRow({
   event: e,
   index = 0,
   neighbors,
+  app,
 }: {
   event: CalendarEvent;
   index?: number;
   neighbors?: CalendarEvent[];
+  /** Read through a connected app (Outlook, Google Calendar): shown, not opened for editing. */
+  app?: string;
 }) {
   const { open } = useWorkspace();
+  const Row = app ? View : Pressable;
   return (
-    <Pressable
-      onPress={() => open({ type: "event", event: e, neighbors })}
+    <Row
+      {...(app ? {} : { onPress: () => open({ type: "event", event: e, neighbors }) })}
       style={[s.row, { gap: 16, paddingVertical: 14 }]}
     >
       <View style={{ width: 65 }}>
@@ -433,11 +438,14 @@ export function AgendaRow({
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={[s.text, { fontSize: 13, fontWeight: "500" }]}>{e.title}</Text>
         <Text numberOfLines={1} style={[s.small, { fontSize: 11 }]}>
-          {e.location || (e.attendees.length ? `${e.attendees.length} attendees` : "Time for you")}
+          {app
+            ? [e.location, calendarName(app)].filter(Boolean).join(" · ")
+            : e.location ||
+              (e.attendees.length ? `${e.attendees.length} attendees` : "Time for you")}
         </Text>
       </View>
-      <ChevronRight size={14} color={colors.muted} />
-    </Pressable>
+      {!app && <ChevronRight size={14} color={colors.muted} />}
+    </Row>
   );
 }
 export function MailScreen() {
@@ -585,16 +593,60 @@ function plusDays(date: string, days: number) {
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 }
+/** "Personal, Outlook and Google Calendar". */
+function listed(names: string[]) {
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+/** When an event starts, for sorting: all-day ones at the start of their day where the person is. */
+function startsAt(event: CalendarEvent, zone: string) {
+  return event.allDay
+    ? Date.parse(zonedInstant(event.start.slice(0, 10), "00:00", zone))
+    : Date.parse(event.start);
+}
+/** An event from a connected calendar app, in the Calendar screen's shape. */
+function fromApp(event: AppCalendarEvent, zone: string): CalendarEvent {
+  return {
+    id: `${event.app}:${event.id}`,
+    calendarId: event.app,
+    title: event.title,
+    start: event.start,
+    end: event.end,
+    allDay: event.allDay,
+    timeZone: zone,
+    location: event.location ?? "",
+    description: "",
+    attendees: [],
+  };
+}
+/** Whether an event overlaps the days from `first` up to (not including) `last`. */
+function within(event: AppCalendarEvent, first: string, last: string, zone: string) {
+  if (event.allDay) {
+    const end = event.end > event.start ? event.end : plusDays(event.start, 1);
+    return event.start < last && end > first;
+  }
+  const start = Date.parse(event.start);
+  const end = Math.max(Date.parse(event.end), start + 1);
+  return (
+    start < Date.parse(zonedInstant(last, "00:00", zone)) &&
+    end > Date.parse(zonedInstant(first, "00:00", zone))
+  );
+}
 export function CalendarScreen() {
-  const { workspace: w, api, open } = useWorkspace();
+  const { workspace: w, api, open, ask, navigate } = useWorkspace();
   const [date, setDate] = useState(todayDate());
   const [all, setAll] = useState(false);
   const [calendars, setCalendars] = useState<CalendarChoice[]>([]);
+  const [calendarsLoaded, setCalendarsLoaded] = useState(false);
   const [calendarId, setCalendarId] = useState("primary");
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  // Events from calendars connected as apps (Outlook, Google Calendar), which chat reads too.
+  const [appDay, setAppDay] = useState<AppDay>();
+  const [appsLoading, setAppsLoading] = useState(true);
   const selected = calendars.find((c) => c.id === calendarId);
   const zone = selected?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const writable = !selected || ["owner", "writer"].includes(selected.accessRole);
@@ -604,6 +656,71 @@ export function CalendarScreen() {
     day.setDate(anchor.getDate() - anchor.getDay() + i);
     return day;
   });
+  // App calendars are read for the whole week, so its days can show a dot.
+  const weekStart = plusDays(date, -anchor.getDay());
+  const appsUntil = all ? plusDays(date, 30) : plusDays(weekStart, 7);
+  useEffect(() => {
+    let active = true;
+    setAppsLoading(true);
+    void Promise.resolve()
+      .then(() => {
+        const query = new URLSearchParams({
+          timeMin: zonedInstant(weekStart, "00:00", zone),
+          timeMax: zonedInstant(appsUntil, "00:00", zone),
+        });
+        return api.request<AppDay>(`/api/calendar/apps?${query}`);
+      })
+      .then(
+        (day) => {
+          if (active) setAppDay(day);
+        },
+        () => {
+          if (active) setAppDay({ events: [], checked: [], failed: ["calendar"] });
+        },
+      )
+      .finally(() => {
+        if (active) setAppsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, weekStart, appsUntil, zone, retry]);
+  const until = plusDays(date, all ? 30 : 1);
+  const seen = new Set<string>();
+  const shown = [
+    ...events.map((event) => ({ event, app: undefined as string | undefined })),
+    ...(appDay?.events ?? [])
+      .filter((e) => within(e, date, until, zone))
+      .map((e) => ({ event: fromApp(e, zone), app: e.app })),
+  ]
+    // The same meeting from two connections shows once.
+    .filter(({ event: e }) => {
+      const key = `${e.title.trim().toLowerCase()}|${e.allDay ? e.start.slice(0, 10) : Date.parse(e.start)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        startsAt(a.event, zone) - startsAt(b.event, zone) ||
+        a.event.title.localeCompare(b.event.title),
+    );
+  const neighbors = shown.map((row) => row.event);
+  const unread = (appDay?.failed ?? []).map(calendarName);
+  // Only app calendars: new events are added by asking in chat.
+  const appOnly = !calendars.length && !!appDay?.checked.length;
+  const sources = [
+    ...(calendars.length ? [selected?.name || "Your calendar"] : []),
+    ...(appDay?.checked ?? []).map(calendarName),
+  ];
+  const busy = loading || appsLoading;
+  // Nothing to read: not the same as a free day.
+  const noCalendar =
+    calendarsLoaded &&
+    !busy &&
+    !calendars.length &&
+    !appDay?.checked.length &&
+    !appDay?.failed.length;
   useEffect(() => {
     let active = true;
     void api
@@ -611,6 +728,7 @@ export function CalendarScreen() {
       .then((items) => {
         if (!active) return;
         setCalendars(items);
+        setCalendarsLoaded(true);
         setCalendarId((current) =>
           items.some((c) => c.id === current) ? current : items[0]?.id || "primary",
         );
@@ -652,9 +770,20 @@ export function CalendarScreen() {
     };
   }, [api, calendarId, date, all, zone, w, retry]);
   function newEvent() {
+    if (noCalendar) {
+      navigate("apps");
+      return;
+    }
+    if (appOnly && appDay) {
+      const day = dateLabel(`${date}T12:00:00`, { weekday: "long", month: "long", day: "numeric" });
+      // With more than one, Neddy asks which calendar instead of picking for them.
+      const which = appDay.checked.length === 1 ? `${calendarName(appDay.checked[0] ?? "")} ` : "";
+      ask(`I'd like to add an event to my ${which}calendar on ${day}.`);
+      return;
+    }
     open({
       type: "event",
-      neighbors: events,
+      neighbors,
       draft: {
         calendarId,
         title: "",
@@ -715,9 +844,20 @@ export function CalendarScreen() {
               day.toISOString(),
               Intl.DateTimeFormat().resolvedOptions().timeZone,
             ).date;
+            const busyDay =
+              [...events, ...w.events].some(
+                (e) => e.calendarId === calendarId && eventDate(e) === key,
+              ) || (appDay?.events ?? []).some((e) => within(e, key, plusDays(key, 1), zone));
             return (
               <Pressable
                 key={key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: key === date }}
+                accessibilityLabel={`${day.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}${busyDay ? ", has events" : ""}`}
                 onPress={() => {
                   setDate(key);
                   setAll(false);
@@ -745,11 +885,7 @@ export function CalendarScreen() {
                     height: 4,
                     width: 4,
                     borderRadius: 4,
-                    backgroundColor: [...events, ...w.events].some(
-                      (e) => e.calendarId === calendarId && eventDate(e) === key,
-                    )
-                      ? "#8DB6CA"
-                      : "transparent",
+                    backgroundColor: busyDay ? "#8DB6CA" : "transparent",
                   }}
                 />
               </Pressable>
@@ -768,30 +904,61 @@ export function CalendarScreen() {
             {all ? "Selected day" : "Next 30 days"}
           </Button>
         </View>
-        <Text style={[s.small, { marginTop: 7, marginBottom: 13 }]}>
-          {selected?.name || "Your calendar"} · {zone}. Events show their own time zone.
-        </Text>
+        {!noCalendar && (
+          <Text style={[s.small, { marginTop: 7, marginBottom: 13 }]}>
+            {listed(sources) || "Your calendar"} · {zone}. Events show their own time zone.
+          </Text>
+        )}
         <ErrorNotice error={error} />
-        {!!error && (
+        {!busy && unread.length > 0 && (
+          <ErrorNotice error={`Couldn’t read ${unread.join(" or ")} just now.`} />
+        )}
+        {(!!error || (!busy && unread.length > 0)) && (
           <Button small onPress={() => setRetry(retry + 1)}>
             Try again
           </Button>
         )}
-        {loading ? (
+        {busy ? (
           <View style={[s.row, { gap: 10, paddingVertical: 35, justifyContent: "center" }]}>
             <ActivityIndicator size="small" color={colors.blueDark} />
             <Text style={s.muted}>Checking your calendar…</Text>
           </View>
-        ) : events.length ? (
-          events.map((e, i) => (
-            <View key={e.id}>
-              {all && <Text style={[s.label, { marginTop: 16 }]}>{dateLabel(e.start)}</Text>}
-              <AgendaRow event={e} index={i} neighbors={events} />
-              <Text style={[s.small, { marginLeft: 84, marginBottom: 8 }]}>{e.timeZone}</Text>
-            </View>
-          ))
+        ) : shown.length ? (
+          shown.map(({ event: e, app }, i) => {
+            const day = eventDate(e);
+            const previous = shown[i - 1]?.event;
+            return (
+              <View key={e.id}>
+                {all && (!previous || eventDate(previous) !== day) && (
+                  <Text style={[s.label, { marginTop: 16 }]}>
+                    {dateLabel(`${day}T12:00:00`, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </Text>
+                )}
+                <AgendaRow event={e} index={i} neighbors={neighbors} app={app} />
+                {e.timeZone !== zone && (
+                  <Text style={[s.small, { marginLeft: 84, marginBottom: 8 }]}>{e.timeZone}</Text>
+                )}
+              </View>
+            );
+          })
+        ) : noCalendar && !error ? (
+          <Empty
+            icon={CalendarDays}
+            title="No calendar connected"
+            detail="Connect Outlook or Google Calendar in Apps and your meetings will show here."
+          >
+            <Button icon={Link2} onPress={() => navigate("apps")}>
+              Connect a calendar
+            </Button>
+          </Empty>
         ) : (
-          !error && (
+          // A calendar that couldn't be read isn't an empty one.
+          !error &&
+          !unread.length && (
             <Empty
               icon={CalendarDays}
               title="A little open space"

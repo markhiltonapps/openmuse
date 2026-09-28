@@ -17,7 +17,7 @@ import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
 import { runApprovedStep } from "./browser-tools.ts";
-import { CalendarToday } from "./calendar-today.ts";
+import { CalendarToday, MAX_RANGE_DAYS } from "./calendar-today.ts";
 import { ChatArchive } from "./chat-archive.ts";
 import { CodeSandbox } from "./code-sandbox.ts";
 import { Commitments } from "./commitments.ts";
@@ -221,6 +221,14 @@ export async function createApp(
   agent.checkIns = checkIns;
   void checkIns
     .adoptMealRoutines()
+    // Their old questions still waiting for an answer are closed: check-ins ask now.
+    .then(() => checkIns.replacedAsks())
+    .then(async (asks) => {
+      for (const { owner, taskId } of asks)
+        await agent
+          .control(owner, taskId, "cancel")
+          .catch((error) => backgroundFailure("closing a replaced meal question", error));
+    })
     .catch((error) => backgroundFailure("meal check-ins from routines", error));
   const reminders = new ReminderService(
     db,
@@ -713,6 +721,30 @@ export async function createApp(
   app.get("/api/calendar/today", async (c) =>
     c.json(await calendarToday.today(c.get("owner"), c.req.query("fresh") === "1")),
   );
+  // Events from connected calendar apps for the Calendar screen's day, week or next 30 days.
+  app.get("/api/calendar/apps", async (c) => {
+    const query = z
+      .object({
+        timeMin: z.iso.datetime({ offset: true }),
+        timeMax: z.iso.datetime({ offset: true }),
+      })
+      .parse(c.req.query());
+    const from = Date.parse(query.timeMin);
+    const to = Date.parse(query.timeMax);
+    if (to <= from || to - from > MAX_RANGE_DAYS * 86_400_000)
+      throw new AppError(
+        `Choose a calendar range between one moment and ${MAX_RANGE_DAYS} days`,
+        422,
+      );
+    return c.json(
+      await calendarToday.between(
+        c.get("owner"),
+        new Date(from).toISOString(),
+        new Date(to).toISOString(),
+        c.req.query("fresh") === "1",
+      ),
+    );
+  });
   app.get("/api/area", async (c) =>
     c.json({ area: (await agent.areas?.get(c.get("owner"))) ?? null }),
   );

@@ -41,6 +41,7 @@ export function rangeArguments(
   tool: Pick<AppTool, "app" | "parameters">,
   from: string,
   to: string,
+  limit = 50,
 ): Record<string, unknown> | undefined {
   const schema = (tool.parameters ?? {}) as Schema;
   const names = Object.keys(schema.properties ?? {});
@@ -52,7 +53,11 @@ export function rangeArguments(
   const single = find(/^single_?events$/i);
   if (single) args[single] = true;
   const most = find(/^(max_?results|top|limit|page_?size)$/i);
-  if (most) args[most] = 50;
+  if (most) {
+    // Never more than the action allows.
+    const maximum = (schema.properties?.[most] as { maximum?: unknown } | undefined)?.maximum;
+    args[most] = typeof maximum === "number" ? Math.min(limit, maximum) : limit;
+  }
   if (tool.app === "googlecalendar") {
     const calendar = find(/^calendar_?id$/i);
     if (calendar) args[calendar] = "primary";
@@ -135,8 +140,12 @@ export function eventsIn(data: unknown, app: string, zone: string): DayEvent[] {
   return found;
 }
 
+/** The longest stretch one look covers: the Calendar screen's next 30 days, plus its week. */
+export const MAX_RANGE_DAYS = 40;
+
 export class CalendarToday {
-  private cache = new Map<string, { at: number; day: string; value: TodayCalendar }>();
+  /** Per person, recent answers by the stretch of time they cover. */
+  private cache = new Map<string, Map<string, { at: number; value: TodayCalendar }>>();
   constructor(
     private readonly apps: AppConnector | undefined,
     private readonly timeZone: (owner: string) => Promise<string>,
@@ -150,33 +159,61 @@ export class CalendarToday {
   async today(owner: string, fresh = false): Promise<TodayCalendar> {
     const zone = await this.timeZone(owner);
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(this.now());
-    const cached = this.cache.get(owner);
-    if (!fresh && cached && cached.day === day && this.now() - cached.at < KEEP)
-      return cached.value;
+    const from = new Date(localInstant(`${day}T00:00`, zone)).toISOString();
+    const to = new Date(localInstant(`${day}T23:59`, zone) + 60_000).toISOString();
+    return this.between(owner, from, to, fresh);
+  }
+  /** Events that overlap a stretch of time (at most MAX_RANGE_DAYS), from every calendar app. */
+  async between(owner: string, from: string, to: string, fresh = false): Promise<TodayCalendar> {
+    const key = `${from}|${to}`;
+    const kept = this.cache.get(owner)?.get(key);
+    if (!fresh && kept && this.now() - kept.at < KEEP) return kept.value;
     const value: TodayCalendar = { events: [], checked: [], failed: [] };
     const apps = this.apps;
     if (!apps) return value;
-    const calendars = (await apps.connections(owner).catch(() => []))
+    const zone = await this.timeZone(owner);
+    let connections: Awaited<ReturnType<AppConnector["connections"]>>;
+    try {
+      connections = await apps.connections(owner);
+    } catch (error) {
+      // Not knowing which calendars are connected isn't the same as having none.
+      value.failed.push("calendar");
+      backgroundFailure("calendar apps", error);
+      return value;
+    }
+    const calendars = connections
       .filter((c) => c.connected && c.app in CALENDAR_ACTIONS)
       .map((c) => c.app);
-    const from = new Date(localInstant(`${day}T00:00`, zone)).toISOString();
-    const to = new Date(localInstant(`${day}T23:59`, zone) + 60_000).toISOString();
+    // A day's worth fits in 50; a month's needs more.
+    const limit = Date.parse(to) - Date.parse(from) > 2 * 86_400_000 ? 250 : 50;
     for (const app of calendars) {
       value.checked.push(app);
       try {
-        value.events.push(...(await this.read(owner, app, from, to, zone)));
+        value.events.push(...(await this.read(owner, app, from, to, zone, limit)));
       } catch (error) {
         value.failed.push(app);
-        backgroundFailure(`today's ${app} calendar`, error);
+        backgroundFailure(`${app} calendar`, error);
       }
     }
     value.events.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
     // Only a full answer is kept: a failure or a calendar still to be connected is asked again.
-    if (value.checked.length && !value.failed.length)
-      this.cache.set(owner, { at: this.now(), day, value });
+    if (value.checked.length && !value.failed.length) {
+      const mine = this.cache.get(owner) ?? new Map();
+      mine.set(key, { at: this.now(), value });
+      // A few recent stretches each; the oldest go first.
+      for (const old of [...mine.keys()].slice(0, Math.max(0, mine.size - 8))) mine.delete(old);
+      this.cache.set(owner, mine);
+    }
     return value;
   }
-  private async read(owner: string, app: string, from: string, to: string, zone: string) {
+  private async read(
+    owner: string,
+    app: string,
+    from: string,
+    to: string,
+    zone: string,
+    limit: number,
+  ) {
     const apps = this.apps;
     if (!apps) return [];
     const candidates: AppTool[] = [];
@@ -188,7 +225,7 @@ export class CalendarToday {
           .catch(() => [])),
       );
     // Actions get renamed: ask the app directory when none of the usual ones fit.
-    if (!candidates.some((t) => t.readOnly && rangeArguments(t, from, to)))
+    if (!candidates.some((t) => t.readOnly && rangeArguments(t, from, to, limit)))
       candidates.push(
         ...(await apps.search(owner, `list ${app} calendar events between two times`)).tools.filter(
           (t) => t.app === app,
@@ -196,7 +233,7 @@ export class CalendarToday {
       );
     let failure: unknown = new Error(`No ${app} action lists events in a time range`);
     for (const tool of candidates) {
-      const args = tool.readOnly ? rangeArguments(tool, from, to) : undefined;
+      const args = tool.readOnly ? rangeArguments(tool, from, to, limit) : undefined;
       if (!args) continue;
       try {
         const events = eventsIn(await apps.execute(owner, tool.slug, args), app, zone);
