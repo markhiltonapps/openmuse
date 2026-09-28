@@ -29,9 +29,14 @@ export function fileLabel(file: Pick<Artifact, "mimeType">) {
               ? "CSV"
               : "Text";
 }
-/** "3 pages · 120 KB", "Picture · 800 KB", "Excel · 2 sheets' worth · 40 KB". */
+/** "120 KB", or "1.7 MB" from a megabyte up. */
+export function sizeLabel(bytes: number) {
+  const kb = Math.max(1, Math.round(bytes / 1024));
+  return kb < 1024 ? `${kb} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+/** "3 pages · 120 KB", "Picture · 800 KB", "Excel · 40 KB". */
 export function fileSummary(file: Pick<Artifact, "mimeType" | "pageCount" | "size">) {
-  const size = `${Math.max(1, Math.round(file.size / 1024))} KB`;
+  const size = sizeLabel(file.size);
   if (isPdf(file)) return `${file.pageCount} ${file.pageCount === 1 ? "page" : "pages"} · ${size}`;
   return `${fileLabel(file)} · ${size}`;
 }

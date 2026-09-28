@@ -10,7 +10,9 @@ import {
   FileText,
   Globe2,
   Inbox,
+  LayoutGrid,
   Link2,
+  List,
   Mail,
   Plus,
   Search,
@@ -29,11 +31,16 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import type { BrowserSession, CalendarEvent, EmailDraft } from "../../../packages/domain/src";
+import type {
+  Artifact,
+  BrowserSession,
+  CalendarEvent,
+  EmailDraft,
+} from "../../../packages/domain/src";
 import { Mascot } from "./avatar";
 import { type AppCalendarEvent, type AppDay, calendarName } from "./calendar-apps";
 import { localDateTime, zonedInstant } from "./date-time";
-import { fileLabel, fileSummary, isPicture } from "./file-kinds";
+import { fileLabel, fileSummary, isPdf, isPicture } from "./file-kinds";
 import { MiniAppsCard } from "./mini-apps-ui";
 import {
   Button,
@@ -852,7 +859,7 @@ export function CalendarScreen() {
               <Pressable
                 key={key}
                 accessibilityRole="button"
-                accessibilityState={{ selected: key === date }}
+                aria-pressed={key === date}
                 accessibilityLabel={`${day.toLocaleDateString("en-US", {
                   weekday: "long",
                   month: "long",
@@ -1084,10 +1091,145 @@ export function BrowserScreen() {
     </View>
   );
 }
+type FilesView = "grid" | "list";
+const FILES_VIEW = "openmuse.files-view";
+/** Grid or list, as last chosen on this device. */
+function savedFilesView(): FilesView {
+  try {
+    return globalThis.localStorage?.getItem(FILES_VIEW) === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+}
+function FilesViewToggle({ view, onView }: { view: FilesView; onView: (view: FilesView) => void }) {
+  const options = [
+    { id: "grid", label: "Grid", icon: LayoutGrid },
+    { id: "list", label: "List", icon: List },
+  ] as const;
+  return (
+    <View
+      role="group"
+      accessibilityLabel="Show files as"
+      style={[s.row, { gap: 4, padding: 4, borderRadius: 22, backgroundColor: colors.subtle }]}
+    >
+      {options.map(({ id, label, icon: Icon }) => {
+        const selected = id === view;
+        return (
+          <Pressable
+            key={id}
+            accessibilityRole="button"
+            // react-native-web reads aria-* props, not accessibilityState.
+            aria-pressed={selected}
+            accessibilityLabel={label}
+            hitSlop={4}
+            onPress={() => onView(id)}
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              height: 36,
+              paddingHorizontal: 14,
+              borderRadius: 18,
+              backgroundColor: selected ? colors.inverse : "transparent",
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <Icon size={16} strokeWidth={1.9} color={selected ? colors.onInverse : colors.text} />
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "600",
+                color: selected ? colors.onInverse : colors.text,
+              }}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+/** "PDF", "14 pages", "1.7 MB", "Email attachment". */
+function fileParts(f: Artifact) {
+  return [isPdf(f) ? "PDF" : "", ...fileSummary(f).split(" · "), f.source].filter(Boolean);
+}
+/** Read out with commas, which screen readers pause on; "·" is read as "dot" or skipped. */
+function fileAccessibilityLabel(f: Artifact) {
+  return [f.name, ...fileParts(f), dateLabel(f.createdAt)].join(", ");
+}
+/** One file as a compact row: a small preview, its name, what it is and when it came in. */
+function FileRow({ file: f, first }: { file: Artifact; first: boolean }) {
+  const { api, open } = useWorkspace();
+  // On a phone the date joins the detail line, leaving the name room.
+  const compact = useWindowDimensions().width < 600;
+  const date = dateLabel(f.createdAt);
+  const detail = [...(compact ? [date] : []), ...fileParts(f)].join(" · ");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={fileAccessibilityLabel(f)}
+      onPress={() => open({ type: "file", file: f })}
+      style={({ pressed }) => [
+        s.row,
+        {
+          gap: 12,
+          paddingVertical: 12,
+          borderTopWidth: first ? 0 : 1,
+          borderTopColor: colors.line,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+    >
+      <View
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 12,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: colors.line,
+          backgroundColor: colors.subtle,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {isPicture(f) ? (
+          <Image
+            source={{ uri: api.url(f.url) }}
+            resizeMode="cover"
+            style={{ width: "100%", height: "100%" }}
+          />
+        ) : (
+          <FileText size={20} color={colors.blueDark} />
+        )}
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text numberOfLines={2} style={[s.text, { fontWeight: "600" }]}>
+          {f.name}
+        </Text>
+        <Text numberOfLines={2} style={s.small}>
+          {detail}
+        </Text>
+      </View>
+      {!compact && <Text style={s.small}>{date}</Text>}
+      <ChevronRight size={18} color={colors.muted} />
+    </Pressable>
+  );
+}
 export function FilesScreen() {
   const { workspace: w, api, refresh, open } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [view, setView] = useState<FilesView>(savedFilesView);
+  function chooseView(next: FilesView) {
+    setView(next);
+    try {
+      globalThis.localStorage?.setItem(FILES_VIEW, next);
+    } catch {
+      // Private browsing: the choice lasts until the app is closed.
+    }
+  }
   async function upload() {
     setError("");
     setBusy(true);
@@ -1114,78 +1256,97 @@ export function FilesScreen() {
       </View>
       <ErrorNotice error={error} />
       <MiniAppsCard />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 18 }}>
-        {w.files.map((f) => (
-          <Pressable
-            key={f.id}
-            onPress={() => open({ type: "file", file: f })}
-            style={{ flexGrow: 1, flexBasis: 250, maxWidth: 430 }}
-          >
-            <Card style={{ padding: 0, overflow: "hidden" }}>
-              <View
-                style={{
-                  height: 175,
-                  backgroundColor: colors.subtle,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                {isPicture(f) ? (
-                  <Image
-                    source={{ uri: api.url(f.url) }}
-                    resizeMode="cover"
-                    accessibilityLabel={f.name}
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-                  />
-                ) : (
-                  <View
-                    style={{
-                      width: 93,
-                      height: 121,
-                      borderRadius: 5,
-                      backgroundColor: "#FFF",
-                      padding: 14,
-                      transform: [{ rotate: "-4deg" }],
-                      borderWidth: 1,
-                      borderColor: colors.line,
-                    }}
-                  >
-                    <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
-                      <FileText size={13} color={colors.blueDark} />
-                      <Text style={{ fontSize: 7, color: colors.blueDark }}>DOCUMENT</Text>
+      {w.files.length > 0 && (
+        <View style={[s.between, { gap: 12 }]}>
+          <Text style={s.muted}>
+            {w.files.length} {w.files.length === 1 ? "file" : "files"}
+          </Text>
+          <FilesViewToggle view={view} onView={chooseView} />
+        </View>
+      )}
+      {view === "list" && w.files.length > 0 && (
+        <Card style={{ paddingVertical: 6 }}>
+          {w.files.map((f, i) => (
+            <FileRow key={f.id} file={f} first={i === 0} />
+          ))}
+        </Card>
+      )}
+      {view === "grid" && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 18 }}>
+          {w.files.map((f) => (
+            <Pressable
+              key={f.id}
+              accessibilityRole="button"
+              accessibilityLabel={fileAccessibilityLabel(f)}
+              onPress={() => open({ type: "file", file: f })}
+              style={{ flexGrow: 1, flexBasis: 250, maxWidth: 430 }}
+            >
+              <Card style={{ padding: 0, overflow: "hidden" }}>
+                <View
+                  style={{
+                    height: 175,
+                    backgroundColor: colors.subtle,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  {isPicture(f) ? (
+                    <Image
+                      source={{ uri: api.url(f.url) }}
+                      resizeMode="cover"
+                      accessibilityLabel={f.name}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 93,
+                        height: 121,
+                        borderRadius: 5,
+                        backgroundColor: "#FFF",
+                        padding: 14,
+                        transform: [{ rotate: "-4deg" }],
+                        borderWidth: 1,
+                        borderColor: colors.line,
+                      }}
+                    >
+                      <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
+                        <FileText size={13} color={colors.blueDark} />
+                        <Text style={{ fontSize: 7, color: colors.blueDark }}>DOCUMENT</Text>
+                      </View>
+                      {[100, 75, 90, 95, 60].map((width, i) => (
+                        <View
+                          key={width}
+                          style={{
+                            height: 3,
+                            backgroundColor: i === 0 ? "#A4BED0" : colors.subtle,
+                            width: `${width}%`,
+                            marginBottom: 7,
+                            borderRadius: 3,
+                          }}
+                        />
+                      ))}
                     </View>
-                    {[100, 75, 90, 95, 60].map((width, i) => (
-                      <View
-                        key={width}
-                        style={{
-                          height: 3,
-                          backgroundColor: i === 0 ? "#A4BED0" : colors.subtle,
-                          width: `${width}%`,
-                          marginBottom: 7,
-                          borderRadius: 3,
-                        }}
-                      />
-                    ))}
+                  )}
+                  <View style={{ position: "absolute", bottom: 12, right: 14 }}>
+                    <Chip>{fileLabel(f)}</Chip>
                   </View>
-                )}
-                <View style={{ position: "absolute", bottom: 12, right: 14 }}>
-                  <Chip>{fileLabel(f)}</Chip>
                 </View>
-              </View>
-              <View style={{ padding: 21, gap: 6 }}>
-                <Text numberOfLines={1} style={[s.heading, { fontSize: 14 }]}>
-                  {f.name}
-                </Text>
-                <Text style={s.small}>{fileSummary(f)}</Text>
-                <View style={[s.between, { marginTop: 9 }]}>
-                  <Chip>{f.source}</Chip>
-                  <Text style={s.small}>{dateLabel(f.createdAt)}</Text>
+                <View style={{ padding: 21, gap: 6 }}>
+                  <Text numberOfLines={1} style={[s.heading, { fontSize: 14 }]}>
+                    {f.name}
+                  </Text>
+                  <Text style={s.small}>{fileSummary(f)}</Text>
+                  <View style={[s.between, { marginTop: 9 }]}>
+                    <Chip>{f.source}</Chip>
+                    <Text style={s.small}>{dateLabel(f.createdAt)}</Text>
+                  </View>
                 </View>
-              </View>
-            </Card>
-          </Pressable>
-        ))}
-      </View>
+              </Card>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {!w.files.length && (
         <Card>
           <Empty
