@@ -36,6 +36,27 @@ export function listenForCheckIns(onOpen: () => void) {
   return () => navigator.serviceWorker?.removeEventListener("message", message);
 }
 
+export const locationAvailable = () => web() && "geolocation" in navigator;
+/** The device's rough location, once, after the person allows it. */
+export function currentPosition(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve, reject) => {
+    if (!locationAvailable())
+      return reject(new Error("Location isn’t available here. Type your city instead."));
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      (error) =>
+        reject(
+          new Error(
+            error.code === error.PERMISSION_DENIED
+              ? "Location is blocked for this site. Type your city instead."
+              : "Couldn’t get your location. Type your city instead.",
+          ),
+        ),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60 * 60 * 1000 },
+    );
+  });
+}
+
 export function isInstalled() {
   if (!web()) return false;
   return (

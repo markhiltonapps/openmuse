@@ -12,6 +12,7 @@ import { agentConfigured, makeRuntime } from "./agent.ts";
 import { AppEvents } from "./app-events.ts";
 import { ApprovalRules } from "./approval-rules.ts";
 import { type AppConnector, ComposioConnector } from "./apps.ts";
+import { Areas, nominatimPlaces } from "./area.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
@@ -183,6 +184,17 @@ export async function createApp(
   if (mailAlerts && config.mode === "live" && /^https:/.test(config.publicUrl))
     void mailAlerts.setUp();
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
+  agent.areas = new Areas(
+    db,
+    config.mode === "live"
+      ? nominatimPlaces(
+          `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; home area for local news)`,
+        )
+      : undefined,
+  );
+  feed.where = (owner) => agent.searchPlace(owner);
+  // A new area means new local news: look it up now rather than tomorrow morning.
+  agent.areaChanged = (owner) => void feed.refresh(owner).catch(() => undefined);
   feed.usage = (owner) => usage.sink(owner, "feed");
   agent.feed = feed;
   const health = new HealthService(db, (owner) => agent.timeZone(owner));
@@ -682,6 +694,21 @@ export async function createApp(
     return c.json(await health.completeWorkout(c.get("owner"), c.req.param("id"), seconds), 201);
   });
   app.get("/api/feed", async (c) => c.json(await feed.get(c.get("owner"))));
+  app.get("/api/area", async (c) =>
+    c.json({ area: (await agent.areas?.get(c.get("owner"))) ?? null }),
+  );
+  app.post("/api/area", async (c) => {
+    const owner = c.get("owner");
+    const area = await agent.areas?.set(owner, await c.req.json());
+    agent.areaChanged?.(owner);
+    return c.json({ area });
+  });
+  app.post("/api/area/clear", async (c) => {
+    const owner = c.get("owner");
+    await agent.areas?.clear(owner);
+    agent.areaChanged?.(owner);
+    return c.json({ ok: true });
+  });
   app.post("/api/feed/topics", async (c) =>
     c.json(await feed.setTopics(c.get("owner"), await c.req.json())),
   );

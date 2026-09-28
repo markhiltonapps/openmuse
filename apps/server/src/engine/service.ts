@@ -32,6 +32,7 @@ import { type ActionService, usesGoogle } from "../actions.ts";
 import type { AppEvents } from "../app-events.ts";
 import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
+import { type Areas, searchPlace } from "../area.ts";
 import type { BrowserService } from "../browser.ts";
 import { ChatSummaries, summarySystemPrompt } from "../chat-summary.ts";
 import {
@@ -903,6 +904,18 @@ export class AgentService {
   health?: HealthService;
   /** "What did you have for lunch?" at meal times; asked from the maintenance loop. */
   checkIns?: MealCheckIns;
+  /** The town or city the person lives in, for local news and "near me" searches. */
+  areas?: Areas;
+  /** Called when the person's area changes, so their Feed catches up. */
+  areaChanged?: (owner: string) => void;
+  /** Where searches should treat as local: the saved area and the person's time zone. */
+  async searchPlace(owner: string) {
+    const [area, timeZone] = await Promise.all([
+      this.areas?.get(owner).catch(() => undefined),
+      this.timeZone(owner).catch(() => undefined),
+    ]);
+    return searchPlace(area, timeZone);
+  }
   /** The Feed's morning refresh; runs from the maintenance loop. */
   feed?: { refreshDue(): Promise<void> };
   /** One-off reminders; delivered from the maintenance loop. */

@@ -13,6 +13,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
+import { AreaPrompt, AreaRow, LOCAL_TOPIC } from "./area-ui";
 import { AssistantResponse } from "./assistant-response";
 import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
@@ -63,6 +64,8 @@ const COMMITMENT_EMOJI: Record<Commitment["kind"], string> = {
 };
 interface FeedState {
   topics: string[];
+  /** Where local news is for, such as "Houston, Texas". */
+  area?: string;
   refreshedAt?: string;
   searchAvailable: boolean;
   refreshing: boolean;
@@ -456,6 +459,10 @@ export function FeedScreen() {
         </Pressable>
       </View>
 
+      {feed?.searchAvailable && !feed.area && feed.topics.some((t) => LOCAL_TOPIC.test(t)) && (
+        <AreaPrompt onSaved={() => void load()} />
+      )}
+
       {days.map((day) => (
         <View key={day}>
           <Text
@@ -500,6 +507,9 @@ export function FeedScreen() {
         />
         {feed && !feed.searchAvailable && (
           <Text style={s.muted}>The Feed needs web search, which isn't set up on this server.</Text>
+        )}
+        {feed?.searchAvailable && (feed.area || !feed.topics.some((t) => LOCAL_TOPIC.test(t))) && (
+          <AreaRow area={feed.area} onSaved={() => void load()} />
         )}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {feed?.topics.map((item) => (

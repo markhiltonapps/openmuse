@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { SearchPlace } from "./area.ts";
 import type { Store } from "./db.ts";
 import { hasEmojiPicture } from "./emoji.ts";
 import { AppError } from "./errors.ts";
@@ -72,6 +73,8 @@ export class FeedService {
   private refreshing = new Set<string>();
   /** Where each person's search usage is recorded. */
   usage?: (owner: string) => UsageSink;
+  /** Where the person lives, so local topics are about their area. */
+  where?: (owner: string) => Promise<SearchPlace | undefined>;
   /** Finds an article's share picture. */
   preview: (url: string) => Promise<string | undefined> = (url) => previewImage(url);
   constructor(
@@ -93,8 +96,10 @@ export class FeedService {
     const items = (await this.db.list<FeedItem>(owner, "feed-items")).sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
     );
+    const where = await this.where?.(owner).catch(() => undefined);
     return {
       topics: settings.topics,
+      area: where?.label,
       refreshedAt: settings.refreshedAt,
       searchAvailable: Boolean(this.search),
       refreshing: this.refreshing.has(owner),
@@ -154,12 +159,15 @@ export class FeedService {
   private async lookUp(owner: string, topic: string) {
     const search = this.search;
     if (!search) return undefined;
+    const where = await this.where?.(owner).catch(() => undefined);
     if (search.stories) {
       const settings = await this.settings(owner);
-      const found = await search.stories(topic, this.usage?.(owner), {
-        liked: settings.liked ?? [],
-        disliked: settings.disliked ?? [],
-      });
+      const found = await search.stories(
+        topic,
+        this.usage?.(owner),
+        { liked: settings.liked ?? [], disliked: settings.disliked ?? [] },
+        where,
+      );
       if (found.stories.length) {
         const stories = await Promise.all(
           found.stories.map(async (story) => {
@@ -182,6 +190,8 @@ export class FeedService {
     const found = await search.search(
       `What's new about ${topic}? The most important news and developments from the past few days.`,
       this.usage?.(owner),
+      "web",
+      where,
     );
     if (found.answer === "No results found.") return undefined;
     // Never a wall of text: the first real paragraph, as one story.

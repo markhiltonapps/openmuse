@@ -349,7 +349,9 @@ export async function executeModelTask(
     );
   if (service.search)
     tools.push(
-      ...webSearchToolSpecs(service.search, service.usage?.sink(owner, "search")).map(
+      ...webSearchToolSpecs(service.search, service.usage?.sink(owner, "search"), () =>
+        service.searchPlace(owner),
+      ).map(
         (spec) =>
           tool(
             spec.name,

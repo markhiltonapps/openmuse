@@ -15,6 +15,7 @@ import {
 import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tools.ts";
 import { appEventInstructions, appEventToolSpecs } from "../app-events.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
+import { areaInstructions, areaToolSpecs } from "../area.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
 import { commitmentInstructions, commitmentToolSpecs } from "../commitments.ts";
@@ -326,6 +327,24 @@ export class ConversationAgent extends AbstractAgent {
           }),
         ),
       );
+    const areas = this.service.areas;
+    if (areas)
+      tools.push(
+        ...areaToolSpecs(areas, this.owner, (owner) => this.service.areaChanged?.(owner)).map(
+          (spec) =>
+            defineTool({
+              ...spec,
+              parameters: spec.parameters as z.ZodObject,
+              execute: async (args: unknown) => {
+                try {
+                  return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
+                } catch (error) {
+                  return { error: error instanceof Error ? error.message : "Could not save it" };
+                }
+              },
+            }),
+        ),
+      );
     const health = this.service.health;
     const checkIns = this.service.checkIns;
     if (health)
@@ -372,7 +391,9 @@ export class ConversationAgent extends AbstractAgent {
     const search = this.service.search;
     if (search)
       tools.push(
-        ...webSearchToolSpecs(search, this.service.usage?.sink(this.owner, "search")).map((spec) =>
+        ...webSearchToolSpecs(search, this.service.usage?.sink(this.owner, "search"), () =>
+          this.service.searchPlace(this.owner),
+        ).map((spec) =>
           defineTool({
             ...spec,
             execute: async (args) => {
@@ -551,6 +572,7 @@ export class ConversationAgent extends AbstractAgent {
         (mail ? agentEmailInstructions : "") +
         (health ? healthToolInstructions : "") +
         (health && this.service.checkIns ? checkInInstructions : "") +
+        (this.service.areas ? areaInstructions : "") +
         computerInstructions,
     });
     return new Observable((subscriber) => {
@@ -565,7 +587,8 @@ export class ConversationAgent extends AbstractAgent {
         this.service.db
           .get<{ name?: string; tone?: string }>(this.owner, "agent-settings", "identity")
           .catch(() => null),
-      ]).then(async ([memories, timeZone, people, coming, hidden, identity]) => {
+        this.service.areas?.get(this.owner).catch(() => undefined),
+      ]).then(async ([memories, timeZone, people, coming, hidden, identity, area]) => {
         // Messages the person deleted are gone from what the agent sees, too.
         const visible = withoutHidden(input.messages, new Set(hidden));
         const compacted = await this.service.chats
@@ -585,6 +608,9 @@ export class ConversationAgent extends AbstractAgent {
                 value: `Your name is ${identity?.name?.trim() || "Neddy"}. Your tone is ${identity?.tone?.trim() || "warm"}.`,
               },
               { description: "Current date and time", value: localNow(timeZone) },
+              ...(area
+                ? [{ description: "Where the person lives (their home area)", value: area.label }]
+                : []),
               ...(coming
                 ? [
                     {
