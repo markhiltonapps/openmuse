@@ -46,7 +46,7 @@ import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
-import { runConversationTurn } from "./conversation-run";
+import { replyFailure, runConversationTurn } from "./conversation-run";
 import { plainText } from "./copy-text";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
@@ -684,7 +684,7 @@ export function ChatScreen({
   );
   const flush = useCallback(() => {
     if (!loaded || !isReady || runLock.current || agent.isRunning) return;
-    void queue.flush(run).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void queue.flush(run).catch((e) => setError(replyFailure(e)));
   }, [agent, isReady, loaded, queue, run]);
   const enqueue = useCallback(
     (text: string) => {
@@ -709,8 +709,7 @@ export function ChatScreen({
     const subscription = copilotkit.subscribe({
       onError: (event) => {
         if (event.context?.agentId && event.context.agentId !== agentId) return;
-        const failure = event.error instanceof Error ? event.error : new Error(String(event.error));
-        setError(failure.message);
+        setError(replyFailure(event.error));
         endVoiceMode();
       },
     });
@@ -1067,7 +1066,7 @@ export function ChatScreen({
                 .then(() => {
                   if (!queue.getSnapshot().paused) flush();
                 })
-                .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+                .catch((e) => setError(replyFailure(e)));
             }}
           >
             Retry response

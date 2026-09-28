@@ -124,6 +124,27 @@ export async function complete(options: {
   return String(reply ?? "");
 }
 
+/**
+ * The conversation sent to the model always ends with the person's turn: newer models refuse to
+ * continue the agent's own reply. The chat can hold a reply after the message that answers it
+ * (saved out of order when the app reconnects mid-reply); it goes back before that message.
+ * Replies after a finished tool step, with nothing new from the person, are left out and written
+ * again, and so are tool calls that never got a result.
+ */
+export function endWithPerson<T extends { role: string; toolCalls?: unknown[] }>(messages: T[]) {
+  let last = messages.length - 1;
+  while (last >= 0 && messages[last]?.role === "assistant") last--;
+  const turn = messages[last];
+  if (!turn || last === messages.length - 1) return messages;
+  const replies = messages.slice(last + 1).filter((m) => !m.toolCalls?.length);
+  console.warn(
+    `[OpenMuse] The chat ended with ${messages.length - last - 1} agent message(s) after the person's turn; ${turn.role === "user" ? "moved them before it" : "left them out"}.`,
+  );
+  return turn.role === "user"
+    ? [...messages.slice(0, last), ...replies, turn]
+    : messages.slice(0, last + 1);
+}
+
 /** Anthropic prompt caching: a cache read costs a tenth of the normal input price. */
 const CACHE = { type: "ephemeral" } as const;
 export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
@@ -160,7 +181,7 @@ export function tanstackAgent(options: {
       const cached = caches(options.model);
       return chat({
         adapter: adapter(options.model),
-        messages: converted.messages,
+        messages: endWithPerson(converted.messages),
         systemPrompts: [
           ...(options.prompt
             ? [
