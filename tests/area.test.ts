@@ -55,6 +55,12 @@ test("the area comes from a typed city or a rounded location, and only the city 
     /lat=29\.76&lon=-95\.37/,
     "only about a kilometer of precision leaves",
   );
+  // A ZIP code is looked up in the person's own country; a name anywhere.
+  await areas.set("me", { place: "77002", country: "us" });
+  assert.match(urls.at(-1) ?? "", /q=77002&countrycodes=us$/);
+  await areas.set("me", { place: "Paris, France", country: "US" });
+  assert.doesNotMatch(urls.at(-1) ?? "", /countrycodes/);
+  await areas.set("me", { lat: 29.76043, lng: -95.3698 });
   const saved = await areas.get("me");
   assert.equal(saved?.label, "Houston, Texas");
   assert.equal("lat" in (saved ?? {}), false, "no coordinates are stored");

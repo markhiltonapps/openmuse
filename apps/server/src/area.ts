@@ -20,7 +20,7 @@ export interface Area {
 export type Place = Omit<Area, "id" | "setAt">;
 /** A place from a name or from a location. Undefined when nothing matches; throws when unreachable. */
 export type PlaceFinder = (
-  where: { text: string } | { lat: number; lng: number },
+  where: { text: string; country?: string } | { lat: number; lng: number },
 ) => Promise<Place | undefined>;
 /** What a search is told about where the person is. */
 export interface SearchPlace {
@@ -32,7 +32,15 @@ export interface SearchPlace {
 }
 
 export const areaInputSchema = z.union([
-  z.object({ place: z.string().trim().min(2).max(120) }),
+  z.object({
+    place: z.string().trim().min(2).max(120),
+    /** The device's country, so a ZIP code is found at home, not abroad. */
+    country: z
+      .string()
+      .regex(/^[A-Za-z]{2}$/)
+      .transform((c) => c.toUpperCase())
+      .optional(),
+  }),
   z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }),
 ]);
 
@@ -87,9 +95,14 @@ export function nominatimPlaces(
       if (wait > 0) await new Promise((done) => setTimeout(done, wait));
       last = now();
       const base = "https://nominatim.openstreetmap.org";
+      // The same ZIP code exists in several countries: look for it in the person's own.
+      const home =
+        "text" in where && where.country && /^[\d\s-]{3,10}$/.test(where.text.trim())
+          ? `&countrycodes=${where.country.toLowerCase()}`
+          : "";
       const url =
         "text" in where
-          ? `${base}/search?format=jsonv2&addressdetails=1&limit=1&q=${encodeURIComponent(where.text)}`
+          ? `${base}/search?format=jsonv2&addressdetails=1&limit=1&q=${encodeURIComponent(where.text)}${home}`
           : // Rounded to about a kilometer: enough to name the town, not to find the house.
             `${base}/reverse?format=jsonv2&addressdetails=1&zoom=10&lat=${where.lat.toFixed(2)}&lon=${where.lng.toFixed(2)}`;
       const response = await fetcher(url, {
@@ -128,7 +141,7 @@ export class Areas {
       if (!this.find) place = { label: input.place };
       else
         try {
-          place = await this.find({ text: input.place });
+          place = await this.find({ text: input.place, country: input.country });
         } catch {
           // The lookup is down: keep their words, which still steer searches.
           place = { label: input.place };

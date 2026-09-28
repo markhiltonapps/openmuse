@@ -13,7 +13,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
-import { AreaPrompt, AreaRow, LOCAL_TOPIC } from "./area-ui";
+import { AreaPrompt, AreaRow, areaPromptDismissed, LOCAL_TOPIC } from "./area-ui";
 import { AssistantResponse } from "./assistant-response";
 import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
@@ -175,6 +175,7 @@ export function FeedScreen() {
     void loadCommitments();
   }, [loadCommitments]);
   const [topic, setTopic] = useState("");
+  const [areaLater, setAreaLater] = useState(areaPromptDismissed);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(
@@ -261,6 +262,12 @@ export function FeedScreen() {
     ["queued", "running", "waiting_input", "waiting_approval"].includes(t.status),
   ).length;
   const days = [...new Set((feed?.items ?? []).map((item) => item.day))];
+  // Local news with no area saved: ask where local is, unless they said not now.
+  const askArea =
+    !!feed?.searchAvailable &&
+    !feed.area &&
+    !areaLater &&
+    feed.topics.some((t) => LOCAL_TOPIC.test(t));
   const healthLine = health.summary ? todayLine(health.summary.today) : "";
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -459,9 +466,7 @@ export function FeedScreen() {
         </Pressable>
       </View>
 
-      {feed?.searchAvailable && !feed.area && feed.topics.some((t) => LOCAL_TOPIC.test(t)) && (
-        <AreaPrompt onSaved={() => void load()} />
-      )}
+      {askArea && <AreaPrompt onSaved={() => void load()} onDismiss={() => setAreaLater(true)} />}
 
       {days.map((day) => (
         <View key={day}>
@@ -508,7 +513,7 @@ export function FeedScreen() {
         {feed && !feed.searchAvailable && (
           <Text style={s.muted}>The Feed needs web search, which isn't set up on this server.</Text>
         )}
-        {feed?.searchAvailable && (feed.area || !feed.topics.some((t) => LOCAL_TOPIC.test(t))) && (
+        {feed?.searchAvailable && !askArea && (
           <AreaRow area={feed.area} onSaved={() => void load()} />
         )}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>

@@ -9,6 +9,24 @@ import { useWorkspace } from "./workspace";
 export const LOCAL_TOPIC =
   /\b(local|near me|nearby|my (city|town|area)|weather|traffic|community|neighbou?rhood)\b/i;
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** The device's country ("US" from en-US), so a typed ZIP code is looked up at home. */
+function homeCountry() {
+  try {
+    const locale = new Intl.Locale(Intl.DateTimeFormat().resolvedOptions().locale).maximize();
+    return locale.region && /^[A-Z]{2}$/.test(locale.region) ? locale.region : undefined;
+  } catch {
+    return undefined;
+  }
+}
+const DISMISSED = "openmuse.area-prompt-dismissed";
+/** Whether the person said "Not now" to the area prompt on this device. */
+export function areaPromptDismissed() {
+  try {
+    return globalThis.localStorage?.getItem(DISMISSED) === "1";
+  } catch {
+    return false;
+  }
+}
 
 /** Sets the person's area from their device's location or a city they type. */
 function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () => void }) {
@@ -20,7 +38,10 @@ function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () 
     setBusy(kind);
     setError("");
     try {
-      const body = kind === "locate" ? await currentPosition() : { place: place.trim() };
+      const body =
+        kind === "locate"
+          ? await currentPosition()
+          : { place: place.trim(), country: homeCountry() };
       const { area } = await api.request<{ area: { label: string } }>("/api/area", body);
       notify(`Local news is now for ${area.label}. Updating your Feed…`);
       onSaved();
@@ -30,6 +51,16 @@ function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () 
       setBusy(undefined);
     }
   }
+  const saveButton = (
+    <Button
+      small
+      busy={busy === "type"}
+      disabled={!!busy || place.trim().length < 2}
+      onPress={() => void save("type")}
+    >
+      Save
+    </Button>
+  );
   return (
     <View style={{ gap: 10 }}>
       {locationAvailable() && (
@@ -57,27 +88,15 @@ function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () 
           autoComplete="postal-address-locality"
           style={[s.input, { flex: 1, minHeight: 42, paddingVertical: 9 }]}
         />
-        <Button
-          small
-          busy={busy === "type"}
-          disabled={!!busy || place.trim().length < 2}
-          style={{ backgroundColor: colors.card }}
-          onPress={() => void save("type")}
-        >
-          Save
-        </Button>
+        {!onCancel && saveButton}
       </View>
       {onCancel && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onCancel}
-          hitSlop={6}
-          style={{ alignSelf: "flex-start", minHeight: 32, justifyContent: "center" }}
-        >
-          <Text style={[s.small, { color: colors.text, textDecorationLine: "underline" }]}>
+        <View style={[s.row, { gap: 8 }]}>
+          {saveButton}
+          <Button small disabled={!!busy} onPress={onCancel}>
             Cancel
-          </Text>
-        </Pressable>
+          </Button>
+        </View>
       )}
       <ErrorNotice error={error} />
     </View>
@@ -85,7 +104,7 @@ function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () 
 }
 
 /** Asked once, near the top of the Feed, when a followed topic is about where they live. */
-export function AreaPrompt({ onSaved }: { onSaved: () => void }) {
+export function AreaPrompt({ onSaved, onDismiss }: { onSaved: () => void; onDismiss: () => void }) {
   return (
     <View
       style={{
@@ -104,12 +123,29 @@ export function AreaPrompt({ onSaved }: { onSaved: () => void }) {
             Where’s local for you?
           </Text>
           <Text style={[s.small, { color: colors.mutedStrong }]}>
-            Your local news, weather and “near me” searches will be about your area. Only your city
-            is saved.
+            Your local news, weather and “near me” searches will be about your area.
           </Text>
         </View>
       </View>
       <AreaEditor onSaved={onSaved} />
+      <Text style={[s.small, { color: colors.mutedStrong }]}>
+        To find your city, your rough location or what you type is looked up once with
+        OpenStreetMap. Only the city is kept.
+      </Text>
+      <Button
+        small
+        style={{ alignSelf: "flex-start", backgroundColor: colors.card }}
+        onPress={() => {
+          try {
+            globalThis.localStorage?.setItem(DISMISSED, "1");
+          } catch {
+            // Private browsing: it just asks again next time.
+          }
+          onDismiss();
+        }}
+      >
+        Not now
+      </Button>
     </View>
   );
 }
@@ -149,40 +185,42 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
       </Pressable>
     );
   return (
-    <View style={{ gap: 6 }}>
-      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-        <MapPin size={15} color={colors.muted} />
+    <View style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
+      <MapPin size={16} color={colors.muted} style={{ marginTop: 3 }} />
+      <View style={{ flex: 1, gap: 4 }}>
         <Text style={s.text}>
           Local news is for <Text style={{ fontWeight: "600" }}>{area}</Text>
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Change your area from ${area}`}
-          onPress={() => setEditing(true)}
-          hitSlop={8}
-        >
-          <Text style={[s.text, { textDecorationLine: "underline" }]}>Change</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Remove your area"
-          onPress={() =>
-            void api.request("/api/area/clear", {}).then(
-              () => {
-                notify("Removed your area.");
-                onSaved();
-              },
-              (e) => setError(message(e)),
-            )
-          }
-          hitSlop={8}
-        >
-          <Text style={[s.text, { color: colors.mutedStrong, textDecorationLine: "underline" }]}>
-            Remove
-          </Text>
-        </Pressable>
+        <View style={[s.row, { gap: 16 }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Change your area from ${area}`}
+            onPress={() => setEditing(true)}
+            hitSlop={8}
+          >
+            <Text style={[s.text, { textDecorationLine: "underline" }]}>Change</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Remove your area"
+            onPress={() =>
+              void api.request("/api/area/clear", {}).then(
+                () => {
+                  notify("Removed your area.");
+                  onSaved();
+                },
+                (e) => setError(message(e)),
+              )
+            }
+            hitSlop={8}
+          >
+            <Text style={[s.text, { color: colors.mutedStrong, textDecorationLine: "underline" }]}>
+              Remove
+            </Text>
+          </Pressable>
+        </View>
+        <ErrorNotice error={error} />
       </View>
-      <ErrorNotice error={error} />
     </View>
   );
 }
