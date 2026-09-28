@@ -98,6 +98,10 @@ function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () 
           </Button>
         </View>
       )}
+      <Text style={[s.small, { color: colors.mutedStrong }]}>
+        To find your city, your rough location or what you type is looked up once with
+        OpenStreetMap. Only the city is kept.
+      </Text>
       <ErrorNotice error={error} />
     </View>
   );
@@ -128,10 +132,6 @@ export function AreaPrompt({ onSaved, onDismiss }: { onSaved: () => void; onDism
         </View>
       </View>
       <AreaEditor onSaved={onSaved} />
-      <Text style={[s.small, { color: colors.mutedStrong }]}>
-        To find your city, your rough location or what you type is looked up once with
-        OpenStreetMap. Only the city is kept.
-      </Text>
       <Button
         small
         style={{ alignSelf: "flex-start", backgroundColor: colors.card }}
@@ -157,7 +157,9 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
   const [error, setError] = useState("");
   if (editing)
     return (
-      <View style={{ gap: 8 }}>
+      <View
+        style={{ gap: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.line }}
+      >
         <Text style={[s.text, { fontWeight: "600" }]}>
           {area ? "Change your area" : "Where’s local for you?"}
         </Text>
