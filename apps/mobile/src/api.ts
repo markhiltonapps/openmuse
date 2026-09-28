@@ -72,6 +72,13 @@ export async function serverInfo(): Promise<{ mode: "sample" | "live"; emailSign
 export function requestSignInLink(email: string) {
   return post<{ ok: true }>("/api/auth/request", { email }, "Could not send the sign-in email.");
 }
+export function redeemSignInCode(email: string, code: string) {
+  return post<{ token: string; mode: "sample" | "live" }>(
+    "/api/auth/code",
+    { email, code },
+    "That code didn't work. Request a new one.",
+  );
+}
 export function redeemSignInLink(token: string) {
   return post<{ token: string; mode: "sample" | "live" }>(
     "/api/auth/verify",

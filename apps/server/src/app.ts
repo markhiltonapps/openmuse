@@ -300,6 +300,21 @@ export async function createApp(
     await agent.ensure(account.id);
     return c.json(session);
   });
+  // The 6-digit code from the same email, typed in instead of opening the link.
+  app.post("/api/auth/code", async (c) => {
+    if (Date.now() - loginWindow > 60000) {
+      loginWindow = Date.now();
+      loginAttempts = 0;
+    }
+    if (++loginAttempts > 30)
+      throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
+    const { email, code } = z
+      .object({ email: z.email().max(320), code: z.string().trim().min(6).max(12) })
+      .parse(await c.req.json());
+    const { account, session } = await accounts.verifyCode(email, code);
+    await agent.ensure(account.id);
+    return c.json(session);
+  });
   // Composio reports new email here; its webhook signature, not a session, authenticates it.
   app.post("/api/webhooks/composio", async (c) => {
     if (!mailAlerts) throw new AppError("Connected apps aren't set up", 503);

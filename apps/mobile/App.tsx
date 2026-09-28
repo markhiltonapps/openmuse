@@ -44,6 +44,7 @@ import {
   createSession,
   MuseApi,
   onSignedOut,
+  redeemSignInCode,
   redeemSignInLink,
   serverInfo,
 } from "./src/api";
@@ -181,6 +182,7 @@ export default function App() {
                 error={error}
                 onKey={(key) => void signIn(() => createSession(key || undefined))}
                 onLogin={(login) => void signIn(() => redeemSignInLink(login))}
+                onCode={(email, code) => void signIn(() => redeemSignInCode(email, code))}
               />
             )}
           </View>

@@ -11,30 +11,44 @@ export function SignInCard({
   error,
   onKey,
   onLogin,
+  onCode,
 }: {
   emailSignIn: boolean;
   error: string;
   onKey: (key: string) => void;
   onLogin: (token: string) => void;
+  onCode: (email: string, code: string) => void;
 }) {
   const [method, setMethod] = useState<"email" | "key">(emailSignIn ? "email" : "key");
   const [email, setEmail] = useState("");
   const [key, setKey] = useState("");
   const [sentTo, setSentTo] = useState("");
-  const [pasted, setPasted] = useState("");
+  const [code, setCode] = useState("");
+  const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   useEffect(() => setMethod(emailSignIn ? "email" : "key"), [emailSignIn]);
   const address = email.trim();
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
-  const pastedToken = pastedLoginToken(pasted);
+  // A pasted sign-in link still works in the code box, for anyone used to that.
+  const pastedToken = pastedLoginToken(code);
+  const digits = code.replace(/\D/g, "");
+  const ready = !!pastedToken || digits.length === 6;
+  function submit(value = code) {
+    const token = pastedLoginToken(value);
+    if (token) return onLogin(token);
+    const typed = value.replace(/\D/g, "");
+    if (typed.length === 6) onCode(sentTo, typed);
+  }
   async function send() {
     if (!validEmail) return;
     setBusy(true);
     setProblem("");
     try {
       await requestSignInLink(address);
+      setResent(!!sentTo);
       setSentTo(address);
+      setCode("");
     } catch (e) {
       setProblem(e instanceof Error ? e.message : String(e));
     } finally {
@@ -62,32 +76,53 @@ export function SignInCard({
         <>
           <Text style={s.heading}>Check your email</Text>
           <Text style={s.muted}>
-            If {sentTo} has a Neato_Muse account, a sign-in link is on its way. Open it on this
-            device. It works once and expires in 15 minutes.
+            If {sentTo} has a Neato_Muse account, a 6-digit sign-in code is on its way. It works
+            once and expires in 15 minutes.
           </Text>
           <Field
-            label="Or paste the link here"
-            value={pasted}
-            onChangeText={setPasted}
+            label="Sign-in code"
+            value={code}
+            onChangeText={(value) => {
+              setCode(value);
+              // Signs in as soon as the sixth digit is in, or a whole link is pasted.
+              if (
+                pastedLoginToken(value) ||
+                (value.replace(/\D/g, "").length === 6 && !/[^\d\s-]/.test(value))
+              )
+                submit(value);
+            }}
+            onSubmitEditing={() => submit()}
+            autoFocus
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="https://…#login=…"
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            inputMode="numeric"
+            returnKeyType="go"
+            placeholder="123 456"
+            style={{ maxWidth: 240, fontSize: 22, letterSpacing: 4, fontVariant: ["tabular-nums"] }}
           />
+          <Button primary disabled={!ready} onPress={() => submit()}>
+            Sign in
+          </Button>
           <Text style={s.small}>
-            Using Neato_Muse from your iPhone Home Screen? Links open in Safari, so press and hold
-            the link in the email, tap Copy, and paste it here.
+            {resent
+              ? "A new code is on its way. Use the newest one."
+              : "You can also tap the link in the email on this device."}
           </Text>
           <Button
-            primary
-            disabled={!pastedToken}
-            onPress={() => pastedToken && onLogin(pastedToken)}
+            busy={busy}
+            onPress={() => {
+              void send();
+            }}
           >
-            Sign in
+            Send a new code
           </Button>
           <Button
             onPress={() => {
               setSentTo("");
-              setPasted("");
+              setCode("");
+              setResent(false);
             }}
           >
             Use a different email
@@ -107,7 +142,7 @@ export function SignInCard({
             onSubmitEditing={() => void send()}
           />
           <Button primary busy={busy} disabled={!validEmail} onPress={() => void send()}>
-            Email me a sign-in link
+            Email me a sign-in code
           </Button>
         </>
       )}

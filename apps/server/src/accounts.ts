@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ADMIN_OWNER, type Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
@@ -22,6 +22,18 @@ interface LoginLink {
   accountId: string;
   expiresAt: number;
 }
+/** The 6-digit code sent with a sign-in link, for typing in instead of opening the link. */
+interface LoginCode {
+  /** The address, hashed: one code per address, the newest one. */
+  id: string;
+  accountId: string;
+  code: string;
+  linkId: string;
+  expiresAt: number;
+  tries: number;
+}
+/** Wrong guesses before a code stops working: 5 in a million. */
+const CODE_TRIES = 5;
 export interface Mailer {
   send(message: { to: string; subject: string; text: string; html: string }): Promise<void>;
 }
@@ -258,6 +270,17 @@ export class AccountService {
       accountId: account.id,
       expiresAt: this.now() + ttl,
     } satisfies LoginLink);
+    // Sign-ins also get a code to type, for the Home Screen app, where links open in the browser.
+    const code = invite ? undefined : String(randomInt(0, 1_000_000)).padStart(6, "0");
+    if (code)
+      await this.db.put("system", "login-codes", {
+        id: hash(normalEmail(account.email)),
+        accountId: account.id,
+        code: hash(`${account.id}:${code}`),
+        linkId: hash(token),
+        expiresAt: this.now() + ttl,
+        tries: 0,
+      } satisfies LoginCode);
     const appUrl = (this.config.appUrl ?? this.config.publicUrl).replace(/\/$/, "");
     const link = `${appUrl}/#login=${token}`;
     await this.mailer.send({
@@ -270,8 +293,31 @@ export class AccountService {
         name: account.name,
         email: account.email,
         address: this.address(account),
+        ...(code ? { code } : {}),
       }),
     });
+  }
+  /** Uses a typed sign-in code once and returns a session for its account. */
+  async verifyCode(email: string, code: string) {
+    const id = hash(normalEmail(email));
+    const expired = new AppError("This code has expired. Request a new one.", 401);
+    const record = await this.db.get<LoginCode>("system", "login-codes", id);
+    if (!record || record.expiresAt < this.now()) throw expired;
+    if (record.code !== hash(`${record.accountId}:${code.replace(/\D/g, "")}`)) {
+      const tries = record.tries + 1;
+      if (tries >= CODE_TRIES) {
+        await this.db.remove("system", "login-codes", id);
+        await this.db.remove("system", "login-links", record.linkId);
+        throw new AppError("Too many wrong codes. Request a new one.", 401);
+      }
+      await this.db.put("system", "login-codes", { ...record, tries });
+      throw new AppError("That code isn’t right. Check the email and try again.", 401);
+    }
+    // Taking the record is the atomic step: of two concurrent uses only one gets it back.
+    const taken = await this.db.take<LoginCode>("system", "login-codes", id);
+    if (!taken || taken.code !== record.code) throw expired;
+    await this.db.remove("system", "login-links", record.linkId);
+    return this.signInAs(record.accountId);
   }
   /** Uses a sign-in link once and returns a session for its account. */
   async verifyLink(token: string) {
@@ -279,8 +325,13 @@ export class AccountService {
     const link = await this.db.take<LoginLink>("system", "login-links", hash(token));
     if (!link || link.expiresAt < this.now())
       throw new AppError("This sign-in link has expired. Request a new one.", 401);
-    const account = await this.get(link.accountId);
+    return this.signInAs(link.accountId, true);
+  }
+  private async signInAs(accountId: string, byLink = false) {
+    const account = await this.get(accountId);
     if (account?.status !== "active") throw new AppError("This account no longer has access", 401);
+    // A link used means its code is done with too.
+    if (byLink) await this.db.remove("system", "login-codes", hash(normalEmail(account.email)));
     await this.db.put("system", "accounts", {
       ...account,
       lastSignInAt: new Date(this.now()).toISOString(),
