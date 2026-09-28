@@ -15,6 +15,7 @@ import {
   Check,
   Copy,
   FileText,
+  Image as ImageIcon,
   Mic,
   Paperclip,
   RotateCcw,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -57,7 +59,7 @@ import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
-import { chooseAndUpload } from "./upload";
+import { chooseAndUpload, uploadToFiles } from "./upload";
 import {
   primeSpeech,
   readAsWritten,
@@ -70,6 +72,11 @@ import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 const displayParameters = z.record(z.string(), z.unknown());
+/** What the message box says when pasted pictures couldn't be added. */
+const failedText = (count: number) =>
+  count === 1
+    ? "Couldn’t add that picture. Try pasting it again."
+    : `Couldn’t add ${count} pictures. Try pasting them again.`;
 /** One-tap requests offered when a photo is attached. */
 const PHOTO_ACTIONS = [
   { label: "What is this?", prompt: "What is in this photo?" },
@@ -433,6 +440,82 @@ export function ChatScreen({
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState<"photos" | "any">();
+  // Pictures pasted into the message box (a screenshot, an image copied from a page) are added
+  // to Files and attached, like choosing a photo. Pasted text still pastes as text.
+  const input = useRef<TextInput>(null);
+  const [pasting, setPasting] = useState(0);
+  // What a screen reader hears: the chip alone appears and disappears too fast to be announced.
+  const [pasteStatus, setPasteStatus] = useState("");
+  /** Pasted pictures that couldn't be added, shown in the message box where they'd have gone. */
+  const [pasteFailed, setPasteFailed] = useState(0);
+  const attachPasted = useCallback(
+    async (pictures: File[]) => {
+      setPasteFailed(0);
+      setPasting((count) => count + pictures.length);
+      setPasteStatus(
+        pictures.length === 1 ? "Adding your picture…" : `Adding ${pictures.length} pictures…`,
+      );
+      // Screenshots arrive as "image.png": a date and time tells them apart in Files.
+      const stamp = new Date()
+        .toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+        .replace(/:/g, ".")
+        .replace(/\s/g, " ");
+      let failed = 0;
+      for (const [index, picture] of pictures.entries()) {
+        const extension = picture.type.split("/")[1]?.replace("jpeg", "jpg") || "png";
+        const named =
+          !picture.name || /^image\.\w+$/i.test(picture.name)
+            ? new File(
+                [picture],
+                `Pasted picture ${stamp}${index > 0 ? ` (${index + 1})` : ""}.${extension}`,
+                { type: picture.type },
+              )
+            : picture;
+        // One picture failing doesn't stop the others.
+        try {
+          const file = await uploadToFiles(api, named);
+          await refresh();
+          setAttachments((current) => [...current, file.id]);
+          setPasteStatus(`Picture attached: ${file.name}`);
+        } catch {
+          failed++;
+          setPasteFailed(failed);
+        } finally {
+          setPasting((count) => count - 1);
+        }
+      }
+      // Said last, so a later success doesn't talk over it.
+      if (failed) setPasteStatus(failedText(failed));
+    },
+    [api, refresh],
+  );
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const node = input.current as unknown as HTMLElement | null;
+    if (!node?.addEventListener) return;
+    const onPaste = (event: ClipboardEvent) => {
+      const pictures = Array.from(event.clipboardData?.items ?? [])
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => !!file);
+      if (!pictures.length) return;
+      // Cells copied from Excel or Word come with a picture of themselves: keep the text. A copied
+      // image carries at most its address or file name as text.
+      const text = event.clipboardData?.getData("text/plain").trim() ?? "";
+      if (text && !/^(\S+:\/\/\S+|[^\s\\/]+\.(png|jpe?g|gif|webp|heic|tiff?|bmp))$/i.test(text))
+        return;
+      event.preventDefault();
+      void attachPasted(pictures);
+    };
+    node.addEventListener("paste", onPaste);
+    return () => node.removeEventListener("paste", onPaste);
+  }, [attachPasted]);
   /** Uploads a new photo or file to Files and attaches it to the message being written. */
   async function addNew(kind: "photos" | "any") {
     setUploading(kind);
@@ -644,7 +727,8 @@ export function ChatScreen({
   /** Sends the draft, or a quick-action prompt that goes with the current attachments. */
   function send(prompt?: string) {
     const text = (prompt ?? draft).trim();
-    if (!text || !isReady || !loaded) return;
+    // A picture still being added would otherwise go without the message.
+    if (!text || !isReady || !loaded || pasting > 0) return;
     primeSpeech();
     stopSpeaking();
     // A new submission can continue after Stop; held follow-ups still need explicit resume.
@@ -661,6 +745,7 @@ export function ChatScreen({
     setDraft("");
     setInputHeight(44);
     setAttachments([]);
+    setPasteFailed(0);
     setPicking(false);
   }
   const messages = agent.messages || [];
@@ -1154,8 +1239,56 @@ export function ChatScreen({
             elevation: 4,
           }}
         >
-          {attachments.length > 0 && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0 }}
+          >
+            {pasteStatus}
+          </Text>
+          {(attachments.length > 0 || pasting > 0 || pasteFailed > 0) && (
             <View style={[s.row, { gap: 6, flexWrap: "wrap", padding: 9 }]}>
+              {pasteFailed > 0 && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${failedText(pasteFailed)} Dismiss`}
+                  onPress={() => setPasteFailed(0)}
+                  style={[
+                    s.row,
+                    {
+                      gap: 7,
+                      maxWidth: "100%",
+                      backgroundColor: colors.errorBg,
+                      borderRadius: 16,
+                      paddingHorizontal: 11,
+                      paddingVertical: 8,
+                    },
+                  ]}
+                >
+                  <Text style={{ flexShrink: 1, fontSize: 12, color: colors.danger }}>
+                    {failedText(pasteFailed)}
+                  </Text>
+                  <X size={13} color={colors.danger} />
+                </Pressable>
+              )}
+              {pasting > 0 && (
+                <View
+                  style={[
+                    s.row,
+                    {
+                      gap: 7,
+                      backgroundColor: colors.sky,
+                      borderRadius: 16,
+                      paddingHorizontal: 11,
+                      paddingVertical: 8,
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={colors.blueDark} />
+                  <Text style={{ fontSize: 12, color: colors.text }}>
+                    {pasting === 1 ? "Adding your picture…" : `Adding ${pasting} pictures…`}
+                  </Text>
+                </View>
+              )}
               {w.files
                 .filter((f) => attachments.includes(f.id))
                 .map((f) => (
@@ -1176,7 +1309,11 @@ export function ChatScreen({
                       },
                     ]}
                   >
-                    <FileText size={14} color={colors.blueDark} />
+                    {isPicture(f) ? (
+                      <ImageIcon size={14} color={colors.blueDark} />
+                    ) : (
+                      <FileText size={14} color={colors.blueDark} />
+                    )}
                     <Text
                       numberOfLines={1}
                       style={{ flexShrink: 1, fontSize: 12, color: colors.text }}
@@ -1196,7 +1333,7 @@ export function ChatScreen({
                 <Button
                   key={action.label}
                   small
-                  disabled={replying || !loaded || !isReady}
+                  disabled={replying || !loaded || !isReady || pasting > 0}
                   onPress={() => send(action.prompt)}
                 >
                   {action.label}
@@ -1224,6 +1361,7 @@ export function ChatScreen({
               </Text>
             </Pressable>
             <TextInput
+              ref={input}
               accessibilityLabel="Message your agent"
               value={draft}
               onChangeText={setDraft}
@@ -1318,7 +1456,7 @@ export function ChatScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}
-              disabled={!replying && (!draft.trim() || !loaded || !isReady)}
+              disabled={!replying && (!draft.trim() || !loaded || !isReady || pasting > 0)}
               onPress={replying ? () => void stop() : () => send()}
               style={({ pressed }) => ({
                 width: 44,

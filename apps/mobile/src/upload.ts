@@ -23,10 +23,7 @@ export async function chooseAndUpload(
   if (!file) return undefined;
   if (Platform.OS === "web") {
     if (!file.file) throw new Error("The selected file could not be read. Please choose it again.");
-    const upload = await shrinkPicture(file.file);
-    const form = new FormData();
-    form.append("file", upload, upload.name);
-    return api.request<Artifact>("/api/files", form);
+    return uploadToFiles(api, file.file);
   }
   const response = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
     httpMethod: "POST",
@@ -39,6 +36,14 @@ export async function chooseAndUpload(
   if (response.status < 200 || response.status >= 300)
     throw new Error(payload.error || "Could not add this file.");
   return payload;
+}
+
+/** Adds a file the web app already has (picked, pasted or dropped) to Files. */
+export async function uploadToFiles(api: MuseApi, file: File): Promise<Artifact> {
+  const upload = await shrinkPicture(file);
+  const form = new FormData();
+  form.append("file", upload, upload.name);
+  return api.request<Artifact>("/api/files", form);
 }
 
 /** Lets the person pick a file and sends it to `path` as-is. Undefined when they cancel. */
