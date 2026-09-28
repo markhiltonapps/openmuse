@@ -62,6 +62,11 @@ const COMMITMENT_EMOJI: Record<Commitment["kind"], string> = {
   event: "🎟️",
   other: "📌",
 };
+interface AppDay {
+  events: { id: string; title: string; start: string; end: string; allDay: boolean }[];
+  checked: string[];
+  failed: string[];
+}
 interface FeedState {
   topics: string[];
   /** Where local news is for, such as "Houston, Texas". */
@@ -174,6 +179,13 @@ export function FeedScreen() {
   useEffect(() => {
     void loadCommitments();
   }, [loadCommitments]);
+  // Events from connected calendar apps (Outlook, Google Calendar), which chat reads too.
+  const [appDay, setAppDay] = useState<AppDay>();
+  useEffect(() => {
+    api
+      .request<AppDay>("/api/calendar/today")
+      .then(setAppDay, () => setAppDay({ events: [], checked: [], failed: ["calendar"] }));
+  }, [api]);
   const [topic, setTopic] = useState("");
   const [areaLater, setAreaLater] = useState(areaPromptDismissed);
   const [busy, setBusy] = useState(false);
@@ -250,7 +262,15 @@ export function FeedScreen() {
 
   const now = new Date();
   const today = localDay(now);
-  const events = w.events
+  const seen = new Set<string>();
+  const events = [...w.events, ...(appDay?.events ?? [])]
+    // The same meeting from two connections shows once.
+    .filter((e) => {
+      const key = `${e.title.trim().toLowerCase()}|${e.allDay ? e.start.slice(0, 10) : new Date(e.start).getTime()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .filter((e) =>
       e.allDay ? e.start.slice(0, 10) === today : localDay(new Date(e.start)) === today,
     )
@@ -362,6 +382,19 @@ export function FeedScreen() {
                 · {e.title}
               </Text>
             ))
+          ) : !appDay ? (
+            <Text style={s.muted}>Checking your calendar…</Text>
+          ) : appDay.failed.length ? (
+            <Text style={s.muted}>
+              Couldn’t read your calendar just now. Ask in chat what’s on it today.
+            </Text>
+          ) : !appDay.checked.length &&
+            !w.connections.some((c) => c.id === "google" && c.status !== "disconnected") ? (
+            <Pressable accessibilityRole="button" onPress={() => navigate("apps")}>
+              <Text style={[s.text, { textDecorationLine: "underline" }]}>
+                Connect your calendar to see your day here
+              </Text>
+            </Pressable>
           ) : (
             <Text style={s.muted}>Nothing else on your calendar today.</Text>
           )}

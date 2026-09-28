@@ -117,3 +117,15 @@ test("social searches stay on forums and social sites; picture searches return e
   const plain = await tool?.execute({ query: "Baratza Encore" });
   assert.equal(plain?.pictures, undefined);
 });
+
+test("citation tags from the search model never reach the person", async () => {
+  const { withoutCitations, parseStories } = await import("../apps/server/src/web-search.ts");
+  assert.equal(
+    withoutCitations('<cite index="15-1">Montgomery County seized $3.2 million.</cite> More.'),
+    "Montgomery County seized $3.2 million. More.",
+  );
+  const [story] = parseStories(
+    '{"stories":[{"emoji":"💊","headline":"Sheriff seizes pills","summary":"<cite index=\\"15-1\\">The sheriff seized $3.2 million in pills on September 18.</cite>"}]}',
+  );
+  assert.equal(story?.summary, "The sheriff seized $3.2 million in pills on September 18.");
+});

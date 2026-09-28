@@ -6,7 +6,7 @@ import { hasEmojiPicture } from "./emoji.ts";
 import { AppError } from "./errors.ts";
 import { previewImage } from "./link-preview.ts";
 import type { UsageSink } from "./usage.ts";
-import type { SearchSource, Story, WebSearch } from "./web-search.ts";
+import { type SearchSource, type Story, type WebSearch, withoutCitations } from "./web-search.ts";
 
 export const feedTopicsSchema = z.object({
   topics: z.array(z.string().trim().min(2).max(80)).max(8),
@@ -93,9 +93,18 @@ export class FeedService {
   }
   async get(owner: string) {
     const settings = await this.settings(owner);
-    const items = (await this.db.list<FeedItem>(owner, "feed-items")).sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    );
+    const items = (await this.db.list<FeedItem>(owner, "feed-items"))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      // Stories saved before citation tags were removed read cleanly too.
+      .map((item) => ({
+        ...item,
+        summary: withoutCitations(item.summary),
+        stories: item.stories?.map((story) => ({
+          ...story,
+          headline: withoutCitations(story.headline),
+          summary: withoutCitations(story.summary),
+        })),
+      }));
     const where = await this.where?.(owner).catch(() => undefined);
     return {
       topics: settings.topics,

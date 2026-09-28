@@ -17,6 +17,7 @@ import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
 import { BrowserService } from "./browser.ts";
 import { runApprovedStep } from "./browser-tools.ts";
+import { CalendarToday } from "./calendar-today.ts";
 import { ChatArchive } from "./chat-archive.ts";
 import { Commitments } from "./commitments.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
@@ -184,6 +185,7 @@ export async function createApp(
   if (mailAlerts && config.mode === "live" && /^https:/.test(config.publicUrl))
     void mailAlerts.setUp();
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
+  const calendarToday = new CalendarToday(apps, (owner) => agent.timeZone(owner));
   agent.areas = new Areas(
     db,
     config.mode === "live"
@@ -694,6 +696,9 @@ export async function createApp(
     return c.json(await health.completeWorkout(c.get("owner"), c.req.param("id"), seconds), 201);
   });
   app.get("/api/feed", async (c) => c.json(await feed.get(c.get("owner"))));
+  app.get("/api/calendar/today", async (c) =>
+    c.json(await calendarToday.today(c.get("owner"), c.req.query("fresh") === "1")),
+  );
   app.get("/api/area", async (c) =>
     c.json({ area: (await agent.areas?.get(c.get("owner"))) ?? null }),
   );

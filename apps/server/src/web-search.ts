@@ -132,11 +132,12 @@ export class AnthropicWebSearch implements WebSearch {
         for (const result of block.content) add(result.url, result.title, result.page_age);
       else failure = block.content?.error_code;
     }
-    const text = blocks
-      .filter((block) => block.type === "text")
-      .map((block) => block.text ?? "")
-      .join("")
-      .trim();
+    const text = withoutCitations(
+      blocks
+        .filter((block) => block.type === "text")
+        .map((block) => block.text ?? "")
+        .join(""),
+    ).trim();
     return { text, failure, sources: [...sources.values()] };
   }
   private today() {
@@ -210,6 +211,10 @@ const SOCIAL_SITES = [
   "tripadvisor.com",
 ];
 
+/** The search model marks sources with <cite index="…"> tags; people should see just the words. */
+export const withoutCitations = (text: string) =>
+  text.replace(/<\/?cite\b[^>]*>/gi, "").replace(/[ \t]{2,}/g, " ");
+
 export interface Story {
   emoji: string;
   headline: string;
@@ -246,8 +251,8 @@ export function parseStories(reply: string): Story[] {
     return [
       {
         emoji: emoji && /\p{Extended_Pictographic}/u.test(emoji) ? emoji : "📰",
-        headline: headline.slice(0, 140),
-        summary: summary.replace(
+        headline: withoutCitations(headline).slice(0, 140),
+        summary: withoutCitations(summary).replace(
           /\[([^\]]+)\]\(([^)\s]+)\)/g,
           (match, phrase: string, link: string) => (https(link) ? match : phrase),
         ),
