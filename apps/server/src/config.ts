@@ -54,6 +54,8 @@ export interface Config {
   /** Also enables web search through Anthropic's search tool. */
   anthropicApiKey?: string;
   webSearchModel?: string;
+  /** The Anthropic model that runs code in the sandbox (CODE_MODEL); Claude Sonnet 5 by default. */
+  codeModel?: string;
   composioApiKey?: string;
   composioUserId?: string;
   composioBaseUrl?: string;
@@ -140,6 +142,7 @@ export function readConfig(): Config {
     computerDeploymentId: process.env.COMPUTER_DEPLOYMENT_ID,
     anthropicApiKey: process.env.ANTHROPIC_API_KEY?.trim() || undefined,
     webSearchModel: process.env.WEB_SEARCH_MODEL?.trim() || undefined,
+    codeModel: process.env.CODE_MODEL?.trim() || undefined,
     composioApiKey: process.env.COMPOSIO_API_KEY?.trim() || undefined,
     composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
     composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,

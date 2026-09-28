@@ -19,6 +19,7 @@ import { BrowserService } from "./browser.ts";
 import { runApprovedStep } from "./browser-tools.ts";
 import { CalendarToday } from "./calendar-today.ts";
 import { ChatArchive } from "./chat-archive.ts";
+import { CodeSandbox } from "./code-sandbox.ts";
 import { Commitments } from "./commitments.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
@@ -168,6 +169,12 @@ export async function createApp(
           baseUrl: process.env.ANTHROPIC_BASE_URL,
         })
       : undefined);
+  // A private sandbox for code and file work, on the same Anthropic key as web search.
+  if (config.agentBackend === "model" && config.anthropicApiKey)
+    agent.sandbox = new CodeSandbox(db, files, config.anthropicApiKey, {
+      model: config.codeModel,
+      baseUrl: process.env.ANTHROPIC_BASE_URL,
+    });
   const mailAlerts = apps
     ? new MailAlerts(db, apps, config.composioWebhookSecret, agent, {
         url: `${config.publicUrl.replace(/\/+$/, "")}/api/webhooks/composio`,

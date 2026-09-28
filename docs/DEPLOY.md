@@ -19,6 +19,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `WORKER_MODEL` | Optional. Model for background work (delegated tasks, routines, subscription scans), for example `anthropic/claude-haiku-4-5` to cut costs while chat keeps `MODEL`. Defaults to `MODEL`; its provider key must be set too |
 | `MODEL_PRICES` | Optional. Adds or corrects the list prices used for cost estimates in Apps → Usage, in dollars per million input/output tokens: `claude-opus-5=5/25,gpt-5.6-terra=2/12` |
 | `WEB_SEARCH_MODEL` | Optional. With `ANTHROPIC_API_KEY` set, agents search the web through Anthropic's web search tool using this model (default `claude-haiku-4-5-20251001`) |
+| `CODE_MODEL` | Optional. With `ANTHROPIC_API_KEY` set, Neddy gets a private code sandbox (Anthropic's code execution tool: Python and shell, no internet) for numbers, spreadsheets, charts and file conversions; files it makes are saved to Files. This model runs it (default `claude-sonnet-5`). About 1,550 free sandbox hours a month per organization, then $0.05 an hour; model tokens are billed as usual |
 | `VISION_MODEL` | Optional. Model that looks at pictures in Files; defaults to the Anthropic model in `MODEL` |
 | `AVATAR_MODEL` | Optional. Model that draws avatars from a description; defaults to the Anthropic model in `MODEL` |
 | `CPK_INTELLIGENCE_API_KEY` | Server-only key from `npx copilotkit@latest project select` |

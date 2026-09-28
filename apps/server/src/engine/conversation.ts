@@ -18,6 +18,7 @@ import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { areaInstructions, areaToolSpecs } from "../area.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
+import { codeSandboxInstructions, codeSandboxToolSpecs } from "../code-sandbox.ts";
 import { commitmentInstructions, commitmentToolSpecs } from "../commitments.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
@@ -334,6 +335,27 @@ export class ConversationAgent extends AbstractAgent {
           }),
         ),
       );
+    const sandbox = this.service.sandbox;
+    if (sandbox)
+      tools.push(
+        ...codeSandboxToolSpecs(
+          sandbox,
+          this.owner,
+          this.service.usage?.sink(this.owner, "code"),
+        ).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) => {
+              try {
+                return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
+              } catch (error) {
+                return { error: error instanceof Error ? error.message : "The code didn't run" };
+              }
+            },
+          }),
+        ),
+      );
     const areas = this.service.areas;
     if (areas)
       tools.push(
@@ -580,6 +602,7 @@ export class ConversationAgent extends AbstractAgent {
         (health ? healthToolInstructions : "") +
         (health && this.service.checkIns ? checkInInstructions : "") +
         (this.service.areas ? areaInstructions : "") +
+        (this.service.sandbox ? codeSandboxInstructions : "") +
         computerInstructions,
     });
     return new Observable((subscriber) => {

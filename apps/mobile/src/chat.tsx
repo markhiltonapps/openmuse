@@ -12,6 +12,8 @@ import {
   ArrowUp,
   AudioLines,
   Camera,
+  Check,
+  Copy,
   FileText,
   Mic,
   Paperclip,
@@ -27,6 +29,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   Text,
   TextInput,
   View,
@@ -42,12 +45,14 @@ import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
+import { plainText } from "./copy-text";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
+import { SandboxCard } from "./sandbox-ui";
 import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -144,6 +149,12 @@ export function WorkspaceTools() {
     render: ({ result, status }) => (
       <ProductsCard result={result} loading={status !== "complete"} />
     ),
+  });
+  useRenderTool({
+    name: "run_code",
+    description: "Show a run in the code sandbox",
+    parameters: displayParameters,
+    render: ({ result, status }) => <SandboxCard result={result} loading={status !== "complete"} />,
   });
   useRenderTool({
     name: "search_web",
@@ -319,6 +330,19 @@ export function ChatScreen({
       voiceSettings().microphone,
     );
   }, [endVoiceMode]);
+  // Copies one message, not the whole chat a text selection would take.
+  const [copiedId, setCopiedId] = useState<string>();
+  const copyMessage = useCallback(async (id: string, text: string) => {
+    try {
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId((current) => (current === id ? undefined : current)), 2000);
+      } else await Share.share({ message: text });
+    } catch {
+      setError("Couldn’t copy that. Select the text instead.");
+    }
+  }, []);
   const readAloud = useCallback(async (id: string, text: string) => {
     setSpeakingId(id);
     await speak(text);
@@ -789,6 +813,22 @@ export function ChatScreen({
                         <Text style={s.small}>{speakingId === message.id ? "Stop" : "Listen"}</Text>
                       </Pressable>
                     )}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        copiedId === message.id ? "Copied" : user ? "Copy message" : "Copy reply"
+                      }
+                      hitSlop={8}
+                      onPress={() => void copyMessage(message.id, user ? text : plainText(text))}
+                      style={[s.row, { gap: 5 }]}
+                    >
+                      {copiedId === message.id ? (
+                        <Check size={14} color={colors.greenDark} />
+                      ) : (
+                        <Copy size={14} color={colors.muted} />
+                      )}
+                      <Text style={s.small}>{copiedId === message.id ? "Copied" : "Copy"}</Text>
+                    </Pressable>
                     {confirmingDelete === message.id ? (
                       <>
                         <Pressable

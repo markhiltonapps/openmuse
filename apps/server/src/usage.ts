@@ -24,7 +24,8 @@ export type UsageKind =
   | "import"
   | "avatar"
   | "ideas"
-  | "summary";
+  | "summary"
+  | "code";
 
 /** Dollars per million tokens. */
 export interface Price {

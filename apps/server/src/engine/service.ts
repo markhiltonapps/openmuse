@@ -35,6 +35,7 @@ import type { AppConnector } from "../apps.ts";
 import { type Areas, searchPlace } from "../area.ts";
 import type { BrowserService } from "../browser.ts";
 import { ChatSummaries, summarySystemPrompt } from "../chat-summary.ts";
+import type { CodeSandbox } from "../code-sandbox.ts";
 import {
   type Commitments,
   commitmentFromEmailPrompt,
@@ -904,6 +905,8 @@ export class AgentService {
   health?: HealthService;
   /** "What did you have for lunch?" at meal times; asked from the maintenance loop. */
   checkIns?: MealCheckIns;
+  /** A private code sandbox (Python, no internet) for numbers and file work. */
+  sandbox?: CodeSandbox;
   /** The town or city the person lives in, for local news and "near me" searches. */
   areas?: Areas;
   /** Called when the person's area changes, so their Feed catches up. */
