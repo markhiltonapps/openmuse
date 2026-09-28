@@ -391,9 +391,17 @@ export function FeedScreen() {
             </Text>
           ))}
           {events.length > 3 && (
-            <Text style={[s.small, { color: colors.mutedStrong }]}>
-              + {events.length - 3} more today
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${events.length - 3} more today. Ask what's on your calendar`}
+              hitSlop={8}
+              onPress={() => ask("What's on my calendar today?")}
+              style={{ alignSelf: "flex-start" }}
+            >
+              <Text style={[s.small, { color: colors.text, textDecorationLine: "underline" }]}>
+                + {events.length - 3} more today
+              </Text>
+            </Pressable>
           )}
           {!appDay ? (
             !events.length && <Text style={s.muted}>Checking your calendar…</Text>

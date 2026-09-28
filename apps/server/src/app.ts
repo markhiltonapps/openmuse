@@ -763,6 +763,7 @@ export async function createApp(
     const { app: slug } = z
       .object({ app: z.string().trim().min(1).max(100) })
       .parse(await c.req.json());
+    calendarToday.forget(c.get("owner"));
     return c.json(await apps.connect(c.get("owner"), slug));
   });
   app.get("/api/drafts", async (c) => c.json(await db.list(c.get("owner"), "drafts")));
