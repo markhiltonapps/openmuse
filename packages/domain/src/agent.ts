@@ -194,7 +194,10 @@ export interface AgentIdentity {
   character?: (typeof avatarCharacters)[number];
   /** Changes whenever a custom picture or design is saved. */
   avatarImageVersion?: string;
+  /** Older setting: false kept updates out of chat. `updatesDisplay` replaces it. */
   showChatUpdates?: boolean;
+  /** Where background updates show: a pop-up by the bell (default), only the bell, or in chat. */
+  updatesDisplay?: "popup" | "bell" | "chat";
 }
 /** A person's own avatar: an uploaded photo (data URL) or a designed SVG. */
 export interface AvatarImage {

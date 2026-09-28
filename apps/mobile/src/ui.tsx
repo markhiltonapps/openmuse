@@ -116,6 +116,7 @@ export function Button({
   danger,
   style,
   accessibilityLabel,
+  selected,
 }: {
   children: ReactNode;
   onPress: () => void;
@@ -128,12 +129,15 @@ export function Button({
   style?: ViewStyle;
   /** When the words alone don't say what it acts on, such as a row's "Edit". */
   accessibilityLabel?: string;
+  /** For a choice among buttons: announced as pressed (react-native-web reads aria-*). */
+  selected?: boolean;
 }) {
   const color = danger ? colors.danger : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      aria-pressed={selected}
       disabled={disabled || busy}
       accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
       onPress={onPress}

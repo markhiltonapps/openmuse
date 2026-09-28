@@ -147,6 +147,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
         avatar: z.enum(avatarColors).optional(),
         character: z.enum(avatarCharacters).optional(),
         showChatUpdates: z.boolean().optional(),
+        updatesDisplay: z.enum(["popup", "bell", "chat"]).optional(),
       })
       .parse(await c.req.json());
     const owner = c.get("owner");

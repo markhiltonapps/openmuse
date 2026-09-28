@@ -66,6 +66,7 @@ import { SignInCard } from "./src/sign-in";
 import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
+import { UpdateToasts } from "./src/update-toasts";
 import { listenForCheckIns, registerServiceWorker } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
@@ -479,7 +480,7 @@ function WorkspaceShell({
             <View style={{ position: "absolute", right: chat ? 0 : 20, top: 16, zIndex: 2 }}>
               <IconButton
                 icon={Bell}
-                label={`Notifications, ${pending} unread or pending`}
+                label={pending ? `Updates, ${pending} new` : "Updates"}
                 onPress={() => open({ type: "notifications" })}
               />
               {pending > 0 && (
@@ -619,6 +620,8 @@ function WorkspaceShell({
               })}
             </View>
           </View>
+          {/* Background updates pop up under the bell; they wait while a sheet covers the page. */}
+          <UpdateToasts hold={!!chatNow || !!detail || threadsOpen} />
         </View>
         {/* Always there, so screen readers hear each confirmation as it appears. */}
         <View

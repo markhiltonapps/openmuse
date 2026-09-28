@@ -59,6 +59,7 @@ import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { noteTyping } from "./update-toasts";
 import { chooseAndUpload, uploadToFiles } from "./upload";
 import {
   primeSpeech,
@@ -1364,7 +1365,10 @@ export function ChatScreen({
               ref={input}
               accessibilityLabel="Message your agent"
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={(text) => {
+                noteTyping();
+                setDraft(text);
+              }}
               onContentSizeChange={(event) =>
                 setInputHeight(Math.max(44, Math.min(140, event.nativeEvent.contentSize.height)))
               }

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
 import { Button, Card, colors, ErrorNotice, resultSummary, s } from "./ui";
+import { updatesDisplay } from "./update-toasts";
 import { useWorkspace } from "./workspace";
 
 export function BackgroundUpdates() {
@@ -18,7 +19,8 @@ export function BackgroundUpdates() {
     item.taskId ?? item.reminderId;
   const others = new Set(updates.map(subject).filter((id) => id !== (update && subject(update))))
     .size;
-  if (!update || data?.identity.showChatUpdates === false) return null;
+  // Only when the person chose updates in chat; otherwise they pop up by the bell.
+  if (!update || updatesDisplay(data?.identity) !== "chat") return null;
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
     try {

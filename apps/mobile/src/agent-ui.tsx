@@ -69,6 +69,7 @@ import {
   Sheet,
   s,
 } from "./ui";
+import { lateNote, type UpdatesDisplay, updateKind, updatesDisplay } from "./update-toasts";
 import { UsageCard } from "./usage-ui";
 import { DictateButton, VoiceCard } from "./voice-ui";
 import { disablePush, enablePush, isInstalled, isIos, type PushState, pushState } from "./web-app";
@@ -1872,7 +1873,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       <Text style={[s.small, { marginBottom: 14 }]}>
         {sample
           ? "Changes to this built-in page stay in your workspace."
-          : "Your agent checks this public page on the server and saves meaningful changes in Notifications."}
+          : "Your agent checks this public page on the server and saves meaningful changes in Updates."}
       </Text>
       <ErrorNotice error={error} />
       <Button
@@ -1972,6 +1973,16 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
     </Card>
   );
 }
+const UPDATE_PLACES: { id: UpdatesDisplay; label: string; detail: string }[] = [
+  {
+    id: "popup",
+    label: "Pop-up by the bell",
+    detail:
+      "A small card pops up under the bell. Reminders and anything that needs you stay until you act; the rest slide away.",
+  },
+  { id: "bell", label: "Only the bell", detail: "Updates wait quietly in the bell." },
+  { id: "chat", label: "In the chat", detail: "Updates appear as a card at the end of the chat." },
+];
 export function NotificationsSheet() {
   const { data, mutate } = useAgentWorkspace();
   const { close, open, navigate } = useWorkspace();
@@ -1988,24 +1999,39 @@ export function NotificationsSheet() {
       setError(errorText(e));
     }
   }
+  // Unread reminders and decisions come first; the rest stays newest first.
+  const items = (data?.notifications ?? [])
+    .map((item) => ({
+      item,
+      needsYou: !item.read && updateKind(item, data?.tasks) !== "update",
+      // A reminder's title is only "Reminder": what it's about leads.
+      reminder: !!item.reminderId && !item.taskId,
+    }))
+    .sort((a, b) => Number(b.needsYou) - Number(a.needsYou));
   return (
     <Sheet
-      title="Notifications"
+      title="Updates"
       subtitle="Results and decisions that need your attention."
       onClose={close}
     >
       <View style={{ gap: 14 }}>
         <ErrorNotice error={error} />
-        {data?.notifications.map((item) => (
+        {items.map(({ item, needsYou, reminder }) => (
           <Card
             key={item.id}
             style={{ gap: 8, backgroundColor: item.read ? colors.card : colors.sky }}
           >
             <View style={s.between}>
-              <Text style={s.heading}>{item.title}</Text>
-              {!item.read && <Chip>New</Chip>}
+              <Text style={[s.heading, { flexShrink: 1 }]}>
+                {reminder ? item.body : item.title}
+              </Text>
+              {!item.read && (
+                <Chip tint={needsYou ? colors.lavender : undefined}>
+                  {needsYou ? "Needs you" : "New"}
+                </Chip>
+              )}
             </View>
-            <Text style={s.muted}>{item.body}</Text>
+            <Text style={s.muted}>{reminder ? lateNote(item.title) || "Reminder" : item.body}</Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
             <Button small onPress={() => void read(item.id, item.taskId, item.checkInId)}>
               {item.taskId
@@ -2014,7 +2040,9 @@ export function NotificationsSheet() {
                   ? "Answer in chat"
                   : item.read
                     ? "Read"
-                    : "Mark read"}
+                    : item.reminderId
+                      ? "Done"
+                      : "Mark read"}
             </Button>
           </Card>
         ))}
@@ -2038,7 +2066,7 @@ export function AppsScreen() {
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [character, setCharacter] = useState(data?.identity.character || "neddy");
-  const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
+  const [display, setDisplay] = useState<UpdatesDisplay>(updatesDisplay(data?.identity));
   const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2048,7 +2076,7 @@ export function AppsScreen() {
       setTone(data.identity.tone);
       setAvatar(data.identity.avatar || "sky");
       setCharacter(data.identity.character || "neddy");
-      setShowChatUpdates(data.identity.showChatUpdates !== false);
+      setDisplay(updatesDisplay(data.identity));
     }
   }, [
     data?.identity.name,
@@ -2057,6 +2085,7 @@ export function AppsScreen() {
     data?.identity.character,
     data?.identity.avatarImageVersion,
     data?.identity.showChatUpdates,
+    data?.identity.updatesDisplay,
   ]);
   async function save(path: string, body: unknown) {
     setBusy(true);
@@ -2172,14 +2201,27 @@ export function AppsScreen() {
                 </Button>
               ))}
             </View>
-            <CheckRow
-              label="Show background updates in chat"
-              checked={showChatUpdates}
-              onPress={() => setShowChatUpdates(!showChatUpdates)}
-            />
+            <Text style={s.label}>Where updates show</Text>
+            <View
+              role="group"
+              accessibilityLabel="Where updates show"
+              style={[s.row, { gap: 8, flexWrap: "wrap" }]}
+            >
+              {UPDATE_PLACES.map((place) => (
+                <Button
+                  key={place.id}
+                  small
+                  primary={display === place.id}
+                  selected={display === place.id}
+                  onPress={() => setDisplay(place.id)}
+                >
+                  {place.label}
+                </Button>
+              ))}
+            </View>
             <Text style={s.small}>
-              Activity and notifications always keep the full record, including requests for
-              approval.
+              {UPDATE_PLACES.find((place) => place.id === display)?.detail} The bell always keeps
+              every update, including anything that needs you.
             </Text>
             <Button
               busy={busy}
@@ -2190,7 +2232,8 @@ export function AppsScreen() {
                   tone,
                   avatar,
                   character,
-                  showChatUpdates,
+                  updatesDisplay: display,
+                  showChatUpdates: display === "chat",
                 })
               }
             >
