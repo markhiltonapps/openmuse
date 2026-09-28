@@ -5,6 +5,14 @@ import pg from "pg";
 import { backgroundFailure } from "./log.ts";
 
 type Row = { data: Record<string, unknown> };
+/** One record as stored, for copying between databases. */
+export interface StoredRow {
+  owner: string;
+  kind: string;
+  id: string;
+  data: Record<string, unknown>;
+  updatedAt: string;
+}
 interface Database {
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Row[] }>;
   close: () => Promise<void>;
@@ -103,10 +111,59 @@ export class Store {
     );
     return (result.rows[0]?.data as T | undefined) ?? null;
   }
-  async recoverInterruptedActions(): Promise<void> {
+  /**
+   * Actions still "executing" long after they started were cut off by a restart. During an update
+   * two copies of the server overlap, so a young one may still be finishing on the old copy.
+   */
+  async recoverInterruptedActions(olderThanMs = 15 * 60_000): Promise<void> {
     await this.db.query(
-      `UPDATE records SET data=data || '{"status":"outcome_unknown","error":"Server restarted during execution. Check the provider before creating another action."}'::jsonb WHERE kind='actions' AND data->>'status'='executing'`,
+      `UPDATE records SET data=data || '{"status":"outcome_unknown","error":"Server restarted during execution. Check the provider before creating another action."}'::jsonb,updated_at=now() WHERE kind='actions' AND data->>'status'='executing' AND updated_at < now() - ($1::text || ' milliseconds')::interval`,
+      [String(olderThanMs)],
     );
+  }
+  /**
+   * Takes or renews a named lease for `holder`, so only one copy of the server does a job at a
+   * time. Returns false while another holder's lease hasn't run out.
+   */
+  async lease(name: string, holder: string, ttlMs: number): Promise<boolean> {
+    const result = await this.db.query(
+      `INSERT INTO records(owner,kind,id,data) VALUES('system','leases',$1,jsonb_build_object('id',$1::text,'holder',$2::text,'until',now() + ($3::text || ' milliseconds')::interval))
+       ON CONFLICT(owner,kind,id) DO UPDATE SET data=excluded.data,updated_at=now()
+       WHERE records.data->>'holder'=$2 OR (records.data->>'until')::timestamptz < now()
+       RETURNING data`,
+      [name, holder, String(ttlMs)],
+    );
+    return result.rows.length === 1;
+  }
+  async release(name: string, holder: string): Promise<void> {
+    await this.db.query(
+      "DELETE FROM records WHERE owner='system' AND kind='leases' AND id=$1 AND data->>'holder'=$2",
+      [name, holder],
+    );
+  }
+  /** Every record with when it last changed, for moving and backups (leases are left out). */
+  async dump(): Promise<StoredRow[]> {
+    const result = await this.db.query(
+      "SELECT jsonb_build_object('owner',owner,'kind',kind,'id',id,'data',data,'updatedAt',updated_at) AS data FROM records WHERE NOT (owner='system' AND kind='leases') ORDER BY owner,kind,id",
+    );
+    return result.rows.map((row) => row.data as unknown as StoredRow);
+  }
+  /**
+   * Adds records as they were, keeping when they last changed. Records that already exist are
+   * left alone unless `replace` is set (restoring a backup). Returns how many were written.
+   */
+  async load(rows: StoredRow[], replace = false): Promise<number> {
+    let written = 0;
+    for (const row of rows) {
+      const result = await this.db.query(
+        `INSERT INTO records(owner,kind,id,data,updated_at) VALUES($1,$2,$3,$4::jsonb,$5::timestamptz)
+         ON CONFLICT(owner,kind,id) DO ${replace ? "UPDATE SET data=excluded.data,updated_at=excluded.updated_at" : "NOTHING"}
+         RETURNING id AS data`,
+        [row.owner, row.kind, row.id, JSON.stringify(row.data), row.updatedAt],
+      );
+      written += result.rows.length;
+    }
+    return written;
   }
   async take<T>(owner: string, kind: string, id: string): Promise<T | null> {
     const result = await this.db.query(

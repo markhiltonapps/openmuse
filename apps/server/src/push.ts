@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import webpush from "web-push";
 import { z } from "zod";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 import { backgroundFailure } from "./log.ts";
+import { keptSecret } from "./server-keys.ts";
 
 // Browser push services. The server only ever posts to these hosts.
 const PUSH_HOSTS = [
@@ -44,26 +43,19 @@ export class PushService {
     private readonly subject: string,
     private readonly send: typeof webpush.sendNotification,
   ) {}
-  /** VAPID keys come from the environment or are generated once and kept in DATA_DIR. */
+  /** VAPID keys come from the environment or are generated once and kept (see keptSecret). */
   static async create(db: Store, config: Config, send = webpush.sendNotification) {
-    let keys =
+    const keys: { publicKey: string; privateKey: string } =
       process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
         ? { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY }
-        : undefined;
-    if (!keys) {
-      const path = join(config.dataDir, "vapid.json");
-      try {
-        keys = JSON.parse(await readFile(path, "utf8"));
-      } catch (error) {
-        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-        await mkdir(config.dataDir, { recursive: true, mode: 0o700 });
-        keys = webpush.generateVAPIDKeys();
-        await writeFile(path, JSON.stringify(keys), { mode: 0o600, flag: "wx" }).catch(async () => {
-          keys = JSON.parse(await readFile(path, "utf8"));
-        });
-      }
-    }
-    if (!keys) throw new Error("Push keys unavailable");
+        : JSON.parse(
+            await keptSecret(db, {
+              name: "vapid.json",
+              dataDir: config.dataDir,
+              encryptionKey: config.encryptionKey,
+              make: () => JSON.stringify(webpush.generateVAPIDKeys()),
+            }),
+          );
     const subject =
       process.env.VAPID_SUBJECT ||
       (config.publicUrl.startsWith("https://") ? config.publicUrl : "mailto:openmuse@example.com");

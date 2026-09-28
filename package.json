@@ -20,6 +20,7 @@
     "format": "biome check --write .",
     "build:server": "tsc -p tsconfig.build.json",
     "start": "node dist/apps/server/src/index.js",
+    "restore-backup": "tsx apps/server/src/restore-backup.ts",
     "build:web": "pnpm --dir apps/mobile build:web",
     "build:ios": "pnpm --dir apps/mobile build:ios",
     "build:android": "pnpm --dir apps/mobile build:android",

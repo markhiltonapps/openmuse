@@ -1,9 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { keptSecret } from "./server-keys.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
 /** Sign-ins last 30 days and renew while in use, so a device stays signed in. */
@@ -105,15 +104,11 @@ export class Auth {
   }
 }
 export async function createAuth(db: Store, config: Config) {
-  await mkdir(config.dataDir, { recursive: true, mode: 0o700 });
-  const path = join(config.dataDir, "session-signing-key");
-  let key: string;
-  try {
-    key = await readFile(path, "utf8");
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-    key = randomBytes(32).toString("base64");
-    await writeFile(path, key, { mode: 0o600, flag: "wx" });
-  }
+  const key = await keptSecret(db, {
+    name: "session-signing-key",
+    dataDir: config.dataDir,
+    encryptionKey: config.encryptionKey,
+    make: () => randomBytes(32).toString("base64"),
+  });
   return new Auth(db, config, key);
 }

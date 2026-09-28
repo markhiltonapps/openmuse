@@ -7,7 +7,9 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 ## API service
 
 - Dockerfile path `infra/api.Dockerfile`, health check path `/api/health`, domain target port `8787`.
-- Volume mounted at `/data`. It holds PGlite, documents and the session signing key. Run a single replica: PGlite cannot be shared between processes.
+- Storage, either:
+  - **Postgres and a bucket (recommended).** Add a Postgres database and a Storage Bucket to the project and set `DATABASE_URL` and the `S3_*` variables below. No volume: updates overlap, so a deploy never drops a reply in progress (see [Moving off the volume](#moving-off-the-volume)).
+  - **A volume at `/data`.** It holds PGlite, documents and the server keys. Run a single replica: PGlite cannot be shared between processes, and each deploy briefly stops the API.
 - Generate a Railway domain before setting the variables below.
 
 | Variable | Value |
@@ -40,10 +42,27 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `AUTH_EMAIL_FROM` | Optional sender of sign-in emails; defaults to `OpenMuse <signin@` + the `AGENT_EMAIL` domain + `>`, which must be verified for sending in Resend |
 | `EXTRA_ALLOWED_ORIGINS` | Optional extra web addresses allowed to use the API, comma-separated. Adding a custom domain to the web service changes what `${{web.RAILWAY_PUBLIC_DOMAIN}}` gives `ALLOWED_ORIGINS`, so list both the custom domain and the `*.up.railway.app` address here (for example `https://muse.neatoventures.com,https://web-production-16243.up.railway.app`) |
 | `APP_URL` | Optional web address used in sign-in links; defaults to the first `ALLOWED_ORIGINS` entry |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` to keep records in Postgres instead of PGlite on the volume |
+| `S3_BUCKET` | `${{<bucket>.BUCKET}}`: the bucket's S3 name. With the four `S3_*` below, file contents and avatar clips go to the bucket and a copy of every record is saved there nightly (`backups/records-YYYY-MM-DD.jsonl.gz`, 14 kept) |
+| `S3_ENDPOINT` | `${{<bucket>.ENDPOINT}}` |
+| `S3_REGION` | `${{<bucket>.REGION}}` (`auto`) |
+| `S3_ACCESS_KEY_ID` | `${{<bucket>.ACCESS_KEY_ID}}` |
+| `S3_SECRET_ACCESS_KEY` | `${{<bucket>.SECRET_ACCESS_KEY}}` |
+| `S3_PATH_STYLE` | Optional `true` for buckets whose Credentials tab says to use path-style URLs |
+| `RAILWAY_DEPLOYMENT_OVERLAP_SECONDS` / `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | Without a volume, `30` and `120`: the new API starts before the old one stops, and the old one finishes the replies it's writing |
 
 The image sets `HOST=0.0.0.0`, `PORT=8787` and `DATA_DIR=/data`. For Gmail and Calendar, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and register `PUBLIC_API_URL` + `/api/google/callback` as the OAuth redirect URI.
 
-Web push keys are generated on first start and kept in `/data/vapid.json`; set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` to supply your own.
+Web push keys and the session signing key are generated on first start and kept in the database, encrypted with `TOKEN_ENCRYPTION_KEY` (a copy left in `/data` by an older version is adopted). Set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` to supply your own push keys.
+
+### Moving off the volume
+
+1. Add the Postgres database and the bucket; don't connect them yet.
+2. In a quiet moment, set `DATABASE_URL` and the `S3_*` variables on the API, keeping the volume attached, and deploy. On start the API checks the bucket (a wrong setting stops the start with the bucket's error), copies every record from PGlite into Postgres and every file into the bucket, and logs `Moved off the server's disk: N records … and M files`. Nothing is overwritten, so a move cut short simply runs again; a marker in Postgres stops it repeating. The health check allows 120 seconds; raise it first for a very large volume.
+3. Check sign-in, chats, Files and notifications. To undo, remove `DATABASE_URL` and the `S3_*` variables: the volume is untouched.
+4. Detach the volume from the API and set the two overlap variables. Keep the volume for two weeks before deleting it.
+
+To put a nightly copy back, from a checkout with the API's `DATABASE_URL` and `S3_*` set: `pnpm restore-backup backups/records-2026-09-29.jsonl.gz` shows what it holds, and adding `--yes` restores it. Records in the copy replace the current ones; records made since are kept.
 
 ## Browser service
 

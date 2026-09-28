@@ -13,7 +13,11 @@ test("fresh nested data directory starts and survives a database restart", async
     await first.put("owner", "actions", { id: "action1", status: "executing" });
     await first.close();
     const second = await createStore(options);
+    // Just started: it may still be finishing on the other copy of the server during an update.
     await second.recoverInterruptedActions();
+    assert.equal((await second.get("owner", "actions", "action1"))?.status, "executing");
+    // Long enough ago: the restart cut it off.
+    await second.recoverInterruptedActions(0);
     assert.equal((await second.get("owner", "actions", "action1"))?.status, "outcome_unknown");
     await second.close();
   } finally {

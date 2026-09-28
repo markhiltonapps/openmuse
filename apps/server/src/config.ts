@@ -1,7 +1,26 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
+import type { BucketSettings } from "./blobs.ts";
 
+/** S3_BUCKET, S3_ENDPOINT, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY together, or none of them. */
+export function bucketSettings(
+  env: Record<string, string | undefined> = process.env,
+): BucketSettings | undefined {
+  const value = (name: string) => env[name]?.trim() || undefined;
+  const required = ["S3_BUCKET", "S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+  const missing = required.filter((name) => !value(name));
+  if (missing.length === required.length) return undefined;
+  if (missing.length) throw new Error(`The file bucket also needs ${missing.join(", ")}`);
+  return {
+    bucket: value("S3_BUCKET") ?? "",
+    endpoint: value("S3_ENDPOINT") ?? "",
+    region: value("S3_REGION") ?? "auto",
+    accessKeyId: value("S3_ACCESS_KEY_ID") ?? "",
+    secretAccessKey: value("S3_SECRET_ACCESS_KEY") ?? "",
+    pathStyle: value("S3_PATH_STYLE") === "true",
+  };
+}
 /** .env keys whose file value loses to a different value already set in the environment. */
 export function shadowedEnvKeys(
   file: Record<string, string | undefined>,
@@ -33,6 +52,8 @@ export interface Config {
   publicUrl: string;
   dataDir: string;
   databaseUrl?: string;
+  /** An S3-compatible bucket for file contents; the data folder on disk when unset. */
+  bucket?: BucketSettings;
   accessKey?: string;
   encryptionKey?: string;
   model?: string;
@@ -169,6 +190,7 @@ export function readConfig(): Config {
       .map((origin) => origin.trim().replace(/\/+$/, ""))
       .filter(Boolean),
   };
+  config.bucket = bucketSettings();
   config.appUrl = process.env.APP_URL?.trim() || config.allowedOrigins[0]?.trim() || undefined;
   const senderDomain = config.agentEmail?.split("@")[1];
   config.authEmailFrom =

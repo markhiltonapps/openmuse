@@ -15,6 +15,8 @@ import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { Areas, nominatimPlaces } from "./area.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
+import { Backups } from "./backups.ts";
+import { type Blobs, createBlobs } from "./blobs.ts";
 import { BrowserService } from "./browser.ts";
 import { runApprovedStep } from "./browser-tools.ts";
 import { CalendarToday, MAX_RANGE_DAYS } from "./calendar-today.ts";
@@ -67,9 +69,12 @@ export async function createApp(
     mailer?: Mailer;
     search?: WebSearch;
     intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread"> & ThreadStore;
+    /** Where file contents live; the bucket when configured, else the data folder. */
+    blobs?: Blobs;
   } = {},
 ) {
   assertApiDeploymentConfig(config);
+  const blobs = options.blobs ?? createBlobs(config);
   const auth = await createAuth(db, config);
   const mailer =
     options.mailer ??
@@ -78,7 +83,7 @@ export async function createApp(
       : undefined);
   const accounts = new AccountService(db, config, auth, mailer);
   await accounts.bootstrap();
-  const files = new Files(db, config, auth),
+  const files = new Files(db, config, auth, blobs),
     google = new GoogleAuth(db, config),
     workspace = new WorkspaceService(db, config, files, google);
   let apps = options.apps;
@@ -219,6 +224,7 @@ export async function createApp(
   );
   health.onMeal = (owner, entry) => checkIns.mealLogged(owner, entry);
   agent.checkIns = checkIns;
+  agent.backups = new Backups(db, blobs);
   void checkIns
     .adoptMealRoutines()
     // Their old questions still waiting for an answer are closed: check-ins ask now.
@@ -436,11 +442,11 @@ export async function createApp(
     });
   });
   // Animated avatars are shared pictures and clips, loaded by <video> without a sign-in header.
-  const avatarMedia = new AvatarMedia(config.dataDir);
+  const avatarMedia = new AvatarMedia(blobs);
   app.get("/api/avatar-media/:preset/:part", async (c) => {
     const file = await avatarMedia.file(c.req.param("preset"), c.req.param("part"));
     const { status, bytes, contentRange } = await avatarMedia.read(
-      file.path,
+      file.key,
       file.size,
       c.req.header("range"),
     );

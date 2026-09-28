@@ -27,19 +27,34 @@ test("avatar clips are fetched once, kept, and served in byte ranges for Safari"
     assert.equal(second.size, 10);
     await media.file("dog", "idle");
     assert.equal(fetched, 1, "downloaded once, even when asked twice at the same time");
+    // A new copy of the server reads the saved copy instead of downloading again.
+    const later = new AvatarMedia(
+      directory,
+      (async () => {
+        throw new Error("no network");
+      }) as unknown as typeof fetch,
+      {
+        dog: {
+          poster: "https://cdn.test/dog.webp",
+          idle: "https://cdn.test/idle.mp4",
+          talking: "",
+        },
+      },
+    );
+    assert.equal((await later.file("dog", "idle")).size, 10);
     assert.equal((await media.file("dog", "poster")).type, "image/webp");
     await assert.rejects(media.file("dog", "talking"), /not found/);
     await assert.rejects(media.file("cat", "idle"), /not found/);
 
-    const whole = await media.read(first.path, first.size);
+    const whole = await media.read(first.key, first.size);
     assert.equal(whole.status, 200);
-    const part = await media.read(first.path, first.size, "bytes=2-5");
+    const part = await media.read(first.key, first.size, "bytes=2-5");
     assert.equal(part.status, 206);
     assert.deepEqual([...part.bytes], [2, 3, 4, 5]);
     assert.equal(part.contentRange, "bytes 2-5/10");
-    assert.deepEqual([...(await media.read(first.path, first.size, "bytes=8-")).bytes], [8, 9]);
-    assert.deepEqual([...(await media.read(first.path, first.size, "bytes=-3")).bytes], [7, 8, 9]);
-    assert.equal((await media.read(first.path, first.size, "bytes=20-")).status, 416);
+    assert.deepEqual([...(await media.read(first.key, first.size, "bytes=8-")).bytes], [8, 9]);
+    assert.deepEqual([...(await media.read(first.key, first.size, "bytes=-3")).bytes], [7, 8, 9]);
+    assert.equal((await media.read(first.key, first.size, "bytes=20-")).status, 416);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -33,6 +33,7 @@ import type { AppEvents } from "../app-events.ts";
 import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
 import { type Areas, searchPlace } from "../area.ts";
+import type { Backups } from "../backups.ts";
 import type { BrowserService } from "../browser.ts";
 import { ChatSummaries, summarySystemPrompt } from "../chat-summary.ts";
 import type { CodeSandbox } from "../code-sandbox.ts";
@@ -83,6 +84,10 @@ export class AgentService {
   /** Pages on the people and groups the person deals with. */
   readonly people: People;
   private maintenance?: ReturnType<typeof setInterval>;
+  /** This copy of the server, for the maintenance lease. */
+  private readonly instance = randomUUID();
+  /** Nightly copies of every record to the bucket. */
+  backups?: Backups;
   private refreshing = false;
   constructor(
     readonly db: Store,
@@ -125,11 +130,19 @@ export class AgentService {
     this.maintenance = undefined;
     await this.worker.stop();
     while (this.refreshing) await new Promise((resolve) => setTimeout(resolve, 10));
+    // Hands background work to the next copy straight away instead of when the lease runs out.
+    await this.db
+      .release("maintenance", this.instance)
+      .catch((error) => backgroundFailure("maintenance handover", error));
   }
   private async maintain() {
     if (this.refreshing) return;
     this.refreshing = true;
     try {
+      // One copy of the server does this at a time; during an update the new one waits its turn.
+      if (!(await this.db.lease("maintenance", this.instance, 5 * 60_000))) return;
+      await this.db.recoverInterruptedActions();
+      await this.backups?.runDue().catch((error) => backgroundFailure("nightly backup", error));
       // Recover publications if the process exited after committing an outcome.
       for (const { owner, value } of await this.db.scan<AgentTask>("tasks"))
         await this.publishOutcome(owner, value);

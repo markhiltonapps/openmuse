@@ -1,10 +1,9 @@
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { type Blobs, DiskBlobs } from "./blobs.ts";
 import { AppError } from "./errors.ts";
 
 /**
  * Animated avatars made from a photo: a still for the first moment and two short clips that
- * loop, one idle and one talking. The files are fetched once and kept with the server's data.
+ * loop, one idle and one talking. The files are fetched once and kept with the server's files.
  */
 export const avatarPresets: Record<string, Record<"poster" | "idle" | "talking", string>> = {
   // Neddy, the Neato_Muse mascot: he looks around and blinks, and his eyes glow as he talks.
@@ -34,46 +33,54 @@ const TYPES: Record<string, string> = {
 const MAX_BYTES = 25 * 1024 * 1024;
 
 export class AvatarMedia {
-  private readonly loading = new Map<string, Promise<string>>();
+  private readonly loading = new Map<string, Promise<Uint8Array>>();
+  /** Clips are small and asked for in many byte ranges: kept in memory once loaded. */
+  private readonly kept = new Map<string, Uint8Array>();
+  private readonly blobs: Blobs;
   constructor(
-    private readonly dataDir: string,
+    storage: Blobs | string,
     private readonly fetcher: typeof fetch = fetch,
     private readonly presets = avatarPresets,
-  ) {}
-  /** The local copy of one part of a preset, downloading it the first time. */
+  ) {
+    this.blobs = typeof storage === "string" ? new DiskBlobs(storage) : storage;
+  }
+  /** One part of a preset, downloading it and saving a copy the first time. */
   async file(preset: string, part: string) {
     const source = this.presets[preset]?.[part as "poster" | "idle" | "talking"];
     if (!source) throw new AppError("Avatar not found", 404);
     const extension = /\.(\w+)(?:\?|$)/.exec(new URL(source).pathname)?.[1]?.toLowerCase() ?? "";
     const type = TYPES[extension];
     if (!type) throw new AppError("Avatar not found", 404);
-    const path = join(this.dataDir, "avatar-media", `${preset}-${part}.${extension}`);
-    const existing = await stat(path).catch(() => undefined);
-    if (!existing) {
-      let pending = this.loading.get(path);
+    const key = `avatar-media/${preset}-${part}.${extension}`;
+    let bytes = this.kept.get(key);
+    if (!bytes) {
+      let pending = this.loading.get(key);
       if (!pending) {
-        pending = this.download(source, path).finally(() => this.loading.delete(path));
-        this.loading.set(path, pending);
+        pending = this.load(source, key, type).finally(() => this.loading.delete(key));
+        this.loading.set(key, pending);
       }
-      await pending;
+      bytes = await pending;
     }
-    return { path, type, size: (await stat(path)).size };
+    return { key, type, size: bytes.length };
   }
-  private async download(source: string, path: string) {
+  private async load(source: string, key: string, type: string) {
+    const bytes = (await this.blobs.get(key)) ?? (await this.download(source, key, type));
+    this.kept.set(key, bytes);
+    return bytes;
+  }
+  private async download(source: string, key: string, type: string) {
     const response = await this.fetcher(source, { signal: AbortSignal.timeout(60000) });
     if (!response.ok) throw new AppError("The avatar couldn't be loaded", 502);
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (!bytes.length || bytes.length > MAX_BYTES)
       throw new AppError("The avatar couldn't be loaded", 502);
-    await mkdir(join(this.dataDir, "avatar-media"), { recursive: true });
-    await writeFile(`${path}.part`, bytes);
-    await rename(`${path}.part`, path);
-    return path;
+    await this.blobs.put(key, bytes, type);
+    return bytes;
   }
   /** Bytes to send for an optional `Range: bytes=a-b` request (Safari needs ranges for video). */
-  async read(path: string, size: number, range?: string) {
+  async read(key: string, size: number, range?: string) {
     const match = /^bytes=(\d*)-(\d*)$/.exec(range ?? "");
-    const bytes = await readFile(path);
+    const bytes = this.kept.get(key) ?? (await this.blobs.get(key)) ?? new Uint8Array();
     if (!match || (!match[1] && !match[2])) return { status: 200 as const, bytes };
     let start = match[1] ? Number(match[1]) : Math.max(0, size - Number(match[2]));
     let end = match[1] && match[2] ? Number(match[2]) : size - 1;
