@@ -165,11 +165,11 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Forget your area"
+          accessibilityLabel="Remove your area"
           onPress={() =>
             void api.request("/api/area/clear", {}).then(
               () => {
-                notify("Your area was removed.");
+                notify("Removed your area.");
                 onSaved();
               },
               (e) => setError(message(e)),
