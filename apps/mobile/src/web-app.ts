@@ -112,7 +112,7 @@ export function dictate(
 ): () => void {
   const Recognizer = recognizer();
   if (!Recognizer) {
-    onEnd("Voice input isn't available in this browser.");
+    onEnd("Voice input isn’t available in this browser.");
     return () => undefined;
   }
   const recognition = new Recognizer();
@@ -145,7 +145,7 @@ export function dictate(
           : event.error === "network" ||
               event.error === "service-not-allowed" ||
               event.error === "audio-capture"
-            ? "Voice isn’t working in this browser. Tap the mic on your keyboard to talk instead."
+            ? "Voice input isn’t working in this browser. Type instead, or tap the mic on your phone’s keyboard."
             : "Voice input stopped.";
     finish();
   };

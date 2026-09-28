@@ -18,6 +18,14 @@ import { useAgentWorkspace } from "./agent-workspace";
 import { Button, Card, CheckRow, colors, Empty, ErrorNotice, Field, Sheet, s } from "./ui";
 import { voiceSettings } from "./voice";
 import { CHECK_IN_OPENED, dictate, dictationAvailable } from "./web-app";
+
+/** Sent after a check-in is answered, skipped or put off, so every chat's card catches up. */
+const CHECK_INS_CHANGED = "muse-checkins-changed";
+const changed = () => {
+  if (typeof window !== "undefined" && window.dispatchEvent)
+    window.dispatchEvent(new Event(CHECK_INS_CHANGED));
+};
+
 import { useWorkspace } from "./workspace";
 
 type Meal = "breakfast" | "lunch" | "dinner";
@@ -99,7 +107,11 @@ export function useCheckIns() {
     if (typeof window === "undefined" || !window.addEventListener) return;
     const reload = () => void load();
     window.addEventListener(CHECK_IN_OPENED, reload);
-    return () => window.removeEventListener(CHECK_IN_OPENED, reload);
+    window.addEventListener(CHECK_INS_CHANGED, reload);
+    return () => {
+      window.removeEventListener(CHECK_IN_OPENED, reload);
+      window.removeEventListener(CHECK_INS_CHANGED, reload);
+    };
   }, [load]);
   return { state, load };
 }
@@ -320,13 +332,17 @@ export function SayOrType({
  * "What did you have for lunch?" just above the chat box, ready to answer by voice or text, until
  * it's answered, skipped or put off.
  */
-export function MealCheckInCard({ replying }: { replying?: boolean }) {
+export function MealCheckInCard({ replying, active }: { replying?: boolean; active?: boolean }) {
   const { api, ask, notify } = useWorkspace();
   const { state, load } = useCheckIns();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState("");
   // A meal logged in chat (a photo, "had soup for lunch") answers its check-in on the server.
   const wasReplying = useRef(false);
+  // Chats stay open in the background; one coming back into view checks again.
+  useEffect(() => {
+    if (active) void load();
+  }, [active, load]);
   useEffect(() => {
     if (wasReplying.current && !replying) void load();
     wasReplying.current = !!replying;
@@ -342,6 +358,7 @@ export function MealCheckInCard({ replying }: { replying?: boolean }) {
     try {
       const result = await api.request<never>(`/api/meal-checkins/${checkIn.id}/${path}`, {});
       notify(done(result));
+      changed();
       await load();
     } catch (e) {
       setError(message(e));
@@ -357,7 +374,7 @@ export function MealCheckInCard({ replying }: { replying?: boolean }) {
     await api
       .request(`/api/meal-checkins/${checkIn.id}/answer`, {})
       .catch(() => undefined)
-      .then(load);
+      .then(changed);
   }
   const yesterday = checkIn.yesterday;
   return (
@@ -526,9 +543,7 @@ export function MealsToday({
             opacity: pressed ? 0.6 : 1,
           })}
         >
-          <Text style={[s.buttonText, { color: colors.text, textDecorationLine: "underline" }]}>
-            View food log
-          </Text>
+          <Text style={[s.text, { textDecorationLine: "underline" }]}>View food log</Text>
         </Pressable>
       </View>
     </View>
@@ -869,7 +884,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
             keyboardType="numeric"
             inputMode="numeric"
             placeholder="Leave empty if you’re not sure"
-            accessibilityHint="Leave it empty to clear the number"
+            accessibilityHint="Delete the number to remove it."
           />
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
             <Button small primary busy={busy} onPress={() => void save()}>
@@ -878,6 +893,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
             <Button
               small
               disabled={busy}
+              style={{ backgroundColor: colors.card }}
               onPress={() => {
                 setEditing(false);
                 setConfirming(false);
