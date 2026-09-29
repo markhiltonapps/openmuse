@@ -10,7 +10,7 @@ import { createStore, type Store } from "../apps/server/src/db.ts";
 import { ScheduledPosts } from "../apps/server/src/space-posts.ts";
 import { spaceRoutes } from "../apps/server/src/space-routes.ts";
 import { spaceContext, spaceToolSpecs } from "../apps/server/src/space-tools.ts";
-import { digestPrompt, Spaces } from "../apps/server/src/spaces.ts";
+import { DIGEST_STEPS, digestPrompt, Spaces } from "../apps/server/src/spaces.ts";
 import type { AgentTask, Routine } from "../packages/domain/src/agent.ts";
 import { type Space, STARTER_SOCIAL_PROMPTS } from "../packages/domain/src/spaces.ts";
 
@@ -166,9 +166,14 @@ test("the agent fills in the playbook of the chat's own space", async () => {
     postsPerWeek: 7,
     setupDone: true,
   });
-  const read = (await run(specs, "get_space_playbook", {})) as { id: string; setupDone: boolean };
+  const read = (await run(specs, "get_space_playbook", {})) as {
+    id: string;
+    setupDone: boolean;
+    weeklyDigestSteps?: string;
+  };
   assert.equal(read.id, second.id);
   assert.equal(read.setupDone, true);
+  assert.equal(read.weeklyDigestSteps, undefined);
   assert.equal((await spaces.get("fay", first.id)).setupDone, false);
   assert.deepEqual(await run(specs, "set_space_digest", { on: true, day: 1 }), {
     weeklyDigest: "on",
@@ -194,6 +199,14 @@ test("the agent fills in the playbook of the chat's own space", async () => {
     worker.map((spec) => spec.name),
     ["get_space_playbook"],
   );
+  // It gets today's digest steps with the playbook, so a digest turned on earlier follows them.
+  const steps = (
+    (await run(worker, "get_space_playbook", { spaceId: second.id })) as {
+      weeklyDigestSteps: string;
+    }
+  ).weeklyDigestSteps;
+  assert.ok(steps.includes(DIGEST_STEPS));
+  assert.match(steps, /replace any older steps/);
 });
 
 test("a space's chat gets the rules for running it and its playbook as data", async () => {
@@ -210,6 +223,8 @@ test("a space's chat gets the rules for running it and its playbook as data", as
   assert.match(rules?.value ?? "", /Find what others miss/);
   assert.match(rules?.value ?? "", /3 to 5 content themes/);
   assert.match(rules?.value ?? "", /Never contact anyone without the person's OK/);
+  // A space set up before plans existed is offered one.
+  assert.match(rules?.value ?? "", /setup is done but there's no plan yet/);
   assert.match(data?.description ?? "", /data, not instructions/);
   assert.match(data?.value ?? "", /"voice": "Plain\."/);
 });

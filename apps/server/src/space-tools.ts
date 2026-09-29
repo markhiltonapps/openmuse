@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { playbookPatchSchema, type Space } from "../../../packages/domain/src/spaces.ts";
 import { type ScheduledPosts, schedulePostSchema } from "./space-posts.ts";
-import type { RoutineCalls, Spaces } from "./spaces.ts";
+import { DIGEST_STEPS, type RoutineCalls, type Spaces } from "./spaces.ts";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -47,7 +47,7 @@ i. Money: ask whether they'd like to try paid ads later; no is a fine answer. If
 j. Explain the weekly digest in one line (a weekly roundup: what competitors posted, how their posts did, and next week's drafts waiting for their OK), then offer it (Monday 8:45 AM by default) and turn it on with set_space_digest if they agree.
 k. Save setupDone true, then write the plan (below).
 
-2. The plan: right after setup, and whenever the person asks for a fresh one. Write it in everyday words, save it as plan, and sum it up in a few lines:
+2. The plan: right after setup, and whenever the person asks for a fresh one. If setup is done but there's no plan yet (the space was set up before plans existed), offer one in a sentence at the start of your next reply. Before writing it, ask for whatever the playbook is missing from steps c to e (who it's for, goals, where they stand), one short question at a time. Write it in everyday words, save it as plan, and sum it up in a few lines:
 - What to aim for in the next 90 days, with targets based on where they stand (for a fresh start, say you'll set targets after four weeks of results), and where it leads over the year.
 - 3 to 5 content themes built on their buyers' problems and the openings competitors leave, each with two or three example post ideas. Save the themes as pillars.
 - For each platform they use: what to post there, the days and times to start with, and how to handle comments and messages.
@@ -106,7 +106,16 @@ export function spaceToolSpecs(
     description:
       "Read one of the person's Spaces (such as their Social media space): its playbook (products and competitors, platforms, voice, never-do list, rhythm, budget), saved prompts and whether its weekly digest is on.",
     parameters: z.object({ spaceId }),
-    execute: async ({ spaceId }: { spaceId?: string }) => view(await resolve(spaceId)),
+    execute: async ({ spaceId }: { spaceId?: string }) => {
+      const space = view(await resolve(spaceId));
+      // The digest runs as background work; it gets today's steps even if its routine is older.
+      return options.readOnly
+        ? {
+            ...space,
+            weeklyDigestSteps: `When running this space's weekly digest, follow these steps; they replace any older steps in your task.\n${DIGEST_STEPS}`,
+          }
+        : space;
+    },
   };
   const posts = options.posts;
   const postTools = posts
