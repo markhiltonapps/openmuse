@@ -6,6 +6,7 @@ import type { Space, SpaceKind } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
 import { FamilyOverview, FamilyPlaybook } from "./family-space";
 import { OurWeeks } from "./family-week-ui";
+import { SocialResults } from "./social-dashboard-ui";
 import {
   fail,
   heading,
@@ -24,7 +25,7 @@ import { useWorkspace } from "./workspace";
  * Overview and Playbook tabs. Each kind of space brings its own two tabs.
  */
 
-type Tab = "overview" | "weeks" | "playbook";
+type Tab = "overview" | "weeks" | "results" | "playbook";
 
 export function SpacesScreen() {
   const { spaces, load, failure } = useSpaces(true);
@@ -215,9 +216,13 @@ function SpaceView({
           <Pill role="tab" selected={tab === "overview"} onPress={() => setTab("overview")}>
             Overview
           </Pill>
-          {space.kind === "family" && (
+          {space.kind === "family" ? (
             <Pill role="tab" selected={tab === "weeks"} onPress={() => setTab("weeks")}>
               Our weeks
+            </Pill>
+          ) : (
+            <Pill role="tab" selected={tab === "results"} onPress={() => setTab("results")}>
+              Results
             </Pill>
           )}
           <Pill role="tab" selected={tab === "playbook"} onPress={() => setTab("playbook")}>
@@ -242,13 +247,15 @@ function SpaceView({
               agentName={agentName}
               onPlaybook={() => setTab("playbook")}
             />
-          ) : tab === "weeks" ? (
+          ) : tab === "weeks" || tab === "results" ? (
             <OurWeeks space={space} agentName={agentName} />
           ) : (
             <FamilyPlaybook space={space} agentName={agentName} onRemoved={onRemoved} />
           )
+        ) : tab === "results" ? (
+          <SocialResults space={space} agentName={agentName} />
         ) : tab === "overview" || tab === "weeks" ? (
-          <Overview space={space} agentName={agentName} />
+          <Overview space={space} agentName={agentName} onPlaybook={() => setTab("playbook")} />
         ) : (
           <Playbook space={space} agentName={agentName} onRemoved={onRemoved} />
         )}

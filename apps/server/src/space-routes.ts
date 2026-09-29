@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import type { FamilyWeeks } from "./family-weeks.ts";
+import type { SocialWeeks } from "./social-weeks.ts";
 import type { ScheduledPosts } from "./space-posts.ts";
 import type { ChatCalls, RoutineCalls, Spaces } from "./spaces.ts";
 
@@ -14,12 +15,16 @@ export function spaceRoutes(
   routines: RoutineCalls,
   posts: ScheduledPosts,
   chats?: ChatCalls,
-  family?: { weeks: FamilyWeeks; timeZone: (owner: string) => Promise<string> },
+  boards?: {
+    weeks: FamilyWeeks;
+    results: SocialWeeks;
+    timeZone: (owner: string) => Promise<string>;
+  },
 ) {
   const app = new Hono<Env>();
   // A family space's week board: groceries ticked off, chores stamped, past weeks looked back on.
-  if (family) {
-    const { weeks, timeZone } = family;
+  if (boards) {
+    const { weeks, results, timeZone } = boards;
     const space = async (c: Context<Env>) => {
       const found = await spaces.get(c.get("owner"), c.req.param("id") ?? "");
       return found.id;
@@ -56,6 +61,10 @@ export function spaceRoutes(
           await body(c),
         ),
       ),
+    );
+    // A social media space's weekly results, oldest first, for its Results tab.
+    app.get("/:id/results", async (c) =>
+      c.json({ weeks: await results.all(c.get("owner"), await space(c)) }),
     );
     app.post("/:id/weeks/:week/reuse-groceries", async (c) => {
       const { to } = await body(c);
@@ -112,7 +121,8 @@ export function spaceRoutes(
       deleteChat === true,
     );
     await posts.cancelSpace(c.get("owner"), c.req.param("id"));
-    await family?.weeks.removeSpace(c.get("owner"), c.req.param("id"));
+    await boards?.weeks.removeSpace(c.get("owner"), c.req.param("id"));
+    await boards?.results.removeSpace(c.get("owner"), c.req.param("id"));
     return c.json(removed);
   });
   return app;

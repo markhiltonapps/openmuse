@@ -58,6 +58,7 @@ import { ReminderService } from "./reminders.ts";
 import { nominatim } from "./rich-cards.ts";
 import { Logins } from "./sign-in.ts";
 import { cleanCode, runApprovedSignIn } from "./sign-in-tools.ts";
+import { SocialWeeks } from "./social-weeks.ts";
 import { ScheduledPosts } from "./space-posts.ts";
 import { spaceRoutes } from "./space-routes.ts";
 import { Spaces } from "./spaces.ts";
@@ -671,7 +672,11 @@ export async function createApp(
           await threads.deleteThread({ threadId, userId: owner, agentId: "default" });
         },
       },
-      { weeks: new FamilyWeeks(db), timeZone: (owner) => agent.timeZone(owner) },
+      {
+        weeks: new FamilyWeeks(db),
+        results: new SocialWeeks(db),
+        timeZone: (owner) => agent.timeZone(owner),
+      },
     ),
   );
   app.route("/api/computer", computerRoutes(computer, files));

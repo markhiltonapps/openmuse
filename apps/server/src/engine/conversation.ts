@@ -37,6 +37,7 @@ import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
 import { richCardInstructions, richCardToolSpecs } from "../rich-cards.ts";
 import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
+import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
@@ -290,6 +291,7 @@ export class ConversationAgent extends AbstractAgent {
           routines: this.service,
           posts: this.service.spacePosts,
           weeks: new FamilyWeeks(this.service.db),
+          results: new SocialWeeks(this.service.db),
           timeZone: () => this.service.timeZone(this.owner),
         }),
         ...shareToolSpecs(this.service.shares, this.owner),

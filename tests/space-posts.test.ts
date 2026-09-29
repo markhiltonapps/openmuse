@@ -139,6 +139,8 @@ test("a failed or missed post says so, and a cancelled one never goes out", asyn
   assert.equal(failed?.status, "failed");
   assert.match(failed?.error ?? "", /expired/);
   assert.equal(failing.notes.at(-1)?.title, "Couldn’t post to Instagram");
+  // Once dealt with, the person clears it from the space.
+  assert.equal((await failing.posts.cancel("cam", one.id)).status, "cancelled");
 
   const late = setup();
   const two = await late.posts.propose("dee", "space-3", post);

@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react-native";
 import {
+  AlertTriangle,
   ArrowUp,
   CalendarClock,
   CalendarHeart,
@@ -25,6 +26,19 @@ import {
 } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
 import { clockTime } from "./meal-checkins-ui";
+import {
+  afterThisWeek,
+  decidedNote,
+  inLastWeek,
+  inThisWeek,
+  needsReconnect,
+  PlanProgress,
+  platformName as postPlatform,
+  reason,
+  tone,
+  tryAgainMessage,
+  WeekPosts,
+} from "./social-dashboard-ui";
 import { parseDollars, parseTime } from "./space-input";
 import { useMuseThread } from "./threads";
 import { Button, Card, colors, dateLabel, ErrorNotice, Field, resultSummary, s } from "./ui";
@@ -121,7 +135,7 @@ function patched<B extends object>(playbook: B, patch: object): B {
 export const spacesView: {
   shown?: string;
   list?: boolean;
-  tab: "overview" | "weeks" | "playbook";
+  tab: "overview" | "weeks" | "results" | "playbook";
 } = {
   tab: "overview",
 };
@@ -198,7 +212,7 @@ export const DAY_NAMES = [
 export const appOf = (action: ActionProposal) =>
   typeof action.data.app === "string" ? action.data.app : "";
 /** "IG", "in", "FB"… for an app badge. */
-function appBadge(app: string) {
+export function appBadge(app: string) {
   const known: Record<string, string> = {
     instagram: "IG",
     facebook: "FB",
@@ -206,6 +220,8 @@ function appBadge(app: string) {
     youtube: "YT",
     tiktok: "TT",
     twitter: "X",
+    pinterest: "Pi",
+    threads: "Th",
     postiz: "Po",
     higgsfield: "Hf",
     calendar: "Cal",
@@ -214,11 +230,20 @@ function appBadge(app: string) {
     trello: "Tr",
   };
   const key = Object.keys(known).find((name) => app.toLowerCase().includes(name));
-  return key ? (known[key] ?? "") : /meta/i.test(app) ? "Ads" : app.slice(0, 2);
+  if (key) return known[key] ?? "";
+  return /meta/i.test(app) ? "Ads" : app.trim().toLowerCase() === "x" ? "X" : app.slice(0, 2);
 }
 
-export function Overview({ space, agentName }: { space: Space; agentName: string }) {
-  const { workspace, open, navigate, api } = useWorkspace();
+export function Overview({
+  space,
+  agentName,
+  onPlaybook,
+}: {
+  space: Space;
+  agentName: string;
+  onPlaybook?: () => void;
+}) {
+  const { workspace, open, navigate, api, notify } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const openChat = useOpenChat();
   const [error, setError] = useState("");
@@ -232,13 +257,24 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
   const { posts, load } = useSpaces();
   const mine = posts.filter((post) => post.spaceId === space.id);
   const toApprove = mine.filter((post) => post.status === "awaiting_review");
-  const needs = toApprove.length + waiting.length;
+  // Posts that didn't go out this week or last stay here until tried again or dismissed.
+  const didntGoOut = mine.filter(
+    (post) => post.status === "failed" && (inThisWeek(post) || inLastWeek(post)),
+  );
+  const needs = toApprove.length + didntGoOut.length + waiting.length;
   const routine = data?.routines.find((item) => item.id === space.digestRoutineId);
   const digest = data?.tasks.find((task) => task.id === routine?.lastTaskId);
   const decide = (post: ScheduledPost, choice: "approve" | "cancel") =>
     run(`${choice}:${post.id}`, async () => {
       await api.request(`/api/spaces/posts/${post.id}/${choice}`, { hash: post.hash });
       await load();
+      notify(decidedNote(post, choice));
+    });
+  const tryAgain = (post: ScheduledPost) =>
+    run(`again:${post.id}`, async () => {
+      await api.request(`/api/spaces/posts/${post.id}/cancel`, {});
+      await load();
+      openChat(space, tryAgainMessage(post));
     });
   async function run(label: string, work: () => Promise<unknown>) {
     setBusy(label);
@@ -332,11 +368,11 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
                     accessibilityLabel={`Approve: ${post.summary}`}
                     onPress={() => void decide(post, "approve")}
                   >
-                    {due ? "Approve and post" : "Approve"}
+                    {due ? "Approve and post now" : "Approve"}
                   </Button>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Remove: ${post.summary}`}
+                    accessibilityLabel={`Don’t post: ${post.summary}`}
                     onPress={() => void decide(post, "cancel")}
                     style={{
                       width: 44,
@@ -350,10 +386,55 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
                 </QueueRow>
               );
             })}
+            {didntGoOut.map((post, index) => (
+              <QueueRow
+                key={post.id}
+                first={!toApprove.length && index === 0}
+                app={post.app}
+                title={post.summary}
+                detail={`Didn’t go out ${when(post.postAt)}: ${reason(post)}`}
+                danger
+              >
+                {needsReconnect(post) && (
+                  <Button
+                    small
+                    primary
+                    accessibilityLabel={`Reconnect ${postPlatform(post.app)} in Apps`}
+                    onPress={() => navigate("apps")}
+                  >
+                    Reconnect
+                  </Button>
+                )}
+                {/* Beside Reconnect, the short label fits a phone; the chat sign says where it goes. */}
+                <Button
+                  small
+                  primary={!needsReconnect(post)}
+                  icon={needsReconnect(post) ? MessageCircle : undefined}
+                  busy={busy === `again:${post.id}`}
+                  accessibilityLabel={`Ask ${agentName} to try again: ${post.summary}`}
+                  onPress={() => void tryAgain(post)}
+                >
+                  {needsReconnect(post) ? "Try again" : `Ask ${agentName} to try again`}
+                </Button>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Dismiss: ${post.summary}`}
+                  onPress={() => void decide(post, "cancel")}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <X size={16} color={colors.muted} />
+                </Pressable>
+              </QueueRow>
+            ))}
             {waiting.map((action, index) => (
               <QueueRow
                 key={action.id}
-                first={!toApprove.length && index === 0}
+                first={!toApprove.length && !didntGoOut.length && index === 0}
                 app={appOf(action)}
                 title={action.title}
                 detail={
@@ -380,7 +461,11 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
         )}
       </View>
 
+      <WeekPosts space={space} agentName={agentName} posts={mine} onChanged={load} />
+
       <ComingUp posts={mine} busy={busy} onCancel={(post) => void decide(post, "cancel")} />
+
+      <PlanProgress space={space} agentName={agentName} onPlaybook={onPlaybook} />
 
       <View style={{ gap: 10 }}>
         <Text {...heading(3)} style={s.heading}>
@@ -405,7 +490,6 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
                       : (digest.question ?? "This week’s digest needs you.")}
                 </Text>
                 <Button
-                  small
                   style={{ alignSelf: "flex-start" }}
                   onPress={() => open({ type: "task", taskId: digest.id })}
                 >
@@ -419,7 +503,6 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
               </Text>
             )}
             <Button
-              small
               busy={busy === "now"}
               style={{ alignSelf: "flex-start" }}
               onPress={() => void run("now", () => mutate(`/routines/${routine.id}/run`, {}))}
@@ -435,7 +518,6 @@ export function Overview({ space, agentName }: { space: Space; agentName: string
             </Text>
             <Button
               primary={space.setupDone}
-              small
               busy={busy === "digest"}
               style={{ alignSelf: "flex-start" }}
               onPress={() => void digestOn()}
@@ -467,12 +549,15 @@ export function QueueRow({
   app,
   title,
   detail,
+  danger,
   children,
 }: {
   first: boolean;
   app: string;
   title: string;
   detail?: string;
+  /** Something went wrong: the detail line says what, in red with a warning sign. */
+  danger?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -496,26 +581,56 @@ export function QueueRow({
           borderRadius: 10,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: colors.sky,
+          backgroundColor: tone(app).background,
         }}
       >
-        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>{appBadge(app)}</Text>
+        <Text style={{ fontSize: 12, fontWeight: "700", color: tone(app).color }}>
+          {appBadge(app)}
+        </Text>
       </View>
       <View style={{ flex: 1, minWidth: 170, gap: 2, paddingVertical: 8 }}>
         <Text numberOfLines={3} style={[s.text, { fontWeight: "500" }]}>
           {title}
         </Text>
-        {!!detail && <Text style={[s.small, { color: colors.mutedStrong }]}>{detail}</Text>}
+        {!!detail &&
+          (danger ? (
+            <View style={[s.row, { gap: 5, alignItems: "flex-start" }]}>
+              <View style={{ paddingTop: 2 }}>
+                <AlertTriangle size={12} color={colors.danger} />
+              </View>
+              <Text style={[s.small, { flex: 1, color: colors.danger }]}>{detail}</Text>
+            </View>
+          ) : (
+            <Text style={[s.small, { color: colors.mutedStrong }]}>{detail}</Text>
+          ))}
       </View>
       {/* On a narrow screen the buttons go under the text instead of squeezing it. */}
       {children && (
-        <View style={[s.row, { gap: 4, marginLeft: "auto", paddingBottom: 4 }]}>{children}</View>
+        <View
+          style={[
+            s.row,
+            {
+              gap: 4,
+              marginLeft: "auto",
+              paddingBottom: 4,
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              flexShrink: 1,
+              maxWidth: "100%",
+            },
+          ]}
+        >
+          {children}
+        </View>
       )}
     </View>
   );
 }
 
-/** Approved posts waiting for their day, and what went out (or didn't) this past week. */
+/**
+ * Posts off this week's calendar: approved ones waiting for a later week, and what went out last
+ * week. (Last week's posts that didn't go out wait in Needs you.)
+ */
 function ComingUp({
   posts,
   busy,
@@ -525,57 +640,60 @@ function ComingUp({
   busy: string;
   onCancel: (post: ScheduledPost) => void;
 }) {
-  const week = Date.now() - 7 * 86_400_000;
-  const upcoming = posts.filter((post) => post.status === "scheduled" || post.status === "posting");
-  const recent = posts
-    .filter(
-      (post) =>
-        (post.status === "posted" || post.status === "failed") &&
-        Date.parse(post.postedAt ?? post.postAt) >= week,
-    )
-    .reverse();
-  if (!upcoming.length && !recent.length) return null;
+  const upcoming = posts.filter(
+    (post) => (post.status === "scheduled" || post.status === "posting") && afterThisWeek(post),
+  );
+  const recent = posts.filter((post) => post.status === "posted" && inLastWeek(post)).reverse();
   return (
-    <View style={{ gap: 10 }}>
-      <Text {...heading(3)} style={s.heading}>
-        Coming up
-      </Text>
-      <Card style={{ gap: 2, paddingVertical: 6 }}>
-        {upcoming.map((post, index) => (
-          <QueueRow
-            key={post.id}
-            first={index === 0}
-            app={post.app}
-            title={post.summary}
-            detail={post.status === "posting" ? "Posting now…" : when(post.postAt)}
-          >
-            {post.status === "scheduled" && (
-              <Button
-                small
-                busy={busy === `cancel:${post.id}`}
-                accessibilityLabel={`Cancel: ${post.summary}`}
-                onPress={() => onCancel(post)}
+    <>
+      {upcoming.length > 0 && (
+        <View style={{ gap: 10 }}>
+          <Text {...heading(3)} style={s.heading}>
+            After this week
+          </Text>
+          <Card style={{ gap: 2, paddingVertical: 6 }}>
+            {upcoming.map((post, index) => (
+              <QueueRow
+                key={post.id}
+                first={index === 0}
+                app={post.app}
+                title={post.summary}
+                detail={post.status === "posting" ? "Posting now…" : when(post.postAt)}
               >
-                Cancel
-              </Button>
-            )}
-          </QueueRow>
-        ))}
-        {recent.map((post, index) => (
-          <QueueRow
-            key={post.id}
-            first={!upcoming.length && index === 0}
-            app={post.app}
-            title={post.summary}
-            detail={
-              post.status === "posted"
-                ? `Posted ${when(post.postedAt ?? post.postAt)}`
-                : `Didn’t go out: ${post.error ?? "unknown problem"}`
-            }
-          />
-        ))}
-      </Card>
-    </View>
+                {post.status === "scheduled" && (
+                  <Button
+                    small
+                    busy={busy === `cancel:${post.id}`}
+                    accessibilityLabel={`Cancel: ${post.summary}`}
+                    onPress={() => onCancel(post)}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </QueueRow>
+            ))}
+          </Card>
+        </View>
+      )}
+      {recent.length > 0 && (
+        <View style={{ gap: 10 }}>
+          <Text {...heading(3)} style={s.heading}>
+            Last week
+          </Text>
+          <Card style={{ gap: 2, paddingVertical: 6 }}>
+            {recent.map((post, index) => (
+              <QueueRow
+                key={post.id}
+                first={index === 0}
+                app={post.app}
+                title={post.summary}
+                detail={`Posted ${when(post.postedAt ?? post.postAt)}`}
+              />
+            ))}
+          </Card>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -1345,7 +1463,7 @@ function Scheduling({ space, save }: { space: Space; save: Save }) {
   );
 }
 
-const PLAN_REQUEST = "Please write a fresh plan for my social media.";
+export const PLAN_REQUEST = "Please write a fresh plan for my social media.";
 
 /** The agent's plan, where things stood at the start, and a way to ask for a fresh one. */
 function Plan({ space, agentName }: { space: Space; agentName: string }) {

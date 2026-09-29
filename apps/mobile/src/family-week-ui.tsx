@@ -56,7 +56,9 @@ export { monthDay };
 export function weekRange(weekStart: string) {
   const end = noon(weekStart);
   end.setDate(end.getDate() + 6);
-  return `${monthDay(weekStart)} – ${monthDay(end.toISOString().slice(0, 10))}`;
+  // The end day from the device's own calendar: toISOString would give UTC's, a day off east of it.
+  const day = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+  return `${monthDay(weekStart)} – ${monthDay(day)}`;
 }
 const plannedOn = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "long" });
 

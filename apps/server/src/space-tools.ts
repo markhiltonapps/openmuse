@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { weekPlanSchema } from "../../../packages/domain/src/family-week.ts";
+import { weekResultsSchema } from "../../../packages/domain/src/social-week.ts";
 import {
   familyPlaybookPatchSchema,
   playbookPatchSchema,
   type Space,
 } from "../../../packages/domain/src/spaces.ts";
 import type { FamilyWeeks } from "./family-weeks.ts";
+import type { SocialWeeks } from "./social-weeks.ts";
 import { type ScheduledPosts, schedulePostSchema } from "./space-posts.ts";
 import { digestSteps, type RoutineCalls, type Spaces } from "./spaces.ts";
 
@@ -54,7 +56,7 @@ i. Money: ask whether they'd like to try paid ads later; no is a fine answer. If
 j. Explain the weekly digest in one line (a weekly roundup: what competitors posted, how their posts did, and next week's drafts waiting for their OK), then offer it (Monday 8:45 AM by default) and turn it on with set_space_digest if they agree.
 k. Save setupDone true, then write the plan (below).
 
-2. The plan: right after setup, and whenever the person asks for a fresh one. If setup is done but there's no plan yet (the space was set up before plans existed), offer one in a sentence at the start of your next reply. Before writing it, ask for whatever the playbook is missing from steps c to e (who it's for, goals, where they stand), one short question at a time. Write it in everyday words, save it as plan, and sum it up in a few lines:
+2. The plan: right after setup, and whenever the person asks for a fresh one. If setup is done but there's no plan yet (the space was set up before plans existed), offer one in a sentence at the start of your next reply. Before writing it, ask for whatever the playbook is missing from steps c to e (who it's for, goals, where they stand), one short question at a time. Write it in everyday words, save it as plan with newPlan true (its 90 days start that day; leave newPlan out when you only change the current plan), and sum it up in a few lines:
 - What to aim for in the next 90 days, with targets based on where they stand (for a fresh start, say you'll set targets after four weeks of results), and where it leads over the year.
 - 3 to 5 content themes built on their buyers' problems and the openings competitors leave, each with two or three example post ideas. Save the themes as pillars.
 - For each platform they use: what to post there, the days and times to start with, and how to handle comments and messages.
@@ -152,10 +154,12 @@ export function spaceToolSpecs(
     readOnly?: boolean;
     /** A family space's week board, planned with save_week_plan. */
     weeks?: FamilyWeeks;
+    /** A social media space's weekly results, saved with save_week_results. */
+    results?: SocialWeeks;
     timeZone?: () => Promise<string>;
   } = {},
 ) {
-  const { weeks, timeZone } = options;
+  const { weeks, results, timeZone } = options;
   const resolve = (id?: string) => spaces.resolve(owner, id, options.threadId);
   const read = {
     name: "get_space_playbook",
@@ -168,8 +172,13 @@ export function spaceToolSpecs(
         found.kind === "family" && weeks && timeZone
           ? await weeks.board(owner, found.id, await timeZone())
           : undefined;
+      const lastResults =
+        found.kind === "social" && results
+          ? (await results.all(owner, found.id)).at(-1)
+          : undefined;
       const space = {
         ...view(found),
+        ...(lastResults ? { lastWeekResults: lastResults } : {}),
         ...(board
           ? {
               // The week on the family's board; the playbook's weekPlan is an older, text-only plan.
@@ -199,6 +208,27 @@ export function spaceToolSpecs(
       return weeks.save(owner, space.id, plan, await timeZone());
     },
   };
+  /** The weekly digest's numbers, for the space's Results tab. */
+  const weekResults = results
+    ? [
+        {
+          name: "save_week_results",
+          description:
+            "Save a social media space's results for a week (last week by default) so the person sees them on the space's Results tab: how many people saw the posts on each platform (the app's own people-reached count, not views), the post that did best, a headline that doesn't repeat it, what competitors posted and the chance each leaves, and each of the plan's aims that has a target, with its real number now and the target. Only numbers the connected apps gave you or the person told you: leave out a platform you couldn't read, an aim with no target and anything you don't have; never estimate. Each call replaces only the parts it includes.",
+          parameters: weekResultsSchema.extend({ spaceId }),
+          execute: async ({
+            spaceId,
+            ...input
+          }: { spaceId?: string } & Record<string, unknown>) => {
+            const space = await resolve(spaceId);
+            if (space.kind !== "social")
+              return { error: "Only a social media space has weekly results." };
+            if (!timeZone) return { error: "Results can't be saved here." };
+            return results.save(owner, space.id, input, await timeZone());
+          },
+        },
+      ]
+    : [];
   const posts = options.posts;
   const postTools = posts
     ? [
@@ -259,12 +289,18 @@ export function spaceToolSpecs(
       ]
     : [];
   if (options.readOnly)
-    return [read, weekPlan, ...postTools.filter((tool) => tool.name !== "cancel_scheduled_post")];
+    return [
+      read,
+      weekPlan,
+      ...weekResults,
+      ...postTools.filter((tool) => tool.name !== "cancel_scheduled_post"),
+    ];
   const routines = options.routines;
   return [
     read,
     ...postTools,
     weekPlan,
+    ...weekResults,
     {
       name: "update_space_playbook",
       description:

@@ -14,6 +14,7 @@ import { FamilyWeeks } from "../family-weeks.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
+import { SocialWeeks } from "../social-weeks.ts";
 import { spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
@@ -314,6 +315,7 @@ export async function executeModelTask(
         readOnly: true,
         posts: service.spacePosts,
         weeks: new FamilyWeeks(service.db),
+        results: new SocialWeeks(service.db),
         timeZone: () => service.timeZone(owner),
       }),
     ].map(

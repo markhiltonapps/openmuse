@@ -93,10 +93,15 @@ export class ScheduledPosts {
     if (!approved) return this.get(owner, id);
     return approved;
   }
-  /** Takes a post off the queue before it goes out. */
+  /** Takes a post off the queue before it goes out, or clears one that didn't go out. */
   async cancel(owner: string, id: string) {
     const post = await this.get(owner, id);
-    if (post.status !== "awaiting_review" && post.status !== "scheduled") return post;
+    if (
+      post.status !== "awaiting_review" &&
+      post.status !== "scheduled" &&
+      post.status !== "failed"
+    )
+      return post;
     return (
       (await this.db.compareAndSwap<ScheduledPost>(
         owner,

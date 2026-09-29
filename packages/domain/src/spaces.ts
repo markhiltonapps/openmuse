@@ -35,6 +35,8 @@ export interface SocialPlaybook {
   pillars?: string[];
   /** The agent's plan: 90-day aims, themes, what to post where, first ad test, people to team up with. */
   plan?: string;
+  /** When the plan was written, the start of its 90 days; set by the server. */
+  planAt?: string;
   /** How the brand sounds. */
   voice: string;
   /** Things never to say or do (claims, names, words, images). */
@@ -180,6 +182,12 @@ export const playbookPatchSchema = z
     baseline: z.string().trim().max(1500).nullable(),
     pillars: z.array(line(160)).max(8),
     plan: z.string().trim().max(8000).nullable(),
+    /** With plan: a new 90-day plan, whose 90 days start now; left out for an edit to the plan. */
+    newPlan: z
+      .boolean()
+      .describe(
+        "With plan: true only for a new 90-day plan, so its 90 days start today. Leave it out when changing the current plan.",
+      ),
     voice: z.string().trim().max(1500),
     avoid: z.array(line(300)).max(25),
     brandFileId: z.string().max(100).nullable(),

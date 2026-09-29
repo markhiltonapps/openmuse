@@ -15,6 +15,8 @@ import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 
 const MAX_SPACES = 10;
+/** A social media plan's length: 13 weeks. */
+const PLAN_DAYS = 91;
 const MAX_PROMPTS = 30;
 
 /** The routine calls the digest needs; the agent service provides them. */
@@ -33,11 +35,12 @@ export interface RoutineCalls {
  * in the routine), so digests turned on earlier follow the current steps too.
  */
 export const DIGEST_STEPS = `1. Competitors: for each product's competitors, use search_web (kind "social", then "web" if needed) for what they posted or advertised in the last 7 days. Note what kind of posts they were (photo, video, text) and which got the most likes, comments and shares.
-2. How you did: with the connected apps (find_app_actions, then use_app), read last week's results for each platform in the playbook and any running ads. If a platform isn't connected, say so. Never estimate or invent a number. Put numbers in plain words, for example "about 300 people saw it and 12 liked it".
+2. How you did: with the connected apps (find_app_actions, then use_app), read last week's results for each platform in the playbook and any running ads; these are the numbers you save in step 5. If a platform isn't connected, say so. Never estimate or invent a number. Put numbers in plain words, for example "300 people saw it and 12 liked it".
 3. Next week: draft the playbook's number of posts, spread across its platforms in order, in its voice, each with a suggested day and time. Add ad ideas only if adIdeasPerWeek is above 0, dailyAdCeilingUsd is set, and organicUntil (if set) has passed; give each a daily budget within that limit. Check what's already queued first (list_scheduled_posts, and the playbook's scheduler app if it names one), so nothing is doubled. Queue each drafted post for its day: in the playbook's scheduler app through use_app if it names one, otherwise with schedule_post (this app's own scheduler). To start an ad, use use_app. All of these wait for the person's approval. Look up an app's actions with find_app_actions first and never guess an action's name. Nothing is posted, paid for or made with paid credits without it.
 Base the drafts on the playbook's content themes and plan, and use last week's results: more of what worked, less of what didn't. When unsure between two ideas, draft both as a side-by-side test.
-4. In the first digest of each month, also compare the month's results with the plan: what worked, what to stop, and any change you'd suggest to the plan or themes (the person can ask for it in the space's chat).
-5. Finish with a short digest in everyday words under three headings: What competitors posted, How you did, Next week. End by saying how many drafts are waiting in Needs you for their OK.`;
+4. In the first digest of each month, also compare the month's results with the plan: what worked, what to stop, and any change you'd suggest to the plan or themes (the person can ask for it in the space's chat). If the plan has no targets yet and there are four weeks of results, suggest targets based on them.
+5. Save last week's results with save_week_results, so the person sees them on the space's Results tab: for each platform you could read, how many people saw the posts, as the app's own count of people or accounts reached (not views or impressions); the post that did best and what it got; a headline of a few words that the numbers back up and that doesn't repeat the best post; what each competitor posted, with the chance it leaves this business; and each of the plan's aims that has a target, with its real number now, the target and where it stands. Leave out a platform you couldn't read (don't save 0 for it), an aim with no target or no real number yet, and any part you have nothing real for. Never estimate a number.
+6. Finish with a short digest in everyday words under three headings: What competitors posted, How you did, Next week. End by saying how many drafts are waiting in Needs you for their OK.`;
 
 /**
  * A family's daily rundown, and its plan for the week ahead on the planning day. Handed to the
@@ -121,7 +124,10 @@ export class Spaces {
   /** Changes the fields given (of this kind of space); null clears an optional one. */
   async update(owner: string, id: string, raw: unknown, setupDone?: boolean) {
     const space = await this.get(owner, id);
-    const patch = patchSchemaFor(space.kind).parse(raw ?? {});
+    const { newPlan, ...patch } = patchSchemaFor(space.kind).parse(raw ?? {}) as Record<
+      string,
+      unknown
+    >;
     const playbook: Record<string, unknown> = { ...space.playbook };
     for (const [key, value] of Object.entries(patch)) {
       if (value === null) delete playbook[key];
@@ -131,6 +137,15 @@ export class Spaces {
     if (space.kind === "family" && "weekPlan" in patch) {
       if (patch.weekPlan) playbook.weekPlanAt = this.now().toISOString();
       else delete playbook.weekPlanAt;
+    }
+    // A new social media plan starts its 90 days now; an edit to the plan keeps them, unless the
+    // 90 days were already over (then it's a new plan, even if newPlan was left out).
+    if (space.kind === "social" && "plan" in patch && patch.plan !== space.playbook.plan) {
+      const started = Date.parse(space.playbook.planAt ?? "");
+      const over = started + PLAN_DAYS * 86_400_000 <= this.now().getTime();
+      if (!patch.plan) delete playbook.planAt;
+      else if (newPlan || !space.playbook.plan || Number.isNaN(started) || over)
+        playbook.planAt = this.now().toISOString();
     }
     return this.save(owner, {
       ...space,
