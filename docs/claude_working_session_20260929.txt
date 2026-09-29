@@ -69,3 +69,58 @@ PENDING
 - Time log (docs/time_log.txt): waiting for today's hours from you.
 - Backups of today's in-progress work are in _backups/ (kept out of git); they can be deleted
   once the commits are pushed.
+
+LATER THE SAME DAY
+------------------
+Pushed and live: ddc5336, ec12c1b, 798712d, d5b85c0, 77ba51d and 663e737 (the list above was
+written before they went out). The e09493c, 77ba51d and 663e737 deploys were checked: SUCCESS.
+
+Committed locally, NOT pushed yet (waiting for "push it"):
+- add0442: the agent's avatar saves as soon as a character or background is tapped (before,
+  picking one after choosing a photo left no way to save it). Name and tone save on their own.
+- 3b03f3d: recipes for each dinner night on the family board.
+  - Tapping a dinner shows 2-3 recipes to pick from (sized for the family, true to the food
+    rules): ingredients with amounts, steps, prep and cook time, and up to 3 real recipe pages
+    taken only from web search results.
+  - Written on their own after the week is planned (3 nights at a time, today onwards), or with
+    "Get recipes" on a night; the board says "Writing recipes" and checks back every 12 seconds.
+  - The grocery list follows the pick. Items the plan lists only for a dinner are that night's
+    recipe's; items for other meals keep their amount with the recipe's added on top; a swap
+    removes only that night's share; items the family typed are never touched.
+  - Every planned night records whether it's cooked (leftovers, takeout, nights out get none).
+  - Only diet words ("peanut-free") go to the web search, never the family's food rules.
+  - Messages and errors show inside the sheet (toasts sit under sheets). Pantry items say
+    "At home" and can be added. Recipe writing is counted in usage as "Dinner recipes".
+  - Design division: visual (4 rounds), usability (3) and copy (3 and a final check) all signed
+    off.
+
+Also answered: how to fill the family dashboard (ask the agent to plan the week, turn on the
+morning rundown, fill the Playbook); what the app costs to run and a first Good/Better/Best
+price (estimates from Railway's real usage and Claude's list prices; see PENDING).
+
+TEST RESULTS (later)
+--------------------
+- Full suite (lint, typecheck, worker typecheck, tests): 397 passed, 0 failed.
+- New tests in tests/family-weeks.test.ts: recipes and the grocery swap; plan items for dinners
+  vs other meals (eggs and milk keep their amounts); the recipe writer (each night once, from
+  today on, a wish waits for a running job, a changed dish gets its own, diet words only in the
+  search, links only from results); the Get recipes route.
+- Checked in a browser at phone 390 (light and dark) and desktop 1280: picking, the in-sheet
+  notes, "At home" and Add, Get recipes, "Writing recipes", nights with nothing to cook.
+
+KNOWN ISSUES (later)
+--------------------
+- Recipes need the Anthropic key on the server; without it "Get recipes" says so.
+- If the planner doesn't tag a dinner-only item, a recipe adds its amount on top instead of
+  taking it over (the list can show "2 lb + 1½ lb").
+- There are no per-person usage limits yet; they're needed before charging anyone.
+
+PENDING (later)
+---------------
+- Push add0442 and 3b03f3d when you say "push it"; then check the Railway deploy and logs.
+- The offer to fix the older "Plan next week" button (it plans next week when the board is
+  empty): waiting for your OK.
+- Pricing: waiting for a screenshot of Settings > Usage, your Railway / CopilotKit / Composio
+  bills, who the customers are, and hard limits vs fair use.
+- Railway staged change ba13b23c still needs Deploy in Railway.
+- Time log: today's row says 8 hours; waiting to hear whether to add hours for this later work.

@@ -80,3 +80,13 @@ Time Log — <Project Name>
   `ps aux | grep "[p]attern"` in a separate command.
 - **Checks before a commit:** lint (Biome), `pnpm typecheck`, the worker's `tsc --noEmit`, and
   `pnpm test` (runs with tsx).
+- **react-native-web 0.21:** it reads `role` and `aria-*` (`aria-checked`, `aria-label`), not
+  `accessibilityState`; and `Pressable` ignores `hitSlop`. For a small control, make the
+  `Pressable` itself 44×44 (negative margins keep the row's height) and draw the small shape
+  inside it.
+- **Sheets hide toasts:** `Sheet` is an RN `Modal`, a separate top layer on the web, so a toast
+  (`notify`) from inside a sheet can't be seen. Say what happened in the sheet itself.
+- **Live regions:** keep a `role="status"` line mounted all the time and change its text; one
+  that appears together with its text often isn't read out.
+- **Local sample server:** the API keeps its database at `${DATA_DIR}/postgres`. Seed into that
+  folder, and only while the server is stopped (a running one can overwrite it).
