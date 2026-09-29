@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { createApp } from "../apps/server/src/app.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
+import { FamilyWeeks } from "../apps/server/src/family-weeks.ts";
 import { ScheduledPosts } from "../apps/server/src/space-posts.ts";
 import { spaceRoutes } from "../apps/server/src/space-routes.ts";
 import { spaceContext, spaceToolSpecs } from "../apps/server/src/space-tools.ts";
@@ -176,7 +177,13 @@ test("the agent fills in the playbook of the chat's own space", async () => {
   }) as Spec[];
   assert.deepEqual(
     specs.map((spec) => spec.name),
-    ["get_space_playbook", "update_space_playbook", "save_space_prompt", "set_space_digest"],
+    [
+      "get_space_playbook",
+      "save_week_plan",
+      "update_space_playbook",
+      "save_space_prompt",
+      "set_space_digest",
+    ],
   );
   await run(specs, "update_space_playbook", {
     products: [{ name: "Neato_Prompt", competitors: ["PromptPerfect"] }],
@@ -338,27 +345,32 @@ test("a family space: its own playbook and rules, a daily rundown and a week pla
   assert.equal(routine?.time, "06:45");
   assert.equal(routine?.prompt, digestPrompt(space));
   assert.match(routine?.prompt ?? "", /^Daily family rundown/);
-  const worker = spaceToolSpecs(spaces, "kim", { readOnly: true }) as Spec[];
+  const weeks = new FamilyWeeks(db, () => new Date("2026-09-29T16:00:00Z"));
+  const worker = spaceToolSpecs(spaces, "kim", {
+    readOnly: true,
+    weeks,
+    timeZone: async () => "America/Los_Angeles",
+  }) as Spec[];
   const read = (await run(worker, "get_space_playbook", { spaceId: space.id })) as {
     kind: string;
     dailyRundownSteps?: string;
     weeklyDigestSteps?: string;
+    thisWeek?: unknown;
   };
   assert.equal(read.kind, "family");
   assert.ok(read.dailyRundownSteps?.includes(FAMILY_RUNDOWN_STEPS));
   assert.equal(read.weeklyDigestSteps, undefined);
-  // The rundown saves the week's plan; nothing else in the playbook can change from there.
-  await run(worker, "save_week_plan", {
+  assert.equal(read.thisWeek, "not planned yet");
+  // The rundown puts the week on the family's board; nothing else in the playbook can change there.
+  const saved = (await run(worker, "save_week_plan", {
     spaceId: space.id,
-    plan: "Monday: tacos, Maya sets the table.",
-  });
-  const after = await spaces.get("kim", space.id);
-  assert.equal(
-    after.kind === "family" ? after.playbook.weekPlan : "",
-    "Monday: tacos, Maya sets the table.",
-  );
-  // The plan carries its date, so a rundown on any day knows when it has gone stale.
-  assert.match(after.kind === "family" ? (after.playbook.weekPlanAt ?? "") : "", /^\d{4}-/);
+    dinners: [{ day: "Monday", dish: "Tacos", note: "Maya sets the table", emoji: "🌮" }],
+  })) as { weekStart: string };
+  assert.equal(saved.weekStart, "2026-09-28");
+  const board = await weeks.board("kim", space.id, "America/Los_Angeles");
+  assert.deepEqual(board.week?.dinners, [
+    { day: 0, dish: "Tacos", note: "Maya sets the table", emoji: "🌮" },
+  ]);
   assert.equal(
     worker.some((spec) => spec.name === "update_space_playbook"),
     false,

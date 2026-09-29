@@ -118,7 +118,11 @@ function patched<B extends object>(playbook: B, patch: object): B {
 }
 
 /** The space shown when Spaces opens (or the list, when asked for), and its tab; kept across visits. */
-export const spacesView: { shown?: string; list?: boolean; tab: "overview" | "playbook" } = {
+export const spacesView: {
+  shown?: string;
+  list?: boolean;
+  tab: "overview" | "weeks" | "playbook";
+} = {
   tab: "overview",
 };
 

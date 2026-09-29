@@ -34,6 +34,7 @@ import { emojiPicture } from "./emoji.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
+import { FamilyWeeks } from "./family-weeks.ts";
 import { FeedService } from "./feed.ts";
 import { FileShares } from "./file-shares.ts";
 import { Files } from "./files.ts";
@@ -660,12 +661,18 @@ export async function createApp(
   app.route("/api/agent", agentRoutes(agent));
   app.route(
     "/api/spaces",
-    spaceRoutes(new Spaces(db), agent, spacePosts, {
-      deleteThread: async (owner, threadId) => {
-        await db.remove(owner, "chat-archive", threadId);
-        await threads.deleteThread({ threadId, userId: owner, agentId: "default" });
+    spaceRoutes(
+      new Spaces(db),
+      agent,
+      spacePosts,
+      {
+        deleteThread: async (owner, threadId) => {
+          await db.remove(owner, "chat-archive", threadId);
+          await threads.deleteThread({ threadId, userId: owner, agentId: "default" });
+        },
       },
-    }),
+      { weeks: new FamilyWeeks(db), timeZone: (owner) => agent.timeZone(owner) },
+    ),
   );
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));

@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import type { Space, SpaceKind } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
 import { FamilyOverview, FamilyPlaybook } from "./family-space";
+import { OurWeeks } from "./family-week-ui";
 import {
   fail,
   heading,
@@ -23,7 +24,7 @@ import { useWorkspace } from "./workspace";
  * Overview and Playbook tabs. Each kind of space brings its own two tabs.
  */
 
-type Tab = "overview" | "playbook";
+type Tab = "overview" | "weeks" | "playbook";
 
 export function SpacesScreen() {
   const { spaces, load, failure } = useSpaces(true);
@@ -214,6 +215,11 @@ function SpaceView({
           <Pill role="tab" selected={tab === "overview"} onPress={() => setTab("overview")}>
             Overview
           </Pill>
+          {space.kind === "family" && (
+            <Pill role="tab" selected={tab === "weeks"} onPress={() => setTab("weeks")}>
+              Our weeks
+            </Pill>
+          )}
           <Pill role="tab" selected={tab === "playbook"} onPress={() => setTab("playbook")}>
             Playbook
           </Pill>
@@ -236,10 +242,12 @@ function SpaceView({
               agentName={agentName}
               onPlaybook={() => setTab("playbook")}
             />
+          ) : tab === "weeks" ? (
+            <OurWeeks space={space} agentName={agentName} />
           ) : (
             <FamilyPlaybook space={space} agentName={agentName} onRemoved={onRemoved} />
           )
-        ) : tab === "overview" ? (
+        ) : tab === "overview" || tab === "weeks" ? (
           <Overview space={space} agentName={agentName} />
         ) : (
           <Playbook space={space} agentName={agentName} onRemoved={onRemoved} />

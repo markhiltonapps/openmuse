@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { weekPlanSchema } from "../../../packages/domain/src/family-week.ts";
 import {
   familyPlaybookPatchSchema,
   playbookPatchSchema,
   type Space,
 } from "../../../packages/domain/src/spaces.ts";
+import type { FamilyWeeks } from "./family-weeks.ts";
 import { type ScheduledPosts, schedulePostSchema } from "./space-posts.ts";
 import { digestSteps, type RoutineCalls, type Spaces } from "./spaces.ts";
 
@@ -99,11 +101,12 @@ If they ask for a plan, today's rundown or the grocery list before setup is done
 
 2. The week ahead: on the planning day, and whenever the person asks.
 - Dinners for the week (the playbook's number), each fitting the cooking time, food rules and likes, with a line on why (a busy night gets something quick; a slow night, something new). Note leftovers.
-- The grocery list for those meals, grouped by aisle, minus what they say they have. Offer to save it as a file with create_document, or as a checklist they can tick off.
+- The grocery list for those meals, grouped by aisle, minus what they say they have. It goes on the board, where they can tick items off and share it; save a file with create_document only if they ask.
 - The schedule: the fixed points plus anything new, clashes called out, and who's driving. If a calendar app is connected, offer to add what's missing through use_app, which asks them first.
 - Chores for the week, by person.
 - Two or three activity ideas for free time, fitting ages, interests, the weather and the budget they've mentioned.
-- Save the whole plan, in everyday words, as weekPlan with update_space_playbook, and sum it up in chat.
+- Save the week to the family's board with save_week_plan (summary, dinners with a note and one food emoji each, schedule, groceries by aisle, chores by person, ideas), then sum it up in chat in a few lines.
+- For a change later (move a dinner, add something to the grocery list, a new activity), save just that section with save_week_plan; addGroceries adds items without rewriting the list.
 
 3. Each day, when the rundown is on, it comes to them on its own. In chat, "What's on today?" gets the same in under 150 words: today's schedule with times, dinner tonight and any prep, chores due today, one thing to get ready for tomorrow, and one encouraging line.
 
@@ -147,8 +150,12 @@ export function spaceToolSpecs(
     posts?: ScheduledPosts;
     /** The playbook can be read but not changed (the weekly digest). */
     readOnly?: boolean;
+    /** A family space's week board, planned with save_week_plan. */
+    weeks?: FamilyWeeks;
+    timeZone?: () => Promise<string>;
   } = {},
 ) {
+  const { weeks, timeZone } = options;
   const resolve = (id?: string) => spaces.resolve(owner, id, options.threadId);
   const read = {
     name: "get_space_playbook",
@@ -157,7 +164,20 @@ export function spaceToolSpecs(
     parameters: z.object({ spaceId }),
     execute: async ({ spaceId }: { spaceId?: string }) => {
       const found = await resolve(spaceId);
-      const space = view(found);
+      const board =
+        found.kind === "family" && weeks && timeZone
+          ? await weeks.board(owner, found.id, await timeZone())
+          : undefined;
+      const space = {
+        ...view(found),
+        ...(board
+          ? {
+              // The week on the family's board; the playbook's weekPlan is an older, text-only plan.
+              thisWeek: board.week ?? "not planned yet",
+              lastWeek: board.past[0] ?? null,
+            }
+          : {}),
+      };
       // The digest runs as background work; it gets today's steps even if its routine is older.
       if (!options.readOnly) return space;
       const steps = `When running this space's ${found.kind === "family" ? "daily rundown" : "weekly digest"}, follow these steps; they replace any older steps in your task.\n${digestSteps(found.kind)}`;
@@ -166,17 +186,17 @@ export function spaceToolSpecs(
         : { ...space, weeklyDigestSteps: steps };
     },
   };
-  /** The rundown writes the week's plan; the chat agent uses update_space_playbook instead. */
+  /** The week on a family's board: the rundown plans it, and the chat plans or changes it. */
   const weekPlan = {
     name: "save_week_plan",
     description:
-      "Save a family space's plan for the week ahead (meals, grocery list, schedule, chores, ideas) in everyday words, so the person sees it on the space's Overview.",
-    parameters: z.object({ spaceId, plan: z.string().trim().min(1).max(8000) }),
-    execute: async ({ spaceId, plan }: { spaceId?: string; plan: string }) => {
+      "Save a family space's week to the board the family sees: a one-line summary, dinners (every night you plan, with a short note and one food emoji), the schedule, the grocery list by aisle, chores by person, and free-time ideas. Each section you give replaces that section of the week (ticked groceries and chore stars carry over); leave out the ones that don't change. addGroceries adds to the list. recap records how the week went.",
+    parameters: weekPlanSchema.extend({ spaceId }),
+    execute: async ({ spaceId, ...plan }: { spaceId?: string } & Record<string, unknown>) => {
       const space = await resolve(spaceId);
       if (space.kind !== "family") return { error: "Only a family space has a week plan." };
-      await spaces.update(owner, space.id, { weekPlan: plan });
-      return { saved: true };
+      if (!weeks || !timeZone) return { error: "The week board isn't available here." };
+      return weeks.save(owner, space.id, plan, await timeZone());
     },
   };
   const posts = options.posts;
@@ -244,10 +264,11 @@ export function spaceToolSpecs(
   return [
     read,
     ...postTools,
+    weekPlan,
     {
       name: "update_space_playbook",
       description:
-        "Save what you've learned into a space's playbook. Only the fields you give change; a list you give replaces the old list, so include the items to keep; null clears a value. A social media space has products, platforms, scheduler, audience, goals, baseline, pillars, plan, voice, avoid, brandFileId, brandFileName, postsPerWeek, adIdeasPerWeek, rhythmNote, organicUntil, dailyAdCeilingUsd and budgetNote. A family space has family, foodRules, favorites, dinnersPerWeek, cookingTime, weekShape, chores, routines, interests, tone, planningDay, weekPlan and notes. Fields of the other kind are ignored. Set setupDone true once setup is finished.",
+        "Save what you've learned into a space's playbook. Only the fields you give change; a list you give replaces the old list, so include the items to keep; null clears a value. A social media space has products, platforms, scheduler, audience, goals, baseline, pillars, plan, voice, avoid, brandFileId, brandFileName, postsPerWeek, adIdeasPerWeek, rhythmNote, organicUntil, dailyAdCeilingUsd and budgetNote. A family space has family, foodRules, favorites, dinnersPerWeek, cookingTime, weekShape, chores, routines, interests, tone, planningDay and notes (the week itself goes on the board with save_week_plan). Fields of the other kind are ignored. Set setupDone true once setup is finished.",
       parameters: playbookPatchSchema.extend({
         ...familyPlaybookPatchSchema.shape,
         spaceId,

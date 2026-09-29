@@ -23,6 +23,7 @@ import { commitmentInstructions, commitmentToolSpecs } from "../commitments.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
 import { hiddenMessages, withoutHidden } from "../data-controls.ts";
+import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
@@ -288,6 +289,8 @@ export class ConversationAgent extends AbstractAgent {
           threadId: input.threadId,
           routines: this.service,
           posts: this.service.spacePosts,
+          weeks: new FamilyWeeks(this.service.db),
+          timeZone: () => this.service.timeZone(this.owner),
         }),
         ...shareToolSpecs(this.service.shares, this.owner),
         ...pastChatToolSpecs(new PastChats(this.service.db), this.owner),

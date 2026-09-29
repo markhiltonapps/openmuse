@@ -10,6 +10,7 @@ import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tool
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { codeSandboxInstructions, codeSandboxToolSpecs } from "../code-sandbox.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
+import { FamilyWeeks } from "../family-weeks.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
@@ -312,6 +313,8 @@ export async function executeModelTask(
       ...spaceToolSpecs(new Spaces(service.db), owner, {
         readOnly: true,
         posts: service.spacePosts,
+        weeks: new FamilyWeeks(service.db),
+        timeZone: () => service.timeZone(owner),
       }),
     ].map(
       (spec) =>

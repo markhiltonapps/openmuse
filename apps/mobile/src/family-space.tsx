@@ -9,6 +9,7 @@ import {
   type FamilySpace,
 } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
+import { monthDay, TodayTimeline, useWeekBoard, WeekBoard } from "./family-week-ui";
 import { clockTime } from "./meal-checkins-ui";
 import { parseTime } from "./space-input";
 import {
@@ -77,6 +78,12 @@ export function FamilyOverview({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [all, setAll] = useState(false);
+  const { board, error: boardError, change } = useWeekBoard(space);
+  const week = board?.week;
+  // "Plan next week" names the week, so this week's plan on the board stays as it is.
+  const nextWeekRequest = board
+    ? `Please plan next week, the week of ${monthDay(board.nextWeek)}.`
+    : "Please plan next week.";
   const waiting = workspace.actions.filter(
     (action) =>
       action.status === "awaiting_review" &&
@@ -117,7 +124,7 @@ export function FamilyOverview({
     );
   return (
     <View style={{ gap: 26 }}>
-      <ErrorNotice error={error} />
+      <ErrorNotice error={error || boardError} />
       {!space.setupDone && (
         <Card style={{ gap: 12, backgroundColor: colors.sky, borderColor: colors.sky }}>
           <Text {...heading(3)} style={s.heading}>
@@ -144,6 +151,7 @@ export function FamilyOverview({
         <Text {...heading(3)} style={s.heading}>
           Today
         </Text>
+        {board?.current && <TodayTimeline space={space} week={board.current} today={board.today} />}
         {routine ? (
           <Card style={{ gap: 10 }}>
             <View style={[s.row, { gap: 10 }]}>
@@ -213,52 +221,75 @@ export function FamilyOverview({
         )}
       </View>
 
-      <View style={{ gap: 10 }}>
-        <Text {...heading(3)} style={s.heading}>
-          This week
-        </Text>
-        <Card style={{ gap: 10 }}>
-          {plan ? (
-            <Text numberOfLines={all ? undefined : 10} style={s.text}>
-              {plan}
-            </Text>
-          ) : (
-            <Text style={[s.text, { color: colors.mutedStrong }]}>
-              No plan yet. {agentName} writes one whenever you ask, and every {planningDay} once the
-              morning rundown is on: dinners, the grocery list, the schedule, chores and a couple of
-              ideas for free time.
-            </Text>
+      {week ? (
+        <View style={{ gap: 14 }}>
+          <WeekBoard
+            space={space}
+            agentName={agentName}
+            board={{ ...board, week }}
+            change={change}
+          />
+          <Button
+            icon={CalendarClock}
+            style={{ alignSelf: "flex-start" }}
+            onPress={() => openChat(space, nextWeekRequest)}
+          >
+            Plan next week
+          </Button>
+          {board.nextPlanned && week.weekStart === board.thisWeek && (
+            <Text style={s.muted}>Next week is planned. It shows here on Saturday.</Text>
           )}
-          {!!plan && long && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setAll(!all)}
-              style={{ alignSelf: "flex-end", minHeight: 32, justifyContent: "center" }}
-            >
-              <Text style={[s.muted, { color: colors.blueDark, fontWeight: "600" }]}>
-                {all ? "Show less" : "Show the whole plan"}
+        </View>
+      ) : (
+        <View style={{ gap: 10 }}>
+          <Text {...heading(3)} style={s.heading}>
+            This week
+          </Text>
+          <Card style={{ gap: 10 }}>
+            {plan ? (
+              <Text numberOfLines={all ? undefined : 10} style={s.text}>
+                {plan}
               </Text>
-            </Pressable>
-          )}
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            <Button
-              small
-              primary={space.setupDone && !plan}
-              icon={CalendarClock}
-              onPress={() => openChat(space, WEEK_REQUEST)}
-            >
-              {!space.setupDone
-                ? "Set up the basics and plan the week"
-                : plan
-                  ? "Plan next week"
-                  : "Plan the week"}
-            </Button>
-            <Button small icon={ShoppingCart} onPress={() => openChat(space, GROCERY_REQUEST)}>
-              Grocery list
-            </Button>
-          </View>
-        </Card>
-      </View>
+            ) : (
+              <Text style={[s.text, { color: colors.mutedStrong }]}>
+                No plan yet. {agentName} writes one whenever you ask, and every {planningDay} once
+                the morning rundown is on: dinners, the grocery list, the schedule, chores and a
+                couple of ideas for free time.
+              </Text>
+            )}
+            {!!plan && long && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setAll(!all)}
+                style={{ alignSelf: "flex-end", minHeight: 32, justifyContent: "center" }}
+              >
+                <Text style={[s.muted, { color: colors.blueDark, fontWeight: "600" }]}>
+                  {all ? "Show less" : "Show the whole plan"}
+                </Text>
+              </Pressable>
+            )}
+            <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+              <Button
+                small
+                primary={space.setupDone && !plan}
+                icon={CalendarClock}
+                onPress={() =>
+                  openChat(space, space.setupDone && plan ? nextWeekRequest : WEEK_REQUEST)
+                }
+              >
+                {!space.setupDone
+                  ? "Set up the basics and plan the week"
+                  : plan
+                    ? "Plan next week"
+                    : "Plan the week"}
+              </Button>
+              <Button small icon={ShoppingCart} onPress={() => openChat(space, GROCERY_REQUEST)}>
+                Grocery list
+              </Button>
+            </View>
+          </Card>
+        </View>
+      )}
 
       <View style={{ gap: 10 }}>
         <View style={[s.row, { gap: 8 }]}>
