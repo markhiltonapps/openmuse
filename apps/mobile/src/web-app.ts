@@ -122,14 +122,92 @@ function recognizer(): (new () => Recognition) | undefined {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition) as (new () => Recognition) | undefined;
 }
 export const dictationAvailable = () => Boolean(recognizer());
+/** How loud a microphone has to get (RMS of its samples) to count as hearing someone talk. */
+export const SPEAKING_LEVEL = 0.02;
+/** Reads how loud a stream is right now, from 0 to about 1. */
+export function openMeter(stream: MediaStream) {
+  const Context =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Context) return { read: () => 0, close: () => undefined };
+  const context = new Context();
+  void context.resume().catch(() => undefined);
+  const source = context.createMediaStreamSource(stream);
+  const analyser = context.createAnalyser();
+  // About 43 ms of sound per read, so reads every 40 ms miss nothing.
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  return {
+    read() {
+      analyser.getFloatTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) sum += sample * sample;
+      return Math.sqrt(sum / samples.length);
+    },
+    close() {
+      source.disconnect();
+      void context.close().catch(() => undefined);
+    },
+  };
+}
+/**
+ * Every microphone at once, with how loud each is about ten times a second, so the person can
+ * see which one hears them. "" is whatever the computer is set to use. Stop it when done.
+ */
+export async function watchMicrophones(onLevels: (levels: Record<string, number>) => void) {
+  const mics = await microphones(true);
+  const open: { id: string; stream: MediaStream; meter: ReturnType<typeof openMeter> }[] = [];
+  let stopped = false;
+  await Promise.all(
+    [{ id: "" }, ...mics].map(async ({ id }) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: id ? { deviceId: { exact: id } } : true,
+        });
+        if (stopped) for (const track of stream.getTracks()) track.stop();
+        else open.push({ id, stream, meter: openMeter(stream) });
+      } catch {
+        // A microphone that can't be opened (in use, unplugged) just shows no sound.
+      }
+    }),
+  );
+  const timer = setInterval(() => {
+    onLevels(Object.fromEntries(open.map(({ id, meter }) => [id, meter.read()])));
+  }, 100);
+  return {
+    mics,
+    stop() {
+      stopped = true;
+      clearInterval(timer);
+      for (const { stream, meter } of open.splice(0)) {
+        meter.close();
+        for (const track of stream.getTracks()) track.stop();
+      }
+    },
+  };
+}
+/** The name the computer gives a microphone; for "" the one it uses by default. */
+export async function microphoneName(id?: string) {
+  if (!web() || !navigator.mediaDevices?.enumerateDevices) return undefined;
+  const devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+    (device) => device.kind === "audioinput",
+  );
+  const found = devices.find((device) => device.deviceId === (id || "default")) ?? devices[0];
+  return found?.label.replace(/^Default - /, "").trim() || undefined;
+}
+
 /**
  * Starts dictation and hands over the whole phrase once, when the person stops talking.
+ * With `nothingHeard`, it reports when listening ended with no words: whether the microphone
+ * picked up any sound at all tells a silent microphone from a browser listening to another one.
  * Returns a function that stops listening.
  */
 export function dictate(
   onText: (text: string) => void,
   onEnd: (error?: string) => void,
   microphone?: string,
+  nothingHeard?: (sound: boolean) => void,
 ): () => void {
   const Recognizer = recognizer();
   if (!Recognizer) {
@@ -145,12 +223,26 @@ export function dictate(
   let track: MediaStreamTrack | undefined;
   let finished = false;
   let stopped = false;
+  // How loud the microphone got while listening, when asked to report silence.
+  let peak = 0;
+  let metering:
+    | { stream: MediaStream; meter: ReturnType<typeof openMeter>; timer: number }
+    | undefined;
+  const stopMetering = () => {
+    if (!metering) return;
+    clearInterval(metering.timer);
+    metering.meter.close();
+    for (const t of metering.stream.getTracks()) t.stop();
+    metering = undefined;
+  };
   const finish = () => {
     if (finished) return;
     finished = true;
+    stopMetering();
     track?.stop();
     if (transcript) onText(transcript);
     onEnd(error);
+    if (nothingHeard && !transcript && !stopped && !error) nothingHeard(peak >= SPEAKING_LEVEL);
   };
   recognition.onresult = (event) => {
     transcript = mergeTranscripts(
@@ -181,6 +273,23 @@ export function dictate(
       } catch {
         track = undefined;
       }
+    if (nothingHeard && navigator.mediaDevices?.getUserMedia)
+      try {
+        const stream = track
+          ? new MediaStream([track.clone()])
+          : await navigator.mediaDevices.getUserMedia({ audio: true });
+        const meter = openMeter(stream);
+        metering = {
+          stream,
+          meter,
+          timer: window.setInterval(() => {
+            peak = Math.max(peak, meter.read());
+          }, 40),
+        };
+      } catch {
+        metering = undefined;
+      }
+    if (finished) return stopMetering();
     if (stopped) return finish();
     try {
       if (track) recognition.start(track);

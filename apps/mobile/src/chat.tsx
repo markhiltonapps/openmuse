@@ -52,6 +52,7 @@ import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
+import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { SandboxCard } from "./sandbox-ui";
@@ -298,6 +299,7 @@ export function ChatScreen({
   const toggleDictation = () => {
     if (listening) return stopListening.current?.();
     setListening(true);
+    clearSilence();
     stopListening.current = dictate(
       (text) => setDraft((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text)),
       (message) => {
@@ -305,6 +307,7 @@ export function ChatScreen({
         if (message) setError(message);
       },
       voiceSettings().microphone,
+      reportSilence,
     );
   };
   // Voice mode: listen, send what was said, read the reply aloud, then listen again.
@@ -1237,6 +1240,7 @@ export function ChatScreen({
             </Button>
           </Card>
         )}
+        <MicHelp />
         <View
           style={{
             backgroundColor: colors.surface,
@@ -1447,26 +1451,32 @@ export function ChatScreen({
               </Pressable>
             )}
             {dictationAvailable() && !replying && !voiceMode && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
-                accessibilityState={{ selected: listening }}
-                onPress={toggleDictation}
-                style={({ pressed }) => ({
-                  width: 44,
-                  height: 44,
-                  borderRadius: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: listening
-                    ? colors.lavender
-                    : pressed
-                      ? colors.sky
-                      : "transparent",
-                })}
+              // The mic and its microphone choice sit together, like one control.
+              <View
+                style={{ flexDirection: "row", borderRadius: 22, backgroundColor: colors.subtle }}
               >
-                <Mic size={22} color={listening ? colors.text : colors.muted} />
-              </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
+                  accessibilityState={{ selected: listening }}
+                  onPress={toggleDictation}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    borderRadius: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: listening
+                      ? colors.lavender
+                      : pressed
+                        ? colors.sky
+                        : "transparent",
+                  })}
+                >
+                  <Mic size={22} color={listening ? colors.text : colors.muted} />
+                </Pressable>
+                <MicChooserButton />
+              </View>
             )}
             <Pressable
               accessibilityRole="button"
