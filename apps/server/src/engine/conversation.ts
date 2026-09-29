@@ -34,6 +34,8 @@ import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
 import { richCardInstructions, richCardToolSpecs } from "../rich-cards.ts";
 import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
+import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
+import { Spaces } from "../spaces.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
@@ -276,9 +278,14 @@ export class ConversationAgent extends AbstractAgent {
       }),
     ];
     const apps = this.service.apps;
+    const spaces = new Spaces(this.service.db);
     tools.push(
       ...[
         ...fileToolSpecs(this.service.files, this.owner, this.service.look),
+        ...spaceToolSpecs(spaces, this.owner, {
+          threadId: input.threadId,
+          routines: this.service,
+        }),
         ...shareToolSpecs(this.service.shares, this.owner),
         ...miniAppToolSpecs(this.service.miniApps, this.owner),
         ...peopleToolSpecs(this.service.people, this.owner),
@@ -594,6 +601,7 @@ export class ConversationAgent extends AbstractAgent {
         browserToolInstructions +
         richCardInstructions +
         miniAppInstructions +
+        spaceInstructions +
         (logins?.available ? signInInstructions : "") +
         (mailAlerts ? mailAlertInstructions : "") +
         (this.service.appEvents?.available && mailAlerts ? appEventInstructions : "") +
@@ -618,7 +626,10 @@ export class ConversationAgent extends AbstractAgent {
           .get<{ name?: string; tone?: string }>(this.owner, "agent-settings", "identity")
           .catch(() => null),
         this.service.areas?.get(this.owner).catch(() => undefined),
-      ]).then(async ([memories, timeZone, people, coming, hidden, identity, area]) => {
+        spaces.byThread(this.owner, input.threadId).catch(() => undefined),
+      ]).then(async ([memories, timeZone, people, coming, hidden, identity, area, space]) => {
+        if (space && !space.threadStarted)
+          void spaces.markStarted(this.owner, space.id).catch(() => undefined);
         // Messages the person deleted are gone from what the agent sees, too.
         const visible = withoutHidden(input.messages, new Set(hidden));
         const compacted = await this.service.chats
@@ -633,6 +644,7 @@ export class ConversationAgent extends AbstractAgent {
             tools: input.tools.filter((t) => t.name === "open_workspace"),
             context: [
               ...input.context,
+              ...(space ? spaceContext(space) : []),
               {
                 description: "Who you are",
                 value: `Your name is ${identity?.name?.trim() || "Neddy"}. Your tone is ${identity?.tone?.trim() || "warm"}.`,

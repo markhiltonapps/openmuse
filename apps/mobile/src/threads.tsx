@@ -4,6 +4,7 @@ import {
   CalendarDays,
   FileText,
   LifeBuoy,
+  Megaphone,
   MessageCircle,
   Monitor,
   Plus,
@@ -194,7 +195,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
-  function go(section: "calendar" | "files" | "apps") {
+  function go(section: "calendar" | "files" | "apps" | "spaces") {
     onClose();
     navigate(section);
   }
@@ -224,6 +225,12 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                 select({ id: mainId, existing: true });
                 onClose();
               }}
+            />
+            <LinkRow
+              icon={Megaphone}
+              title="Spaces"
+              detail="Your social media, run for you"
+              onPress={() => go("spaces")}
             />
             {confirmDelete("main", "Delete everything in your main chat and start it fresh?") ?? (
               <Button

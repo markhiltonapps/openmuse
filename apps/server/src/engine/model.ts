@@ -12,6 +12,8 @@ import { codeSandboxInstructions, codeSandboxToolSpecs } from "../code-sandbox.t
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
+import { spaceToolSpecs } from "../space-tools.ts";
+import { Spaces } from "../spaces.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
@@ -303,7 +305,10 @@ export async function executeModelTask(
     ),
   ];
   tools.push(
-    ...fileToolSpecs(service.files, owner, service.look).map(
+    ...[
+      ...fileToolSpecs(service.files, owner, service.look),
+      ...spaceToolSpecs(new Spaces(service.db), owner, { readOnly: true }),
+    ].map(
       (spec) =>
         tool(
           spec.name,

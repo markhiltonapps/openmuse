@@ -53,6 +53,8 @@ import { ReminderService } from "./reminders.ts";
 import { nominatim } from "./rich-cards.ts";
 import { Logins } from "./sign-in.ts";
 import { cleanCode, runApprovedSignIn } from "./sign-in-tools.ts";
+import { spaceRoutes } from "./space-routes.ts";
+import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
@@ -581,6 +583,7 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  app.route("/api/spaces", spaceRoutes(new Spaces(db), agent));
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {

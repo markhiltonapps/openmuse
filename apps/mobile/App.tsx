@@ -63,6 +63,7 @@ import {
   saveSession,
 } from "./src/session-store";
 import { SignInCard } from "./src/sign-in";
+import { SpaceChip, SpacesScreen } from "./src/spaces";
 import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
@@ -96,6 +97,7 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   calendar: { title: "Calendar", subtitle: "Time for what matters." },
   browser: { title: "Browser", subtitle: "Your connected browsing sessions." },
   files: { title: "Files & media", subtitle: "Photos, documents, forms and filled copies." },
+  spaces: { title: "Spaces", subtitle: "Areas of your life your agent runs for you." },
 };
 export default function App() {
   const [token, setToken] = useState("");
@@ -377,7 +379,9 @@ function WorkspaceShell({
                   ? IdeasScreen
                   : section === "goals"
                     ? GoalsScreen
-                    : AppsScreen;
+                    : section === "spaces"
+                      ? SpacesScreen
+                      : AppsScreen;
   const utility = ["mail", "calendar", "browser"].includes(section);
   const chat = section === "chat";
   const headerHeight = chat ? (desktop ? 150 : 128) : desktop ? 158 : 132;
@@ -549,9 +553,11 @@ function WorkspaceShell({
                     <ActivityIndicator color={colors.blueDark} />
                   ) : null}
                   {!threadsLoading && selection.id !== mainId && (
-                    <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
-                      Side chat
-                    </Text>
+                    <SpaceChip threadId={selection.id}>
+                      <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
+                        Side chat
+                      </Text>
+                    </SpaceChip>
                   )}
                   {visited.map((thread) => (
                     <View
