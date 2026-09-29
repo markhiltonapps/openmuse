@@ -18,13 +18,20 @@ const KEEP_ON_RESET = [
   "events",
   "imports",
   "credentials",
+  "mcp-servers",
   "push-subscriptions",
   "app-connector",
   "agent-inbox",
   "usage",
 ];
 /** Never exported: sign-in secrets and internal bookkeeping. */
-const NOT_EXPORTED = ["credentials", "push-subscriptions", "app-connector", "computer-state"];
+const NOT_EXPORTED = [
+  "credentials",
+  "mcp-servers",
+  "push-subscriptions",
+  "app-connector",
+  "computer-state",
+];
 /** Files larger than this in total are listed in the export but not included. */
 const MAX_EXPORT_BYTES = 200 * 1024 * 1024;
 

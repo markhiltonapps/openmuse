@@ -49,6 +49,7 @@ import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
 import { HelpCard } from "./help-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
+import { OwnAppsCard } from "./own-apps";
 import { PeopleNotesCard } from "./people-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { PasswordsCard } from "./sign-in-ui";
@@ -2138,6 +2139,7 @@ export function AppsScreen() {
             placeholder="Search connectors"
           />
           <ConnectionsScreen query={query} />
+          {!query && <OwnAppsCard />}
           <Text style={s.heading}>On your computer</Text>
           <Card style={{ paddingVertical: 3, backgroundColor: colors.card }}>
             {shortcuts

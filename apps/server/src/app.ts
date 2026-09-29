@@ -41,6 +41,7 @@ import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
 import { backgroundFailure } from "./log.ts";
 import { MAIL_APPS, MailAlerts } from "./mail-alerts.ts";
+import { CombinedApps, McpApps, signedInPage, signInFailedPage } from "./mcp-apps.ts";
 import { MealCheckIns } from "./meal-checkins.ts";
 import {
   chatgptMessages,
@@ -70,6 +71,8 @@ export async function createApp(
   options: {
     docker?: DockerRunner;
     apps?: AppConnector;
+    /** The person's own apps (MCP servers); tests pass one that may reach a local server. */
+    mcp?: McpApps;
     mailer?: Mailer;
     search?: WebSearch;
     intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread"> & ThreadStore;
@@ -105,6 +108,10 @@ export async function createApp(
     );
     apps = composio;
   }
+  // The person's own apps join Composio's for the agent, approvals and the Apps list.
+  const mcp = options.mcp ?? new McpApps(db, config);
+  const connected: AppConnector | undefined =
+    apps || options.mcp || config.encryptionKey ? new CombinedApps(apps, mcp) : undefined;
   const spending = new SpendingService(db);
   const logins = new Logins(db, config.encryptionKey);
   const actions = new ActionService(db, {
@@ -131,8 +138,8 @@ export async function createApp(
         return runApprovedSignIn(browser, logins, owner, input.data, approval?.code);
       if (input.kind !== "app.action")
         return workspace.execute(owner, input, connectionId, targetVersion);
-      if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
-      const data = await apps.execute(owner, input.data.tool, input.data.arguments);
+      if (!connected) throw new AppError("Connected apps are not configured on this server", 409);
+      const data = await connected.execute(owner, input.data.tool, input.data.arguments);
       // A meeting added or moved shows on the Feed's day card straight away.
       if (/calendar|outlook/i.test(input.data.app)) calendarToday.forget(owner);
       if (isPurchase(input.data.tool) && input.data.amountUsd)
@@ -146,7 +153,16 @@ export async function createApp(
   });
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
-  const agent = new AgentService(db, config, workspace, files, actions, browser, computer, apps);
+  const agent = new AgentService(
+    db,
+    config,
+    workspace,
+    files,
+    actions,
+    browser,
+    computer,
+    connected,
+  );
   const push = await PushService.create(db, config);
   agent.push = push;
   agent.spending = spending;
@@ -249,7 +265,7 @@ export async function createApp(
       }),
   );
   agent.reminders = reminders;
-  const spacePosts = new ScheduledPosts(db, apps, (owner, title, body, key) =>
+  const spacePosts = new ScheduledPosts(db, connected, (owner, title, body, key) =>
     agent.notify(owner, title, body, undefined, key),
   );
   agent.spacePosts = spacePosts;
@@ -416,6 +432,33 @@ export async function createApp(
       "<h1>Google is connected</h1><p>Return to Neato_Muse and refresh your workspace.</p>",
     );
   });
+  // The person's own apps send them back here after they sign in on the app's own page.
+  app.get("/api/mcp/callback", async (c) => {
+    const state = c.req.query("state"),
+      code = c.req.query("code");
+    if (c.req.query("error") || !state || !code)
+      return c.html(
+        signInFailedPage(
+          (c.req.query("error_description") ?? "The sign-in was cancelled.").slice(0, 200),
+        ),
+        400,
+      );
+    try {
+      return c.html(signedInPage((await mcp.finish(state, code)).name));
+    } catch (error) {
+      console.warn(
+        `[OpenMuse] Own app sign-in failed: ${error instanceof Error ? error.message : error}`,
+      );
+      return c.html(
+        signInFailedPage(
+          error instanceof AppError ? error.message : "The app didn't accept the sign-in.",
+        ),
+        400,
+      );
+    }
+  });
+  // Sign-in servers that take a published client description read it here.
+  app.get("/api/mcp/client", (c) => c.json(mcp.clientDocument()));
   // 3D emoji pictures, shared by everyone and loaded by <img> without a sign-in header.
   app.get("/api/emoji/:code", async (c) => {
     const bytes = await emojiPicture(c.req.param("code").replace(/\.webp$/, ""));
@@ -828,10 +871,22 @@ export async function createApp(
   });
   app.get("/api/apps", async (c) =>
     c.json(
-      apps
-        ? { configured: true, apps: await apps.connections(c.get("owner")) }
+      connected
+        ? { configured: true, apps: await connected.connections(c.get("owner")) }
         : { configured: false, apps: [] },
     ),
+  );
+  // "Your own apps": add one by its address, sign in or add its key, check it again, remove it.
+  app.get("/api/mcp", async (c) => c.json({ apps: await mcp.list(c.get("owner")) }));
+  app.post("/api/mcp", async (c) => c.json(await mcp.add(c.get("owner"), await c.req.json()), 201));
+  app.post("/api/mcp/:id/connect", async (c) =>
+    c.json(await mcp.connect(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/mcp/:id/key", async (c) =>
+    c.json(await mcp.setKey(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.post("/api/mcp/:id/delete", async (c) =>
+    c.json(await mcp.remove(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/apps/directory", async (c) => {
     if (!apps) return c.json({ configured: false, apps: [] });
@@ -841,21 +896,21 @@ export async function createApp(
     });
   });
   app.post("/api/apps/disconnect", async (c) => {
-    if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
+    if (!connected) throw new AppError("Connected apps are not configured on this server", 409);
     const { app: slug } = z
       .object({ app: z.string().trim().min(1).max(100) })
       .parse(await c.req.json());
-    await apps.disconnect(c.get("owner"), slug);
+    await connected.disconnect(c.get("owner"), slug);
     calendarToday.forget(c.get("owner"));
     return c.json({ ok: true });
   });
   app.post("/api/apps/connect", async (c) => {
-    if (!apps) throw new AppError("Connected apps are not configured on this server", 409);
+    if (!connected) throw new AppError("Connected apps are not configured on this server", 409);
     const { app: slug } = z
       .object({ app: z.string().trim().min(1).max(100) })
       .parse(await c.req.json());
     calendarToday.forget(c.get("owner"));
-    return c.json(await apps.connect(c.get("owner"), slug));
+    return c.json(await connected.connect(c.get("owner"), slug));
   });
   app.get("/api/drafts", async (c) => c.json(await db.list(c.get("owner"), "drafts")));
   app.post("/api/drafts", async (c) => {

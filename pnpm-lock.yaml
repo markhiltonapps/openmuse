@@ -26,6 +26,9 @@ importers:
       '@lobehub/fluent-emoji-3d':
         specifier: 1.1.0
         version: 1.1.0
+      '@modelcontextprotocol/sdk':
+        specifier: 1.30.0
+        version: 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@8.1.1)(zod@4.6.5)
       '@tanstack/ai':
         specifier: ^0.59.0
         version: 0.59.0(@opentelemetry/api@1.9.1)(zod@4.6.5)

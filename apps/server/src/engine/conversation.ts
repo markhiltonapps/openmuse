@@ -27,6 +27,7 @@ import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
+import { ownAppToolSpecs } from "../mcp-apps.ts";
 import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
 import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
@@ -446,25 +447,28 @@ export class ConversationAgent extends AbstractAgent {
       );
     if (apps)
       tools.push(
-        ...appToolSpecs(
-          apps,
-          this.owner,
-          (data) =>
-            this.service.actions.propose(
-              this.owner,
-              { kind: "app.action", data },
-              key("app", data),
-            ),
-          this.service.spending,
-          this.service.approvals && {
-            allowed: (tool) =>
-              this.service.approvals?.allows(this.owner, tool) ?? Promise.resolve(undefined),
-            blocked: (tool) =>
-              this.service.approvals?.blocked(this.owner, tool) ?? Promise.resolve(undefined),
-            approve: (proposal) =>
-              this.service.actions.decide(this.owner, proposal.id, proposal.hash, "approve"),
-          },
-        ).map((spec) =>
+        ...[
+          ...appToolSpecs(
+            apps,
+            this.owner,
+            (data) =>
+              this.service.actions.propose(
+                this.owner,
+                { kind: "app.action", data },
+                key("app", data),
+              ),
+            this.service.spending,
+            this.service.approvals && {
+              allowed: (tool) =>
+                this.service.approvals?.allows(this.owner, tool) ?? Promise.resolve(undefined),
+              blocked: (tool) =>
+                this.service.approvals?.blocked(this.owner, tool) ?? Promise.resolve(undefined),
+              approve: (proposal) =>
+                this.service.actions.decide(this.owner, proposal.id, proposal.hash, "approve"),
+            },
+          ),
+          ...ownAppToolSpecs(apps, this.owner),
+        ].map((spec) =>
           defineTool({
             ...spec,
             execute: async (args: unknown) => {
