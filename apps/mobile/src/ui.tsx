@@ -55,6 +55,8 @@ export const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    // A long label wraps inside the button instead of running off the screen.
+    maxWidth: "100%",
     gap: 8,
     paddingHorizontal: 17,
     minHeight: 42,
@@ -63,7 +65,7 @@ export const s = StyleSheet.create({
   },
   primary: { backgroundColor: colors.blue },
   secondary: { backgroundColor: colors.subtle },
-  buttonText: { fontSize: 14, fontWeight: "600" },
+  buttonText: { fontSize: 14, fontWeight: "600", flexShrink: 1 },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 4,

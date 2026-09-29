@@ -811,7 +811,7 @@ export function ChatScreen({
                 maxWidth: 350,
               }}
             >
-              {space ? `Your ${space.name} space.` : "A little help. A lot more room for life."}
+              {space ? space.name : "A little help. A lot more room for life."}
             </Text>
             <Text style={[s.muted, { maxWidth: 320, textAlign: "center", lineHeight: 23 }]}>
               {space

@@ -192,7 +192,8 @@ export function FamilyOverview({
           <Card style={{ gap: 10 }}>
             <Text style={[s.text, { color: colors.mutedStrong }]}>
               A short note each morning: today’s schedule, dinner tonight and any prep, chores due,
-              and one thing to get ready for tomorrow.
+              and one thing to get ready for tomorrow. It starts every day at 6:45 AM; change that
+              in the Playbook.
             </Text>
             <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
               <Button
@@ -202,7 +203,7 @@ export function FamilyOverview({
                 busy={busy === "rundown"}
                 onPress={() => void rundownOn()}
               >
-                Turn on the morning rundown (every day, 6:45 AM)
+                Turn on the morning rundown
               </Button>
               <Button small onPress={() => openChat(space, TODAY_REQUEST)}>
                 What’s on today?
@@ -634,7 +635,7 @@ function Tone({
           </Button>
         ))}
       </View>
-      <Text style={s.small}>{chosen?.about}. Always with some understanding for a busy week.</Text>
+      <Text style={s.muted}>{chosen?.about}. Always with some understanding for a busy week.</Text>
     </Section>
   );
 }
