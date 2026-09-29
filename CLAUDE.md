@@ -62,3 +62,21 @@ Time Log — <Project Name>
 |------------|------------------------------------------------------------------|-------|
 | YYYY-MM-DD | Short, specific description of the day's work                    | 0     |
 ```
+
+## Lessons learned
+
+- **Deploys:** a push to `claude/deploy-openmuse-repo-oza7s9` deploys to Railway straight away.
+  Commit locally and hold pushes until the user says "push it".
+- **New UI goes through the Design division** before it's committed: visual (UI Designer),
+  usability (UX Researcher) and copy reviewers, looping until all three sign off.
+- **Layout width:** the app's content column is capped at 760px (`apps/mobile/App.tsx`), so a
+  layout that changes with width should measure its own container (`onLayout`), not the window.
+- **Local dates:** never use `toISOString().slice(0, 10)` for a day in the person's calendar; it
+  gives UTC's day, which is a day off in some time zones. Build it from the local date parts.
+- **Charts:** `react-native-svg` text falls back to a serif font on the web; give it the app's
+  font family.
+- **Shell:** `pkill -f <pattern>` (or `pgrep | xargs kill`) inside a longer command can kill that
+  command's own shell when the pattern appears in it. Find processes with
+  `ps aux | grep "[p]attern"` in a separate command.
+- **Checks before a commit:** lint (Biome), `pnpm typecheck`, the worker's `tsc --noEmit`, and
+  `pnpm test` (runs with tsx).

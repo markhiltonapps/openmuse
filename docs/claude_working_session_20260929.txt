@@ -1,0 +1,71 @@
+Claude working session — 2026-09-29
+===================================
+Times are UTC. Branch: claude/deploy-openmuse-repo-oza7s9 (a push auto-deploys to Railway).
+
+WHAT CHANGED
+------------
+Pushed and live (on GitHub, deployed):
+- 540267d, f13176b, ccdebae, e904538 (00:45–01:26): social media Spaces — the agent runs a
+  person's social media as an expert manager, with a built-in post scheduler (no scheduler app
+  needed), and spaces started earlier brought up to date.
+- b882d0f (15:20): sign-in gets a "Request access" button, so new people aren't left waiting.
+- f5fe9b5, b688079 (15:50–16:15): a Family planner space for busy parents; its rundown button
+  fits a phone and long button labels wrap.
+- 077125a (19:03): "Connect your own app" by its MCP address (sign-in or key, private
+  addresses blocked, tools usable by the agent).
+- e09493c (19:42): searchable history of past chats imported from ChatGPT and Claude exports,
+  plus Claude memory import.
+
+Committed locally, NOT pushed yet (waiting for "push it"):
+- ddc5336: a microphone picker right next to the mic, with live level bars, and a note when the
+  mic heard nothing or heard sound but no words.
+- ec12c1b: the family's week as a board (dinners, groceries to tick off and share, chore stars,
+  ideas, today's timeline) and an "Our weeks" tab to look back, reuse a grocery list or plan
+  next week like a past one.
+- 798712d: the social media dashboard.
+  - Overview: this week's posts on a calendar (posted / scheduled / waiting for your OK /
+    didn't go out / cancelled); each post opens a sheet with its real caption and pictures and
+    the right actions (approve, don't post, cancel, ask the agent to change it or try again,
+    reconnect the app). Posts that didn't go out wait in Needs you. "After this week" and
+    "Last week" lists. The 90-day plan: week N of 13 and each aim's real number against its
+    target.
+  - Results tab: people who saw the posts each week (number, trend, line chart), where they
+    saw them (per platform), what competitors posted and the chance it leaves, past weeks with
+    a detail sheet, and empty states that say what to do next.
+  - Server: the weekly digest saves each week's numbers with a new save_week_results tool, only
+    from the connected apps' own numbers (never estimated). A plan's 90 days start with a new
+    plan (newPlan), not an edit, and restart once the 90 days are over. A failed post can be
+    dismissed.
+  - Reviewed by the Design division (visual, usability, copy) over four rounds until all three
+    signed off.
+- d5b85c0: CLAUDE.md with the working guidelines (ask, back up first, daily sessions, time log).
+
+TEST RESULTS
+------------
+- Full suite (lint, typecheck, worker typecheck, tests): 393 passed, 0 failed.
+- New tests: tests/social-weeks.test.ts (3 tests: saving and merging results, the tool only for
+  social spaces, the plan's 90-day rules, the Results route); tests/space-posts.test.ts (a failed
+  post can be dismissed).
+- Checked in a browser (local build with sample data) at phone 360/390 and desktop 1280, light
+  and dark: calendar, post sheet, day list, approve with its confirmation, Results, week sheet,
+  empty states.
+
+KNOWN ISSUES
+------------
+- The calendar groups posts by the device's time zone; the digest uses the agent's. Near
+  midnight while travelling, a post can show on the neighbouring day (same as the family board).
+- save_week_results can't check which apps are connected; the "only real numbers" rule is in
+  the agent's instructions, not enforced in code.
+- Posts queued in a scheduler app (Postiz, Buffer, Hootsuite) don't appear on the calendar; the
+  empty calendar says so and offers to ask the agent what's scheduled.
+- Plans written before this change have no start date; their 90 days start on their next edit.
+
+PENDING
+-------
+- Push the 4 local commits (ddc5336, ec12c1b, 798712d, d5b85c0) when you say "push it"; then
+  confirm the Railway deploy and logs.
+- The e09493c deploy was seen "deploying" but its final success wasn't re-checked.
+- Railway staged change ba13b23c is waiting for you to click Deploy in Railway.
+- Time log (docs/time_log.txt): waiting for today's hours from you.
+- Backups of today's in-progress work are in _backups/ (kept out of git); they can be deleted
+  once the commits are pushed.
