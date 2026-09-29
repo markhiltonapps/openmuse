@@ -1,0 +1,6 @@
+Time Log — Neato_Muse
+=====================================================
+
+| Date       | Summary                                                          | Hours |
+|------------|------------------------------------------------------------------|-------|
+| 2026-09-29 | Built and shipped: social media Spaces (agent as social media manager, built-in post scheduler); Request access button on sign-in; Family planner space; connect-your-own-app over MCP (sign-in or key, private addresses blocked); searchable ChatGPT/Claude chat history and Claude memory import; mic picker with live levels and no-sound help; family week board with "Our weeks" history; social media dashboard (week calendar with approve/cancel/retry, 90-day plan progress, Results tab with weekly reach chart, platforms, competitors, past weeks). Four Design division review rounds (visual, usability, copy) to sign-off; 393 tests passing; browser-tested at phone and desktop sizes in light and dark; deployed to Railway. Added CLAUDE.md guidelines and daily session notes. | 8     |
