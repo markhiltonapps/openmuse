@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { createApp } from "../apps/server/src/app.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
+import { ScheduledPosts } from "../apps/server/src/space-posts.ts";
 import { spaceRoutes } from "../apps/server/src/space-routes.ts";
 import { spaceContext, spaceToolSpecs } from "../apps/server/src/space-tools.ts";
 import { digestPrompt, Spaces } from "../apps/server/src/spaces.ts";
@@ -206,7 +207,10 @@ test("the spaces API lists, creates, edits and removes a person's spaces", async
     c.set("owner", "hal");
     await next();
   });
-  api.route("/api/spaces", spaceRoutes(new Spaces(db), server.agent));
+  api.route(
+    "/api/spaces",
+    spaceRoutes(new Spaces(db), server.agent, new ScheduledPosts(db, undefined, async () => {})),
+  );
   const call = async (path: string, body?: unknown) => {
     const response = await api.request(path, {
       method: body === undefined ? "GET" : "POST",

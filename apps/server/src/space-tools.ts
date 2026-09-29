@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { playbookPatchSchema, type Space } from "../../../packages/domain/src/spaces.ts";
+import { type ScheduledPosts, schedulePostSchema } from "./space-posts.ts";
 import type { RoutineCalls, Spaces } from "./spaces.ts";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -29,7 +30,7 @@ Setting up (while setupDone is false). Ask one short question at a time and skip
 1. Brand: ask whether they have a brand guide or a website. For a file, find it with list_files and read all of it with read_file; for a website, read it with browse_web. They can also attach a file with + in this chat; it lands in Files. If they have neither, ask what they sell, who buys it and where (local or online), then offer two or three short sample voices to pick from. Take their products and services, how they sound, and every rule about what never to say or show (claims, names that must stay private, banned words, image rules). Save products (name and one line each), voice and the never-do list with update_space_playbook, with brandFileId and brandFileName for a file.
 2. Products: show the list and ask which ones they want to promote here. Save those.
 3. Competitors: for each product, use search_web to find 3 to 5 current, direct competitors that sell to the same buyer. Save them per product, show them briefly, and invite the person to change them. If web search isn't available, ask them to name two or three businesses they compete with.
-4. Platforms: recommend one or two for the people who buy from them, with a one-line reason, and let them change it. Check list_connected_apps and offer to connect the most important one now with connect_app; the rest can wait. If they have no account yet or connecting fails, carry on: drafts don't need a connection. Also look for a connected scheduler app (Postiz, Buffer, Hootsuite): if there is one, save it as scheduler and say in one line that approved posts will be queued there to go out on their day, even when you're not chatting. If there isn't, say that each post goes out when they approve it, and that a scheduler such as Postiz can be connected later in Apps.
+4. Platforms: recommend one or two for the people who buy from them, with a one-line reason, and let them change it. Check list_connected_apps and offer to connect the most important one now with connect_app; the rest can wait. If they have no account yet or connecting fails, carry on: drafts don't need a connection. Also look for a connected scheduler app (Postiz, Buffer, Hootsuite): if there is one, save it as scheduler and say in one line that approved posts will be queued there to go out on their day, even when you're not chatting. If there isn't, say that this app schedules posts itself: they approve each post ahead of time and it goes out on its day.
 5. How often to post: if the person doesn't know, recommend a starting plan and say why in two sentences. Start light, since they approve every post: 3 posts a week in total (on the most important platform, or split across two), with a short video when they can, and suggest more once they're comfortable. If they want ads, 2 ad ideas a week once ads start. Save postsPerWeek (the weekly total), adIdeasPerWeek and rhythmNote (how the posts split and why).
 6. Money: ask whether they'd like to try paid ads later; no is a fine answer. If no, save adIdeasPerWeek 0 and leave the daily limit empty. If yes, suggest free posts only for a week or two first, so there's something proven to promote. Suggest a small starting daily limit, such as $5 to $10, and always say what it comes to in a month (the daily limit times 30). Save only an amount they clearly agree to: organicUntil (a date), dailyAdCeilingUsd (never go over it) and budgetNote.
 7. Explain the weekly digest in one line (a weekly roundup: what competitors posted, how their posts did, and next week's drafts waiting for their OK), then offer it (Monday 8:45 AM by default) and turn it on with set_space_digest if they agree.
@@ -38,7 +39,7 @@ Setting up (while setupDone is false). Ask one short question at a time and skip
 Always, in this space:
 - Follow the playbook's voice and never-do list exactly. Never invent a statistic, customer, quote or testimonial; label anything unreleased as coming soon.
 - Nothing is posted, scheduled, paid for or made with paid credits (such as image or video generation) without the person's approval. Post and schedule only through use_app, which asks them first, and never say a post is live until it has succeeded.
-- To post later, queue approved posts in the playbook's scheduler app through use_app. Look up its actions with find_app_actions first and never guess an action's name: some schedulers, such as Postiz, have a single "ask" action that takes a plain request like "Schedule this post to Instagram on Tuesday at 10 AM: …". To see what's already queued, ask the scheduler the same way.
+- To post on a later day: if the playbook names a scheduler app, queue the post there through use_app; otherwise use schedule_post, the app's own scheduler, which the person approves in the space and which then posts at its time. Look up an app's actions with find_app_actions first and never guess an action's name: some schedulers, such as Postiz, have a single "ask" action that takes a plain request like "Schedule this post to Instagram on Tuesday at 10 AM: …". To see what's already queued, use list_scheduled_posts, or ask the scheduler app the same way.
 - Stay on social media. For anything else, help briefly and mention the main chat.
 - When the person asks something they're likely to ask again, you may offer once, in a few words, to add it to their saved questions (save_space_prompt). Don't offer again in this chat if they pass.`;
 
@@ -69,7 +70,14 @@ const spaceId = z
 export function spaceToolSpecs(
   spaces: Spaces,
   owner: string,
-  options: { threadId?: string; routines?: RoutineCalls; readOnly?: boolean } = {},
+  options: {
+    threadId?: string;
+    routines?: RoutineCalls;
+    /** The app's own scheduler: its tools are offered when given. */
+    posts?: ScheduledPosts;
+    /** The playbook can be read but not changed (the weekly digest). */
+    readOnly?: boolean;
+  } = {},
 ) {
   const resolve = (id?: string) => spaces.resolve(owner, id, options.threadId);
   const read = {
@@ -79,10 +87,71 @@ export function spaceToolSpecs(
     parameters: z.object({ spaceId }),
     execute: async ({ spaceId }: { spaceId?: string }) => view(await resolve(spaceId)),
   };
-  if (options.readOnly) return [read];
+  const posts = options.posts;
+  const postTools = posts
+    ? [
+        {
+          name: "schedule_post",
+          description:
+            "Queue a social media post in this app's own scheduler, for a space without a scheduler app. First find the platform's posting action with find_app_actions and give its arguments exactly as it needs them (the post's text, pictures and so on). The person approves the exact post in the space, then it goes out at postAt by itself. Returns the queued post, waiting for approval.",
+          parameters: schedulePostSchema.extend({
+            spaceId,
+            tool: z.string().describe("The posting action's name from find_app_actions"),
+            summary: z
+              .string()
+              .describe("What the person sees: the platform, the kind of post and its text"),
+            postAt: z
+              .string()
+              .describe("When to post: ISO 8601 with the person's time-zone offset"),
+          }),
+          execute: async ({ spaceId, ...post }: { spaceId?: string } & Record<string, unknown>) => {
+            const space = await resolve(spaceId);
+            const queued = await posts.propose(owner, space.id, post);
+            return {
+              id: queued.id,
+              status: "waiting for the person's approval in the space",
+              postAt: queued.postAt,
+            };
+          },
+        },
+        {
+          name: "list_scheduled_posts",
+          description:
+            "List a space's posts in this app's own scheduler: waiting for approval, scheduled, and recently posted or failed.",
+          parameters: z.object({ spaceId }),
+          execute: async ({ spaceId }: { spaceId?: string }) => {
+            const space = await resolve(spaceId);
+            return (await posts.list(owner, space.id))
+              .filter((post) => post.status !== "cancelled")
+              .slice(-40)
+              .map(({ id, app, summary, postAt, status, error }) => ({
+                id,
+                app,
+                summary,
+                postAt,
+                status,
+                error,
+              }));
+          },
+        },
+        {
+          name: "cancel_scheduled_post",
+          description:
+            "Take a post off this app's own schedule before it goes out, when the person asks.",
+          parameters: z.object({ id: z.string().max(100) }),
+          execute: async ({ id }: { id: string }) => {
+            const post = await posts.cancel(owner, id);
+            return { id: post.id, status: post.status };
+          },
+        },
+      ]
+    : [];
+  if (options.readOnly)
+    return [read, ...postTools.filter((tool) => tool.name !== "cancel_scheduled_post")];
   const routines = options.routines;
   return [
     read,
+    ...postTools,
     {
       name: "update_space_playbook",
       description:

@@ -53,6 +53,7 @@ import { ReminderService } from "./reminders.ts";
 import { nominatim } from "./rich-cards.ts";
 import { Logins } from "./sign-in.ts";
 import { cleanCode, runApprovedSignIn } from "./sign-in-tools.ts";
+import { ScheduledPosts } from "./space-posts.ts";
 import { spaceRoutes } from "./space-routes.ts";
 import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
@@ -247,6 +248,10 @@ export async function createApp(
       }),
   );
   agent.reminders = reminders;
+  const spacePosts = new ScheduledPosts(db, apps, (owner, title, body, key) =>
+    agent.notify(owner, title, body, undefined, key),
+  );
+  agent.spacePosts = spacePosts;
   const commitments = new Commitments(
     db,
     (owner) => agent.timeZone(owner),
@@ -583,7 +588,7 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
-  app.route("/api/spaces", spaceRoutes(new Spaces(db), agent));
+  app.route("/api/spaces", spaceRoutes(new Spaces(db), agent, spacePosts));
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {

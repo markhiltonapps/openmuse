@@ -285,6 +285,7 @@ export class ConversationAgent extends AbstractAgent {
         ...spaceToolSpecs(spaces, this.owner, {
           threadId: input.threadId,
           routines: this.service,
+          posts: this.service.spacePosts,
         }),
         ...shareToolSpecs(this.service.shares, this.owner),
         ...miniAppToolSpecs(this.service.miniApps, this.owner),

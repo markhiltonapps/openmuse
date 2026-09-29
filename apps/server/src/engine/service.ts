@@ -61,6 +61,7 @@ import { People } from "../people.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
+import type { ScheduledPosts } from "../space-posts.ts";
 import type { UsageMeter } from "../usage.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
@@ -153,6 +154,9 @@ export class AgentService {
       await this.reminders
         ?.deliverDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("reminders", error));
+      await this.spacePosts
+        ?.publishDue((owner) => this.removed(owner))
+        .catch((error) => backgroundFailure("scheduled posts", error));
       await this.commitments
         ?.nudgeDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("commitments", error));
@@ -936,6 +940,8 @@ export class AgentService {
   feed?: { refreshDue(): Promise<void> };
   /** One-off reminders; delivered from the maintenance loop. */
   reminders?: ReminderService;
+  /** Social posts approved ahead of time; published from the maintenance loop. */
+  spacePosts?: ScheduledPosts;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
   commitments?: Commitments;
   /** Alerts from connected apps beyond email, such as a new booking or message. */

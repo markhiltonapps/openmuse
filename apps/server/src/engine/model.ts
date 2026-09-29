@@ -307,7 +307,10 @@ export async function executeModelTask(
   tools.push(
     ...[
       ...fileToolSpecs(service.files, owner, service.look),
-      ...spaceToolSpecs(new Spaces(service.db), owner, { readOnly: true }),
+      ...spaceToolSpecs(new Spaces(service.db), owner, {
+        readOnly: true,
+        posts: service.spacePosts,
+      }),
     ].map(
       (spec) =>
         tool(

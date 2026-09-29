@@ -19,6 +19,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src/index";
 import {
   type PlaybookPatch,
+  type ScheduledPost,
   SOCIAL_APPS,
   type SocialPlaybook,
   type Space,
@@ -46,6 +47,8 @@ const SETUP_MESSAGE = "Let's set up my social media space.";
 // One list of spaces for the whole app: the Spaces screen keeps it fresh, and the chat reads it
 // to show which space a chat belongs to.
 let cache: Space[] | undefined;
+/** Posts in the app's own scheduler, for every space. */
+let queue: ScheduledPost[] = [];
 /** Why the list couldn't load, while there's nothing to show yet. */
 let failure = "";
 /** Saves on their way: a refresh meanwhile would show the old values for a moment. */
@@ -73,7 +76,11 @@ export function useSpaces(poll = false) {
   const [, rerender] = useState(0);
   const load = useCallback(
     () =>
-      api.request<Space[]>("/api/spaces").then((list) => {
+      Promise.all([
+        api.request<Space[]>("/api/spaces"),
+        api.request<ScheduledPost[]>("/api/spaces/posts").catch(() => queue),
+      ]).then(([list, posts]) => {
+        queue = posts;
         if (!inflight) publish(list);
       }),
     [api],
@@ -94,7 +101,7 @@ export function useSpaces(poll = false) {
       if (timer) clearInterval(timer);
     };
   }, [load, poll]);
-  return { spaces: cache, load, failure };
+  return { spaces: cache, posts: queue, load, failure };
 }
 
 /** Opens a space's own chat, asking `text` there when given; a new space starts with setup. */
@@ -393,8 +400,17 @@ function Overview({ space, agentName }: { space: Space; agentName: string }) {
       action.kind === "app.action" &&
       SOCIAL_APPS.test(appOf(action)),
   );
+  const { posts, load } = useSpaces();
+  const mine = posts.filter((post) => post.spaceId === space.id);
+  const toApprove = mine.filter((post) => post.status === "awaiting_review");
+  const needs = toApprove.length + waiting.length;
   const routine = data?.routines.find((item) => item.id === space.digestRoutineId);
   const digest = data?.tasks.find((task) => task.id === routine?.lastTaskId);
+  const decide = (post: ScheduledPost, choice: "approve" | "cancel") =>
+    run(`${choice}:${post.id}`, async () => {
+      await api.request(`/api/spaces/posts/${post.id}/${choice}`, { hash: post.hash });
+      await load();
+    });
   async function run(label: string, work: () => Promise<unknown>) {
     setBusy(label);
     setError("");
@@ -451,7 +467,7 @@ function Overview({ space, agentName }: { space: Space; agentName: string }) {
           <Text {...heading(3)} style={s.heading}>
             Needs you
           </Text>
-          {waiting.length > 0 && (
+          {needs > 0 && (
             <View
               style={{
                 paddingHorizontal: 9,
@@ -460,52 +476,63 @@ function Overview({ space, agentName }: { space: Space; agentName: string }) {
                 backgroundColor: colors.lavender,
               }}
             >
-              <Text style={[s.small, { color: colors.text, fontWeight: "600" }]}>
-                {waiting.length}
-              </Text>
+              <Text style={[s.small, { color: colors.text, fontWeight: "600" }]}>{needs}</Text>
             </View>
           )}
         </View>
-        {waiting.length ? (
+        {needs ? (
           <Card style={{ gap: 2, paddingVertical: 6 }}>
-            {waiting.map((action, index) => (
-              <View
-                key={action.id}
-                style={[
-                  s.row,
-                  {
-                    gap: 12,
-                    minHeight: 60,
-                    borderTopWidth: index ? 1 : 0,
-                    borderColor: colors.line,
-                  },
-                ]}
-              >
-                <View
-                  aria-hidden
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: colors.sky,
-                  }}
+            {toApprove.map((post, index) => {
+              const due = Date.parse(post.postAt) <= Date.now();
+              return (
+                <QueueRow
+                  key={post.id}
+                  first={index === 0}
+                  app={post.app}
+                  title={post.summary}
+                  detail={
+                    due
+                      ? "Its time has passed: it goes out once you approve"
+                      : `Goes out ${when(post.postAt)}`
+                  }
                 >
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>
-                    {appBadge(appOf(action))}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text numberOfLines={2} style={[s.text, { fontWeight: "500" }]}>
-                    {action.title}
-                  </Text>
-                  {typeof action.data.amountUsd === "number" && (
-                    <Text style={[s.small, { color: colors.mutedStrong }]}>
-                      Spends up to ${action.data.amountUsd}
-                    </Text>
-                  )}
-                </View>
+                  <Button
+                    small
+                    primary
+                    busy={busy === `approve:${post.id}`}
+                    accessibilityLabel={`Approve: ${post.summary}`}
+                    onPress={() => void decide(post, "approve")}
+                  >
+                    {due ? "Approve and post" : "Approve"}
+                  </Button>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove: ${post.summary}`}
+                    onPress={() => void decide(post, "cancel")}
+                    style={{
+                      width: 44,
+                      height: 44,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <X size={16} color={colors.muted} />
+                  </Pressable>
+                </QueueRow>
+              );
+            })}
+            {waiting.map((action, index) => (
+              <QueueRow
+                key={action.id}
+                first={!toApprove.length && index === 0}
+                app={appOf(action)}
+                title={action.title}
+                detail={
+                  typeof action.data.amountUsd === "number"
+                    ? `Spends up to $${action.data.amountUsd}`
+                    : undefined
+                }
+              >
                 <Button
                   small
                   primary
@@ -514,7 +541,7 @@ function Overview({ space, agentName }: { space: Space; agentName: string }) {
                 >
                   Review
                 </Button>
-              </View>
+              </QueueRow>
             ))}
           </Card>
         ) : (
@@ -523,6 +550,8 @@ function Overview({ space, agentName }: { space: Space; agentName: string }) {
           </Text>
         )}
       </View>
+
+      <ComingUp posts={mine} busy={busy} onCancel={(post) => void decide(post, "cancel")} />
 
       <View style={{ gap: 10 }}>
         <Text {...heading(3)} style={s.heading}>
@@ -589,6 +618,134 @@ function Overview({ space, agentName }: { space: Space; agentName: string }) {
       </View>
 
       <SavedQuestions space={space} onAsk={(text) => openChat(space, text)} />
+    </View>
+  );
+}
+
+/** "Tue, Oct 7, 10:00 AM" */
+const when = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+/** A post or action in a list: app badge, what it is, a detail line, and its buttons. */
+function QueueRow({
+  first,
+  app,
+  title,
+  detail,
+  children,
+}: {
+  first: boolean;
+  app: string;
+  title: string;
+  detail?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <View
+      style={[
+        s.row,
+        {
+          gap: 12,
+          minHeight: 60,
+          flexWrap: "wrap",
+          borderTopWidth: first ? 0 : 1,
+          borderColor: colors.line,
+        },
+      ]}
+    >
+      <View
+        aria-hidden
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.sky,
+        }}
+      >
+        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.text }}>{appBadge(app)}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 170, gap: 2, paddingVertical: 8 }}>
+        <Text numberOfLines={3} style={[s.text, { fontWeight: "500" }]}>
+          {title}
+        </Text>
+        {!!detail && <Text style={[s.small, { color: colors.mutedStrong }]}>{detail}</Text>}
+      </View>
+      {/* On a narrow screen the buttons go under the text instead of squeezing it. */}
+      {children && (
+        <View style={[s.row, { gap: 4, marginLeft: "auto", paddingBottom: 4 }]}>{children}</View>
+      )}
+    </View>
+  );
+}
+
+/** Approved posts waiting for their day, and what went out (or didn't) this past week. */
+function ComingUp({
+  posts,
+  busy,
+  onCancel,
+}: {
+  posts: ScheduledPost[];
+  busy: string;
+  onCancel: (post: ScheduledPost) => void;
+}) {
+  const week = Date.now() - 7 * 86_400_000;
+  const upcoming = posts.filter((post) => post.status === "scheduled" || post.status === "posting");
+  const recent = posts
+    .filter(
+      (post) =>
+        (post.status === "posted" || post.status === "failed") &&
+        Date.parse(post.postedAt ?? post.postAt) >= week,
+    )
+    .reverse();
+  if (!upcoming.length && !recent.length) return null;
+  return (
+    <View style={{ gap: 10 }}>
+      <Text {...heading(3)} style={s.heading}>
+        Coming up
+      </Text>
+      <Card style={{ gap: 2, paddingVertical: 6 }}>
+        {upcoming.map((post, index) => (
+          <QueueRow
+            key={post.id}
+            first={index === 0}
+            app={post.app}
+            title={post.summary}
+            detail={post.status === "posting" ? "Posting now…" : when(post.postAt)}
+          >
+            {post.status === "scheduled" && (
+              <Button
+                small
+                busy={busy === `cancel:${post.id}`}
+                accessibilityLabel={`Cancel: ${post.summary}`}
+                onPress={() => onCancel(post)}
+              >
+                Cancel
+              </Button>
+            )}
+          </QueueRow>
+        ))}
+        {recent.map((post, index) => (
+          <QueueRow
+            key={post.id}
+            first={!upcoming.length && index === 0}
+            app={post.app}
+            title={post.summary}
+            detail={
+              post.status === "posted"
+                ? `Posted ${when(post.postedAt ?? post.postAt)}`
+                : `Didn’t go out: ${post.error ?? "unknown problem"}`
+            }
+          />
+        ))}
+      </Card>
     </View>
   );
 }
@@ -1280,7 +1437,7 @@ function Platforms({ space, save, ...state }: SectionState & { space: Space; sav
 
 const SCHEDULERS = ["Postiz", "Buffer", "Hootsuite"];
 
-/** Which app queues approved posts for their day; none means a post goes out once approved. */
+/** Which app queues approved posts for their day: this app's own scheduler, or one they use. */
 function Scheduling({ space, save }: { space: Space; save: Save }) {
   const { navigate } = useWorkspace();
   const scheduler = space.playbook.scheduler;
@@ -1291,14 +1448,22 @@ function Scheduling({ space, save }: { space: Space; save: Save }) {
       <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>Scheduling</Text>
       <Text style={s.muted}>
         {scheduler
-          ? `Approved posts wait in ${scheduler} and go out on their day, even when you’re not chatting.`
-          : "No scheduler: each post goes out when you approve it."}
+          ? `Approved posts wait in ${scheduler} and go out on their day.`
+          : "Built in: approved posts go out from here on their day, even when you’re not chatting. Nothing else to set up."}
       </Text>
       <View
         role="group"
         aria-label="Scheduler app"
         style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
       >
+        <Button
+          small
+          selected={!scheduler}
+          primary={!scheduler}
+          onPress={() => void save("platforms", { scheduler: null })}
+        >
+          Built in
+        </Button>
         {SCHEDULERS.map((name) => (
           <Button
             key={name}
@@ -1310,14 +1475,6 @@ function Scheduling({ space, save }: { space: Space; save: Save }) {
             {name}
           </Button>
         ))}
-        <Button
-          small
-          selected={!scheduler}
-          primary={!scheduler}
-          onPress={() => void save("platforms", { scheduler: null })}
-        >
-          None
-        </Button>
       </View>
       <Pressable
         role="link"
@@ -1325,7 +1482,7 @@ function Scheduling({ space, save }: { space: Space; save: Save }) {
         style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}
       >
         <Text style={[s.text, { fontSize: 14, color: colors.blueDark }]}>
-          Connect a scheduler in Apps
+          Already use one of these? Connect it in Apps
         </Text>
       </Pressable>
     </View>

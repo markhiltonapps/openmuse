@@ -66,6 +66,31 @@ export interface Space {
   updatedAt: string;
 }
 
+/**
+ * A post queued by the app's own scheduler: a connected app's action with its exact arguments,
+ * approved ahead of time and published at `postAt`.
+ */
+export interface ScheduledPost {
+  id: string;
+  spaceId: string;
+  /** The connected app, e.g. instagram. */
+  app: string;
+  /** The app's action, e.g. INSTAGRAM_CREATE_POST. */
+  tool: string;
+  arguments: Record<string, unknown>;
+  /** What the person sees: the platform, the kind of post and its text. */
+  summary: string;
+  postAt: string;
+  status: "awaiting_review" | "scheduled" | "posting" | "posted" | "failed" | "cancelled";
+  /** Fixes what was approved: the action, its arguments and the time. */
+  hash: string;
+  createdAt: string;
+  decidedAt?: string;
+  postedAt?: string;
+  result?: string;
+  error?: string;
+}
+
 const line = (max: number) => z.string().trim().min(1).max(max);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-10-06");
 
