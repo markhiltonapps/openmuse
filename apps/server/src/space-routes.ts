@@ -1,14 +1,19 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import type { ScheduledPosts } from "./space-posts.ts";
-import type { RoutineCalls, Spaces } from "./spaces.ts";
+import type { ChatCalls, RoutineCalls, Spaces } from "./spaces.ts";
 
 type Env = { Variables: { owner: string } };
 const body = async (c: Context<Env>) =>
   (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
 
 /** /api/spaces: the person's spaces, their playbooks, prompts and weekly digest. */
-export function spaceRoutes(spaces: Spaces, routines: RoutineCalls, posts: ScheduledPosts) {
+export function spaceRoutes(
+  spaces: Spaces,
+  routines: RoutineCalls,
+  posts: ScheduledPosts,
+  chats?: ChatCalls,
+) {
   const app = new Hono<Env>();
   app.get("/", async (c) => c.json(await spaces.list(c.get("owner"))));
   // The app's own post scheduler: the person approves or cancels queued posts.
@@ -44,7 +49,14 @@ export function spaceRoutes(spaces: Spaces, routines: RoutineCalls, posts: Sched
     c.json(await spaces.setDigest(c.get("owner"), c.req.param("id"), await body(c), routines)),
   );
   app.post("/:id/delete", async (c) => {
-    const removed = await spaces.remove(c.get("owner"), c.req.param("id"), routines);
+    const { deleteChat } = await body(c);
+    const removed = await spaces.remove(
+      c.get("owner"),
+      c.req.param("id"),
+      routines,
+      chats,
+      deleteChat === true,
+    );
     await posts.cancelSpace(c.get("owner"), c.req.param("id"));
     return c.json(removed);
   });

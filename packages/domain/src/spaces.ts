@@ -2,11 +2,12 @@ import { z } from "zod";
 
 /**
  * Spaces: a place for one area of the person's life that their agent runs for them, with its own
- * chat, a playbook the agent follows, saved prompts and a weekly digest. The first kind is social
- * media; the playbook is what the agent learns while setting it up (from a brand guide, web
- * research and the person's answers) and what every later run follows.
+ * chat, a playbook the agent follows, saved prompts and a digest that runs on a schedule. The
+ * kinds are social media and the family week; a playbook is what the agent learns while setting
+ * the space up (from a brand guide, web research and the person's answers) and what every later
+ * run follows.
  */
-export type SpaceKind = "social";
+export type SpaceKind = "social" | "family";
 
 export interface SocialProduct {
   name: string;
@@ -54,27 +55,82 @@ export interface SocialPlaybook {
   budgetNote?: string;
 }
 
+export interface FamilyMember {
+  name: string;
+  /** Left out for grown-ups. */
+  age?: number;
+  /** A few words: what they love, what they can do. */
+  notes?: string;
+}
+
+export type FamilyTone = "direct" | "warm" | "knowledgeable" | "playful" | "calm";
+export const FAMILY_TONES: { id: FamilyTone; label: string; about: string }[] = [
+  { id: "direct", label: "Direct", about: "Straight to the point" },
+  { id: "warm", label: "Warm", about: "Kind and encouraging" },
+  { id: "knowledgeable", label: "Knowledgeable", about: "Confident, and says why" },
+  { id: "playful", label: "Playful", about: "Light, with a little humor" },
+  { id: "calm", label: "Calm", about: "Steady and reassuring" },
+];
+
+/** What the family planner learns during setup and follows every week. */
+export interface FamilyPlaybook {
+  /** Everyone in the house, grown-ups and children. */
+  family: FamilyMember[];
+  /** Allergies, diets and firm dislikes: never a suggestion. */
+  foodRules: string[];
+  /** Meals the family likes, to build weeks around. */
+  favorites: string[];
+  /** Dinners to plan each week. */
+  dinnersPerWeek?: number;
+  /** How long there is to cook on a weeknight, e.g. "30 minutes". */
+  cookingTime?: string;
+  /** The week's fixed points: school and work hours, activities, pickups, who's where when. */
+  weekShape?: string;
+  /** Who does what around the house, e.g. "Maya (8): feeds the dog, sets the table". */
+  chores: string[];
+  /** How mornings and evenings should go, and where they fall apart. */
+  routines?: string;
+  /** What each person enjoys, for activity ideas. */
+  interests: string[];
+  tone?: FamilyTone;
+  /** The day the week ahead is planned; 0 is Sunday. */
+  planningDay?: number;
+  /** This week's plan as the agent last wrote it: meals, the schedule, chores and ideas. */
+  weekPlan?: string;
+  /** When the plan was last written; set by the server. */
+  weekPlanAt?: string;
+  /** Anything else to keep in mind. */
+  notes?: string;
+}
+
 export interface SavedPrompt {
   id: string;
   text: string;
 }
 
-export interface Space {
+interface SpaceBase {
   id: string;
-  kind: SpaceKind;
   name: string;
   /** The space's own chat. */
   threadId: string;
   /** The chat has messages, so opening it loads them. */
   threadStarted: boolean;
-  playbook: SocialPlaybook;
   prompts: SavedPrompt[];
-  /** The weekly digest routine, when it's on. */
+  /** The digest routine (a weekly digest, or a family's daily rundown), when it's on. */
   digestRoutineId?: string;
   setupDone: boolean;
   createdAt: string;
   updatedAt: string;
 }
+export interface SocialSpace extends SpaceBase {
+  kind: "social";
+  playbook: SocialPlaybook;
+}
+export interface FamilySpace extends SpaceBase {
+  kind: "family";
+  playbook: FamilyPlaybook;
+}
+export type Space = SocialSpace | FamilySpace;
 
 /**
  * A post queued by the app's own scheduler: a connected app's action with its exact arguments,
@@ -138,15 +194,48 @@ export const playbookPatchSchema = z
   .partial();
 export type PlaybookPatch = z.infer<typeof playbookPatchSchema>;
 
-export const createSpaceSchema = z.object({
-  kind: z.literal("social").default("social"),
-  name: line(60).default("Social media"),
+const familyMemberSchema = z.object({
+  name: line(60),
+  age: z.number().int().min(0).max(120).optional(),
+  notes: z.string().trim().max(200).optional(),
 });
+export const familyPlaybookPatchSchema = z
+  .object({
+    family: z.array(familyMemberSchema).max(12),
+    foodRules: z.array(line(120)).max(20),
+    favorites: z.array(line(120)).max(30),
+    dinnersPerWeek: z.number().int().min(0).max(7).nullable(),
+    cookingTime: z.string().trim().max(60).nullable(),
+    weekShape: z.string().trim().max(2000).nullable(),
+    chores: z.array(line(160)).max(30),
+    routines: z.string().trim().max(2000).nullable(),
+    interests: z.array(line(120)).max(30),
+    tone: z.enum(["direct", "warm", "knowledgeable", "playful", "calm"]).nullable(),
+    planningDay: z.number().int().min(0).max(6).nullable(),
+    weekPlan: z.string().trim().max(8000).nullable(),
+    notes: z.string().trim().max(1500).nullable(),
+  })
+  .partial();
+export type FamilyPlaybookPatch = z.infer<typeof familyPlaybookPatchSchema>;
+
+/** The patch schema for a space's kind; unknown fields are dropped. */
+export const patchSchemaFor = (kind: SpaceKind) =>
+  kind === "family" ? familyPlaybookPatchSchema : playbookPatchSchema;
+
+export const spaceNameSchema = z.object({ name: line(60) });
+export const createSpaceSchema = z.object({
+  kind: z.enum(["social", "family"]).default("social"),
+  name: line(60).optional(),
+});
+export const defaultSpaceName = (kind: SpaceKind) =>
+  kind === "family" ? "Family" : "Social media";
 
 export const digestSchema = z.object({
   on: z.boolean(),
   /** 0 is Sunday. */
   day: z.number().int().min(0).max(6).default(1),
+  /** Several days, such as every morning for a family's rundown; `day` alone otherwise. */
+  days: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
   time: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -165,10 +254,31 @@ export const STARTER_SOCIAL_PROMPTS = [
   "What’s in this week’s digest?",
 ];
 
+/** The prompts a new family space starts with. */
+export const STARTER_FAMILY_PROMPTS = [
+  "Plan this week’s dinners",
+  "Make the grocery list",
+  "What’s on today?",
+  "Ideas for a rainy afternoon with [child]",
+  "Set up a chore chart",
+  "Help our mornings go smoother",
+  "Move [activity] to another day",
+  "What’s in this week’s plan?",
+];
+export const starterPromptsFor = (kind: SpaceKind) =>
+  kind === "family" ? STARTER_FAMILY_PROMPTS : STARTER_SOCIAL_PROMPTS;
+
 /** Composio apps that belong to social media work, for the space's "Needs you" list. */
 export const SOCIAL_APPS =
   /instagram|facebook|linkedin|youtube|tiktok|twitter|threads|pinterest|metaads|meta_ads|postiz|higgsfield|buffer|hootsuite/i;
+/** Apps a family planner reaches for: calendars and to-do lists. */
+export const FAMILY_APPS = /calendar|todoist|tasks|reminders|notion|trello|anylist/i;
 
 export function emptyPlaybook(): SocialPlaybook {
   return { products: [], platforms: [], voice: "", avoid: [] };
 }
+export function emptyFamilyPlaybook(): FamilyPlaybook {
+  return { family: [], foodRules: [], favorites: [], chores: [], interests: [] };
+}
+export const emptyPlaybookFor = (kind: SpaceKind) =>
+  kind === "family" ? emptyFamilyPlaybook() : emptyPlaybook();

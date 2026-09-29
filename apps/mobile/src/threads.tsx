@@ -229,7 +229,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             <LinkRow
               icon={Megaphone}
               title="Spaces"
-              detail="Your social media, run for you"
+              detail="Social media and the family week, run for you"
               onPress={() => go("spaces")}
             />
             {confirmDelete("main", "Delete everything in your main chat and start it fresh?") ?? (

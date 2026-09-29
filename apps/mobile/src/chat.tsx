@@ -55,6 +55,7 @@ import { MealCheckInCard } from "./meal-checkins-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { SandboxCard } from "./sandbox-ui";
+import { useSpaces } from "./spaces";
 import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -284,6 +285,8 @@ export function ChatScreen({
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
   const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
   const selection = thread || { id: "local", existing: false };
+  // A space's chat starts with its saved questions instead of the general ones.
+  const space = useSpaces().spaces?.find((item) => item.threadId === selection.id);
   const threadId = richThreads ? selection.id : "local-main";
   const agentId = `openmuse-${threadId}`;
   const { agent, isReady } = useAgent({ agentId, runtimeAgentId: "default", threadId });
@@ -808,24 +811,33 @@ export function ChatScreen({
                 maxWidth: 350,
               }}
             >
-              A little help. A lot more room for life.
+              {space ? `Your ${space.name} space.` : "A little help. A lot more room for life."}
             </Text>
             <Text style={[s.muted, { maxWidth: 320, textAlign: "center", lineHeight: 23 }]}>
-              Tell me what’s on your mind. I can make a plan, work with your apps, and use my
-              computer to help.
+              {space
+                ? "Tap a question, or just ask. Everything here follows the space’s playbook."
+                : "Tell me what’s on your mind. I can make a plan, work with your apps, and use my computer to help."}
             </Text>
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
-              {[
-                {
-                  text: "Find cool things on Hacker News",
-                  action: () => enqueue("Check out Hacker News for cool stuff"),
-                },
-                {
-                  text: "Summarize copilotkit.ai",
-                  action: () => enqueue("Summarize copilotkit.ai"),
-                },
-                { text: "Keep an eye on a website", action: () => navigate("goals") },
-              ].map((item) => (
+              {(space
+                ? space.prompts.slice(0, 4).map((prompt) => ({
+                    text: prompt.text,
+                    // A question with a blank is filled in on the space's screen.
+                    action: () =>
+                      /\[/.test(prompt.text) ? navigate("spaces") : enqueue(prompt.text),
+                  }))
+                : [
+                    {
+                      text: "Find cool things on Hacker News",
+                      action: () => enqueue("Check out Hacker News for cool stuff"),
+                    },
+                    {
+                      text: "Summarize copilotkit.ai",
+                      action: () => enqueue("Summarize copilotkit.ai"),
+                    },
+                    { text: "Keep an eye on a website", action: () => navigate("goals") },
+                  ]
+              ).map((item) => (
                 <Button key={item.text} onPress={item.action}>
                   {item.text}
                 </Button>

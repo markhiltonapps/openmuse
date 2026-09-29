@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { Routine } from "../../../packages/domain/src/agent.ts";
 import {
   createSpaceSchema,
+  defaultSpaceName,
   digestSchema,
-  emptyPlaybook,
-  type PlaybookPatch,
-  playbookPatchSchema,
-  type SocialPlaybook,
+  emptyPlaybookFor,
+  patchSchemaFor,
   type Space,
-  STARTER_SOCIAL_PROMPTS,
+  type SpaceKind,
+  spaceNameSchema,
+  starterPromptsFor,
 } from "../../../packages/domain/src/spaces.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -17,6 +18,10 @@ const MAX_SPACES = 10;
 const MAX_PROMPTS = 30;
 
 /** The routine calls the digest needs; the agent service provides them. */
+/** Deleting a space's chat; the app's thread store provides it. */
+export interface ChatCalls {
+  deleteThread(owner: string, threadId: string): Promise<unknown>;
+}
 export interface RoutineCalls {
   createRoutine(owner: string, raw: unknown): Promise<Routine>;
   updateRoutine(owner: string, id: string, raw: unknown): Promise<Routine>;
@@ -34,8 +39,21 @@ Base the drafts on the playbook's content themes and plan, and use last week's r
 4. In the first digest of each month, also compare the month's results with the plan: what worked, what to stop, and any change you'd suggest to the plan or themes (the person can ask for it in the space's chat).
 5. Finish with a short digest in everyday words under three headings: What competitors posted, How you did, Next week. End by saying how many drafts are waiting in Needs you for their OK.`;
 
-/** The weekly digest routine's task: the playbook and the steps come from get_space_playbook. */
-export function digestPrompt(space: Pick<Space, "id" | "name">) {
+/**
+ * A family's daily rundown, and its plan for the week ahead on the planning day. Handed to the
+ * routine with the playbook when it runs, like the social digest's steps.
+ */
+export const FAMILY_RUNDOWN_STEPS = `1. Today: work out today's date and day in the person's time zone. Read the playbook's weekPlan, weekShape and routines. If a calendar app is connected (find_app_actions, then use_app to read today's and tomorrow's events), use it; never invent an appointment.
+2. Plan the week ahead first when today is the planning day (the playbook's planningDay; Sunday when unset), when there's no weekPlan yet, or when weekPlanAt is more than 6 days ago: dinners for the week (dinnersPerWeek, or 5) that fit foodRules, favorites and cookingTime, with a line on why each night's pick (a busy night gets something quick); the grocery list for them, grouped by aisle; the schedule from weekShape and the calendar, with clashes and who's driving called out; chores for the week by person; two or three activity ideas for free time that fit interests and ages. Save the whole plan in everyday words with save_week_plan.
+3. Every run: a short rundown, under 150 words, in the playbook's tone (warm when none is set): today's schedule with times; dinner tonight and any prep to start early; chores due today; one thing to get ready for tomorrow; one encouraging line. Put the rundown first and, on a planning day, the week's plan under it.
+4. Nothing is added to a calendar, bought or sent without the person's approval. No medical, legal or money advice: an allergy is planned around, never advised on.`;
+export const digestSteps = (kind: SpaceKind) =>
+  kind === "family" ? FAMILY_RUNDOWN_STEPS : DIGEST_STEPS;
+
+/** The digest routine's task: the playbook and the steps come from get_space_playbook. */
+export function digestPrompt(space: Pick<Space, "id" | "name" | "kind">) {
+  if (space.kind === "family")
+    return `Daily family rundown for the space "${space.name}" (space id ${space.id}). First call get_space_playbook with this space id, then follow its dailyRundownSteps and its playbook: who's in the family, food rules and favorites, the week's shape, chores, routines, interests and tone.`;
   return `Weekly social media digest for the space "${space.name}" (space id ${space.id}). First call get_space_playbook with this space id, then follow its weeklyDigestSteps and its playbook: products and competitors, platforms in order, voice, never-do list, how often to post and budget.`;
 }
 
@@ -84,15 +102,15 @@ export class Spaces {
     return this.db.put<Space>(owner, "spaces", {
       id: randomUUID(),
       kind: input.kind,
-      name: input.name,
+      name: input.name ?? defaultSpaceName(input.kind),
       threadId: randomUUID(),
       threadStarted: false,
-      playbook: emptyPlaybook(),
-      prompts: STARTER_SOCIAL_PROMPTS.map((text) => ({ id: randomUUID(), text })),
+      playbook: emptyPlaybookFor(input.kind),
+      prompts: starterPromptsFor(input.kind).map((text) => ({ id: randomUUID(), text })),
       setupDone: false,
       createdAt: at,
       updatedAt: at,
-    });
+    } as Space);
   }
   private save(owner: string, space: Space) {
     return this.db.put<Space>(owner, "spaces", {
@@ -100,23 +118,28 @@ export class Spaces {
       updatedAt: this.now().toISOString(),
     });
   }
-  /** Changes the fields given; null clears an optional one. */
+  /** Changes the fields given (of this kind of space); null clears an optional one. */
   async update(owner: string, id: string, raw: unknown, setupDone?: boolean) {
-    const patch: PlaybookPatch = playbookPatchSchema.parse(raw ?? {});
     const space = await this.get(owner, id);
+    const patch = patchSchemaFor(space.kind).parse(raw ?? {});
     const playbook: Record<string, unknown> = { ...space.playbook };
     for (const [key, value] of Object.entries(patch)) {
       if (value === null) delete playbook[key];
       else if (value !== undefined) playbook[key] = value;
     }
+    // A family's week plan carries its date, so the rundown knows when it has gone stale.
+    if (space.kind === "family" && "weekPlan" in patch) {
+      if (patch.weekPlan) playbook.weekPlanAt = this.now().toISOString();
+      else delete playbook.weekPlanAt;
+    }
     return this.save(owner, {
       ...space,
-      playbook: playbook as unknown as SocialPlaybook,
+      playbook,
       setupDone: setupDone ?? space.setupDone,
-    });
+    } as unknown as Space);
   }
   async rename(owner: string, id: string, name: unknown) {
-    const { name: next } = createSpaceSchema.pick({ name: true }).parse({ name });
+    const { name: next } = spaceNameSchema.parse({ name });
     return this.save(owner, { ...(await this.get(owner, id)), name: next });
   }
   async addPrompt(owner: string, id: string, raw: unknown) {
@@ -149,10 +172,10 @@ export class Spaces {
       return this.save(owner, { ...space, digestRoutineId: undefined });
     }
     const schedule = {
-      title: `${space.name} digest`,
+      title: `${space.name} ${space.kind === "family" ? "rundown" : "digest"}`,
       prompt: digestPrompt(space),
       time: input.time,
-      days: [input.day],
+      days: input.days ?? [input.day],
       enabled: true,
     };
     const existing =
@@ -161,11 +184,19 @@ export class Spaces {
     const routine = existing || (await routines.createRoutine(owner, schedule));
     return this.save(owner, { ...space, digestRoutineId: routine.id });
   }
-  async remove(owner: string, id: string, routines: RoutineCalls) {
+  /** Removes the space and its digest; its chat too when asked, since it holds what they said. */
+  async remove(
+    owner: string,
+    id: string,
+    routines: RoutineCalls,
+    chats?: ChatCalls,
+    deleteChat = false,
+  ) {
     const space = await this.get(owner, id);
     if (space.digestRoutineId)
       await routines.deleteRoutine(owner, space.digestRoutineId).catch(() => undefined);
+    if (deleteChat && chats) await chats.deleteThread(owner, space.threadId).catch(() => undefined);
     await this.db.take(owner, "spaces", id);
-    return { ok: true };
+    return { ok: true, chatDeleted: deleteChat && !!chats };
   }
 }

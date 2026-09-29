@@ -198,10 +198,16 @@ export function Chip({ children, tint }: { children: ReactNode; tint?: string })
     </View>
   );
 }
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
+export function Field({
+  label,
+  hideLabel,
+  ...props
+}: TextInputProps & { label: string; hideLabel?: boolean }) {
   return (
     <View style={s.field}>
-      <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>{label}</Text>
+      {!hideLabel && (
+        <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>{label}</Text>
+      )}
       <TextInput
         placeholderTextColor={colors.muted}
         accessibilityLabel={label}

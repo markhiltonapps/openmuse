@@ -10,9 +10,25 @@ import { createStore, type Store } from "../apps/server/src/db.ts";
 import { ScheduledPosts } from "../apps/server/src/space-posts.ts";
 import { spaceRoutes } from "../apps/server/src/space-routes.ts";
 import { spaceContext, spaceToolSpecs } from "../apps/server/src/space-tools.ts";
-import { DIGEST_STEPS, digestPrompt, Spaces } from "../apps/server/src/spaces.ts";
+import {
+  DIGEST_STEPS,
+  digestPrompt,
+  FAMILY_RUNDOWN_STEPS,
+  Spaces,
+} from "../apps/server/src/spaces.ts";
 import type { AgentTask, Routine } from "../packages/domain/src/agent.ts";
-import { type Space, STARTER_SOCIAL_PROMPTS } from "../packages/domain/src/spaces.ts";
+import {
+  type SocialSpace,
+  type Space,
+  STARTER_FAMILY_PROMPTS,
+  STARTER_SOCIAL_PROMPTS,
+} from "../packages/domain/src/spaces.ts";
+
+/** The social media playbook of a space that is one. */
+const social = (space: Space) => {
+  assert.equal(space.kind, "social");
+  return (space as SocialSpace).playbook;
+};
 
 let db: Store, directory: string, server: Awaited<ReturnType<typeof createApp>>;
 before(async () => {
@@ -79,16 +95,17 @@ test("the playbook changes only the fields given; lists replace, null clears", a
     { platforms: ["Instagram"], dailyAdCeilingUsd: null },
     true,
   );
-  assert.deepEqual(updated.playbook.platforms, ["Instagram"]);
-  assert.equal(updated.playbook.dailyAdCeilingUsd, undefined);
-  assert.equal(updated.playbook.organicUntil, "2026-10-06");
-  assert.equal(updated.playbook.scheduler, "Postiz");
-  assert.deepEqual(updated.playbook.goals, ["More customers or sales", "Getting known"]);
-  assert.deepEqual(updated.playbook.pillars, ["Every call answered", "Behind the build"]);
-  assert.match(updated.playbook.plan ?? "", /90 days/);
+  const book = social(updated);
+  assert.deepEqual(book.platforms, ["Instagram"]);
+  assert.equal(book.dailyAdCeilingUsd, undefined);
+  assert.equal(book.organicUntil, "2026-10-06");
+  assert.equal(book.scheduler, "Postiz");
+  assert.deepEqual(book.goals, ["More customers or sales", "Getting known"]);
+  assert.deepEqual(book.pillars, ["Every call answered", "Behind the build"]);
+  assert.match(book.plan ?? "", /90 days/);
   const noScheduler = await spaces.update("cam", space.id, { scheduler: null });
-  assert.equal(noScheduler.playbook.scheduler, undefined);
-  assert.equal(updated.playbook.products[0]?.competitors[0], "Plaud");
+  assert.equal(social(noScheduler).scheduler, undefined);
+  assert.equal(book.products[0]?.competitors[0], "Plaud");
   assert.equal(updated.setupDone, true);
   await assert.rejects(spaces.update("cam", space.id, { organicUntil: "next week" }));
   await assert.rejects(spaces.update("cam", space.id, { postsPerWeek: 50 }));
@@ -197,7 +214,7 @@ test("the agent fills in the playbook of the chat's own space", async () => {
   const worker = spaceToolSpecs(spaces, "fay", { readOnly: true }) as Spec[];
   assert.deepEqual(
     worker.map((spec) => spec.name),
-    ["get_space_playbook"],
+    ["get_space_playbook", "save_week_plan"],
   );
   // It gets today's digest steps with the playbook, so a digest turned on earlier follows them.
   const steps = (
@@ -254,7 +271,7 @@ test("the spaces API lists, creates, edits and removes a person's spaces", async
     platforms: ["Facebook"],
     setupDone: true,
   });
-  assert.deepEqual(edited.json.playbook.platforms, ["Facebook"]);
+  assert.deepEqual(social(edited.json).platforms, ["Facebook"]);
   assert.equal(edited.json.setupDone, true);
   const prompt = await call(`/api/spaces/${id}/prompts`, { text: "What worked?" });
   assert.equal(prompt.json.prompts.at(-1)?.text, "What worked?");
@@ -264,4 +281,98 @@ test("the spaces API lists, creates, edits and removes a person's spaces", async
   assert.equal(list.length, 1);
   await call(`/api/spaces/${id}/delete`, {});
   assert.deepEqual(await (await api.request("/api/spaces")).json(), []);
+});
+
+test("a family space: its own playbook and rules, a daily rundown and a week plan", async () => {
+  const spaces = new Spaces(db);
+  const space = await spaces.create("kim", { kind: "family" });
+  assert.equal(space.kind, "family");
+  assert.equal(space.name, "Family");
+  assert.deepEqual(
+    space.prompts.map((p) => p.text),
+    STARTER_FAMILY_PROMPTS,
+  );
+  assert.deepEqual(space.playbook, {
+    family: [],
+    foodRules: [],
+    favorites: [],
+    chores: [],
+    interests: [],
+  });
+  // Only family fields apply; a social media field is dropped, a bad value refused.
+  const updated = await spaces.update("kim", space.id, {
+    family: [{ name: "Maya", age: 8 }, { name: "Sam" }],
+    foodRules: ["No peanuts"],
+    dinnersPerWeek: 5,
+    tone: "playful",
+    planningDay: 0,
+    products: [{ name: "Not here" }],
+  });
+  assert.deepEqual(updated.playbook, {
+    family: [{ name: "Maya", age: 8 }, { name: "Sam" }],
+    foodRules: ["No peanuts"],
+    favorites: [],
+    chores: [],
+    interests: [],
+    dinnersPerWeek: 5,
+    tone: "playful",
+    planningDay: 0,
+  });
+  await assert.rejects(spaces.update("kim", space.id, { tone: "bossy" }));
+  // Its chat gets the family rules, not the social media ones.
+  const [rules] = spaceContext(updated);
+  assert.match(rules?.value ?? "", /no medical, legal or money advice/);
+  assert.match(rules?.value ?? "", /an allergy is never a suggestion/);
+  assert.match(rules?.value ?? "", /one short question at a time/);
+  assert.doesNotMatch(rules?.value ?? "", /competitors/);
+  // The rundown can run every weekday morning, and reads today's steps when it runs.
+  const on = await spaces.setDigest(
+    "kim",
+    space.id,
+    { on: true, days: [1, 2, 3, 4, 5], time: "06:45" },
+    server.agent,
+  );
+  const routine = await db.get<Routine>("kim", "routines", on.digestRoutineId ?? "");
+  assert.equal(routine?.title, "Family rundown");
+  assert.deepEqual(routine?.days, [1, 2, 3, 4, 5]);
+  assert.equal(routine?.time, "06:45");
+  assert.equal(routine?.prompt, digestPrompt(space));
+  assert.match(routine?.prompt ?? "", /^Daily family rundown/);
+  const worker = spaceToolSpecs(spaces, "kim", { readOnly: true }) as Spec[];
+  const read = (await run(worker, "get_space_playbook", { spaceId: space.id })) as {
+    kind: string;
+    dailyRundownSteps?: string;
+    weeklyDigestSteps?: string;
+  };
+  assert.equal(read.kind, "family");
+  assert.ok(read.dailyRundownSteps?.includes(FAMILY_RUNDOWN_STEPS));
+  assert.equal(read.weeklyDigestSteps, undefined);
+  // The rundown saves the week's plan; nothing else in the playbook can change from there.
+  await run(worker, "save_week_plan", {
+    spaceId: space.id,
+    plan: "Monday: tacos, Maya sets the table.",
+  });
+  const after = await spaces.get("kim", space.id);
+  assert.equal(
+    after.kind === "family" ? after.playbook.weekPlan : "",
+    "Monday: tacos, Maya sets the table.",
+  );
+  // The plan carries its date, so a rundown on any day knows when it has gone stale.
+  assert.match(after.kind === "family" ? (after.playbook.weekPlanAt ?? "") : "", /^\d{4}-/);
+  assert.equal(
+    worker.some((spec) => spec.name === "update_space_playbook"),
+    false,
+  );
+  // Removing the space can take its chat with it, since that chat holds the family's details.
+  const deleted: string[] = [];
+  const gone = await spaces.remove(
+    "kim",
+    space.id,
+    server.agent,
+    { deleteThread: async (_owner, threadId) => deleted.push(threadId) },
+    true,
+  );
+  assert.deepEqual(gone, { ok: true, chatDeleted: true });
+  assert.deepEqual(deleted, [space.threadId]);
+  await assert.rejects(spaces.get("kim", space.id), /Space not found/);
 });

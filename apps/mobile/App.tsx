@@ -63,7 +63,8 @@ import {
   saveSession,
 } from "./src/session-store";
 import { SignInCard } from "./src/sign-in";
-import { SpaceChip, SpacesScreen } from "./src/spaces";
+import { SpaceChip } from "./src/spaces";
+import { SpacesScreen } from "./src/spaces-screen";
 import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";

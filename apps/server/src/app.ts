@@ -613,7 +613,15 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
-  app.route("/api/spaces", spaceRoutes(new Spaces(db), agent, spacePosts));
+  app.route(
+    "/api/spaces",
+    spaceRoutes(new Spaces(db), agent, spacePosts, {
+      deleteThread: async (owner, threadId) => {
+        await db.remove(owner, "chat-archive", threadId);
+        await threads.deleteThread({ threadId, userId: owner, agentId: "default" });
+      },
+    }),
+  );
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {

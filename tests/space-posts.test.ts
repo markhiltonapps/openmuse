@@ -178,7 +178,7 @@ test("the agent queues posts for approval; the digest can queue but not cancel",
   const worker = spaceToolSpecs(spaces, "fay", { readOnly: true, posts }) as Spec[];
   assert.deepEqual(
     worker.map((spec) => spec.name),
-    ["get_space_playbook", "schedule_post", "list_scheduled_posts"],
+    ["get_space_playbook", "save_week_plan", "schedule_post", "list_scheduled_posts"],
   );
   // No tool approves: only the person can, in the app.
   assert.equal(

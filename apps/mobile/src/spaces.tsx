@@ -1,9 +1,8 @@
 import type { LucideIcon } from "lucide-react-native";
 import {
-  ArrowLeft,
   ArrowUp,
-  ArrowUpRight,
   CalendarClock,
+  CalendarHeart,
   Check,
   FileText,
   Lock,
@@ -18,35 +17,28 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Pressable, Text, TextInput, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src/index";
 import {
+  type Space as AnySpace,
   type PlaybookPatch,
   type ScheduledPost,
   SOCIAL_APPS,
-  type SocialPlaybook,
-  type Space,
+  type SocialSpace,
 } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
 import { clockTime } from "./meal-checkins-ui";
 import { parseDollars, parseTime } from "./space-input";
 import { useMuseThread } from "./threads";
-import {
-  Button,
-  Card,
-  colors,
-  dateLabel,
-  Empty,
-  ErrorNotice,
-  Field,
-  LinkRow,
-  resultSummary,
-  s,
-} from "./ui";
+import { Button, Card, colors, dateLabel, ErrorNotice, Field, resultSummary, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-const SETUP_MESSAGE = "Let's set up my social media space.";
+/** The social media parts of this file work on their own kind of space. */
+type Space = SocialSpace;
+
+const setupMessage = (kind: AnySpace["kind"]) =>
+  kind === "family" ? "Let's set up my family planner." : "Let's set up my social media space.";
 
 // One list of spaces for the whole app: the Spaces screen keeps it fresh, and the chat reads it
 // to show which space a chat belongs to.
-let cache: Space[] | undefined;
+let cache: AnySpace[] | undefined;
 /** Posts in the app's own scheduler, for every space. */
 let queue: ScheduledPost[] = [];
 /** Why the list couldn't load, while there's nothing to show yet. */
@@ -54,22 +46,18 @@ let failure = "";
 /** Saves on their way: a refresh meanwhile would show the old values for a moment. */
 let inflight = 0;
 const listeners = new Set<() => void>();
-function publish(next: Space[]) {
+function publish(next: AnySpace[]) {
   cache = next;
   failure = "";
   for (const listener of listeners) listener();
 }
-function fail(error: unknown) {
+export function fail(error: unknown) {
   failure = error instanceof Error ? error.message : String(error);
   for (const listener of listeners) listener();
 }
-function replace(space: Space) {
+export function replace(space: AnySpace) {
   publish((cache ?? []).map((item) => (item.id === space.id ? space : item)));
 }
-type Tab = "overview" | "playbook";
-/** The space shown when Spaces opens, and its tab; kept across visits. */
-let shown: string | undefined;
-let lastTab: Tab = "overview";
 
 export function useSpaces(poll = false) {
   const { api } = useWorkspace();
@@ -77,7 +65,7 @@ export function useSpaces(poll = false) {
   const load = useCallback(
     () =>
       Promise.all([
-        api.request<Space[]>("/api/spaces"),
+        api.request<AnySpace[]>("/api/spaces"),
         api.request<ScheduledPost[]>("/api/spaces/posts").catch(() => queue),
       ]).then(([list, posts]) => {
         queue = posts;
@@ -105,13 +93,13 @@ export function useSpaces(poll = false) {
 }
 
 /** Opens a space's own chat, asking `text` there when given; a new space starts with setup. */
-function useOpenChat() {
+export function useOpenChat() {
   const { select } = useMuseThread();
   const { ask } = useWorkspace();
   return useCallback(
-    (space: Space, text?: string) => {
+    (space: AnySpace, text?: string) => {
       select({ id: space.threadId, existing: space.threadStarted });
-      const first = !space.threadStarted && !space.setupDone ? SETUP_MESSAGE : undefined;
+      const first = !space.threadStarted && !space.setupDone ? setupMessage(space.kind) : undefined;
       const message = text ?? first;
       if (message) ask(message);
     },
@@ -120,14 +108,42 @@ function useOpenChat() {
 }
 
 /** Applies a playbook change the way the server does: null clears a value. */
-function patched(playbook: SocialPlaybook, patch: PlaybookPatch): SocialPlaybook {
-  const next: Record<string, unknown> = { ...playbook };
+function patched<B extends object>(playbook: B, patch: object): B {
+  const next = { ...playbook } as Record<string, unknown>;
   for (const [key, value] of Object.entries(patch)) {
     if (value === null) delete next[key];
     else if (value !== undefined) next[key] = value;
   }
-  return next as unknown as SocialPlaybook;
+  return next as B;
 }
+
+/** The space shown when Spaces opens (or the list, when asked for), and its tab; kept across visits. */
+export const spacesView: { shown?: string; list?: boolean; tab: "overview" | "playbook" } = {
+  tab: "overview",
+};
+
+/** What each kind of space is: its icon and tint, how it's started, and what it does. */
+export const KINDS: Record<
+  AnySpace["kind"],
+  { icon: LucideIcon; tint: string; start: string; more: string; about: (agent: string) => string }
+> = {
+  social: {
+    icon: Megaphone,
+    tint: colors.lavender,
+    start: "Start a social media space",
+    more: "New social media space",
+    about: (agent) =>
+      `${agent} learns your brand, keeps an eye on competitors and drafts your posts. Nothing goes out without your OK.`,
+  },
+  family: {
+    icon: CalendarHeart,
+    tint: colors.sky,
+    start: "Start a family planner",
+    more: "New family planner",
+    about: (agent) =>
+      `${agent} plans the week's dinners and grocery list, keeps the family schedule straight, hands out chores and sends a morning rundown.`,
+  },
+};
 
 /** Above a space's chat: which space this is, and the way back to it. Other chats show `children`. */
 export function SpaceChip({ threadId, children }: { threadId: string; children?: ReactNode }) {
@@ -135,12 +151,13 @@ export function SpaceChip({ threadId, children }: { threadId: string; children?:
   const { navigate } = useWorkspace();
   const space = spaces?.find((item) => item.threadId === threadId);
   if (!space) return <>{children}</>;
+  const Icon = KINDS[space.kind].icon;
   return (
     <Pressable
       role="link"
       accessibilityLabel={`${space.name} space. Open its overview`}
       onPress={() => {
-        shown = space.id;
+        spacesView.shown = space.id;
         navigate("spaces");
       }}
       style={({ pressed }) => [
@@ -152,225 +169,29 @@ export function SpaceChip({ threadId, children }: { threadId: string; children?:
           paddingHorizontal: 12,
           minHeight: 32,
           borderRadius: 16,
-          backgroundColor: colors.lavender,
+          backgroundColor: KINDS[space.kind].tint,
           opacity: pressed ? 0.8 : 1,
         },
       ]}
     >
-      <Megaphone size={14} color={colors.blueDark} />
+      <Icon size={14} color={colors.blueDark} />
       <Text style={[s.small, { color: colors.text, fontWeight: "600" }]}>{space.name} space</Text>
     </Pressable>
   );
 }
 
-const heading = (level: 2 | 3) => ({ role: "heading" as const, "aria-level": level });
+export const heading = (level: 2 | 3) => ({ role: "heading" as const, "aria-level": level });
 
-export function SpacesScreen() {
-  const { spaces, load, failure } = useSpaces(true);
-  const { api } = useWorkspace();
-  const { data } = useAgentWorkspace();
-  const agentName = data?.identity.name || "Neddy";
-  const [, rerender] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function start() {
-    setBusy(true);
-    setError("");
-    try {
-      const space = await api.request<Space>("/api/spaces", {});
-      shown = space.id;
-      lastTab = "overview";
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  const show = (id?: string) => {
-    shown = id;
-    lastTab = "overview";
-    rerender((n) => n + 1);
-  };
-  if (!spaces)
-    return failure ? (
-      <View style={{ gap: 12 }}>
-        <ErrorNotice error={failure} />
-        <Button style={{ alignSelf: "flex-start" }} onPress={() => void load().catch(fail)}>
-          Try again
-        </Button>
-      </View>
-    ) : (
-      <Text style={s.muted}>Loading your spaces…</Text>
-    );
-  const space =
-    spaces.find((item) => item.id === shown) ?? (spaces.length === 1 ? spaces[0] : undefined);
-  if (space)
-    return (
-      <SpaceView
-        key={space.id}
-        space={space}
-        agentName={agentName}
-        onBack={spaces.length > 1 ? () => show(undefined) : undefined}
-        onRemoved={() => show(undefined)}
-      />
-    );
-  return (
-    <View style={{ gap: 16 }}>
-      <ErrorNotice error={error} />
-      {spaces.length ? (
-        <Card style={{ gap: 4 }}>
-          {spaces.map((item) => (
-            <LinkRow
-              key={item.id}
-              icon={Megaphone}
-              tint={colors.lavender}
-              title={item.name}
-              detail={item.setupDone ? `Run by ${agentName}` : "Not set up yet"}
-              onPress={() => show(item.id)}
-            />
-          ))}
-        </Card>
-      ) : (
-        <Empty
-          icon={Megaphone}
-          title={`Hand an area of your life to ${agentName}`}
-          detail={`Start with social media. ${agentName} learns your brand, keeps an eye on competitors and drafts your posts, and nothing goes out without your OK.`}
-        >
-          <Button primary icon={Plus} busy={busy} onPress={() => void start()}>
-            Start a social media space
-          </Button>
-        </Empty>
-      )}
-      {!!spaces.length && (
-        <Button
-          icon={Plus}
-          busy={busy}
-          style={{ alignSelf: "flex-start" }}
-          onPress={() => void start()}
-        >
-          New social media space
-        </Button>
-      )}
-    </View>
-  );
-}
-
-/** A pill like the Apps screen's tabs: a tab, or a link to another screen. */
-function Pill({
-  role,
-  selected = false,
-  icon: Icon,
-  trailing: Trailing,
-  label,
-  onPress,
-  children,
-}: {
-  role: "tab" | "link";
-  selected?: boolean;
-  icon?: LucideIcon;
-  trailing?: LucideIcon;
-  label?: string;
-  onPress: () => void;
-  children: string;
-}) {
-  const color = selected ? colors.onInverse : colors.text;
-  return (
-    <Pressable
-      role={role}
-      aria-selected={role === "tab" ? selected : undefined}
-      accessibilityLabel={label ?? children}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-        paddingHorizontal: 16,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: selected ? colors.inverse : colors.subtle,
-        opacity: pressed ? 0.8 : 1,
-      })}
-    >
-      {Icon && <Icon size={15} color={color} />}
-      <Text style={{ fontSize: 14, fontWeight: "600", color }}>{children}</Text>
-      {Trailing && <Trailing size={14} color={colors.muted} />}
-    </Pressable>
-  );
-}
-
-function SpaceView({
-  space,
-  agentName,
-  onBack,
-  onRemoved,
-}: {
-  space: Space;
-  agentName: string;
-  onBack?: () => void;
-  onRemoved: () => void;
-}) {
-  const [tab, setTabState] = useState<Tab>(lastTab);
-  const setTab = (next: Tab) => {
-    lastTab = next;
-    setTabState(next);
-  };
-  const openChat = useOpenChat();
-  return (
-    <View style={{ gap: 20 }}>
-      {onBack && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onBack}
-          style={[s.row, { gap: 6, alignSelf: "flex-start", minHeight: 44 }]}
-        >
-          <ArrowLeft size={16} color={colors.text} />
-          <Text style={[s.text, { fontWeight: "500" }]}>All spaces</Text>
-        </Pressable>
-      )}
-      <View style={{ gap: 4 }}>
-        <Text {...heading(2)} style={s.title}>
-          {space.name}
-        </Text>
-        <Text style={s.muted}>
-          {space.setupDone
-            ? `Run by ${agentName}. Nothing posts or costs you money without your OK.`
-            : `${agentName} sets this up with you in a few minutes.`}
-        </Text>
-      </View>
-      {/* The two tabs, then the chat, which opens on its own screen. */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <View role="tablist" style={{ flexDirection: "row", gap: 8 }}>
-          <Pill role="tab" selected={tab === "overview"} onPress={() => setTab("overview")}>
-            Overview
-          </Pill>
-          <Pill role="tab" selected={tab === "playbook"} onPress={() => setTab("playbook")}>
-            Playbook
-          </Pill>
-        </View>
-        <Pill
-          role="link"
-          icon={MessageCircle}
-          trailing={ArrowUpRight}
-          label={`Open the ${space.name} chat`}
-          onPress={() => openChat(space)}
-        >
-          Chat
-        </Pill>
-      </View>
-      <View role="tabpanel">
-        {tab === "overview" ? (
-          <Overview space={space} agentName={agentName} />
-        ) : (
-          <Playbook space={space} agentName={agentName} onRemoved={onRemoved} />
-        )}
-      </View>
-    </View>
-  );
-}
-
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const appOf = (action: ActionProposal) =>
+export const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+export const appOf = (action: ActionProposal) =>
   typeof action.data.app === "string" ? action.data.app : "";
 /** "IG", "in", "FB"… for an app badge. */
 function appBadge(app: string) {
@@ -383,12 +204,16 @@ function appBadge(app: string) {
     twitter: "X",
     postiz: "Po",
     higgsfield: "Hf",
+    calendar: "Cal",
+    todoist: "To",
+    notion: "No",
+    trello: "Tr",
   };
   const key = Object.keys(known).find((name) => app.toLowerCase().includes(name));
   return key ? (known[key] ?? "") : /meta/i.test(app) ? "Ads" : app.slice(0, 2);
 }
 
-function Overview({ space, agentName }: { space: Space; agentName: string }) {
+export function Overview({ space, agentName }: { space: Space; agentName: string }) {
   const { workspace, open, navigate, api } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const openChat = useOpenChat();
@@ -633,7 +458,7 @@ const when = (iso: string) =>
   });
 
 /** A post or action in a list: app badge, what it is, a detail line, and its buttons. */
-function QueueRow({
+export function QueueRow({
   first,
   app,
   title,
@@ -762,7 +587,7 @@ function FillIn({
   onCancel,
 }: {
   text: string;
-  space: Space;
+  space: AnySpace;
   onAsk: (text: string) => void;
   onCancel: () => void;
 }) {
@@ -775,11 +600,17 @@ function FillIn({
   const clean = (value: string) => value.replace(/[[\]]/g, "").trim();
   const ready = values.every((value) => clean(value));
   const suggestions = (label: string) =>
-    /competitor/i.test(label)
-      ? unique(space.playbook.products.flatMap((product) => product.competitors))
-      : /product/i.test(label)
-        ? space.playbook.products.map((product) => product.name)
-        : [];
+    space.kind === "family"
+      ? /child|kid|son|daughter|name|who/i.test(label)
+        ? space.playbook.family.map((member) => member.name)
+        : /activit|interest|hobby/i.test(label)
+          ? space.playbook.interests
+          : []
+      : /competitor/i.test(label)
+        ? unique(space.playbook.products.flatMap((product) => product.competitors))
+        : /product/i.test(label)
+          ? space.playbook.products.map((product) => product.name)
+          : [];
   const set = (index: number, value: string) =>
     setValues((current) => current.map((item, i) => (i === index ? value : item)));
   const ask = () => {
@@ -828,7 +659,13 @@ function FillIn({
   );
 }
 
-function SavedQuestions({ space, onAsk }: { space: Space; onAsk: (text: string) => void }) {
+export function SavedQuestions({
+  space,
+  onAsk,
+}: {
+  space: AnySpace;
+  onAsk: (text: string) => void;
+}) {
   const { api } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const [filling, setFilling] = useState<string>();
@@ -1040,35 +877,31 @@ const dollars = (amount: number) =>
 
 type Save = (section: string, patch: PlaybookPatch, removed?: string) => Promise<boolean>;
 
-function Playbook({
-  space,
-  agentName,
-  onRemoved,
-}: {
-  space: Space;
-  agentName: string;
-  onRemoved: () => void;
-}) {
-  const { api, notify } = useWorkspace();
-  const openChat = useOpenChat();
-  const book = space.playbook;
+/**
+ * Saving a playbook section, for any kind of space: at once on screen, then on the server; a
+ * removal can be undone for a few seconds. Errors and undo are kept per section.
+ */
+export function usePlaybookSave<P extends object>(space: AnySpace) {
+  const { api } = useWorkspace();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState("");
-  const [undo, setUndo] = useState<{ section: string; label: string; patch: PlaybookPatch }>();
+  const [undo, setUndo] = useState<{ section: string; label: string; patch: P }>();
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(undoTimer.current), []);
-  /** Saves at once on screen, then on the server; a removal can be undone for a few seconds. */
-  const save: Save = async (section, patch, removed) => {
+  const save = async (section: string, patch: P, removed?: string) => {
     const before = cache?.find((item) => item.id === space.id) ?? space;
     const restore = Object.fromEntries(
-      Object.keys(patch).map((key) => [key, before.playbook[key as keyof SocialPlaybook] ?? null]),
-    ) as PlaybookPatch;
+      Object.keys(patch).map((key) => [
+        key,
+        (before.playbook as unknown as Record<string, unknown>)[key] ?? null,
+      ]),
+    ) as P;
     setSaving(section);
     setErrors((current) => ({ ...current, [section]: "" }));
     inflight++;
-    replace({ ...before, playbook: patched(before.playbook, patch) });
+    replace({ ...before, playbook: patched(before.playbook, patch) } as AnySpace);
     try {
-      replace(await api.request<Space>(`/api/spaces/${space.id}/playbook`, patch));
+      replace(await api.request<AnySpace>(`/api/spaces/${space.id}/playbook`, patch));
       if (removed) {
         setUndo({ section, label: removed, patch: restore });
         clearTimeout(undoTimer.current);
@@ -1100,6 +933,22 @@ function Playbook({
           }
         : undefined,
   });
+  return { save, section, saving };
+}
+
+export function Playbook({
+  space,
+  agentName,
+  onRemoved,
+}: {
+  space: Space;
+  agentName: string;
+  onRemoved: () => void;
+}) {
+  const { notify } = useWorkspace();
+  const openChat = useOpenChat();
+  const book = space.playbook;
+  const { save, section, saving } = usePlaybookSave<PlaybookPatch>(space);
   const empty = !book.products.length && !book.platforms.length && !book.voice;
   return (
     <View style={{ gap: 16 }}>
@@ -1151,12 +1000,12 @@ function Playbook({
   );
 }
 
-interface SectionState {
+export interface SectionState {
   error?: string;
   undo?: { label: string; onUndo: () => void };
 }
 
-function Section({
+export function Section({
   title,
   error,
   undo,
@@ -1182,7 +1031,7 @@ function Section({
 }
 
 /** A Field without its own bottom margin, so the gap of the group around it is the only space. */
-function TightField(props: Parameters<typeof Field>[0]) {
+export function TightField(props: Parameters<typeof Field>[0]) {
   return (
     <View style={{ marginBottom: -16 }}>
       <Field {...props} />
@@ -1191,7 +1040,7 @@ function TightField(props: Parameters<typeof Field>[0]) {
 }
 
 /** A chip with a remove button, for competitors and never-do rules. */
-function Removable({ label, onRemove }: { label: string; onRemove: () => void }) {
+export function Removable({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
     <View
       style={[
@@ -1220,7 +1069,7 @@ function Removable({ label, onRemove }: { label: string; onRemove: () => void })
 }
 
 /** A one-line box with an Add button; `taken` names can't be added twice. */
-function AddLine({
+export function AddLine({
   label,
   placeholder,
   taken,
@@ -1694,7 +1543,7 @@ function Voice({ space, save, ...state }: SectionState & { space: Space; save: S
 }
 
 /** A number with − and + buttons; quick taps add up and save once they stop. */
-function Stepper({
+export function Stepper({
   label,
   value,
   max,
@@ -1927,7 +1776,7 @@ function Money({ space, save, ...state }: SectionState & { space: Space; save: S
   );
 }
 
-const TIMES = [
+export const TIMES = [
   { label: "Morning, 8:45 AM", time: "08:45" },
   { label: "Noon", time: "12:00" },
   { label: "Evening, 6 PM", time: "18:00" },
@@ -2032,17 +1881,19 @@ function Digest({ space }: { space: Space }) {
   );
 }
 
-function RemoveSpace({ space, onRemoved }: { space: Space; onRemoved: () => void }) {
+export function RemoveSpace({ space, onRemoved }: { space: AnySpace; onRemoved: () => void }) {
   const { api, notify } = useWorkspace();
   const { load } = useSpaces();
   const [confirming, setConfirming] = useState(false);
+  // The chat holds what they told the agent (a family's names and allergies, say), so it goes too.
+  const [deleteChat, setDeleteChat] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function remove() {
     setBusy(true);
     setError("");
     try {
-      await api.request(`/api/spaces/${space.id}/delete`, {});
+      await api.request(`/api/spaces/${space.id}/delete`, { deleteChat });
       await load();
       notify(`Removed the ${space.name} space`);
       onRemoved();
@@ -2057,9 +1908,33 @@ function RemoveSpace({ space, onRemoved }: { space: Space; onRemoved: () => void
       {confirming ? (
         <View style={{ gap: 8, padding: 12, borderRadius: 12, backgroundColor: colors.errorBg }}>
           <Text style={s.text}>
-            Remove the {space.name} space? Its playbook, saved questions and weekly digest go too.
-            Its chat stays in your side chats.
+            Remove the {space.name} space? Its playbook, saved questions and{" "}
+            {space.kind === "family" ? "morning rundown" : "weekly digest"} go too.
           </Text>
+          <Pressable
+            role="checkbox"
+            aria-checked={deleteChat}
+            onPress={() => setDeleteChat(!deleteChat)}
+            style={[s.row, { gap: 10, minHeight: 44 }]}
+          >
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                borderWidth: 2,
+                borderColor: colors.text,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: deleteChat ? colors.text : "transparent",
+              }}
+            >
+              {deleteChat && <Check size={14} color={colors.onInverse} />}
+            </View>
+            <Text style={[s.text, { flex: 1 }]}>
+              Also delete its chat{deleteChat ? "" : " (it stays in your side chats)"}
+            </Text>
+          </Pressable>
           <View style={[s.row, { gap: 8 }]}>
             <Button small onPress={() => setConfirming(false)}>
               Cancel
