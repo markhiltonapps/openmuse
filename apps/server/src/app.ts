@@ -54,6 +54,7 @@ import {
 import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.ts";
 import { PastChats } from "./past-chats.ts";
 import { PushService } from "./push.ts";
+import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
 import { ReminderService } from "./reminders.ts";
 import { nominatim } from "./rich-cards.ts";
 import { Logins } from "./sign-in.ts";
@@ -222,6 +223,13 @@ export async function createApp(
   // A live server tells Composio where to send new-email events as soon as it starts.
   if (mailAlerts && config.mode === "live" && /^https:/.test(config.publicUrl))
     void mailAlerts.setUp();
+  // The family board's recipes, written on their own after a week is planned.
+  if (claude)
+    agent.recipes = new RecipeKitchen(
+      db,
+      (request, onUsage) => writeRecipes(request, { ...claude, search: agent.search, onUsage }),
+      (owner) => usage.sink(owner, "recipes"),
+    );
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   const calendarToday = new CalendarToday(apps, (owner) => agent.timeZone(owner));
   agent.areas = new Areas(
@@ -675,6 +683,7 @@ export async function createApp(
       {
         weeks: new FamilyWeeks(db),
         results: new SocialWeeks(db),
+        recipes: () => agent.recipes,
         timeZone: (owner) => agent.timeZone(owner),
       },
     ),

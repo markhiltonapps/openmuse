@@ -37,6 +37,7 @@ const KINDS: Record<string, string> = {
   ideas: "Ideas",
   summary: "Summarizing long chats",
   code: "Running code",
+  recipes: "Dinner recipes",
 };
 const dollars = (value: number) =>
   value > 0 && value < 0.01 ? "under $0.01" : `$${value.toFixed(2)}`;

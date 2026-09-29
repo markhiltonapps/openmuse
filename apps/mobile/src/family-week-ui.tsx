@@ -21,6 +21,7 @@ import {
 } from "../../../packages/domain/src/family-week";
 import type { FamilySpace } from "../../../packages/domain/src/spaces";
 import { Emoji } from "./emoji";
+import { DinnerRecipes } from "./recipe-ui";
 import { heading, replace, useOpenChat } from "./spaces";
 import { dark } from "./theme";
 import { Button, Card, colors, ErrorNotice, Sheet, s } from "./ui";
@@ -42,6 +43,8 @@ export interface Board {
   nextWeek: string;
   nextPlanned: boolean;
   past: WeekSummary[];
+  /** The nights (Monday 0) whose recipes are being written now. */
+  recipesWriting?: number[];
 }
 /** Tonight's place on the board, when the board shows this week. */
 export const tonight = (board: Board) =>
@@ -130,11 +133,26 @@ export function useWeekBoard(space: FamilySpace) {
     });
     return () => listener.remove();
   }, [load]);
-  /** A change on the board's week, shown at once and undone if it doesn't save. */
+  // While recipes are on the way, look again every so often so they show up on their own.
+  const waiting = Boolean(board?.recipesWriting?.length);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => void load(), 12000);
+    return () => clearInterval(timer);
+  }, [waiting, load]);
+  /**
+   * A change on the board's week, shown at once and undone if it doesn't save. Resolves with the
+   * saved week, or undefined when it didn't save; `quiet` leaves saying so to the caller.
+   */
   const change = useCallback(
-    async (path: string, body: unknown, optimistic?: (week: FamilyWeek) => FamilyWeek) => {
+    async (
+      path: string,
+      body: unknown,
+      optimistic?: (week: FamilyWeek) => FamilyWeek,
+      options: { quiet?: boolean } = {},
+    ): Promise<FamilyWeek | undefined> => {
       const week = board?.week;
-      if (!week) return false;
+      if (!week) return undefined;
       if (optimistic) setBoard((b) => (b?.week ? { ...b, week: optimistic(b.week) } : b));
       try {
         const saved = await api.request<FamilyWeek>(
@@ -144,14 +162,16 @@ export function useWeekBoard(space: FamilySpace) {
         setBoard((b) =>
           b ? { ...b, week: saved, current: b.current?.id === saved.id ? saved : b.current } : b,
         );
-        return true;
+        return saved;
       } catch {
         setBoard((b) => (b ? { ...b, week } : b));
-        notify("Couldn't save that. Try again.");
-        return false;
+        if (!options.quiet) notify("Couldn’t save that. Try again.");
+        // The week may have changed underneath (a recipe rewritten, say): show it as it is.
+        void load();
+        return undefined;
       }
     },
-    [api, board?.week, notify, space.id],
+    [api, board?.week, notify, space.id, load],
   );
   return { board, error, load, change };
 }
@@ -233,11 +253,14 @@ export function WeekBoard({
   agentName,
   board,
   change,
+  reload,
 }: {
   space: FamilySpace;
   agentName: string;
   board: Board & { week: FamilyWeek };
   change: ReturnType<typeof useWeekBoard>["change"];
+  /** Fetches the board again, e.g. once a night's recipes are written. */
+  reload: () => Promise<unknown>;
 }) {
   const { week } = board;
   const today = tonight(board);
@@ -276,7 +299,15 @@ export function WeekBoard({
           </View>
         )}
       </View>
-      <Dinners space={space} agentName={agentName} week={week} today={today} />
+      <Dinners
+        space={space}
+        agentName={agentName}
+        week={week}
+        today={today}
+        writing={board.recipesWriting ?? []}
+        change={change}
+        reload={reload}
+      />
       <View
         style={wide ? { flexDirection: "row", gap: 16, alignItems: "flex-start" } : { gap: 22 }}
       >
@@ -327,11 +358,18 @@ function Dinners({
   agentName,
   week,
   today,
+  writing,
+  change,
+  reload,
 }: {
   space: FamilySpace;
   agentName: string;
   week: FamilyWeek;
   today?: number;
+  /** Nights whose recipes are being written now. */
+  writing: number[];
+  change: ReturnType<typeof useWeekBoard>["change"];
+  reload: () => Promise<unknown>;
 }) {
   const openChat = useOpenChat();
   const [shown, setShown] = useState<number>();
@@ -417,22 +455,42 @@ function Dinners({
           subtitle={dinner?.note}
           onClose={() => setShown(undefined)}
         >
-          <View style={{ gap: 16, alignItems: "flex-start" }}>
-            <Plate dinner={dinner} size={96} />
-            <Button
-              primary
-              onPress={() => {
-                setShown(undefined);
-                openChat(
-                  space,
-                  dinner
-                    ? `Please swap ${WEEKDAYS[shown]}'s dinner (${dinner.dish}) for something else.`
-                    : `Please plan a dinner for ${WEEKDAYS[shown]}.`,
-                );
-              }}
-            >
-              {dinner ? `Ask ${agentName} to swap it` : `Ask ${agentName} to plan it`}
-            </Button>
+          <View style={{ gap: 22 }}>
+            {/* The plate stands in until there are recipes; then they fill the sheet. */}
+            {!dinner?.recipes?.length && <Plate dinner={dinner} size={96} />}
+            {dinner ? (
+              <DinnerRecipes
+                key={dinner.day}
+                spaceId={space.id}
+                agentName={agentName}
+                week={week}
+                dinner={dinner}
+                writing={writing.includes(dinner.day)}
+                change={change}
+                reload={reload}
+                onSwap={() => {
+                  setShown(undefined);
+                  openChat(
+                    space,
+                    `Please swap ${dinner.dish} on ${WEEKDAYS[shown]} (week of ${monthDay(week.weekStart)}) for something else.`,
+                  );
+                }}
+              />
+            ) : (
+              <Button
+                primary
+                style={{ alignSelf: "flex-start" }}
+                onPress={() => {
+                  setShown(undefined);
+                  openChat(
+                    space,
+                    `Please plan a dinner for ${WEEKDAYS[shown]} (week of ${monthDay(week.weekStart)}).`,
+                  );
+                }}
+              >
+                Ask {agentName} to plan it
+              </Button>
+            )}
           </View>
         </Sheet>
       )}

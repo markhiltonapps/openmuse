@@ -1,12 +1,13 @@
 import { z } from "zod";
-import { weekPlanSchema } from "../../../packages/domain/src/family-week.ts";
+import { WEEKDAYS, weekPlanSchema } from "../../../packages/domain/src/family-week.ts";
 import { weekResultsSchema } from "../../../packages/domain/src/social-week.ts";
 import {
   familyPlaybookPatchSchema,
   playbookPatchSchema,
   type Space,
 } from "../../../packages/domain/src/spaces.ts";
-import type { FamilyWeeks } from "./family-weeks.ts";
+import { type FamilyWeeks, weekForAgent } from "./family-weeks.ts";
+import { nightsToWrite, type RecipeKitchen } from "./recipe-writer.ts";
 import type { SocialWeeks } from "./social-weeks.ts";
 import { type ScheduledPosts, schedulePostSchema } from "./space-posts.ts";
 import { digestSteps, type RoutineCalls, type Spaces } from "./spaces.ts";
@@ -103,12 +104,12 @@ If they ask for a plan, today's rundown or the grocery list before setup is done
 
 2. The week ahead: on the planning day, and whenever the person asks.
 - Dinners for the week (the playbook's number), each fitting the cooking time, food rules and likes, with a line on why (a busy night gets something quick; a slow night, something new). Note leftovers.
-- The grocery list for those meals, grouped by aisle, minus what they say they have. It goes on the board, where they can tick items off and share it; save a file with create_document only if they ask.
+- The grocery list for those meals and whatever else the family needs, grouped by aisle, minus what they say they have. When an item is only for dinners, list those nights in its for field, so each night's recipe can take its share over; leave for out on items for breakfasts, lunches, snacks and staples. It goes on the board, where they can tick items off and share it; each night's recipe adds anything else it needs. Save a file with create_document only if they ask.
 - The schedule: the fixed points plus anything new, clashes called out, and who's driving. If a calendar app is connected, offer to add what's missing through use_app, which asks them first.
 - Chores for the week, by person.
 - Two or three activity ideas for free time, fitting ages, interests, the weather and the budget they've mentioned.
-- Save the week to the family's board with save_week_plan (summary, dinners with a note and one food emoji each, schedule, groceries by aisle, chores by person, ideas), then sum it up in chat in a few lines.
-- For a change later (move a dinner, add something to the grocery list, a new activity), save just that section with save_week_plan; addGroceries adds items without rewriting the list.
+- Save the week to the family's board with save_week_plan (summary, dinners with a note and one food emoji each, schedule, groceries by aisle, chores by person, ideas). Set cook on every dinner: false for leftovers, takeout and eating-out nights, true for the rest. Two or three recipes for each home-cooked night are then written on their own (sized for the family and true to the food rules) and show on the board within a few minutes. When save_week_plan's result says they're being written, say so in one line; if it doesn't, don't mention recipes. When the person wants different recipes for a night, use write_dinner_recipes with what they'd like. Sum it up in chat in a few lines.
+- For a change later (move a dinner, add something to the grocery list, a new activity), save just that section with save_week_plan; addGroceries adds items without rewriting the list. When a night's dish changes, its new recipes are written on their own.
 
 3. Each day, when the rundown is on, it comes to them on its own. In chat, "What's on today?" gets the same in under 150 words: today's schedule with times, dinner tonight and any prep, chores due today, one thing to get ready for tomorrow, and one encouraging line.
 
@@ -156,10 +157,12 @@ export function spaceToolSpecs(
     weeks?: FamilyWeeks;
     /** A social media space's weekly results, saved with save_week_results. */
     results?: SocialWeeks;
+    /** Writes a family week's dinner recipes; set when the Anthropic API is configured. */
+    recipes?: RecipeKitchen;
     timeZone?: () => Promise<string>;
   } = {},
 ) {
-  const { weeks, results, timeZone } = options;
+  const { weeks, results, recipes, timeZone } = options;
   const resolve = (id?: string) => spaces.resolve(owner, id, options.threadId);
   const read = {
     name: "get_space_playbook",
@@ -182,7 +185,7 @@ export function spaceToolSpecs(
         ...(board
           ? {
               // The week on the family's board; the playbook's weekPlan is an older, text-only plan.
-              thisWeek: board.week ?? "not planned yet",
+              thisWeek: board.week ? weekForAgent(board.week) : "not planned yet",
               lastWeek: board.past[0] ?? null,
             }
           : {}),
@@ -205,9 +208,61 @@ export function spaceToolSpecs(
       const space = await resolve(spaceId);
       if (space.kind !== "family") return { error: "Only a family space has a week plan." };
       if (!weeks || !timeZone) return { error: "The week board isn't available here." };
-      return weeks.save(owner, space.id, plan, await timeZone());
+      const zone = await timeZone();
+      const saved = await weeks.save(owner, space.id, plan, zone);
+      // The recipes are written on their own, so this run stays short.
+      if (!recipes || !plan.dinners) return saved;
+      const week = await weeks.get(owner, space.id, saved.weekStart);
+      if (!week || !nightsToWrite(week, { timeZone: zone }).length) return saved;
+      void recipes.fill(owner, space, saved.weekStart, { timeZone: zone }).catch(() => undefined);
+      return {
+        ...saved,
+        recipes:
+          "Recipes for the home-cooked nights are being written now and show on the board within a few minutes.",
+      };
     },
   };
+  /** Fresh recipes for one night, when the person wants different ones. */
+  const dinnerRecipes = recipes
+    ? [
+        {
+          name: "write_dinner_recipes",
+          description:
+            "Have two or three new recipes written for one night's dinner on a family's board, replacing that night's recipes, when the person wants something different for the same dish (quicker, vegetarian, no oven). For a different dish, change the dinner with save_week_plan; its recipes are written on their own. Say what they'd like in wish. The recipes follow the food rules and swap the night's ingredients on the grocery list. The result lists the nights written and any that failed: only say new recipes are on the board for a night that was written. Takes up to a minute.",
+          parameters: z.object({
+            spaceId,
+            week: z
+              .enum(["this", "next"])
+              .optional()
+              .describe("The week the dinner is in; default next week on a weekend, else this"),
+            day: z.enum(WEEKDAYS),
+            wish: z
+              .string()
+              .trim()
+              .max(300)
+              .optional()
+              .describe(
+                "What they'd like, in their words: 'something vegetarian', 'under 20 minutes'",
+              ),
+          }),
+          execute: async (input: {
+            spaceId?: string;
+            week?: "this" | "next";
+            day: (typeof WEEKDAYS)[number];
+            wish?: string;
+          }) => {
+            const space = await resolve(input.spaceId);
+            if (space.kind !== "family") return { error: "Only a family space has dinners." };
+            if (!weeks || !timeZone) return { error: "The week board isn't available here." };
+            const { weekStart } = weeks.which(input.week, await timeZone());
+            return recipes.fill(owner, space, weekStart, {
+              nights: [WEEKDAYS.indexOf(input.day)],
+              ...(input.wish ? { wish: input.wish } : {}),
+            });
+          },
+        },
+      ]
+    : [];
   /** The weekly digest's numbers, for the space's Results tab. */
   const weekResults = results
     ? [
@@ -292,6 +347,7 @@ export function spaceToolSpecs(
     return [
       read,
       weekPlan,
+      ...dinnerRecipes,
       ...weekResults,
       ...postTools.filter((tool) => tool.name !== "cancel_scheduled_post"),
     ];
@@ -300,6 +356,7 @@ export function spaceToolSpecs(
     read,
     ...postTools,
     weekPlan,
+    ...dinnerRecipes,
     ...weekResults,
     {
       name: "update_space_playbook",

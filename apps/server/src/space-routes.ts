@@ -1,6 +1,8 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { AppError } from "./errors.ts";
 import type { FamilyWeeks } from "./family-weeks.ts";
+import type { RecipeKitchen } from "./recipe-writer.ts";
 import type { SocialWeeks } from "./social-weeks.ts";
 import type { ScheduledPosts } from "./space-posts.ts";
 import type { ChatCalls, RoutineCalls, Spaces } from "./spaces.ts";
@@ -18,6 +20,8 @@ export function spaceRoutes(
   boards?: {
     weeks: FamilyWeeks;
     results: SocialWeeks;
+    /** Writes dinner recipes; undefined when the Anthropic API isn't configured. */
+    recipes: () => RecipeKitchen | undefined;
     timeZone: (owner: string) => Promise<string>;
   },
 ) {
@@ -29,9 +33,13 @@ export function spaceRoutes(
       const found = await spaces.get(c.get("owner"), c.req.param("id") ?? "");
       return found.id;
     };
-    app.get("/:id/weeks", async (c) =>
-      c.json(await weeks.board(c.get("owner"), await space(c), await timeZone(c.get("owner")))),
-    );
+    app.get("/:id/weeks", async (c) => {
+      const owner = c.get("owner");
+      const board = await weeks.board(owner, await space(c), await timeZone(owner));
+      // The nights whose recipes are on the way, so the board can say so and look again.
+      const writing = board.week ? (boards.recipes()?.pending(owner, board.week.id) ?? []) : [];
+      return c.json({ ...board, recipesWriting: writing });
+    });
     app.get("/:id/weeks/:week", async (c) =>
       c.json(await weeks.get(c.get("owner"), await space(c), c.req.param("week"))),
     );
@@ -59,6 +67,52 @@ export function spaceRoutes(
           c.req.param("week"),
           c.req.param("chore"),
           await body(c),
+        ),
+      ),
+    );
+    // A night's recipes written now, when the family asks on the board (or the ones missing).
+    app.post("/:id/weeks/:week/recipes", async (c) => {
+      const kitchen = boards.recipes();
+      if (!kitchen)
+        throw new AppError(
+          "Recipes can’t be written yet: the server needs an Anthropic API key.",
+          503,
+        );
+      const found = await spaces.get(c.get("owner"), c.req.param("id") ?? "");
+      if (found.kind !== "family") throw new AppError("Only a family space has dinners", 404);
+      const night = Number((await body(c)).day);
+      const result = await kitchen.fill(
+        c.get("owner"),
+        found,
+        c.req.param("week"),
+        Number.isInteger(night)
+          ? { nights: [night] }
+          : { timeZone: await timeZone(c.get("owner")) },
+      );
+      return c.json({
+        ...result,
+        week: await weeks.get(c.get("owner"), found.id, c.req.param("week")),
+      });
+    });
+    // A night's recipe: pick one (its ingredients replace the last pick's), or put back what's missing.
+    app.post("/:id/weeks/:week/dinners/:day/choose", async (c) =>
+      c.json(
+        await weeks.chooseRecipe(
+          c.get("owner"),
+          await space(c),
+          c.req.param("week"),
+          Number(c.req.param("day")),
+          await body(c),
+        ),
+      ),
+    );
+    app.post("/:id/weeks/:week/dinners/:day/groceries", async (c) =>
+      c.json(
+        await weeks.addRecipeGroceries(
+          c.get("owner"),
+          await space(c),
+          c.req.param("week"),
+          Number(c.req.param("day")),
         ),
       ),
     );

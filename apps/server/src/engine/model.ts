@@ -316,6 +316,7 @@ export async function executeModelTask(
         posts: service.spacePosts,
         weeks: new FamilyWeeks(service.db),
         results: new SocialWeeks(service.db),
+        recipes: service.recipes,
         timeZone: () => service.timeZone(owner),
       }),
     ].map(

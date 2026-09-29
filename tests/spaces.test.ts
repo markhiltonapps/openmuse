@@ -369,7 +369,7 @@ test("a family space: its own playbook and rules, a daily rundown and a week pla
   assert.equal(saved.weekStart, "2026-09-28");
   const board = await weeks.board("kim", space.id, "America/Los_Angeles");
   assert.deepEqual(board.week?.dinners, [
-    { day: 0, dish: "Tacos", note: "Maya sets the table", emoji: "🌮" },
+    { day: 0, dish: "Tacos", note: "Maya sets the table", emoji: "🌮", cook: true },
   ]);
   assert.equal(
     worker.some((spec) => spec.name === "update_space_playbook"),

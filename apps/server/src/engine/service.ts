@@ -58,6 +58,7 @@ import type { MailAlerts } from "../mail-alerts.ts";
 import type { MealCheckIns } from "../meal-checkins.ts";
 import { MiniApps } from "../mini-apps.ts";
 import { People } from "../people.ts";
+import type { RecipeKitchen } from "../recipe-writer.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
@@ -964,6 +965,8 @@ export class AgentService {
   avatarFetcher?: typeof fetch;
   /** Web search for current information; set when a search provider is configured. */
   search?: WebSearch;
+  /** Writes the family board's dinner recipes; set when the Anthropic API is configured. */
+  recipes?: RecipeKitchen;
   /** Purchase guardrails for connected-app actions. */
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
   /** Phone and browser notifications; set when web push is available. */

@@ -292,6 +292,7 @@ export class ConversationAgent extends AbstractAgent {
           posts: this.service.spacePosts,
           weeks: new FamilyWeeks(this.service.db),
           results: new SocialWeeks(this.service.db),
+          recipes: this.service.recipes,
           timeZone: () => this.service.timeZone(this.owner),
         }),
         ...shareToolSpecs(this.service.shares, this.owner),

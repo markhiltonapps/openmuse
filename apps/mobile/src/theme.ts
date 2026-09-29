@@ -41,6 +41,8 @@ const light = {
   sky: "#EDF7FD",
   green: "#E3F3E8",
   greenDark: "#189A58",
+  /** Green text on the page or a card: greenDark is too light for text in light mode. */
+  greenText: "#147A45",
   lavender: "#F0EEFA",
   orange: "#FDF0DF",
   danger: "#AA4A45",
@@ -69,6 +71,7 @@ const night: typeof light = {
   sky: "#0E2130",
   green: "#0F2619",
   greenDark: "#2BD46E",
+  greenText: "#2BD46E",
   lavender: "#1C1930",
   orange: "#2B2012",
   danger: "#FF8F85",

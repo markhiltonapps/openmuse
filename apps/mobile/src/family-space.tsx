@@ -78,7 +78,7 @@ export function FamilyOverview({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [all, setAll] = useState(false);
-  const { board, error: boardError, change } = useWeekBoard(space);
+  const { board, error: boardError, change, load: reloadBoard } = useWeekBoard(space);
   const week = board?.week;
   // "Plan next week" names the week, so this week's plan on the board stays as it is.
   const nextWeekRequest = board
@@ -228,6 +228,7 @@ export function FamilyOverview({
             agentName={agentName}
             board={{ ...board, week }}
             change={change}
+            reload={reloadBoard}
           />
           <Button
             icon={CalendarClock}
