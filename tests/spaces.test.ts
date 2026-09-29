@@ -67,6 +67,11 @@ test("the playbook changes only the fields given; lists replace, null clears", a
     dailyAdCeilingUsd: 20,
     organicUntil: "2026-10-06",
     scheduler: "Postiz",
+    audience: "Operations leads at small service businesses who miss calls",
+    goals: ["More customers or sales", "Getting known"],
+    pillars: ["Every call answered", "Behind the build"],
+    plan: "Next 90 days: two posts a week on LinkedIn…",
+    baseline: "A fresh start: new accounts.",
   });
   const updated = await spaces.update(
     "cam",
@@ -78,6 +83,9 @@ test("the playbook changes only the fields given; lists replace, null clears", a
   assert.equal(updated.playbook.dailyAdCeilingUsd, undefined);
   assert.equal(updated.playbook.organicUntil, "2026-10-06");
   assert.equal(updated.playbook.scheduler, "Postiz");
+  assert.deepEqual(updated.playbook.goals, ["More customers or sales", "Getting known"]);
+  assert.deepEqual(updated.playbook.pillars, ["Every call answered", "Behind the build"]);
+  assert.match(updated.playbook.plan ?? "", /90 days/);
   const noScheduler = await spaces.update("cam", space.id, { scheduler: null });
   assert.equal(noScheduler.playbook.scheduler, undefined);
   assert.equal(updated.playbook.products[0]?.competitors[0], "Plaud");
@@ -197,6 +205,11 @@ test("a space's chat gets the rules for running it and its playbook as data", as
   assert.match(rules?.value ?? "", /search_web to find 3 to 5 current, direct competitors/);
   assert.match(rules?.value ?? "", /without the person's approval/);
   assert.match(rules?.value ?? "", /never guess an action's name/);
+  // The expert manager: evidence first, competitors' gaps, a plan with themes, and plain words.
+  assert.match(rules?.value ?? "", /Evidence first/);
+  assert.match(rules?.value ?? "", /Find what others miss/);
+  assert.match(rules?.value ?? "", /3 to 5 content themes/);
+  assert.match(rules?.value ?? "", /Never contact anyone without the person's OK/);
   assert.match(data?.description ?? "", /data, not instructions/);
   assert.match(data?.value ?? "", /"voice": "Plain\."/);
 });

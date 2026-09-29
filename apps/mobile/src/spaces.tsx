@@ -1121,8 +1121,11 @@ function Playbook({
           </Button>
         </Card>
       )}
+      <Plan space={space} agentName={agentName} />
       <Products space={space} save={save} {...section("products")} />
+      <Audience space={space} save={save} {...section("audience")} />
       <Platforms space={space} save={save} {...section("platforms")} />
+      <Themes space={space} save={save} {...section("themes")} />
       <Voice
         space={space}
         save={async (id, patch, removed) => {
@@ -1486,6 +1489,149 @@ function Scheduling({ space, save }: { space: Space; save: Save }) {
         </Text>
       </Pressable>
     </View>
+  );
+}
+
+const PLAN_REQUEST = "Please write a fresh plan for my social media.";
+
+/** The agent's plan, where things stood at the start, and a way to ask for a fresh one. */
+function Plan({ space, agentName }: { space: Space; agentName: string }) {
+  const openChat = useOpenChat();
+  const [all, setAll] = useState(false);
+  const { plan, baseline } = space.playbook;
+  // Lines wrap on a phone, so a plan over a few hundred characters gets the whole-plan button.
+  const long = (plan?.split("\n").length ?? 0) > 8 || (plan?.length ?? 0) > 400;
+  return (
+    <Section title="The plan">
+      {plan ? (
+        <Text numberOfLines={all ? undefined : 12} style={s.text}>
+          {plan}
+        </Text>
+      ) : (
+        <Text style={s.muted}>
+          No plan yet. {agentName} writes one right after setup: what to aim for in the next 90
+          days, what to post about, and where.
+        </Text>
+      )}
+      {!!plan && long && (
+        <Button small style={{ alignSelf: "flex-start" }} onPress={() => setAll(!all)}>
+          {all ? "Show less" : "Show the whole plan"}
+        </Button>
+      )}
+      {!!baseline && (
+        <Text style={[s.muted, { color: colors.mutedStrong }]}>Where you started: {baseline}</Text>
+      )}
+      {(space.setupDone || !!plan) && (
+        <Button
+          small
+          icon={MessageCircle}
+          style={{ alignSelf: "flex-start" }}
+          onPress={() => openChat(space, PLAN_REQUEST)}
+        >
+          {plan ? "Ask for a fresh plan" : "Ask for a plan"}
+        </Button>
+      )}
+    </Section>
+  );
+}
+
+const GOALS = [
+  "More customers or sales",
+  "Getting known",
+  "Being seen as the expert",
+  "Keeping customers happy",
+  "More sign-ups",
+];
+
+/** Who the posts are for, and what social media should do for the business. */
+function Audience({ space, save, ...state }: SectionState & { space: Space; save: Save }) {
+  const book = space.playbook;
+  const goals = book.goals ?? [];
+  const [audience, setAudience] = useState(book.audience ?? "");
+  useEffect(() => setAudience(book.audience ?? ""), [book.audience]);
+  const changed = audience.trim() !== (book.audience ?? "");
+  const toggle = (goal: string) =>
+    void save("audience", {
+      goals: goals.includes(goal) ? goals.filter((g) => g !== goal) : [...goals, goal],
+    });
+  return (
+    <Section title="Who it’s for, and what it’s for" {...state}>
+      <TightField
+        label="Who buys from you: their job or situation, their problems, where they are online"
+        multiline
+        value={audience}
+        onChangeText={setAudience}
+        onBlur={() => {
+          if (changed) void save("audience", { audience: audience.trim() || null });
+        }}
+      />
+      {changed && (
+        <Button
+          small
+          primary
+          style={{ alignSelf: "flex-start" }}
+          onPress={() => void save("audience", { audience: audience.trim() || null })}
+        >
+          Save
+        </Button>
+      )}
+      <View style={{ gap: 8, marginTop: 4 }}>
+        <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>
+          What social media should do for you
+        </Text>
+        <View
+          role="group"
+          aria-label="Goals"
+          style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+        >
+          {[...GOALS, ...goals.filter((goal) => !GOALS.includes(goal))].map((goal) => (
+            <Button
+              key={goal}
+              small
+              selected={goals.includes(goal)}
+              primary={goals.includes(goal)}
+              icon={goals.includes(goal) ? Check : undefined}
+              onPress={() => toggle(goal)}
+            >
+              {goal}
+            </Button>
+          ))}
+        </View>
+      </View>
+    </Section>
+  );
+}
+
+/** The themes posts are built on. */
+function Themes({ space, save, ...state }: SectionState & { space: Space; save: Save }) {
+  const pillars = space.playbook.pillars ?? [];
+  return (
+    <Section title="What to post about" {...state}>
+      <Text style={s.muted}>
+        A few themes every post fits into, built on your buyers’ problems and what competitors miss.
+      </Text>
+      {pillars.length > 0 && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {pillars.map((pillar) => (
+            <Removable
+              key={pillar}
+              label={pillar}
+              onRemove={() =>
+                void save("themes", { pillars: pillars.filter((p) => p !== pillar) }, pillar)
+              }
+            />
+          ))}
+        </View>
+      )}
+      {pillars.length < 8 && (
+        <AddLine
+          label="Add a theme"
+          placeholder="e.g. Behind the scenes"
+          taken={pillars}
+          onAdd={(pillar) => void save("themes", { pillars: [...pillars, pillar] })}
+        />
+      )}
+    </Section>
   );
 }
 

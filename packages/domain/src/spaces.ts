@@ -24,6 +24,16 @@ export interface SocialPlaybook {
    * when the person approves it.
    */
   scheduler?: string;
+  /** Who buys: their job or situation, the problems they want solved, where they are online. */
+  audience?: string;
+  /** What social media should do for the business, e.g. "More customers", "Getting known". */
+  goals?: string[];
+  /** Where the accounts stood when the space was set up. */
+  baseline?: string;
+  /** The content themes posts are built on. */
+  pillars?: string[];
+  /** The agent's plan: 90-day aims, themes, what to post where, first ad test, people to team up with. */
+  plan?: string;
   /** How the brand sounds. */
   voice: string;
   /** Things never to say or do (claims, names, words, images). */
@@ -109,6 +119,11 @@ export const playbookPatchSchema = z
     products: z.array(socialProductSchema).max(12),
     platforms: z.array(line(40)).max(8),
     scheduler: z.string().trim().min(1).max(40).nullable(),
+    audience: z.string().trim().max(1500).nullable(),
+    goals: z.array(line(80)).max(6),
+    baseline: z.string().trim().max(1500).nullable(),
+    pillars: z.array(line(160)).max(8),
+    plan: z.string().trim().max(8000).nullable(),
     voice: z.string().trim().max(1500),
     avoid: z.array(line(300)).max(25),
     brandFileId: z.string().max(100).nullable(),
@@ -142,6 +157,7 @@ export const digestSchema = z.object({
 export const STARTER_SOCIAL_PROMPTS = [
   "Draft this week’s posts",
   "What did [competitor] post this week?",
+  "Find post ideas our competitors are missing",
   "Make 3 ad ideas for [product]",
   "Which post did best this month, and why?",
   "Draft replies to new comments",
