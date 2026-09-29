@@ -1,9 +1,9 @@
-import { Download, RotateCcw, Upload } from "lucide-react-native";
+import { Download, RotateCcw } from "lucide-react-native";
 import { useState } from "react";
 import { Linking, Platform, Text, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
+import { PastChatsImport } from "./past-chats-ui";
 import { Button, Card, ErrorNotice, Field, SectionHeading, s } from "./ui";
-import { chooseAndSend } from "./upload";
 import { useWorkspace } from "./workspace";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -93,24 +93,25 @@ export function YourDataCard() {
   );
 }
 
-/** Brings what ChatGPT knows about the person over as memory suggestions to keep or dismiss. */
+/**
+ * Past chats from ChatGPT and Claude, and ChatGPT's own memory list pasted in as suggestions to
+ * keep or dismiss.
+ */
 export function ChatgptImport() {
   const { api, notify } = useWorkspace();
   const { refresh } = useAgentWorkspace();
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState<"file" | "text">();
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  async function run(
-    kind: "file" | "text",
-    work: () => Promise<{ suggested: number } | undefined>,
-  ) {
-    setBusy(kind);
+  async function importPasted() {
+    setBusy(true);
     setError("");
     try {
-      const result = await work();
-      if (!result) return;
+      const result = await api.request<{ suggested: number }>("/api/memories/import", {
+        text: text.trim(),
+      });
       await refresh();
-      if (kind === "text") setText("");
+      setText("");
       notify(
         result.suggested
           ? `${result.suggested} ${result.suggested === 1 ? "memory" : "memories"} to review below.`
@@ -119,51 +120,29 @@ export function ChatgptImport() {
     } catch (e) {
       setError(message(e));
     } finally {
-      setBusy(undefined);
+      setBusy(false);
     }
   }
   return (
     <View style={{ gap: 10 }}>
-      <Text style={s.label}>Import from ChatGPT</Text>
-      <Text style={s.small}>
-        In ChatGPT, open Settings → Data controls → Export data, then upload the .zip file it emails
-        you. Your agent reads what you wrote and suggests things to remember; nothing is kept until
-        you approve it. Or paste your memories from ChatGPT's Settings → Personalization → Manage
-        memories.
+      <PastChatsImport />
+      <View style={s.divider} />
+      <Text style={s.label}>Memories from ChatGPT</Text>
+      <Text style={s.muted}>
+        Paste the list from ChatGPT's Settings → Personalization → Manage memories. You choose which
+        ones to keep.
       </Text>
-      <Button
-        icon={Upload}
-        busy={busy === "file"}
-        disabled={!!busy}
-        onPress={() =>
-          void run("file", () =>
-            chooseAndSend<{ suggested: number }>(api, "/api/memories/import", [
-              "application/zip",
-              "application/x-zip-compressed",
-              "application/json",
-              ".zip",
-              ".json",
-            ]),
-          )
-        }
-      >
-        Upload ChatGPT export
-      </Button>
       <Field
-        label="Or paste memories"
+        label="Paste memories"
         value={text}
         onChangeText={setText}
         multiline
         placeholder={"Has a daughter named Emma\nPrefers aisle seats"}
       />
       <Button
-        busy={busy === "text"}
-        disabled={!!busy || text.trim().length < 3}
-        onPress={() =>
-          void run("text", () =>
-            api.request<{ suggested: number }>("/api/memories/import", { text: text.trim() }),
-          )
-        }
+        busy={busy}
+        disabled={busy || text.trim().length < 3}
+        onPress={() => void importPasted()}
       >
         Import pasted memories
       </Button>

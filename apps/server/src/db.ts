@@ -5,6 +5,8 @@ import pg from "pg";
 import { backgroundFailure } from "./log.ts";
 
 type Row = { data: Record<string, unknown> };
+/** Text matched literally inside a LIKE pattern. */
+const escapeLike = (text: string) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 /** One record as stored, for copying between databases. */
 export interface StoredRow {
   owner: string;
@@ -164,6 +166,48 @@ export class Store {
       written += result.rows.length;
     }
     return written;
+  }
+  /** Saves many records of one kind in one statement; a later copy of an id wins. */
+  async putMany<T extends { id: string }>(owner: string, kind: string, values: T[]) {
+    const unique = [...new Map(values.map((value) => [value.id, value])).values()];
+    if (!unique.length) return;
+    await this.db.query(
+      "INSERT INTO records(owner,kind,id,data) SELECT $1,$2,item->>'id',item FROM jsonb_array_elements($3::jsonb) AS item ON CONFLICT(owner,kind,id) DO UPDATE SET data=excluded.data,updated_at=now()",
+      [owner, kind, JSON.stringify(unique)],
+    );
+  }
+  /**
+   * Records of one kind whose text holds every word (matched in lower case), newest first by
+   * their `updatedAt`, optionally only those whose id starts with `prefix`.
+   */
+  async matching<T>(owner: string, kind: string, words: string[], limit: number, prefix = "") {
+    const result = await this.db.query(
+      "SELECT data FROM records WHERE owner=$1 AND kind=$2 AND id LIKE $3 AND lower(data::text) LIKE ALL($4::text[]) ORDER BY data->>'updatedAt' DESC LIMIT $5",
+      [
+        owner,
+        kind,
+        `${escapeLike(prefix)}%`,
+        words.map((w) => `%${escapeLike(w.toLowerCase())}%`),
+        limit,
+      ],
+    );
+    return result.rows.map((row) => row.data as T);
+  }
+  /** How many records of one kind have ids starting with `prefix`. */
+  async count(owner: string, kind: string, prefix = "") {
+    const result = await this.db.query(
+      "SELECT count(*)::int AS data FROM records WHERE owner=$1 AND kind=$2 AND id LIKE $3",
+      [owner, kind, `${escapeLike(prefix)}%`],
+    );
+    return Number(result.rows[0]?.data ?? 0);
+  }
+  /** Deletes the records of one kind whose ids start with `prefix`. */
+  async removePrefix(owner: string, kind: string, prefix: string) {
+    await this.db.query("DELETE FROM records WHERE owner=$1 AND kind=$2 AND id LIKE $3", [
+      owner,
+      kind,
+      `${escapeLike(prefix)}%`,
+    ]);
   }
   async take<T>(owner: string, kind: string, id: string): Promise<T | null> {
     const result = await this.db.query(

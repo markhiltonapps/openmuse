@@ -51,11 +51,13 @@ export async function chooseAndSend<T>(
   api: MuseApi,
   path: string,
   types: string[],
+  limit?: { maxBytes: number; tooBig: string },
 ): Promise<T | undefined> {
   const result = await DocumentPicker.getDocumentAsync({ type: types, copyToCacheDirectory: true });
   if (result.canceled) return undefined;
   const file = result.assets[0];
   if (!file) return undefined;
+  if (limit && file.size && file.size > limit.maxBytes) throw new Error(limit.tooBig);
   if (Platform.OS === "web") {
     if (!file.file) throw new Error("The selected file could not be read. Please choose it again.");
     const form = new FormData();

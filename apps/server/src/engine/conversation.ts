@@ -30,6 +30,7 @@ import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { ownAppToolSpecs } from "../mcp-apps.ts";
 import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
 import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
+import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
@@ -289,6 +290,7 @@ export class ConversationAgent extends AbstractAgent {
           posts: this.service.spacePosts,
         }),
         ...shareToolSpecs(this.service.shares, this.owner),
+        ...pastChatToolSpecs(new PastChats(this.service.db), this.owner),
         ...miniAppToolSpecs(this.service.miniApps, this.owner),
         ...peopleToolSpecs(this.service.people, this.owner),
         ...(this.service.commitments

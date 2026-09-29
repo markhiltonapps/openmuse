@@ -59,7 +59,8 @@ export const s = StyleSheet.create({
     maxWidth: "100%",
     gap: 8,
     paddingHorizontal: 17,
-    minHeight: 42,
+    // 44px: big enough to tap reliably.
+    minHeight: 44,
     paddingVertical: 10,
     borderRadius: 24,
   },

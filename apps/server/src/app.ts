@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import { ownWords } from "../../../packages/domain/src/chat-export.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
 import { AccessRequests } from "./access-requests.ts";
 import { AccountService, type Mailer, ResendMailer } from "./accounts.ts";
@@ -50,6 +51,7 @@ import {
   recentHistory,
 } from "./memory-import.ts";
 import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.ts";
+import { PastChats } from "./past-chats.ts";
 import { PushService } from "./push.ts";
 import { ReminderService } from "./reminders.ts";
 import { nominatim } from "./rich-cards.ts";
@@ -1032,13 +1034,18 @@ export async function createApp(
         .parse(await c.req.json());
       memories = listedMemories(text) ?? (await read(text));
     }
+    const suggested = await suggestMemories(owner, memories, "ChatGPT");
+    return c.json({ found: memories.length, suggested });
+  });
+  /** Memories found in another assistant's history, each waiting for the person to keep it. */
+  async function suggestMemories(owner: string, memories: string[], from: string) {
     let suggested = 0;
     for (const text of memories) {
       const result = await agent
         .suggestMemory(
           owner,
-          { text: text.slice(0, 500), reason: "From your ChatGPT history" },
-          "ChatGPT import",
+          { text: text.slice(0, 500), reason: `From your ${from} history` },
+          `${from} import`,
           { quiet: true },
         )
         .catch(() => undefined);
@@ -1047,13 +1054,52 @@ export async function createApp(
     if (suggested)
       await agent.notify(
         owner,
-        "Memories from ChatGPT to review",
+        `Memories from ${from} to review`,
         `${suggested} ${suggested === 1 ? "thing" : "things"} to keep or dismiss under Memory.`,
         undefined,
         `memory-import:${randomUUID()}`,
       );
-    return c.json({ found: memories.length, suggested });
+    return suggested;
+  }
+  // Past chats from ChatGPT and Claude: big exports are read on the device and sent in batches,
+  // small ones (from the phone app) as the file. What the person wrote there suggests memories.
+  const pastChats = new PastChats(db);
+  const suggestFrom = (owner: string, from: string, history: string) => {
+    if (!claude || !history.trim()) return false;
+    void extractMemories(history, { ...claude, onUsage: usage.sink(owner, "import") })
+      .then((memories) => suggestMemories(owner, memories, from))
+      .catch((error) => backgroundFailure(`memories from ${from}`, error));
+    return true;
+  };
+  app.get("/api/past-chats", async (c) =>
+    c.json({ sources: await pastChats.sources(c.get("owner")) }),
+  );
+  app.post("/api/past-chats/batch", async (c) =>
+    c.json(await pastChats.save(c.get("owner"), await c.req.json())),
+  );
+  app.post("/api/past-chats/finish", async (c) => {
+    const owner = c.get("owner");
+    const { source, history } = z
+      .object({ source: z.unknown(), history: z.string().max(70000).optional() })
+      .parse(await c.req.json());
+    const summary = await pastChats.finish(owner, source);
+    const suggesting = suggestFrom(owner, summary.name, history ?? "");
+    return c.json({ summary, sources: await pastChats.sources(owner), suggesting });
   });
+  app.post("/api/past-chats/upload", async (c) => {
+    const owner = c.get("owner");
+    const file = (await c.req.parseBody()).file;
+    if (!(file instanceof File)) throw new AppError("Choose your ChatGPT or Claude export");
+    const { summary, chats } = await pastChats.importFile(
+      owner,
+      new Uint8Array(await file.arrayBuffer()),
+    );
+    const suggesting = suggestFrom(owner, summary.name, ownWords(chats));
+    return c.json({ summary, sources: await pastChats.sources(owner), suggesting });
+  });
+  app.post("/api/past-chats/remove", async (c) =>
+    c.json(await pastChats.remove(c.get("owner"), (await c.req.json()).source)),
+  );
   app.get("/api/conversation", async (c) =>
     c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),
   );

@@ -12,6 +12,7 @@ import { codeSandboxInstructions, codeSandboxToolSpecs } from "../code-sandbox.t
 import { computerInstructions, computerTools } from "../computer-tools.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
+import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
@@ -307,6 +308,7 @@ export async function executeModelTask(
   tools.push(
     ...[
       ...fileToolSpecs(service.files, owner, service.look),
+      ...pastChatToolSpecs(new PastChats(service.db), owner),
       ...spaceToolSpecs(new Spaces(service.db), owner, {
         readOnly: true,
         posts: service.spacePosts,
