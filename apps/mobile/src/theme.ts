@@ -34,6 +34,8 @@ const light = {
   /** Small grey text on tinted surfaces, where muted falls short of AA. */
   mutedStrong: "#565E63",
   line: "#EEEEF0",
+  /** The edge of a small control that must stand out from the card, such as a colour swatch. */
+  edge: "#8A9196",
   blue: "#C8E7FF",
   blueDark: "#1473C8",
   sky: "#EDF7FD",
@@ -61,6 +63,7 @@ const night: typeof light = {
   muted: "#9C9CA3",
   mutedStrong: "#ADADB4",
   line: "#26262A",
+  edge: "#77777F",
   blue: "#1C4E7D",
   blueDark: "#55AAFF",
   sky: "#0E2130",

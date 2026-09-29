@@ -2059,7 +2059,7 @@ export function NotificationsSheet() {
   );
 }
 export function AppsScreen() {
-  const { navigate, open } = useWorkspace();
+  const { navigate, open, notify } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
   const [tab, setTab] = useAppsTab();
@@ -2071,28 +2071,37 @@ export function AppsScreen() {
   const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const settingsChanged =
+    !!data?.identity &&
+    (name.trim() !== data.identity.name ||
+      tone !== data.identity.tone ||
+      display !== updatesDisplay(data.identity));
+  // The avatar saves as soon as it's picked, so it follows the saved identity on its own; that
+  // way picking one doesn't undo a name or tone that's being edited.
   useEffect(() => {
     if (data?.identity) {
       setName(data.identity.name);
       setTone(data.identity.tone);
-      setAvatar(data.identity.avatar || "sky");
-      setCharacter(data.identity.character || "neddy");
       setDisplay(updatesDisplay(data.identity));
     }
   }, [
     data?.identity.name,
     data?.identity.tone,
-    data?.identity.avatar,
-    data?.identity.character,
-    data?.identity.avatarImageVersion,
     data?.identity.showChatUpdates,
     data?.identity.updatesDisplay,
   ]);
-  async function save(path: string, body: unknown) {
+  useEffect(() => {
+    if (data?.identity) {
+      setAvatar(data.identity.avatar || "sky");
+      setCharacter(data.identity.character || "neddy");
+    }
+  }, [data?.identity.avatar, data?.identity.character, data?.identity.avatarImageVersion]);
+  async function save(path: string, body: unknown, done?: string) {
     setBusy(true);
     setError("");
     try {
       await mutate(path, body);
+      if (done) notify(done);
       if (path === "/memories") setMemory("");
     } catch (e) {
       setError(errorText(e));
@@ -2192,13 +2201,23 @@ export function AppsScreen() {
             <AvatarPicker
               character={character}
               color={avatar}
+              agentName={data?.identity.name || "Your agent"}
               onCharacter={setCharacter}
               onColor={setAvatar}
             />
+            {/* The avatar saves on its own; everything below waits for the button. */}
+            <View style={s.divider} />
             <Field label="Name" value={name} onChangeText={setName} />
-            <View style={[s.row, { gap: 8 }]}>
+            <Text style={s.label}>Tone</Text>
+            <View role="group" aria-label="Tone" style={[s.row, { gap: 8 }]}>
               {(["warm", "concise", "thoughtful"] as const).map((item) => (
-                <Button key={item} small primary={tone === item} onPress={() => setTone(item)}>
+                <Button
+                  key={item}
+                  small
+                  primary={tone === item}
+                  selected={tone === item}
+                  onPress={() => setTone(item)}
+                >
                   {statusLabel(item)}
                 </Button>
               ))}
@@ -2225,21 +2244,24 @@ export function AppsScreen() {
               {UPDATE_PLACES.find((place) => place.id === display)?.detail} The bell always keeps
               every update, including anything that needs you.
             </Text>
+            {/* Lit only when something here isn't saved yet, so an avatar tap never looks unsaved. */}
             <Button
               busy={busy}
-              disabled={!name.trim()}
+              disabled={!name.trim() || !settingsChanged}
               onPress={() =>
-                void save("/identity", {
-                  name: name.trim(),
-                  tone,
-                  avatar,
-                  character,
-                  updatesDisplay: display,
-                  showChatUpdates: display === "chat",
-                })
+                void save(
+                  "/identity",
+                  {
+                    name: name.trim(),
+                    tone,
+                    updatesDisplay: display,
+                    showChatUpdates: display === "chat",
+                  },
+                  `${name.trim()}’s settings are saved.`,
+                )
               }
             >
-              Save preferences
+              Save name and settings
             </Button>
           </Card>
           <Card style={{ gap: 12 }}>

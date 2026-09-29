@@ -139,11 +139,12 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       throw new AppError("Memory not found", 404);
     return c.json({ ok: true });
   });
+  // Only the fields given change, so the avatar picker can save a tap without touching the name.
   app.post("/identity", async (c) => {
     const body = z
       .object({
-        name: z.string().trim().min(1).max(80),
-        tone: z.enum(["warm", "concise", "thoughtful"]),
+        name: z.string().trim().min(1).max(80).optional(),
+        tone: z.enum(["warm", "concise", "thoughtful"]).optional(),
         avatar: z.enum(avatarColors).optional(),
         character: z.enum(avatarCharacters).optional(),
         showChatUpdates: z.boolean().optional(),

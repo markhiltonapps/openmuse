@@ -83,6 +83,13 @@ test("people can upload a picture or have an avatar designed", async () => {
     200,
   );
   assert.equal((await (await call("")).json()).identity.character, "fox");
+  // A tap in the picker sends just the avatar; the name and tone stay as they are.
+  assert.equal((await call("/identity", { character: "owl" })).status, 200);
+  const after = (await (await call("")).json()).identity;
+  assert.deepEqual(
+    [after.name, after.tone, after.character, after.avatar],
+    ["Muse", "warm", "owl", "mint"],
+  );
 
   assert.equal(
     (await call("/avatar-image", { data: "data:image/svg+xml;base64,PHN2Zz4=" })).status,
