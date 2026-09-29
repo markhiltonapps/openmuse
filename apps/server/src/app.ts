@@ -6,6 +6,7 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
+import { AccessRequests } from "./access-requests.ts";
 import { AccountService, type Mailer, ResendMailer } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
@@ -252,6 +253,10 @@ export async function createApp(
     agent.notify(owner, title, body, undefined, key),
   );
   agent.spacePosts = spacePosts;
+  // "Request access" on the sign-in screen; the admin hears about it and decides.
+  const accessRequests = new AccessRequests(db, accounts, (owner, title, body, key) =>
+    agent.notify(owner, title, body, undefined, key),
+  );
   const commitments = new Commitments(
     db,
     (owner) => agent.timeZone(owner),
@@ -358,6 +363,9 @@ export async function createApp(
     await agent.ensure(account.id);
     return c.json(session);
   });
+  app.post("/api/auth/request-access", async (c) =>
+    c.json(await accessRequests.request(await c.req.json())),
+  );
   // The 6-digit code from the same email, typed in instead of opening the link.
   app.post("/api/auth/code", async (c) => {
     if (Date.now() - loginWindow > 60000) {
@@ -559,7 +567,11 @@ export async function createApp(
   app.get("/api/accounts", async (c) => {
     if (!(await accounts.isAdmin(c.get("owner"))))
       throw new AppError("Only the admin can manage people", 403);
-    return c.json({ emailSignIn: accounts.emailSignIn, accounts: await accounts.list() });
+    return c.json({
+      emailSignIn: accounts.emailSignIn,
+      accounts: await accounts.list(),
+      requests: await accessRequests.list(c.get("owner")),
+    });
   });
   app.post("/api/accounts", async (c) =>
     c.json(await accounts.invite(c.get("owner"), await c.req.json()), 201),
@@ -572,6 +584,19 @@ export async function createApp(
   );
   app.post("/api/accounts/:id/invite", async (c) =>
     c.json(await accounts.resendInvite(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/accounts/requests/:id/approve", async (c) =>
+    c.json(
+      await accessRequests.approve(
+        c.get("owner"),
+        c.req.param("id"),
+        await c.req.json().catch(() => ({})),
+      ),
+      201,
+    ),
+  );
+  app.post("/api/accounts/requests/:id/decline", async (c) =>
+    c.json(await accessRequests.decline(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/workspace", async (c) => {
     const [snapshot, reachable] = await Promise.all([

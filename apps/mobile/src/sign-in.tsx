@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
-import { API_URL, requestSignInLink } from "./api";
+import { API_URL, requestAccess, requestSignInLink } from "./api";
 import { hasHelp, openHelp } from "./help-ui";
 import { pastedLoginToken } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
@@ -19,8 +19,12 @@ export function SignInCard({
   onLogin: (token: string) => void;
   onCode: (email: string, code: string) => void;
 }) {
-  const [method, setMethod] = useState<"email" | "key">(emailSignIn ? "email" : "key");
+  const [method, setMethod] = useState<"email" | "key" | "request">(emailSignIn ? "email" : "key");
   const [email, setEmail] = useState("");
+  // Request access: who's asking, why, and the address the request went in for.
+  const [name, setName] = useState("");
+  const [note, setNote] = useState("");
+  const [requested, setRequested] = useState("");
   const [key, setKey] = useState("");
   const [sentTo, setSentTo] = useState("");
   const [code, setCode] = useState("");
@@ -55,10 +59,100 @@ export function SignInCard({
       setBusy(false);
     }
   }
+  async function ask() {
+    if (!validEmail || !name.trim()) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      await requestAccess({
+        name: name.trim(),
+        email: address,
+        ...(note.trim() ? { note: note.trim() } : {}),
+      });
+      setRequested(address);
+    } catch (e) {
+      setProblem(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const link = [
+    s.small,
+    { textAlign: "center" as const, textDecorationLine: "underline" as const },
+  ];
   return (
     <Card style={{ width: "100%", gap: 12 }}>
       <ErrorNotice error={problem || error} />
-      {method === "key" ? (
+      {method === "request" ? (
+        requested ? (
+          <>
+            <Text role="heading" aria-level={2} aria-live="polite" style={s.heading}>
+              Request sent
+            </Text>
+            <Text style={s.muted}>
+              The person who runs this Neato_Muse will see your request. If they approve, an invite
+              arrives at {requested}. It works for 3 days.
+            </Text>
+            <Text style={s.small}>
+              Already have an account? Your usual sign-in email is on its way instead.
+            </Text>
+            <Button
+              onPress={() => {
+                // The code from that email works here, without sending another.
+                setSentTo(requested);
+                setRequested("");
+                setMethod("email");
+              }}
+            >
+              Enter the code from that email
+            </Button>
+          </>
+        ) : (
+          <>
+            <Text role="heading" aria-level={2} style={s.heading}>
+              Request access
+            </Text>
+            <Text style={s.muted}>
+              Neato_Muse is by invitation. Leave your name and email, and the person who runs it can
+              invite you.
+            </Text>
+            <Field
+              label="Your name"
+              value={name}
+              onChangeText={setName}
+              autoFocus
+              autoComplete="name"
+              placeholder="Sarah Jones"
+            />
+            <Field
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              keyboardType="email-address"
+              placeholder="you@example.com"
+            />
+            <Field
+              label="What you'd use it for (optional)"
+              value={note}
+              onChangeText={setNote}
+              maxLength={300}
+              placeholder="A line is plenty"
+              onSubmitEditing={() => void ask()}
+            />
+            <Button
+              primary
+              busy={busy}
+              disabled={!validEmail || !name.trim()}
+              onPress={() => void ask()}
+            >
+              Request access
+            </Button>
+          </>
+        )
+      ) : method === "key" ? (
         <>
           <Field
             label="Workspace access key"
@@ -146,13 +240,28 @@ export function SignInCard({
           </Button>
         </>
       )}
+      {emailSignIn && method === "email" && (
+        <Button onPress={() => setMethod("request")}>No account yet? Request access</Button>
+      )}
       {emailSignIn ? (
         <Pressable
           accessibilityRole="button"
-          onPress={() => setMethod(method === "email" ? "key" : "email")}
+          onPress={() => {
+            // Back from a request lands on the email form, whatever was sent before.
+            if (method === "request") {
+              setRequested("");
+              setSentTo("");
+              setCode("");
+            }
+            setMethod(method === "email" ? "key" : "email");
+          }}
         >
-          <Text style={[s.small, { textAlign: "center", textDecorationLine: "underline" }]}>
-            {method === "email" ? "Use the access key instead" : "Sign in with email instead"}
+          <Text style={link}>
+            {method === "email"
+              ? "Use the access key instead"
+              : method === "key"
+                ? "Sign in with email instead"
+                : "Back to sign in"}
           </Text>
         </Pressable>
       ) : (

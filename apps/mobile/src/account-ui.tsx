@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Platform, Text, View } from "react-native";
-import { Button, Card, ErrorNotice, Field, SectionHeading, s } from "./ui";
+import { Button, Card, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
 import { disablePush, pushState } from "./web-app";
 import { useWorkspace } from "./workspace";
 
@@ -14,7 +14,17 @@ interface Person {
   lastSignInAt?: string;
   agentEmail?: string;
 }
+/** Someone who tapped "Request access" on the sign-in screen. */
+interface AccessRequest {
+  id: string;
+  email: string;
+  name: string;
+  note?: string;
+  createdAt: string;
+}
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** A heading inside a card, one step below the card's own. */
+const subheading = [s.small, { fontWeight: "600" as const, color: colors.text, marginTop: 6 }];
 
 /** Who is signed in on this device, their agent's address, and signing out. */
 export function AccountCard() {
@@ -55,6 +65,9 @@ export function AccountCard() {
 export function PeopleCard() {
   const { api, notify } = useWorkspace();
   const [people, setPeople] = useState<Person[]>();
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
+  /** The request whose Decline was tapped once; a second tap declines. */
+  const [declining, setDeclining] = useState("");
   const [emailSignIn, setEmailSignIn] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -63,10 +76,15 @@ export function PeopleCard() {
   const [error, setError] = useState("");
   const load = useCallback(
     () =>
-      api.request<{ emailSignIn: boolean; accounts: Person[] }>("/api/accounts").then((value) => {
-        setPeople(value.accounts);
-        setEmailSignIn(value.emailSignIn);
-      }),
+      api
+        .request<{ emailSignIn: boolean; accounts: Person[]; requests?: AccessRequest[] }>(
+          "/api/accounts",
+        )
+        .then((value) => {
+          setPeople(value.accounts);
+          setRequests(value.requests ?? []);
+          setEmailSignIn(value.emailSignIn);
+        }),
     [api],
   );
   useEffect(() => {
@@ -118,8 +136,85 @@ export function PeopleCard() {
         memory{domain ? `, plus their own agent address @${domain}` : ""}. They sign in with a link
         sent to their email, no password or key.
       </Text>
+      {requests.length > 0 && (
+        <View style={{ gap: 16 }}>
+          <View style={{ gap: 4 }}>
+            <Text role="heading" aria-level={3} style={subheading}>
+              Asked to join
+            </Text>
+            <Text style={s.small}>
+              Approving sends the usual invite. Declining doesn't email them.
+            </Text>
+          </View>
+          {requests.map((request) => (
+            <View key={request.id} style={{ gap: 6 }}>
+              <Text style={s.text}>
+                {request.name} · {request.email}
+              </Text>
+              {!!request.note && (
+                <Text style={[s.small, { fontStyle: "italic" }]}>“{request.note}”</Text>
+              )}
+              <Text style={s.small}>Asked {new Date(request.createdAt).toLocaleDateString()}</Text>
+              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                {declining === request.id ? (
+                  <>
+                    <Button
+                      small
+                      danger
+                      busy={busy === `${request.id}:decline`}
+                      accessibilityLabel={`Yes, decline ${request.name}`}
+                      onPress={() =>
+                        void run(
+                          `${request.id}:decline`,
+                          () => api.request(`/api/accounts/requests/${request.id}/decline`, {}),
+                          `Declined. ${request.name} wasn't emailed.`,
+                        ).then(() => setDeclining(""))
+                      }
+                    >
+                      Yes, decline
+                    </Button>
+                    <Button small onPress={() => setDeclining("")}>
+                      Keep
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      small
+                      primary
+                      busy={busy === `${request.id}:approve`}
+                      accessibilityLabel={`Approve and invite ${request.name}`}
+                      onPress={() =>
+                        void run(
+                          `${request.id}:approve`,
+                          () => api.request(`/api/accounts/requests/${request.id}/approve`, {}),
+                          `Invite sent to ${request.email}.`,
+                        )
+                      }
+                    >
+                      Approve and invite
+                    </Button>
+                    <Button
+                      small
+                      accessibilityLabel={`Decline ${request.name}`}
+                      onPress={() => setDeclining(request.id)}
+                    >
+                      Decline
+                    </Button>
+                  </>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+      {requests.length > 0 && members.length > 0 && (
+        <Text role="heading" aria-level={3} style={subheading}>
+          Invited
+        </Text>
+      )}
       {members.map((person) => (
-        <View key={person.id} style={{ gap: 6 }}>
+        <View key={person.id} style={{ gap: 6, marginBottom: 4 }}>
           <Text style={s.text}>
             {person.name} · {person.email}
           </Text>

@@ -72,6 +72,10 @@ export async function serverInfo(): Promise<{ mode: "sample" | "live"; emailSign
 export function requestSignInLink(email: string) {
   return post<{ ok: true }>("/api/auth/request", { email }, "Could not send the sign-in email.");
 }
+/** Asks the admin for an account; the answer is the same whether or not the address has one. */
+export function requestAccess(input: { name: string; email: string; note?: string }) {
+  return post<{ ok: true }>("/api/auth/request-access", input, "Could not send your request.");
+}
 export function redeemSignInCode(email: string, code: string) {
   return post<{ token: string; mode: "sample" | "live" }>(
     "/api/auth/code",

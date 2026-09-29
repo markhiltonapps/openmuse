@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import type { AccessRequest } from "../apps/server/src/access-requests.ts";
 import { AccountService, type Mailer } from "../apps/server/src/accounts.ts";
 import { createApp } from "../apps/server/src/app.ts";
 import type { Config } from "../apps/server/src/config.ts";
@@ -209,4 +210,75 @@ test("email to a person's agent address goes to their workspace", async () => {
   // A removed person's address stops taking work.
   await server.accounts.setStatus("local-user", sarahId, "disabled");
   assert.equal((await deliver("em_sarah2", ["sarah@agent.test"])).status, "ignored");
+});
+
+test("people can ask to join from the sign-in screen; the admin approves or declines", async () => {
+  await call("/api/auth/request", { email: "boss@example.com" });
+  const admin = await signIn(sent.at(-1)?.text);
+  const ask = (email: string, name: string, note?: string) =>
+    call("/api/auth/request-access", { email, name, ...(note ? { note } : {}) });
+  const before = sent.length;
+  const notified = async () =>
+    (await db.list<{ title: string; body: string }>("local-user", "notifications")).filter((n) =>
+      n.title.endsWith("asked to join"),
+    );
+  assert.deepEqual(
+    await (await ask("Mike@Example.com", "Mike Hilton", "Planning the family week")).json(),
+    { ok: true },
+  );
+  assert.deepEqual(await (await ask("nadia@example.com", "Nadia")).json(), { ok: true });
+  // They get no email yet; the admin gets a notification.
+  assert.equal(sent.length, before);
+  const notes = await notified();
+  assert.equal(notes.length, 2);
+  assert.match(
+    notes.find((n) => n.title === "Mike Hilton asked to join")?.body ?? "",
+    /^mike@example\.com — “Planning the family week”\. Approve or decline/,
+  );
+  // Asking again while it waits changes nothing, and tells them nothing.
+  assert.deepEqual(await (await ask("mike@example.com", "Mike H")).json(), { ok: true });
+  assert.equal((await notified()).length, 2);
+  // Someone who already has an account gets their sign-in email instead, with the same answer.
+  assert.deepEqual(await (await ask("boss@example.com", "Boss")).json(), { ok: true });
+  assert.equal(sent.at(-1)?.to, "boss@example.com");
+  assert.match(sent.at(-1)?.subject ?? "", /sign-in code/);
+  assert.equal((await notified()).length, 2);
+  // Even once their sign-in emails are rate-limited: the answer never changes.
+  for (let n = 0; n < 5; n++) await call("/api/auth/request", { email: "boss@example.com" });
+  assert.equal((await call("/api/auth/request", { email: "boss@example.com" })).status, 429);
+  assert.deepEqual(await (await ask("boss@example.com", "Boss")).json(), { ok: true });
+
+  const people = await (await call("/api/accounts", undefined, admin)).json();
+  assert.deepEqual(
+    people.requests.map((r: AccessRequest) => [r.email, r.name, r.note]),
+    [
+      ["mike@example.com", "Mike Hilton", "Planning the family week"],
+      ["nadia@example.com", "Nadia", undefined],
+    ],
+  );
+  const [mike, nadia] = people.requests as AccessRequest[];
+  // Only the admin decides.
+  const invited = await call("/api/accounts", { email: "pat@example.com", name: "Pat" }, admin);
+  assert.equal(invited.status, 201);
+  const member = await signIn(sent.at(-1)?.text);
+  assert.equal((await call(`/api/accounts/requests/${mike?.id}/approve`, {}, member)).status, 403);
+  // Approving sends the invite with the name they gave; declining is quiet.
+  const approved = await call(`/api/accounts/requests/${mike?.id}/approve`, {}, admin);
+  assert.equal(approved.status, 201);
+  assert.equal((await approved.json()).name, "Mike Hilton");
+  assert.equal(sent.at(-1)?.to, "mike@example.com");
+  assert.match(sent.at(-1)?.subject ?? "", /invited/);
+  const mails = sent.length;
+  assert.equal((await call(`/api/accounts/requests/${nadia?.id}/decline`, {}, admin)).status, 200);
+  assert.equal(sent.length, mails);
+  assert.deepEqual((await (await call("/api/accounts", undefined, admin)).json()).requests, []);
+  assert.equal((await call(`/api/accounts/requests/${nadia?.id}/decline`, {}, admin)).status, 404);
+  // Mike signs in with the invite; asking now sends a sign-in email, not a request.
+  await signIn(sent.at(-1)?.text);
+  await ask("mike@example.com", "Mike Hilton");
+  assert.equal(sent.at(-1)?.to, "mike@example.com");
+  assert.match(sent.at(-1)?.subject ?? "", /sign-in code/);
+  // One address gets three tries a day.
+  for (let n = 0; n < 3; n++) assert.equal((await ask("many@example.com", "Many")).status, 200);
+  assert.equal((await ask("many@example.com", "Many")).status, 429);
 });
