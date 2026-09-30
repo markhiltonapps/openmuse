@@ -156,3 +156,61 @@ PENDING
 - futurehome.html (future page) and its Neddy images: the page team's work is waiting on the
   owner's approval of the feature name; then add the "See how it works today" link to help.html.
 - Pricing inputs, and time-log hours for 2026-09-29 (evening) and 2026-09-30.
+
+
+EVENING SESSION (2026-09-30, continued)
+=======================================
+
+WHAT CHANGED
+------------
+1. Future page published (018aeec): muse.neatoventures.com/futurehome.html with the new Neddy
+   pictures. The owner approved the feature name "Legwork" and chose to keep the page out of search
+   results for now (robots noindex; delete that line to let search engines list it).
+
+2. "Neddy pursues you", phase 1, slice 1: About you (045ea59), live.
+   - Apps › About you (🙂): what Neddy knows about the person, by group (You, Work, Home and
+     family, Email and apps, How I help), each with where it came from. Tap to change (typed or
+     said), forget with an inline confirm and Undo; guesses show a Guess tag with That's right / No.
+     Missing facts are quiet "+" buttons; an empty page starts with five. Where you live = home area.
+   - The old Memory card moved here as "Other things I remember"; memory suggestions sit at the top.
+   - "Answer a few questions" and the say-or-type box go to the chat, where Neddy asks one question
+     at a time and saves answers (save_about_person / forget_about_person). Neddy sees a short
+     summary of the page in every chat and background job.
+   - Facts are an allowlist (packages/domain/src/persona.ts); no health, religion, politics,
+     account numbers or logins; a guess never replaces what the person said.
+
+3. Jobs you hand off (ec269bd), from the owner's robot-vacuum job:
+   - Finished job page: green Done card with one big "Open the report" button (files a job makes are
+     now linked to it), the answer once, "Where I looked" folded as plain links (error pages marked).
+   - Failed job page: "Couldn't finish" card, plain words, error message small, Try again.
+   - Told when it's done: the pop-up stays until opened or closed (also for jobs that ended while the
+     app was closed); push and email links open the job (/?task=, kept through sign-in); an email
+     when a handed-off job is done, needs an answer, or can't finish (never raw errors; switch in
+     Apps › Alerts › "Jobs you hand off"); opening a job clears its updates; an offer to turn on
+     notifications while a job runs. Only jobs a person starts are "handed off"; routines stay quiet.
+   - Research rules for background jobs: say when a site shows an error, "best-reviewed" = rating
+     and review count, one page means one page, lead the summary with the answer.
+
+4. Voice research for slice 5 (scratchpad/proactive/voice-research.md): recommends Gemini 3.8
+   Flash-Lite TTS (about 1 cent a minute, top of one blind test); runner-up Gemini 3.8 Flash TTS.
+   Prices double on 1 Jan 2027. Several figures are from search extracts, flagged in the report.
+
+TEST RESULTS
+------------
+- Full suite: 430 passed, 0 failed (new: tests/persona.test.ts, tests/job-email.test.ts,
+  tests/job-alerts.test.ts).
+- Design division: About you approved after three rounds; the job page and alerts after two
+  (visual, usability, copy). Browser checks at 320/390/1100, light and dark, keyboard walks.
+
+KNOWN ISSUES
+------------
+- The corner pop-up stays last in the Tab order (it's positioned against the whole shell); the bell,
+  early in the Tab order, opens the same updates. The usability reviewer accepted this.
+- Job emails need the mailer (Resend) that sign-in already uses; sample/local servers don't send.
+- The phone notification offer depends on the browser: iPhone needs the app on the Home Screen.
+
+PENDING
+-------
+- Owner: re-run the robot-vacuum job to see the new Done page, pop-up and email.
+- Slice 2: spoken first interview + drip questions. Slices 3–6 after that.
+- Pricing inputs, and time-log hours for 2026-09-29 (evening) and 2026-09-30.

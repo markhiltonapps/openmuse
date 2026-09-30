@@ -124,5 +124,13 @@ Time Log — <Project Name>
   and a press that turns into a scroll must not click. It's a live, signed-in site with no approvals.
 - **Background jobs and placeholders:** a job text like "my bank's website" is sent literally, and a
   job with no real site can't start. Give people boxes to fill in, and have the agent ask.
+- **Full-page screenshots:** the app scrolls inside its own container, so Playwright's
+  `fullPage` only captures the first screen. Use a tall viewport (e.g. 390×3400) instead.
+- **Biome and string quotes:** Biome may switch a long string to single quotes. Before editing an
+  agent-facing string with apostrophes, check its quotes (a single-quoted one needs `\'`).
+- **Container restarts:** uncommitted work survives, but background servers don't. Before a long
+  wait, save `git diff` and new files to the scratchpad so nothing depends on one container.
+- **Job emails and notify():** `notify()` returns whether the update is new; send anything extra
+  (email) only then, because maintenance re-publishes every job's outcome each minute.
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
   `apps/worker` changes; other pushes show it as SKIPPED.
