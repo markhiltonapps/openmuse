@@ -3,8 +3,8 @@ import {
   Archive,
   CalendarDays,
   FileText,
+  LayoutGrid,
   LifeBuoy,
-  Megaphone,
   MessageCircle,
   Monitor,
   Plus,
@@ -227,7 +227,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
               }}
             />
             <LinkRow
-              icon={Megaphone}
+              icon={LayoutGrid}
               title="Spaces"
               detail="Social media and the family week, run for you"
               onPress={() => go("spaces")}

@@ -4,6 +4,7 @@ import {
   Bell,
   Check,
   FolderOpen,
+  LayoutGrid,
   Lightbulb,
   type LucideIcon,
   Menu,
@@ -75,6 +76,7 @@ import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", icon: MessageCircle },
   { id: "feed", label: "Feed", icon: Newspaper },
+  { id: "spaces", label: "Spaces", icon: LayoutGrid },
   { id: "activity", label: "Activity", icon: PanelsTopLeft },
   { id: "ideas", label: "Ideas", icon: Lightbulb },
   { id: "goals", label: "Goals", icon: SquareCheck },
@@ -580,7 +582,8 @@ function WorkspaceShell({
           </View>
           <View
             style={{
-              paddingHorizontal: 22,
+              // Eight buttons: a narrow phone gives the bar more of its width.
+              paddingHorizontal: width < 420 ? 8 : 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,
               alignItems: "center",
@@ -590,8 +593,8 @@ function WorkspaceShell({
               style={{
                 flexDirection: "row",
                 width: "100%",
-                maxWidth: 370,
-                padding: 5,
+                maxWidth: 400,
+                padding: 4,
                 backgroundColor: colors.surface,
                 borderRadius: 40,
                 shadowColor: "#132631",
