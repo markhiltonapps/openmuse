@@ -184,3 +184,49 @@ test("a background job works a website: reads it, downloads, and stops before pa
   assert.equal(cost.dollars, 0.009);
   assert.equal(task.evidence[0]?.url, PAGE.url);
 });
+
+test("a job that doesn't name the site asks which one, in the agent's own words", async (t) => {
+  const bodies = await scriptedClaude(t, [
+    { text: "Which bank do you use? Tell me its name or web address and I'll get the statement." },
+  ]);
+  let task: AgentTask = {
+    id: "task-web-2",
+    title: "Get my statement",
+    prompt: "Go to my bank's website, sign in, and download my statement for August 2026.",
+    kind: "agent",
+    status: "running",
+    plan: [],
+    evidence: [],
+    artifactIds: [],
+    state: {},
+    createdAt: "2026-09-30T12:00:00.000Z",
+    updatedAt: "2026-09-30T12:00:00.000Z",
+  } as unknown as AgentTask;
+  const service = {
+    config: { model: "anthropic/claude-haiku-4-5-20251001" },
+    computer: {},
+    files: {},
+    browser: {},
+    db: { get: async () => null, list: async () => [] },
+    usage: { sink: () => () => undefined, cost: () => 0.001 },
+  } as unknown as AgentService;
+  const ctx = {
+    signal: new AbortController().signal,
+    guard: async () => undefined,
+    event: async () => undefined,
+    checkpoint: async (patch: Partial<AgentTask>) => {
+      task = { ...task, ...patch, state: { ...task.state, ...(patch.state ?? {}) } };
+      return task;
+    },
+  } as unknown as TaskContext;
+
+  const result = await executeModelTask(service, "owner-1", task, ctx);
+
+  const system = JSON.stringify((bodies[0] as { system?: unknown }).system ?? "");
+  assert.match(system, /never guess a site/, "the job is told to ask which site");
+  assert.equal(result.status, "waiting_input");
+  assert.equal(
+    (result as { question?: string }).question,
+    "Which bank do you use? Tell me its name or web address and I'll get the statement.",
+  );
+});

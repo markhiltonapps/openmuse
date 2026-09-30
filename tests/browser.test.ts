@@ -629,3 +629,41 @@ test("a full browser makes room from the page and profile left alone longest", a
   assert.equal(stalest(sessions, new Set(["open-old"])), "old");
   assert.equal(stalest([sessions[0] as (typeof sessions)[0]], new Set(["open-old"])), undefined);
 });
+
+test("the console can press and hold, for checks like Press & hold", async () => {
+  const { consoleInput } = await import("../apps/worker/src/browser.ts");
+  // Pressing down and letting go are separate, so the page sees a real, live hold.
+  assert.deepEqual(consoleInput({ type: "down", x: 640, y: 400 }), {
+    type: "down",
+    x: 640,
+    y: 400,
+  });
+  assert.deepEqual(consoleInput({ type: "up", x: 700, y: 420 }), {
+    type: "up",
+    x: 700,
+    y: 420,
+    cancel: false,
+  });
+  // A press the person turned into a scroll is let go without a click.
+  assert.equal(consoleInput({ type: "up", x: 640, y: 400, cancel: true }).type, "up");
+  assert.deepEqual(consoleInput({ type: "up", x: 640, y: 400, cancel: true }), {
+    type: "up",
+    x: 640,
+    y: 400,
+    cancel: true,
+  });
+  assert.deepEqual(consoleInput({ type: "click", x: 10, y: 20 }), { type: "click", x: 10, y: 20 });
+  for (const bad of [
+    { type: "down", x: 1280, y: 400 },
+    { type: "up", x: 640 },
+    { type: "hold", x: 640, y: 400, ms: 2000 },
+    { type: "key", key: "F12" },
+  ])
+    assert.throws(() => consoleInput(bad), /Unsupported browser input/);
+  // The console page presses down when the person does, and lets go when they do.
+  const { browserConsole } = await import("../apps/server/src/browser-console.ts");
+  const page = browserConsole("/api/browsers/x/preview");
+  assert.match(page, /type:'down'/);
+  assert.match(page, /type:'up'/);
+  assert.match(page, /hold down on it until the site lets you through/);
+});

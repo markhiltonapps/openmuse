@@ -69,7 +69,7 @@ export function Details({ detail }: { detail: Detail }) {
   const { close, navigate } = useWorkspace();
   if (detail.type === "computer") return <ComputerSheet />;
   if (detail.type === "task") return <TaskDetail taskId={detail.taskId} />;
-  if (detail.type === "delegate") return <DelegateSheet />;
+  if (detail.type === "delegate") return <DelegateSheet prompt={detail.prompt} />;
   if (detail.type === "notifications") return <NotificationsSheet />;
   if (detail.type === "food") return <FoodLogSheet log={detail.log} />;
   if (detail.type === "commitments") return <CommitmentsSheet tab={detail.tab} />;

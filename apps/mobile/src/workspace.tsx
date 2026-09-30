@@ -20,7 +20,8 @@ export type Detail =
   | { type: "browser"; browser: BrowserSession }
   | { type: "review"; action: ActionProposal }
   | { type: "task"; taskId: string }
-  | { type: "delegate" }
+  /** Delegate task; `prompt` arrives filled in (from a ?delegate= link), as a General task. */
+  | { type: "delegate"; prompt?: string }
   | { type: "notifications" }
   | { type: "food"; log?: boolean }
   | { type: "computer" }

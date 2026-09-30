@@ -348,6 +348,20 @@ export function takeSharedText() {
   return text.slice(0, 4000);
 }
 
+/**
+ * A job handed over by a link, /?delegate=…, such as the trial page's "Start in the app". It only
+ * fills in Delegate task; nothing is sent until the person taps it. Tidies the address bar.
+ */
+export function takeDelegateDraft() {
+  if (!web()) return "";
+  const url = new URL(window.location.href);
+  const text = url.searchParams.get("delegate")?.trim() ?? "";
+  if (!url.searchParams.has("delegate")) return "";
+  url.searchParams.delete("delegate");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return text.slice(0, 2000);
+}
+
 /** Lets the person choose a picture; returns it as a small square JPEG data URL. */
 export function pickImage(size = 256): Promise<string | undefined> {
   if (!web()) return Promise.resolve(undefined);

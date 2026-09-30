@@ -482,7 +482,17 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           )}
           {task.status === "waiting_input" && (
             <Card style={{ backgroundColor: colors.sky, gap: 10 }}>
-              <Text style={s.heading}>{task.question || "A detail from you will help"}</Text>
+              {task.question && (task.question.length > 120 || task.question.includes("\n")) ? (
+                <>
+                  {/* A longer message is the agent's own words, shown as it wrote them. */}
+                  <Text style={s.heading}>
+                    {`${data?.identity.name || "Your agent"} needs your answer`}
+                  </Text>
+                  <AssistantResponse content={task.question} />
+                </>
+              ) : (
+                <Text style={s.heading}>{task.question || "A detail from you will help"}</Text>
+              )}
               {fieldNames.map((name) =>
                 missing.some(
                   (f) => typeof f === "object" && f && f.name === name && f.type === "checkbox",
@@ -1026,11 +1036,11 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
     </Card>
   );
 }
-export function DelegateSheet() {
+export function DelegateSheet({ prompt: filled }: { prompt?: string } = {}) {
   const { workspace, close, open } = useWorkspace();
   const { delegate } = useAgentWorkspace();
-  const [kind, setKind] = useState<AgentTask["kind"]>("plan");
-  const [prompt, setPrompt] = useState("");
+  const [kind, setKind] = useState<AgentTask["kind"]>(filled ? "agent" : "plan");
+  const [prompt, setPrompt] = useState(filled ?? "");
   const [messageId, setMessageId] = useState("");
   const [csv, setCsv] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1059,11 +1069,22 @@ export function DelegateSheet() {
     >
       <View style={[s.row, { flexWrap: "wrap", gap: 8, marginBottom: 20 }]}>
         {(["plan", "document", "finance", "agent"] as const).map((item) => (
-          <Button small primary={kind === item} key={item} onPress={() => setKind(item)}>
+          <Button
+            small
+            primary={kind === item}
+            selected={kind === item}
+            key={item}
+            onPress={() => setKind(item)}
+          >
             {item === "agent" ? "General task" : statusLabel(item)}
           </Button>
         ))}
       </View>
+      {filled && (
+        <Text style={[s.muted, { marginBottom: 12 }]}>
+          This job is filled in from your link. Check it, then tap Delegate task.
+        </Text>
+      )}
       <Field
         label="What would you like done?"
         value={prompt}

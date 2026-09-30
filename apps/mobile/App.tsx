@@ -73,7 +73,7 @@ import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { tipProps } from "./src/tips";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
-import { listenForCheckIns, registerServiceWorker } from "./src/web-app";
+import { listenForCheckIns, registerServiceWorker, takeDelegateDraft } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 /** The bottom bar. `short` is the word under the icon when the full name is too long for it. */
@@ -249,6 +249,11 @@ function WorkspaceApp({ token }: { token: string }) {
       }),
     [],
   );
+  // A ?delegate= link opens Delegate task with the job filled in, ready to check and send.
+  useEffect(() => {
+    const prompt = takeDelegateDraft();
+    if (prompt) setDetail({ type: "delegate", prompt });
+  }, []);
   if (!workspace)
     return (
       <SafeAreaView

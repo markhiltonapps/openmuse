@@ -23,7 +23,7 @@ const style: Partial<MarkdownStyles> = {
   heading1: { fontSize: 21, lineHeight: 27 },
   heading2: { fontSize: 19, lineHeight: 25 },
   heading3: { fontSize: 17, lineHeight: 23 },
-  link: { color: colors.blueDark, textDecorationLine: "underline" },
+  link: { color: colors.blueText, textDecorationLine: "underline" },
   codeInline: { backgroundColor: colors.subtle, color: colors.text },
   codeBlock: { backgroundColor: colors.subtle, color: colors.text },
 };

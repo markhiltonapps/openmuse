@@ -44,6 +44,8 @@ export async function createBrowserManager(options: {
   const sessions = new Map<string, Session>();
   const running = new Map<string, Running>();
   const queues = new Map<string, Promise<unknown>>();
+  // A button held down from the console, let go by the person, or after 20 seconds at most.
+  const held = new Map<string, ReturnType<typeof setTimeout>>();
   const proxy = await startEgressProxy();
   for (const id of await readdir(dataDir)) {
     if (!SESSION_ID.test(id)) continue;
@@ -337,37 +339,35 @@ export async function createBrowserManager(options: {
     input: (id: string, input: Record<string, unknown>) =>
       serial(id, async () => {
         const { page } = active(id);
-        const { type, x, y, key, text, deltaY } = input;
-        if (
-          type === "click" &&
-          typeof x === "number" &&
-          typeof y === "number" &&
-          Number.isFinite(x) &&
-          Number.isFinite(y) &&
-          x >= 0 &&
-          x < 1280 &&
-          y >= 0 &&
-          y < 800
-        )
-          await page.mouse.click(x, y);
-        else if (type === "text" && typeof text === "string" && text.length <= 10_000)
-          await page.keyboard.insertText(text);
-        else if (
-          type === "key" &&
-          typeof key === "string" &&
-          /^(Enter|Tab|Escape|Backspace|Delete|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown|Control\+a|Meta\+a|Shift\+Tab)$/.test(
-            key,
-          )
-        )
-          await page.keyboard.press(key);
-        else if (
-          type === "scroll" &&
-          typeof deltaY === "number" &&
-          Number.isFinite(deltaY) &&
-          Math.abs(deltaY) <= 5000
-        )
-          await page.mouse.wheel(0, deltaY);
-        else throw new WorkerError("INVALID_INPUT", "Unsupported browser input or coordinates.");
+        const step = consoleInput(input);
+        if (step.type === "click") await page.mouse.click(step.x, step.y);
+        else if (step.type === "down") {
+          // Held down while the person holds, for checks like "Press & hold to confirm you're a
+          // human", so the page reacts live.
+          await page.mouse.move(step.x, step.y, { steps: 8 });
+          await page.mouse.down();
+          clearTimeout(held.get(id));
+          held.set(
+            id,
+            setTimeout(() => {
+              held.delete(id);
+              void serial(id, async () => {
+                const current = running.get(id)?.page;
+                if (current && !current.isClosed()) await current.mouse.up();
+              }).catch(() => undefined);
+            }, 20_000),
+          );
+        } else if (step.type === "up") {
+          clearTimeout(held.get(id));
+          held.delete(id);
+          // Let go where the person did. A cancelled press (they started scrolling) lets go just
+          // clear of where it was pressed, so the site doesn't count a click or drag far.
+          if (step.cancel) await page.mouse.move(step.x, step.y >= 400 ? step.y - 60 : step.y + 60);
+          else await page.mouse.move(step.x, step.y);
+          await page.mouse.up();
+        } else if (step.type === "text") await page.keyboard.insertText(step.text);
+        else if (step.type === "key") await page.keyboard.press(step.key);
+        else await page.mouse.wheel(0, step.deltaY);
         return refresh(id);
       }),
     elements: (id: string) =>
@@ -443,6 +443,48 @@ export async function createBrowserManager(options: {
 }
 
 /** Why a page didn't load, in words the agent can pass on. */
+const CONSOLE_KEYS =
+  /^(Enter|Tab|Escape|Backspace|Delete|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown|Control\+a|Meta\+a|Shift\+Tab)$/;
+const onScreen = (x: unknown, y: unknown): x is number =>
+  typeof x === "number" &&
+  typeof y === "number" &&
+  Number.isFinite(x) &&
+  Number.isFinite(y) &&
+  x >= 0 &&
+  x < 1280 &&
+  y >= 0 &&
+  y < 800;
+
+type ConsoleInput =
+  | { type: "click"; x: number; y: number }
+  | { type: "down"; x: number; y: number }
+  | { type: "up"; x: number; y: number; cancel: boolean }
+  | { type: "text"; text: string }
+  | { type: "key"; key: string }
+  | { type: "scroll"; deltaY: number };
+
+/**
+ * What the person does in the browser console: a click, pressing down and letting go (a press and
+ * hold), typing, a key or a scroll.
+ */
+export function consoleInput(input: Record<string, unknown>): ConsoleInput {
+  const { type, x, y, key, text, deltaY } = input;
+  if (type === "click" && onScreen(x, y)) return { type, x, y: y as number };
+  if (type === "down" && onScreen(x, y)) return { type, x, y: y as number };
+  if (type === "up" && onScreen(x, y))
+    return { type, x, y: y as number, cancel: input.cancel === true };
+  if (type === "text" && typeof text === "string" && text.length <= 10_000) return { type, text };
+  if (type === "key" && typeof key === "string" && CONSOLE_KEYS.test(key)) return { type, key };
+  if (
+    type === "scroll" &&
+    typeof deltaY === "number" &&
+    Number.isFinite(deltaY) &&
+    Math.abs(deltaY) <= 5000
+  )
+    return { type, deltaY };
+  throw new WorkerError("INVALID_INPUT", "Unsupported browser input or coordinates.");
+}
+
 export function navigationFailure(error: unknown) {
   if (error instanceof WorkerError && error.code === "BLOCKED_URL")
     return "The page sent the browser to a blocked destination.";

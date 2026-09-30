@@ -598,10 +598,14 @@ export async function executeModelTask(
   }).finally(saveCost);
   if (runError) throw new Error(runError);
   if (text) await ctx.event("step", "Agent update", text.slice(0, 12000));
+  // A run that stops without finishing or asking still shows the agent's own last words, which
+  // are usually a question, so the person can answer it.
+  const said = text.trim();
   const result = outcome ?? {
     status: "waiting_input" as const,
-    question:
-      "The agent reached the end of this run without confirming completion. Give it a follow-up instruction to continue.",
+    question: said
+      ? said.slice(0, 2000)
+      : `${identity?.name ?? "Neddy"} stopped before finishing. Say what to do next, then tap Continue task.`,
     state: { ...task.state, lastUpdate: text },
   };
   return result.state ? { ...result, state: { ...result.state, cost: cost() } } : result;
