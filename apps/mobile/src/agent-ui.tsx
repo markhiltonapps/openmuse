@@ -3,7 +3,9 @@ import {
   Bell,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   CircleDollarSign,
   FileText,
   Globe2,
@@ -43,6 +45,7 @@ import { AppAlertsCard } from "./app-alerts-ui";
 import { AppearanceCard } from "./appearance-ui";
 import { AlwaysAllowedCard, AppPermissionsCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
+import { AssistantResponse } from "./assistant-response";
 import { AvatarPicker } from "./avatar-settings";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { Emoji, topicEmoji } from "./emoji";
@@ -79,6 +82,22 @@ import { useWorkspace } from "./workspace";
 export function statusLabel(value: string) {
   return value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
+/** A task's status in everyday words. */
+const TASK_STATUS: Record<string, string> = {
+  queued: "Waiting to start",
+  scheduled: "Scheduled",
+  running: "Working on it",
+  waiting_input: "Needs your answer",
+  waiting_approval: "Waiting for your OK",
+  paused: "Paused",
+  succeeded: "Done",
+  failed: "Didn’t finish",
+  cancelled: "Cancelled",
+};
+const taskStatus = (value: string) => TASK_STATUS[value] ?? statusLabel(value);
+/** What a task was asked, without the note every scheduled routine carries. */
+const askedFor = (prompt: string) =>
+  prompt.split(/\n\nThis is the scheduled routine /)[0]?.trim() ?? prompt;
 function stamp(value?: string) {
   return value
     ? new Date(value).toLocaleString(undefined, {
@@ -304,6 +323,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   const [fieldJson, setFieldJson] = useState("");
   const [showFieldJson, setShowFieldJson] = useState(false);
   const [fields, setFields] = useState<Record<string, string | boolean>>({});
+  const [showDetails, setShowDetails] = useState(false);
   const task = data?.tasks.find((item) => item.id === taskId) || detail?.task;
   useEffect(() => {
     let active = true;
@@ -396,7 +416,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     <Sheet
       title={task?.title || "Task"}
       subtitle={
-        task ? `${statusLabel(task.status)} · ${stamp(task.updatedAt)}` : "Loading saved progress…"
+        task ? `${taskStatus(task.status)} · ${stamp(task.updatedAt)}` : "Loading saved progress…"
       }
       onClose={close}
     >
@@ -405,54 +425,6 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         <ActivityIndicator color={colors.blueDark} />
       ) : (
         <View style={{ gap: 20 }}>
-          <Text selectable style={s.text}>
-            {task.prompt}
-          </Text>
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            {["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(
-              task.status,
-            ) && (
-              <Button
-                small
-                icon={Pause}
-                busy={busy}
-                onPress={() => void act("control", { action: "pause" })}
-              >
-                Pause
-              </Button>
-            )}
-            {task.status === "paused" && (
-              <Button
-                small
-                icon={Play}
-                busy={busy}
-                onPress={() => void act("control", { action: "resume" })}
-              >
-                Resume
-              </Button>
-            )}
-            {task.status === "failed" && (
-              <Button
-                small
-                icon={RefreshCw}
-                busy={busy}
-                onPress={() => void act("control", { action: "retry" })}
-              >
-                Retry task
-              </Button>
-            )}
-            {activeTask(task) && (
-              <Button
-                small
-                danger
-                icon={X}
-                busy={busy}
-                onPress={() => void act("control", { action: "cancel" })}
-              >
-                Cancel task
-              </Button>
-            )}
-          </View>
           {task.status === "waiting_approval" && (
             <Card style={{ backgroundColor: colors.lavender, gap: 12 }}>
               <Text style={s.heading}>Ready for your review</Text>
@@ -532,7 +504,14 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               </Button>
             </Card>
           )}
-          {!!task.plan.length && (
+          {/* The result comes first, formatted the way the agent wrote it. */}
+          {!!task.result && <AssistantResponse content={resultSummary(task.result)} />}
+          {!task.result && ["queued", "running", "scheduled"].includes(task.status) && (
+            <Text style={[s.text, { color: colors.mutedStrong }]}>
+              Working on it. The result will show here.
+            </Text>
+          )}
+          {!task.result && !!task.plan.length && (
             <Card style={{ gap: 15 }}>
               <Text style={s.heading}>Plan</Text>
               {task.plan.map((step, index) => (
@@ -554,13 +533,6 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   </View>
                 </View>
               ))}
-            </Card>
-          )}
-          {!!task.result && (
-            <Card style={{ backgroundColor: colors.green }}>
-              <Text selectable style={s.text}>
-                {resultSummary(task.result)}
-              </Text>
             </Card>
           )}
           <ErrorNotice error={task.error ?? undefined} />
@@ -621,23 +593,121 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               <EvidenceList items={task.evidence} />
             </View>
           )}
-          <Text style={s.heading}>Timeline</Text>
-          {detail?.events.map((event) => (
-            <View
-              key={event.id}
-              style={{ gap: 4, paddingLeft: 14, borderLeftWidth: 2, borderLeftColor: colors.line }}
-            >
-              <Text style={s.small}>
-                {stamp(event.date)} · {statusLabel(event.kind)}
-              </Text>
-              <Text style={s.text}>{event.title}</Text>
-              <Text selectable style={s.muted}>
-                {event.detail}
-              </Text>
+          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+            {["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(
+              task.status,
+            ) && (
+              <Button
+                small
+                icon={Pause}
+                busy={busy}
+                onPress={() => void act("control", { action: "pause" })}
+              >
+                Pause
+              </Button>
+            )}
+            {task.status === "paused" && (
+              <Button
+                small
+                icon={Play}
+                busy={busy}
+                onPress={() => void act("control", { action: "resume" })}
+              >
+                Resume
+              </Button>
+            )}
+            {task.status === "failed" && (
+              <Button
+                small
+                icon={RefreshCw}
+                busy={busy}
+                onPress={() => void act("control", { action: "retry" })}
+              >
+                Retry task
+              </Button>
+            )}
+            {activeTask(task) && (
+              <Button
+                small
+                danger
+                icon={X}
+                busy={busy}
+                onPress={() => void act("control", { action: "cancel" })}
+              >
+                Cancel task
+              </Button>
+            )}
+          </View>
+          {/* What the agent was asked and each step it took, for anyone who wants to look. */}
+          <Pressable
+            role="button"
+            aria-expanded={showDetails}
+            onPress={() => setShowDetails((open) => !open)}
+            style={[s.row, { gap: 6, minHeight: 44, alignSelf: "flex-start" }]}
+          >
+            <Text style={[s.text, { fontWeight: "600" }]}>Details</Text>
+            {showDetails ? (
+              <ChevronUp size={17} color={colors.text} />
+            ) : (
+              <ChevronDown size={17} color={colors.text} />
+            )}
+          </Pressable>
+          {showDetails && (
+            <View style={{ gap: 16 }}>
+              <View style={{ gap: 6 }}>
+                <Text style={s.label}>What it was asked</Text>
+                <Text selectable style={s.muted}>
+                  {askedFor(task.prompt)}
+                </Text>
+              </View>
+              {!!task.result && !!task.plan.length && (
+                <Card style={{ gap: 15 }}>
+                  <Text style={s.heading}>Plan</Text>
+                  {task.plan.map((step, index) => (
+                    <View key={step.id} style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
+                      <Text
+                        style={[
+                          s.text,
+                          { color: step.status === "succeeded" ? colors.blueDark : colors.muted },
+                        ]}
+                      >
+                        {step.status === "succeeded" ? "✓" : `${index + 1}.`}
+                      </Text>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={s.text}>{step.title}</Text>
+                        <Text style={s.small}>
+                          {statusLabel(step.status)}
+                          {step.detail ? ` · ${step.detail}` : ""}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </Card>
+              )}
+              <Text style={s.label}>Steps</Text>
+              {detail?.events.map((event) => (
+                <View
+                  key={event.id}
+                  style={{
+                    gap: 4,
+                    paddingLeft: 14,
+                    borderLeftWidth: 2,
+                    borderLeftColor: colors.line,
+                  }}
+                >
+                  <Text style={s.small}>
+                    {stamp(event.date)} · {statusLabel(event.kind)}
+                  </Text>
+                  <Text style={s.text}>{event.title}</Text>
+                  <Text selectable style={s.muted}>
+                    {event.detail}
+                  </Text>
+                </View>
+              ))}
+              {!detail?.events.length && (
+                <Text style={s.muted}>The worker will record each step here.</Text>
+              )}
             </View>
-          ))}
-          {!detail?.events.length && (
-            <Text style={s.muted}>The worker will record each step here.</Text>
           )}
         </View>
       )}
