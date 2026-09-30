@@ -112,3 +112,17 @@ Time Log — <Project Name>
   `onChangeText`; use `pressSequentially()`.
 - **Local sample server:** the API keeps its database at `${DATA_DIR}/postgres`. Seed into that
   folder, and only while the server is stopped (a running one can overwrite it).
+- **Chat in Playwright:** the app's chat runs in CopilotKit intelligence mode, which can't start
+  locally. Mock `/api/copilotkit/info` (mode "sse", no intelligence) and fulfil
+  `/agent/default/run` with an AG-UI SSE stream of scripted events.
+- **Disabled links in Playwright:** it won't click an `aria-disabled` link; use
+  `click({ force: true })` to test what happens when someone taps one anyway.
+- **pnpm in a copied tree:** with symlinked `node_modules`, `pnpm typecheck`/`pnpm test` try to
+  reinstall (and would wipe the real modules). Run `tsc --noEmit` and `tsx --test` directly there.
+- **Taking control of the agent's browser:** anything a person does there must behave like a real
+  browser: a hold is live (press sends down, release sends up), letting go elsewhere lets go there,
+  and a press that turns into a scroll must not click. It's a live, signed-in site with no approvals.
+- **Background jobs and placeholders:** a job text like "my bank's website" is sent literally, and a
+  job with no real site can't start. Give people boxes to fill in, and have the agent ask.
+- **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
+  `apps/worker` changes; other pushes show it as SKIPPED.

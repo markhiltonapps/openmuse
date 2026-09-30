@@ -97,3 +97,62 @@ PENDING
 - Pricing: still waiting for Settings > Usage, the Railway / CopilotKit / Composio bills, who
   the customers are, and hard limits vs fair use.
 - Time log: hours for 2026-09-29 (evening) and today.
+
+========================================================================
+AFTERNOON AND EVENING (2026-09-30)
+========================================================================
+
+WHAT CHANGED
+------------
+1. Take-me-there buttons (3ab372d)
+   - When Neddy says where something is, or after he does something, a button under the reply
+     goes there (at most two). "Take me to…" opens the place at once. A "Back to chat" pill on the
+     landing screen returns to the conversation and the pressed button.
+   - Catalog of app places (packages/domain/src/app-places.ts), a show_in_app tool for chat
+     (apps/server/src/app-guide.ts), buttons and landing anchors (apps/mobile/src/app-places-ui.tsx).
+   - Also: chat keeps following new replies unless you scroll up; the narrow composer puts the
+     message box on its own line; the space header's chat pill never cuts off "chat"; paths use "›".
+
+2. Cheap-setup ("poor man's OpenBot") trial (ab8c56a, 17e9848)
+   - Background jobs can work on websites in their own browser: open, read, click and type, sign in
+     with saved passwords or codes, keep downloads in Files. Paying, submitting, sending, buying or
+     changing a setting pauses the job for approval; approving runs that step and the job carries on.
+   - Each job records its AI calls and estimated cost; the job sheet shows "AI cost about $0.08".
+   - WORKER_MODEL on the Railway api service set to anthropic/claude-haiku-4-5-20251001 (background
+     jobs only). The old value couldn't be read (secrets rule). To undo: delete WORKER_MODEL in
+     Railway (api service › Variables), which returns background jobs to the main model.
+   - From the owner's first runs: a job that doesn't name the site now asks which one; a stopped run
+     shows Neddy's own words (long ones under "{name} needs your answer"); a ?delegate= link opens
+     Delegate task already filled in; the browser view can press and hold live (for "Press & hold"
+     human checks), and a scroll or drag-off never clicks the pressed spot.
+
+3. Help page (a22bc1d, 17e9848): new "Website jobs" section, four steps plus what to do when stuck.
+
+4. Private trial tracker (claude.ai artifact CZewSmw517Heczp3Cu7irV, "Neddy Website Trial"):
+   setup, how to run a job, ten jobs with fill-in boxes and a Start in the app button, and a results
+   record (outcome, AI cost, note) with a pass mark: 8 of 10 done right, about $0.15 a job or less,
+   nothing paid or sent without OK. Results live in the page's own database; Claude can read them.
+
+TEST RESULTS
+------------
+- Full suite (Biome, typecheck, worker typecheck, tests): 421 passed, 0 failed.
+- New tests: tests/app-places.test.ts (4), tests/task-web.test.ts (a statement job that downloads,
+  stops at "Pay now", records its cost; a job with no site asks which one), press and hold in
+  tests/browser.test.ts.
+- Browser checks at 320/390/1280, light and dark, for every new screen; press-and-hold traced with
+  mouse and touch (click, hold, drag-off, scroll-cancel).
+- Design division: visual, usability and copy approved every change (several rounds each).
+
+KNOWN ISSUES
+------------
+- Big stores (Target seen) show "prove you're human" checks to Neddy's server browser; press and
+  hold now works, but they may keep blocking it. Record as a trial finding.
+- The ?delegate= draft is lost if the person has to sign in through an emailed link first.
+- The browser view page is light-only.
+
+PENDING
+-------
+- The owner runs the 10 trial jobs and records results on the tracker; then "check the trial".
+- futurehome.html (future page) and its Neddy images: the page team's work is waiting on the
+  owner's approval of the feature name; then add the "See how it works today" link to help.html.
+- Pricing inputs, and time-log hours for 2026-09-29 (evening) and 2026-09-30.
