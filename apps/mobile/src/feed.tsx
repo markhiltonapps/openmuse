@@ -377,7 +377,7 @@ export function FeedScreen() {
             >
               {greeting}
             </Text>
-            <Text style={[s.muted, { fontSize: 15 }]}>
+            <Text style={[s.muted, { fontSize: 15, color: colors.mutedStrong }]}>
               {now.toLocaleDateString(undefined, {
                 weekday: "long",
                 month: "long",
@@ -419,9 +419,17 @@ export function FeedScreen() {
             </Pressable>
           )}
           {!appDay ? (
-            !events.length && <Text style={s.muted}>Checking your calendar…</Text>
+            !events.length && (
+              <Text style={[s.muted, { color: colors.mutedStrong }]}>Checking your calendar…</Text>
+            )
           ) : unread.length ? (
-            <Text style={events.length ? [s.small, { color: colors.mutedStrong }] : s.muted}>
+            <Text
+              style={
+                events.length
+                  ? [s.small, { color: colors.mutedStrong }]
+                  : [s.muted, { color: colors.mutedStrong }]
+              }
+            >
               Couldn’t read {unread.join(" or ")} just now. Ask in chat what’s on it today.
             </Text>
           ) : events.length ? null : !appDay.checked.length &&
@@ -432,7 +440,9 @@ export function FeedScreen() {
               </Text>
             </Pressable>
           ) : (
-            <Text style={s.muted}>Nothing else on your calendar today.</Text>
+            <Text style={[s.muted, { color: colors.mutedStrong }]}>
+              Nothing else on your calendar today.
+            </Text>
           )}
         </DayRow>
         {commitments.slice(0, 3).map((item) => (
@@ -580,16 +590,19 @@ export function FeedScreen() {
           }
         />
         {feed && !feed.searchAvailable && (
-          <Text style={s.muted}>The Feed needs web search, which isn't set up on this server.</Text>
+          <Text style={s.muted}>The Feed needs web search, which isn’t set up on this server.</Text>
         )}
         {feed?.searchAvailable && !askArea && (
           <AreaRow
             area={feed.area}
-            // Outside the US (or, with no city, a device outside it) there's no weather to promise.
+            // Outside the US (or, with no city, a device outside it), or with weather not set up
+            // on this server, there's no weather to promise.
             weather={
-              feed.area
-                ? !(weather && "unavailable" in weather && weather.unavailable === "outside-us")
-                : !homeCountry() || homeCountry() === "US"
+              !(
+                weather &&
+                "unavailable" in weather &&
+                (weather.unavailable === "outside-us" || weather.unavailable === "off")
+              ) && (feed.area ? true : !homeCountry() || homeCountry() === "US")
             }
             onSaved={citySaved}
           />

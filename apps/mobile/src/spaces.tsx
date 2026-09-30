@@ -41,7 +41,7 @@ import {
 } from "./social-dashboard-ui";
 import { parseDollars, parseTime } from "./space-input";
 import { useMuseThread } from "./threads";
-import { Button, Card, colors, dateLabel, ErrorNotice, Field, resultSummary, s } from "./ui";
+import { Button, Card, colors, dateLabel, ErrorNotice, Field, plainPreview, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /** The social media parts of this file work on their own kind of space. */
@@ -484,7 +484,7 @@ export function Overview({
               <>
                 <Text numberOfLines={6} style={[s.text, { color: colors.mutedStrong }]}>
                   {digest.result
-                    ? resultSummary(digest.result)
+                    ? plainPreview(digest.result)
                     : digest.status === "running" || digest.status === "queued"
                       ? "Working on this week’s digest…"
                       : (digest.question ?? "This week’s digest needs you.")}

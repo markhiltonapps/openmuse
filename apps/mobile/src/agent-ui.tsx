@@ -104,11 +104,20 @@ const STEP_STATUS: Record<string, string> = {
   succeeded: "Done",
   failed: "Didn’t finish",
 };
-const stepStatus = (value: string) => STEP_STATUS[value] ?? statusLabel(value);
-/** What a task was asked, without the note every scheduled routine carries or a space's id. */
+/** The step it's on reads "Waiting for you" while the task waits for the person. */
+const stepStatus = (value: string, task?: string) =>
+  value === "running" && (task === "waiting_approval" || task === "waiting_input")
+    ? STEP_STATUS.waiting
+    : (STEP_STATUS[value] ?? statusLabel(value));
+/**
+ * What a task was asked, without the note every scheduled routine carries, or a space's id and
+ * the steps its routine gives the agent.
+ */
 const askedFor = (prompt: string) =>
   (prompt.split(/\n\nThis is the scheduled routine /)[0] ?? prompt)
     .replace(/\s*\(space id [^)]+\)/g, "")
+    .replace(/(\.)\s+First call get_space_playbook[\s\S]*$/, "$1")
+    .replace(/"([^"]*)"/g, "“$1”")
     .trim();
 function stamp(value?: string) {
   return value
@@ -206,12 +215,12 @@ export function TaskCard({
         )}
         {(task.question || task.result || task.error || next?.title) && (
           <Text numberOfLines={compact ? 2 : 4} style={s.muted}>
-            {task.question || task.error || plainPreview(task.result || next?.title || "")}
+            {plainPreview(task.question || task.error || task.result || next?.title || "")}
           </Text>
         )}
         {waiting && (
           <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
-            {task.status === "waiting_approval" ? "Review requested" : "Your input is needed"}
+            {task.status === "waiting_approval" ? "Tap to review" : "Tap to answer"}
           </Text>
         )}
       </Card>
@@ -424,6 +433,10 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           : "",
     )
     .filter(Boolean);
+  const canPause =
+    !!task &&
+    ["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(task.status);
+  const canCancel = !!task && activeTask(task);
   return (
     <Sheet
       title={task?.title || "Task"}
@@ -440,7 +453,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           {task.status === "waiting_approval" && (
             <Card style={{ backgroundColor: colors.lavender, gap: 12 }}>
               <Text style={s.heading}>Ready for your review</Text>
-              <Text style={s.muted}>
+              <Text style={[s.muted, { color: colors.mutedStrong }]}>
                 Check exactly what it will do, and from which account, before it goes ahead.
               </Text>
               <Button primary busy={busy} onPress={() => void review()}>
@@ -546,7 +559,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={s.text}>{step.title}</Text>
                     <Text style={s.small}>
-                      {stepStatus(step.status)}
+                      {stepStatus(step.status, task.status)}
                       {step.detail ? ` · ${step.detail}` : ""}
                     </Text>
                   </View>
@@ -612,51 +625,51 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               <EvidenceList items={task.evidence} />
             </View>
           )}
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            {["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(
-              task.status,
-            ) && (
-              <Button
-                small
-                icon={Pause}
-                busy={busy}
-                onPress={() => void act("control", { action: "pause" })}
-              >
-                Pause
-              </Button>
-            )}
-            {task.status === "paused" && (
-              <Button
-                small
-                icon={Play}
-                busy={busy}
-                onPress={() => void act("control", { action: "resume" })}
-              >
-                Resume
-              </Button>
-            )}
-            {task.status === "failed" && (
-              <Button
-                small
-                icon={RefreshCw}
-                busy={busy}
-                onPress={() => void act("control", { action: "retry" })}
-              >
-                Retry task
-              </Button>
-            )}
-            {activeTask(task) && (
-              <Button
-                small
-                danger
-                icon={X}
-                busy={busy}
-                onPress={() => void act("control", { action: "cancel" })}
-              >
-                Cancel task
-              </Button>
-            )}
-          </View>
+          {(canPause || task.status === "paused" || task.status === "failed" || canCancel) && (
+            <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+              {canPause && (
+                <Button
+                  small
+                  icon={Pause}
+                  busy={busy}
+                  onPress={() => void act("control", { action: "pause" })}
+                >
+                  Pause
+                </Button>
+              )}
+              {task.status === "paused" && (
+                <Button
+                  small
+                  icon={Play}
+                  busy={busy}
+                  onPress={() => void act("control", { action: "resume" })}
+                >
+                  Resume
+                </Button>
+              )}
+              {task.status === "failed" && (
+                <Button
+                  small
+                  icon={RefreshCw}
+                  busy={busy}
+                  onPress={() => void act("control", { action: "retry" })}
+                >
+                  Retry task
+                </Button>
+              )}
+              {canCancel && (
+                <Button
+                  small
+                  danger
+                  icon={X}
+                  busy={busy}
+                  onPress={() => void act("control", { action: "cancel" })}
+                >
+                  Cancel task
+                </Button>
+              )}
+            </View>
+          )}
           {/* What the agent was asked and each step it took, for anyone who wants to look. */}
           <Pressable
             role="button"
@@ -680,8 +693,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 </Text>
               </View>
               {!!task.result && !!task.plan.length && (
-                <Card style={{ gap: 15 }}>
-                  <Text style={s.heading}>Plan</Text>
+                <View style={{ gap: 10 }}>
+                  <Text style={s.label}>Plan</Text>
                   {task.plan.map((step, index) => (
                     <View key={step.id} style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
                       <Text
@@ -695,13 +708,13 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                       <View style={{ flex: 1, gap: 3 }}>
                         <Text style={s.text}>{step.title}</Text>
                         <Text style={s.small}>
-                          {stepStatus(step.status)}
+                          {stepStatus(step.status, task.status)}
                           {step.detail ? ` · ${step.detail}` : ""}
                         </Text>
                       </View>
                     </View>
                   ))}
-                </Card>
+                </View>
               )}
               <Text style={s.label}>What it did</Text>
               {detail?.events.map((event) => (
@@ -1412,7 +1425,7 @@ function every(minutes: number) {
 }
 /** The first line of what a task found, for a row's subtitle. */
 function taskLine(task?: AgentTask) {
-  const text = (task?.result || task?.question || "").replace(/[#*_`>]/g, "").replace(/\s+/g, " ");
+  const text = plainPreview(task?.result || task?.question || "").replace(/\s+/g, " ");
   return text.trim().slice(0, 160) || undefined;
 }
 /** A new routine: a template to start from, what to do, when and on which days. */
@@ -2119,7 +2132,9 @@ export function NotificationsSheet() {
                 </Chip>
               )}
             </View>
-            <Text style={s.muted}>{reminder ? lateNote(item.title) || "Reminder" : item.body}</Text>
+            <Text style={s.muted} numberOfLines={3}>
+              {reminder ? lateNote(item.title) || "Reminder" : plainPreview(item.body)}
+            </Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
             <Button small onPress={() => void read(item.id, item.taskId, item.checkInId)}>
               {item.taskId

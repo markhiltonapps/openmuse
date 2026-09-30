@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import webpush from "web-push";
 import { z } from "zod";
+import { plainText } from "../../../packages/domain/src/plain-text.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -85,7 +86,7 @@ export class PushService {
     const subscriptions = await this.db.list<Subscription>(owner, "push-subscriptions");
     const payload = JSON.stringify({
       title: message.title.slice(0, 120),
-      body: message.body.slice(0, 300),
+      body: plainText(message.body).slice(0, 300),
       tag: message.tag,
       url: message.url ?? "/",
     });

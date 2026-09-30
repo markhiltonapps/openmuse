@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react-native";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
   Platform,
@@ -65,6 +65,21 @@ export function useWeather() {
     },
     [api],
   );
+  // A lookup that didn't answer is tried again after a minute, a few times, before the 15 minutes.
+  const quickTries = useRef(0);
+  const unreachable = !!result && "unavailable" in result && result.unavailable === "unreachable";
+  useEffect(() => {
+    if (!unreachable) {
+      quickTries.current = 0;
+      return;
+    }
+    if (quickTries.current >= 3) return;
+    const timer = setTimeout(() => {
+      quickTries.current++;
+      void load();
+    }, 60_000);
+    return () => clearTimeout(timer);
+  }, [unreachable, result, load]);
   useEffect(() => {
     void load();
     const timer = setInterval(() => void load(), 15 * 60_000);
@@ -145,6 +160,27 @@ function todayParts(w: Weather) {
     chanceLine(w.today.rain, w.days[0]?.sky ?? w.now.sky),
   ].filter(Boolean);
 }
+/**
+ * Parts of a line with " · " between them. Each part moves to the next line whole, and wraps inside
+ * itself only when it can't fit on a line alone; the dot stays on the part before it.
+ */
+function PartsLine({ parts, color }: { parts: string[]; color: string }) {
+  return (
+    // One item for a screen reader on a phone, as it is on the web (where a label on a plain
+    // element isn't allowed).
+    <View
+      accessible
+      aria-label={Platform.OS === "web" ? undefined : parts.join(", ")}
+      style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 4 }}
+    >
+      {parts.map((part, index) => (
+        <Text key={part} style={{ fontSize: 13, lineHeight: 18, color, flexShrink: 1 }}>
+          {index < parts.length - 1 ? `${part}\u00a0·` : part}
+        </Text>
+      ))}
+    </View>
+  );
+}
 const severe = (alert: WeatherAlert) => alert.severity === "Extreme" || alert.severity === "Severe";
 const moreAlerts = (count: number) =>
   count > 0 ? `${count} more alert${count > 1 ? "s" : ""}` : "";
@@ -197,7 +233,7 @@ export function WeatherToday({
       return (
         <Row>
           <Text style={[s.muted, { color: colors.mutedStrong }]}>
-            Couldn’t get the weather just now. Trying again in a few minutes.
+            Couldn’t get the weather just now. Trying again soon.
           </Text>
         </Row>
       );
@@ -241,7 +277,7 @@ export function WeatherToday({
     w.today.high !== undefined ? `High ${w.today.high} degrees` : "",
     w.today.low !== undefined ? `low ${w.today.low} degrees` : "",
     chanceLine(w.today.rain, w.days[0]?.sky ?? w.now.sky),
-    asOf.toLowerCase(),
+    asOf.replace(/^A/, "a"),
   ].filter(Boolean);
   const label = [
     `Weather in ${w.place}: ${w.now.temp} degrees, ${w.now.sky.toLowerCase()}${feels !== undefined ? `, feels like ${feels} degrees` : ""}.`,
@@ -264,11 +300,7 @@ export function WeatherToday({
         <Text style={s.text} numberOfLines={2}>
           <Text style={{ fontWeight: "700" }}>{w.now.temp}°</Text> {w.now.sky}
         </Text>
-        {details.length > 0 && (
-          <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>
-            {details.join(" · ")}
-          </Text>
-        )}
+        {details.length > 0 && <PartsLine parts={details} color={colors.mutedStrong} />}
       </PressRow>
       {opened && (
         <Forecast
@@ -345,7 +377,7 @@ function AlertBand({
 }) {
   const strong = severe(alert);
   const ink = strong ? colors.onInverse : colors.danger;
-  const line = [until(alert.ends, timeZone), moreAlerts(more)].filter(Boolean).join(" · ");
+  const line = [until(alert.ends, timeZone), moreAlerts(more)].filter(Boolean);
   return (
     <Pressable
       role="button"
@@ -366,7 +398,7 @@ function AlertBand({
       <Emoji char="⚠️" size={36} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[s.text, { color: ink, fontWeight: "700" }]}>{alert.event}</Text>
-        {!!line && <Text style={{ fontSize: 13, lineHeight: 18, color: ink }}>{line}</Text>}
+        {line.length > 0 && <PartsLine parts={line} color={ink} />}
       </View>
       <ChevronRight size={18} color={ink} />
     </Pressable>
@@ -434,11 +466,7 @@ function Forecast({
               {w.now.temp}°
             </Text>
             <Text style={[s.text, { fontWeight: "600" }]}>{w.now.sky}</Text>
-            {parts.length > 0 && (
-              <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>
-                {parts.join(" · ")}
-              </Text>
-            )}
+            {parts.length > 0 && <PartsLine parts={parts} color={colors.mutedStrong} />}
           </View>
         </View>
         {w.hours.length > 0 && <Hours hours={w.hours} />}
@@ -608,7 +636,7 @@ function Week({ days, today }: { days: WeatherDay[]; today: string }) {
   const at = (t: number) => (max > min ? (t - min) / (max - min) : 0.5);
   const numbers = { fontVariant: ["tabular-nums" as const] };
   return (
-    <View style={{ gap: 4, maxWidth: 560 }}>
+    <View style={{ gap: 4 }}>
       <Text {...heading(3)} style={[s.heading, { marginBottom: 6 }]}>
         7 days
       </Text>

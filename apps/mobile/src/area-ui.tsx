@@ -142,7 +142,9 @@ export function AreaPrompt({ onSaved, onDismiss }: { onSaved: () => void; onDism
             Where’s local for you?
           </Text>
           <Text style={[s.small, { color: colors.mutedStrong }]}>
-            Your local news, weather and “near me” searches will be about your area.
+            {!homeCountry() || homeCountry() === "US"
+              ? "Your local news, weather and “near me” searches will be about your area."
+              : "Your local news and “near me” searches will be about your area."}
           </Text>
         </View>
       </View>

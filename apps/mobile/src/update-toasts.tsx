@@ -9,7 +9,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
 import { dark } from "./theme";
-import { Button, colors, ErrorNotice, resultSummary, s } from "./ui";
+import { Button, colors, ErrorNotice, plainPreview, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /** Where background updates show: a pop-up by the bell, only in the bell, or as a card in chat. */
@@ -289,7 +289,7 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
     ? namesOf(toast.items)
     : kind === "reminder"
       ? lateNote(first.title)
-      : resultSummary(first.body);
+      : plainPreview(first.body);
   return (
     <>
       {announcer}

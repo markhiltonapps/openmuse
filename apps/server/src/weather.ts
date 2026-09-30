@@ -279,7 +279,8 @@ export class WeatherService {
     if (!geocode) return { unavailable: "off" };
     try {
       const query = [area.city, area.region, area.country].filter(Boolean).join(", ") || area.label;
-      // A miss isn't kept: the geocoder answers undefined when it's busy, too.
+      // A miss throws NotFound, so it isn't kept here (the geocoder remembers real misses itself);
+      // a busy lookup throws too and shows as "didn't answer".
       const { value: where } = await this.cached(
         `city:${query.toLowerCase()}`,
         7 * 24 * HOUR,
@@ -440,7 +441,7 @@ function unavailable(reason: WeatherUnavailable, place: string | undefined, back
   if (reason === "outside-us") return `This forecast covers US cities only. ${elsewhere}`;
   if (reason === "not-found")
     return `Couldn't get a forecast for their home city${place ? ` (${place})` : ""}. ${elsewhere}`;
-  if (reason === "unreachable") return `The Weather Service didn't answer just now. ${elsewhere}`;
+  if (reason === "unreachable") return `Couldn't get the forecast just now. ${elsewhere}`;
   return `The forecast isn't set up here. ${elsewhere}`;
 }
 

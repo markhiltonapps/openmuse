@@ -212,7 +212,10 @@ function SpaceView({
       </View>
       {/* The two tabs, then the chat, which opens on its own screen. */}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <View role="tablist" style={{ flexDirection: "row", gap: 8 }}>
+        <View
+          role="tablist"
+          style={{ flexDirection: "row", flexWrap: "wrap", flexShrink: 1, gap: 8 }}
+        >
           <Pill role="tab" selected={tab === "overview"} onPress={() => setTab("overview")}>
             Overview
           </Pill>

@@ -14,6 +14,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { plainText, readableResult } from "../../../packages/domain/src/plain-text";
 import { palette } from "./theme";
 export const colors = palette;
 export const s = StyleSheet.create({
@@ -304,7 +305,9 @@ export function Sheet({
             ]}
           >
             <View style={{ flex: 1, gap: 4 }}>
-              <Text style={s.title}>{title}</Text>
+              <Text role="heading" aria-level={2} style={s.title}>
+                {title}
+              </Text>
               {!!subtitle && <Text style={s.muted}>{subtitle}</Text>}
             </View>
             <IconButton icon={X} label="Close details" onPress={onClose} />
@@ -433,20 +436,7 @@ export function relativeDate(value: string) {
         : dateLabel(value);
 }
 
-/** A result as plain words for a short preview: no headings, bold marks, bullets or link syntax. */
-export function plainPreview(value: string) {
-  return resultSummary(value)
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/^\s*[-*•]\s+/gm, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-}
-export function resultSummary(value: string) {
-  return /^Saved to (?:sample|local) sent mail(?: · .+)?$/.test(value)
-    ? "Reply saved in your local Sent mail."
-    : value;
-}
+/** A result as plain words for a short preview (shared with phone notifications). */
+export const plainPreview = plainText;
+/** A result in the person's words. */
+export const resultSummary = readableResult;

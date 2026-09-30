@@ -67,6 +67,13 @@ test("push keys persist, only real push services are accepted, and gone devices 
     url: "/",
   });
   assert.equal(sent[0]?.subject, "https://openmuse.example");
+  // A phone shows the text as it is, so a result's markdown is taken out.
+  sent.length = 0;
+  await push.notify("push-owner", {
+    title: "Weekly plan",
+    body: "## This week\n\n- **Monday:** tacos\n- See [the list](https://example.com/list)",
+  });
+  assert.equal(JSON.parse(sent[0]?.payload ?? "{}").body, "Monday: tacos.\nSee the list");
   const remaining = await db.list<{ endpoint: string }>("push-owner", "push-subscriptions");
   assert.deepEqual(
     remaining.map((s) => s.endpoint),

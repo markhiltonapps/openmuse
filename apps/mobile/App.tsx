@@ -582,8 +582,9 @@ function WorkspaceShell({
           </View>
           <View
             style={{
-              // Eight buttons: a narrow phone gives the bar more of its width.
-              paddingHorizontal: width < 420 ? 8 : 22,
+              // Eight buttons: a narrow phone gives the bar nearly all its width, 44px a button from
+              // 360px wide.
+              paddingHorizontal: width < 420 ? 3 : 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,
               alignItems: "center",
@@ -596,7 +597,8 @@ function WorkspaceShell({
                 flexDirection: "row",
                 width: "100%",
                 maxWidth: 400,
-                padding: 4,
+                paddingVertical: 4,
+                paddingHorizontal: width < 420 ? 0 : 4,
                 backgroundColor: colors.surface,
                 borderRadius: 40,
                 shadowColor: "#132631",
@@ -609,6 +611,7 @@ function WorkspaceShell({
               }}
             >
               {nav.map((item) => {
+                const pill = width < 420 ? 38 : 44;
                 const active = section === item.id || (item.id === "apps" && utility);
                 return (
                   <Pressable
@@ -623,11 +626,30 @@ function WorkspaceShell({
                       height: 47,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: active ? colors.subtle : "transparent",
+                      // Rounds the keyboard focus ring too.
                       borderRadius: 28,
                     }}
                   >
-                    <item.icon size={23} strokeWidth={1.8} color={colors.text} />
+                    {/* The selected circle is drawn inside the button, so the whole width stays
+                        tappable, and it's the same shape at every width. */}
+                    {active && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: (47 - pill) / 2,
+                          left: "50%",
+                          marginLeft: -pill / 2,
+                          width: pill,
+                          height: pill,
+                          borderRadius: pill / 2,
+                          backgroundColor: colors.subtle,
+                        }}
+                      />
+                    )}
+                    {/* In a View so it's drawn above the circle on the web too. */}
+                    <View>
+                      <item.icon size={23} strokeWidth={1.8} color={colors.text} />
+                    </View>
                   </Pressable>
                 );
               })}

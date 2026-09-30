@@ -74,7 +74,9 @@ export function BackgroundUpdates() {
       ) : (
         <>
           <Text style={s.heading}>{update.title}</Text>
-          <Text style={s.text}>{plainPreview(update.body)}</Text>
+          <Text style={s.text} numberOfLines={4}>
+            {plainPreview(update.body)}
+          </Text>
         </>
       )}
       <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
