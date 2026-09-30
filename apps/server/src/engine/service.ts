@@ -64,6 +64,7 @@ import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
 import type { ScheduledPosts } from "../space-posts.ts";
 import type { UsageMeter } from "../usage.ts";
+import type { WeatherService } from "../weather.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
@@ -929,6 +930,8 @@ export class AgentService {
   areas?: Areas;
   /** Called when the person's area changes, so their Feed catches up. */
   areaChanged?: (owner: string) => void;
+  /** The home city's forecast from the US National Weather Service. */
+  weather?: WeatherService;
   /** Where searches should treat as local: the saved area and the person's time zone. */
   async searchPlace(owner: string) {
     const [area, timeZone] = await Promise.all([

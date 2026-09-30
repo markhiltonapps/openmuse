@@ -38,6 +38,8 @@ const light = {
   edge: "#8A9196",
   blue: "#C8E7FF",
   blueDark: "#1473C8",
+  /** Small blue text on grey or sky tiles: blueDark is a touch light for it in light mode. */
+  blueText: "#1269B8",
   sky: "#EDF7FD",
   green: "#E3F3E8",
   greenDark: "#189A58",
@@ -68,6 +70,7 @@ const night: typeof light = {
   edge: "#77777F",
   blue: "#1C4E7D",
   blueDark: "#55AAFF",
+  blueText: "#55AAFF",
   sky: "#0E2130",
   green: "#0F2619",
   greenDark: "#2BD46E",

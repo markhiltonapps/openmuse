@@ -10,7 +10,7 @@ export const LOCAL_TOPIC =
   /\b(local|near me|nearby|my (city|town|area)|weather|traffic|community|neighbou?rhood)\b/i;
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** The device's country ("US" from en-US), so a typed ZIP code is looked up at home. */
-function homeCountry() {
+export function homeCountry() {
   try {
     const locale = new Intl.Locale(Intl.DateTimeFormat().resolvedOptions().locale).maximize();
     return locale.region && /^[A-Z]{2}$/.test(locale.region) ? locale.region : undefined;
@@ -29,7 +29,19 @@ export function areaPromptDismissed() {
 }
 
 /** Sets the person's area from their device's location or a city they type. */
-function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () => void }) {
+export function AreaEditor({
+  onSaved,
+  onCancel,
+  saved = (area) =>
+    !area.country || area.country === "US"
+      ? `Weather and local news are now for ${area.label}.`
+      : `Local news is now for ${area.label}. Weather is only available for US cities.`,
+}: {
+  onSaved: () => void;
+  onCancel?: () => void;
+  /** The note once it's saved. */
+  saved?: (area: { label: string; country?: string }) => string;
+}) {
   const { api, notify } = useWorkspace();
   const [place, setPlace] = useState("");
   const [busy, setBusy] = useState<"locate" | "type">();
@@ -42,8 +54,11 @@ function AreaEditor({ onSaved, onCancel }: { onSaved: () => void; onCancel?: () 
         kind === "locate"
           ? await currentPosition()
           : { place: place.trim(), country: homeCountry() };
-      const { area } = await api.request<{ area: { label: string } }>("/api/area", body);
-      notify(`Local news is now for ${area.label}. Updating your Feed…`);
+      const { area } = await api.request<{ area: { label: string; country?: string } }>(
+        "/api/area",
+        body,
+      );
+      notify(saved(area));
       onSaved();
     } catch (e) {
       setError(message(e));
@@ -150,7 +165,7 @@ export function AreaPrompt({ onSaved, onDismiss }: { onSaved: () => void; onDism
   );
 }
 
-/** "Local news is for Houston, Texas", with a way to change it. */
+/** "Local news and weather are for Houston, Texas", with a way to change it. */
 export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void }) {
   const { api, notify } = useWorkspace();
   const [editing, setEditing] = useState(false);
@@ -161,7 +176,7 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
         style={{ gap: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.line }}
       >
         <Text style={[s.text, { fontWeight: "600" }]}>
-          {area ? "Change your area" : "Where’s local for you?"}
+          {area ? "Change your city" : "Where’s local for you?"}
         </Text>
         <AreaEditor
           onSaved={() => {
@@ -182,7 +197,7 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
       >
         <MapPin size={15} color={colors.muted} />
         <Text style={[s.text, { textDecorationLine: "underline" }]}>
-          Add your area for local news
+          Add your city for local news and weather
         </Text>
       </Pressable>
     );
@@ -191,12 +206,12 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
       <MapPin size={16} color={colors.muted} style={{ marginTop: 3 }} />
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={s.text}>
-          Local news is for <Text style={{ fontWeight: "600" }}>{area}</Text>
+          Local news and weather are for <Text style={{ fontWeight: "600" }}>{area}</Text>
         </Text>
         <View style={[s.row, { gap: 16 }]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Change your area from ${area}`}
+            accessibilityLabel={`Change your city from ${area}`}
             onPress={() => setEditing(true)}
             hitSlop={8}
           >
@@ -204,11 +219,11 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Remove your area"
+            accessibilityLabel="Remove your city"
             onPress={() =>
               void api.request("/api/area/clear", {}).then(
                 () => {
-                  notify("Removed your area.");
+                  notify("Removed your city.");
                   onSaved();
                 },
                 (e) => setError(message(e)),

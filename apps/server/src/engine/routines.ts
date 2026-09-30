@@ -69,7 +69,7 @@ export const routineTemplates = [
   {
     title: "Morning brief",
     prompt:
-      "Give me a brief for today: my calendar, important unread email, anything waiting on me, and progress on my goals.",
+      "Give me a brief for today: the weather, my calendar, important unread email, anything waiting on me, and progress on my goals.",
     time: "07:30",
     days: [1, 2, 3, 4, 5],
   },

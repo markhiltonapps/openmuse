@@ -21,6 +21,7 @@ import { todayLine, useHealth } from "./health-ui";
 import { MealsToday } from "./meal-checkins-ui";
 import { dark } from "./theme";
 import { Button, Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
+import { useWeather, WeatherToday } from "./weather-ui";
 import { useWorkspace } from "./workspace";
 
 type Feedback = "up" | "down";
@@ -150,6 +151,7 @@ export function FeedScreen() {
   const { workspace: w, api, navigate, ask } = useWorkspace();
   const { data } = useAgentWorkspace();
   const health = useHealth();
+  const { result: weather, load: loadWeather } = useWeather();
   const [feed, setFeed] = useState<FeedState>();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const loadReminders = useCallback(
@@ -292,7 +294,22 @@ export function FeedScreen() {
   const healthLine = health.summary ? todayLine(health.summary.today) : "";
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const sky = hour < 6 || hour >= 20 ? "🌙" : hour < 10 ? "🌅" : hour < 17 ? "☀️" : "🌇";
+  // The sky as it is at home when the forecast is in; otherwise the time of day.
+  const sky =
+    weather && "weather" in weather
+      ? weather.weather.now.emoji
+      : hour < 6 || hour >= 20
+        ? "🌙"
+        : hour < 10
+          ? "🌅"
+          : hour < 17
+            ? "☀️"
+            : "🌇";
+  // A new home city means new weather and new local news.
+  const citySaved = () => {
+    void load();
+    void loadWeather(true);
+  };
 
   return (
     <View style={{ gap: 24 }}>
@@ -370,6 +387,11 @@ export function FeedScreen() {
           </View>
           <Emoji char={sky} size={64} />
         </View>
+        <WeatherToday
+          result={weather}
+          reload={(fresh) => (fresh ? citySaved() : void loadWeather())}
+          askingForArea={!feed || askArea}
+        />
         <DayRow emoji="📅">
           {events.slice(0, 3).map((e) => (
             <Text key={`${e.id}-${e.start}`} style={s.text}>
@@ -512,7 +534,7 @@ export function FeedScreen() {
         </Pressable>
       </View>
 
-      {askArea && <AreaPrompt onSaved={() => void load()} onDismiss={() => setAreaLater(true)} />}
+      {askArea && <AreaPrompt onSaved={citySaved} onDismiss={() => setAreaLater(true)} />}
 
       {days.map((day) => (
         <View key={day}>
@@ -559,9 +581,7 @@ export function FeedScreen() {
         {feed && !feed.searchAvailable && (
           <Text style={s.muted}>The Feed needs web search, which isn't set up on this server.</Text>
         )}
-        {feed?.searchAvailable && !askArea && (
-          <AreaRow area={feed.area} onSaved={() => void load()} />
-        )}
+        {feed?.searchAvailable && !askArea && <AreaRow area={feed.area} onSaved={citySaved} />}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {feed?.topics.map((item) => (
             <Pressable

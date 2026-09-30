@@ -66,6 +66,7 @@ import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
+import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
 import { WorkspaceService } from "./workspace.ts";
@@ -299,6 +300,13 @@ export async function createApp(
       db,
       `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; personal assistant maps)`,
     );
+  // The home city's weather on the Feed and for the agent (US cities only).
+  if (agent.areas)
+    agent.weather = new WeatherService({
+      areas: agent.areas,
+      geocode: agent.geocode,
+      userAgent: `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; home city weather)`,
+    });
   const inbox = new AgentInbox(db, config, agent, accounts);
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
@@ -858,6 +866,9 @@ export async function createApp(
       ),
     );
   });
+  app.get("/api/weather", async (c) =>
+    c.json(agent.weather ? await agent.weather.forOwner(c.get("owner")) : { unavailable: "off" }),
+  );
   app.get("/api/area", async (c) =>
     c.json({ area: (await agent.areas?.get(c.get("owner"))) ?? null }),
   );

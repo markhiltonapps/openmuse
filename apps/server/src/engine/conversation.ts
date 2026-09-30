@@ -40,6 +40,7 @@ import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
+import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
@@ -391,6 +392,17 @@ export class ConversationAgent extends AbstractAgent {
             }),
         ),
       );
+    const weather = this.service.weather;
+    if (weather)
+      tools.push(
+        ...weatherToolSpecs(weather, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async () => spec.execute(),
+          }),
+        ),
+      );
     const health = this.service.health;
     const checkIns = this.service.checkIns;
     if (health)
@@ -623,6 +635,7 @@ export class ConversationAgent extends AbstractAgent {
         (health ? healthToolInstructions : "") +
         (health && this.service.checkIns ? checkInInstructions : "") +
         (this.service.areas ? areaInstructions : "") +
+        (this.service.weather ? weatherInstructions : "") +
         (this.service.sandbox ? codeSandboxInstructions : "") +
         computerInstructions,
     });
