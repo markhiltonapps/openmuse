@@ -29,7 +29,7 @@ import {
   useOpenChat,
   usePlaybookSave,
 } from "./spaces";
-import { Button, Card, colors, dateLabel, ErrorNotice, resultSummary, s } from "./ui";
+import { Button, Card, colors, dateLabel, ErrorNotice, plainPreview, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /**
@@ -165,7 +165,7 @@ export function FamilyOverview({
               <>
                 <Text numberOfLines={8} style={[s.text, { color: colors.mutedStrong }]}>
                   {latest.result
-                    ? resultSummary(latest.result)
+                    ? plainPreview(latest.result)
                     : latest.status === "running" || latest.status === "queued"
                       ? "Working on today’s rundown…"
                       : (latest.question ?? "Today’s rundown needs you.")}

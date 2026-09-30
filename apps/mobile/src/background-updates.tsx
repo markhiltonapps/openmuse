@@ -2,7 +2,7 @@ import { AlarmClock, ArrowRight, Bell, Check, X } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
-import { Button, Card, colors, ErrorNotice, resultSummary, s } from "./ui";
+import { Button, Card, colors, ErrorNotice, plainPreview, s } from "./ui";
 import { updatesDisplay } from "./update-toasts";
 import { useWorkspace } from "./workspace";
 
@@ -74,7 +74,7 @@ export function BackgroundUpdates() {
       ) : (
         <>
           <Text style={s.heading}>{update.title}</Text>
-          <Text style={s.text}>{resultSummary(update.body)}</Text>
+          <Text style={s.text}>{plainPreview(update.body)}</Text>
         </>
       )}
       <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>

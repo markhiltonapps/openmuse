@@ -68,6 +68,7 @@ import {
   ErrorNotice,
   Field,
   LinkRow,
+  plainPreview,
   resultSummary,
   SectionHeading,
   Sheet,
@@ -95,9 +96,20 @@ const TASK_STATUS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 const taskStatus = (value: string) => TASK_STATUS[value] ?? statusLabel(value);
-/** What a task was asked, without the note every scheduled routine carries. */
+/** A plan step's status in everyday words. */
+const STEP_STATUS: Record<string, string> = {
+  pending: "To do",
+  running: "In progress",
+  waiting: "Waiting for you",
+  succeeded: "Done",
+  failed: "Didn’t finish",
+};
+const stepStatus = (value: string) => STEP_STATUS[value] ?? statusLabel(value);
+/** What a task was asked, without the note every scheduled routine carries or a space's id. */
 const askedFor = (prompt: string) =>
-  prompt.split(/\n\nThis is the scheduled routine /)[0]?.trim() ?? prompt;
+  (prompt.split(/\n\nThis is the scheduled routine /)[0] ?? prompt)
+    .replace(/\s*\(space id [^)]+\)/g, "")
+    .trim();
 function stamp(value?: string) {
   return value
     ? new Date(value).toLocaleString(undefined, {
@@ -174,7 +186,7 @@ export function TaskCard({
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={s.heading}>{task.title}</Text>
             <Text style={s.small}>
-              {statusLabel(task.status)}
+              {taskStatus(task.status)}
               {task.plan.length ? ` · ${done}/${task.plan.length} steps` : ""}
             </Text>
           </View>
@@ -194,7 +206,7 @@ export function TaskCard({
         )}
         {(task.question || task.result || task.error || next?.title) && (
           <Text numberOfLines={compact ? 2 : 4} style={s.muted}>
-            {task.question || task.error || resultSummary(task.result || next?.title || "")}
+            {task.question || task.error || plainPreview(task.result || next?.title || "")}
           </Text>
         )}
         {waiting && (
@@ -428,7 +440,9 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           {task.status === "waiting_approval" && (
             <Card style={{ backgroundColor: colors.lavender, gap: 12 }}>
               <Text style={s.heading}>Ready for your review</Text>
-              <Text style={s.muted}>Review the exact action and account before it proceeds.</Text>
+              <Text style={s.muted}>
+                Check exactly what it will do, and from which account, before it goes ahead.
+              </Text>
               <Button primary busy={busy} onPress={() => void review()}>
                 Review action
               </Button>
@@ -508,7 +522,12 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           {!!task.result && <AssistantResponse content={resultSummary(task.result)} />}
           {!task.result && ["queued", "running", "scheduled"].includes(task.status) && (
             <Text style={[s.text, { color: colors.mutedStrong }]}>
-              Working on it. The result will show here.
+              {task.status === "running"
+                ? "Working on it."
+                : task.status === "scheduled" && task.nextRunAt
+                  ? `Scheduled for ${stamp(task.nextRunAt)}.`
+                  : "Waiting to start."}{" "}
+              The result will show here when it’s done.
             </Text>
           )}
           {!task.result && !!task.plan.length && (
@@ -527,7 +546,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={s.text}>{step.title}</Text>
                     <Text style={s.small}>
-                      {statusLabel(step.status)}
+                      {stepStatus(step.status)}
                       {step.detail ? ` · ${step.detail}` : ""}
                     </Text>
                   </View>
@@ -676,7 +695,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                       <View style={{ flex: 1, gap: 3 }}>
                         <Text style={s.text}>{step.title}</Text>
                         <Text style={s.small}>
-                          {statusLabel(step.status)}
+                          {stepStatus(step.status)}
                           {step.detail ? ` · ${step.detail}` : ""}
                         </Text>
                       </View>
@@ -684,7 +703,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   ))}
                 </Card>
               )}
-              <Text style={s.label}>Steps</Text>
+              <Text style={s.label}>What it did</Text>
               {detail?.events.map((event) => (
                 <View
                   key={event.id}
@@ -695,9 +714,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                     borderLeftColor: colors.line,
                   }}
                 >
-                  <Text style={s.small}>
-                    {stamp(event.date)} · {statusLabel(event.kind)}
-                  </Text>
+                  <Text style={s.small}>{stamp(event.date)}</Text>
                   <Text style={s.text}>{event.title}</Text>
                   <Text selectable style={s.muted}>
                     {event.detail}
@@ -705,7 +722,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 </View>
               ))}
               {!detail?.events.length && (
-                <Text style={s.muted}>The worker will record each step here.</Text>
+                <Text style={s.muted}>Each step will show here as it happens.</Text>
               )}
             </View>
           )}
