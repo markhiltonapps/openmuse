@@ -88,5 +88,12 @@ Time Log — <Project Name>
   (`notify`) from inside a sheet can't be seen. Say what happened in the sheet itself.
 - **Live regions:** keep a `role="status"` line mounted all the time and change its text; one
   that appears together with its text often isn't read out.
+- **Layers on the web:** an absolutely positioned `View` paints over a later sibling that isn't
+  positioned, such as a lucide icon's SVG. Wrap the icon in a `View` (positioned on the web) to
+  keep it on top, e.g. a selected pill drawn inside a tab.
+- **Sandbox network:** api.weather.gov and open-meteo are blocked by the sandbox's egress proxy,
+  so weather can only be tested locally with mocked responses. Live checks happen on Railway.
+- **Playwright on this app:** the bottom bar's buttons are `role="tab"`. Short names like "Open"
+  or "Details" need `exact: true`.
 - **Local sample server:** the API keeps its database at `${DATA_DIR}/postgres`. Seed into that
   folder, and only while the server is stopped (a running one can overwrite it).

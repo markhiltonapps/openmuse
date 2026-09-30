@@ -124,3 +124,53 @@ PENDING (later)
   bills, who the customers are, and hard limits vs fair use.
 - Railway staged change ba13b23c still needs Deploy in Railway.
 - Time log: today's row says 8 hours; waiting to hear whether to add hours for this later work.
+
+EVENING (Central time)
+----------------------
+Pushed and live: add0442 and 3b03f3d (recipes), 727f069 (docs), then:
+- 48efa96 Feed stories open their own article, never a site's home page, section or topic page.
+  Links are checked against the search results and the page itself (og:type, canonical,
+  JSON-LD); free sites come before paywalled ones; a story with no article is left out.
+- 0119ac6 + d0cd017 Local weather on the Feed for the home city, from the US National Weather
+  Service: now, the next 12 hours, 7 days and severe-weather alerts (warnings filled red at
+  the top). Hidden outside the US. The agent has a get_weather tool for plans, the morning
+  brief and the family rundown. A busy city lookup reads "Trying again soon", not "not found".
+- 8cf4f58 + 48c6d50 Spaces in the bottom bar (it was only in the ☰ menu); screen readers hear
+  which tab is selected.
+- efa6a4b + fa4a16b Tapping a notification opens the result first (formatted), with what the
+  agent was asked and each step under "Details"; statuses in everyday words everywhere.
+The deploys of 48efa96, efa6a4b and 48c6d50 were checked: SUCCESS, clean logs.
+
+Committed after the Design division's round 4 (visual, usability and copy all approved):
+- fef7a07 Plain-text previews and phone notifications (one shared helper), 44px tabs from 360px
+  wide with a selected circle, headings for screen readers, weather lines that don't split a
+  word, a retry a minute after a missed forecast, contrast fixes on the Feed.
+
+TEST RESULTS (evening)
+----------------------
+- Full suite (lint, typecheck, worker typecheck, tests): 401 passed, 0 failed.
+- New tests: tests/news-links.test.ts, tests/weather.test.ts, tests/plain-text.test.ts; push
+  bodies without markdown in tests/push.test.ts; Feed link checks in tests/feed.test.ts.
+- Browser checks at 320, 360, 390 and 1280, light and dark: bottom bar, Updates, the task
+  sheet, every weather state (alerts, not found, outside the US, unreachable).
+
+KNOWN ISSUES (evening)
+----------------------
+- The weather could only be tested here with mocked answers: the Weather Service is blocked
+  in this sandbox. It works on Railway; add api.weather.gov under Network access to test it
+  in Claude sessions.
+- On phones under 360px wide the tabs are 39px (still above the 24px accessibility minimum).
+- The selected tab is hard to see (a light grey circle); see PENDING.
+- Older, not from today: "+ Add a reminder" on the Feed is small and low-contrast; the chat
+  box placeholder wraps at 360px; Activity's "Reviews & receipts" shows raw statuses
+  ("awaiting_review"); `small` buttons are 38px tall.
+
+PENDING (evening)
+-----------------
+- Spaces icon: the reviewers suggest a people icon (UsersRound) or short labels under the
+  tabs (labels would also make the selected tab easy to see). Your call.
+- Keep 8 tabs on very small phones (the usability reviewer's advice) or show 7 below 360px.
+- The older "Plan next week" button fix: waiting for your OK.
+- Pricing: waiting for Settings > Usage, the Railway / CopilotKit / Composio bills, who the
+  customers are, and hard limits vs fair use.
+- Time log: hours for this evening's work.
