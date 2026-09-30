@@ -335,6 +335,16 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
     </View>
   );
 }
+/**
+ * What a task's AI has cost so far, from the server's estimate: " · AI cost about $0.08". Its
+ * spaces don't break, so a wrapped subtitle keeps the phrase whole.
+ */
+function taskCost(task: AgentTask) {
+  const cost = task.state.cost as { dollars?: number } | undefined;
+  if (!cost?.dollars) return "";
+  const amount = cost.dollars < 0.01 ? "under\u00a01¢" : `about\u00a0$${cost.dollars.toFixed(2)}`;
+  return ` · AI\u00a0cost\u00a0${amount}`;
+}
 export function TaskDetail({ taskId }: { taskId: string }) {
   const { api, workspace, close, open, refresh: refreshWorkspace } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
@@ -448,7 +458,9 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     <Sheet
       title={task?.title || "Task"}
       subtitle={
-        task ? `${taskStatus(task.status)} · ${stamp(task.updatedAt)}` : "Loading saved progress…"
+        task
+          ? `${taskStatus(task.status)} · ${stamp(task.updatedAt).replace(/ ([AP]M)$/i, "\u00a0$1")}${taskCost(task)}`
+          : "Loading saved progress…"
       }
       onClose={close}
     >

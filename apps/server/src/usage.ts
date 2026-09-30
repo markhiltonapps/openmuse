@@ -205,6 +205,10 @@ export class UsageMeter {
     });
     return settled;
   }
+  /** What one model call cost, in dollars; undefined for a model without a known price. */
+  cost(model: string, tokens: Tokens) {
+    return costOf(model, tokens, this.prices);
+  }
   /** A sink that records for one person and purpose without waiting. */
   sink(owner: string, kind: UsageKind): UsageSink {
     return (model, tokens) => void this.record(owner, kind, model, tokens);
