@@ -33,7 +33,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
   const app = new Hono<{ Variables: { owner: string } }>();
   app.get("/", async (c) => c.json(await service.snapshot(c.get("owner"))));
   app.post("/tasks", async (c) =>
-    c.json(await service.createTask(c.get("owner"), await c.req.json()), 201),
+    c.json(await service.delegate(c.get("owner"), await c.req.json()), 201),
   );
   app.get("/tasks/:id", async (c) =>
     c.json(await service.detail(c.get("owner"), c.req.param("id"))),
@@ -149,6 +149,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
         character: z.enum(avatarCharacters).optional(),
         showChatUpdates: z.boolean().optional(),
         updatesDisplay: z.enum(["popup", "bell", "chat"]).optional(),
+        emailJobUpdates: z.boolean().optional(),
       })
       .parse(await c.req.json());
     const owner = c.get("owner");

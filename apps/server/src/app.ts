@@ -179,6 +179,13 @@ export async function createApp(
   );
   const push = await PushService.create(db, config);
   agent.push = push;
+  // Emails about jobs a person handed off go to their account's own address.
+  if (mailer)
+    agent.jobMail = {
+      send: (message) => mailer.send(message),
+      appUrl: (config.appUrl ?? config.publicUrl).replace(/\/$/, ""),
+      to: async (owner) => (await accounts.get(owner))?.email,
+    };
   agent.spending = spending;
   // Direct Claude calls for pictures and for reading imported history.
   const claude =
@@ -261,8 +268,9 @@ export async function createApp(
     db,
     health,
     (owner) => agent.timeZone(owner),
-    (owner, note) =>
-      agent.notify(owner, note.title, note.body, undefined, note.key, { checkInId: note.id }),
+    async (owner, note) => {
+      await agent.notify(owner, note.title, note.body, undefined, note.key, { checkInId: note.id });
+    },
   );
   health.onMeal = (owner, entry) => checkIns.mealLogged(owner, entry);
   agent.checkIns = checkIns;
@@ -281,10 +289,11 @@ export async function createApp(
   const reminders = new ReminderService(
     db,
     (owner) => agent.timeZone(owner),
-    (owner, reminder) =>
-      agent.notify(owner, reminder.title, reminder.body, undefined, reminder.key, {
+    async (owner, reminder) => {
+      await agent.notify(owner, reminder.title, reminder.body, undefined, reminder.key, {
         reminderId: reminder.id,
-      }),
+      });
+    },
   );
   agent.reminders = reminders;
   const spacePosts = new ScheduledPosts(db, connected, (owner, title, body, key) =>

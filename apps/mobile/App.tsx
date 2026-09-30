@@ -73,7 +73,12 @@ import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { tipProps } from "./src/tips";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
-import { listenForCheckIns, registerServiceWorker, takeDelegateDraft } from "./src/web-app";
+import {
+  listenForCheckIns,
+  listenForTaskLinks,
+  registerServiceWorker,
+  takeDelegateDraft,
+} from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 /** The bottom bar. `short` is the word under the icon when the full name is too long for it. */
@@ -249,6 +254,8 @@ function WorkspaceApp({ token }: { token: string }) {
       }),
     [],
   );
+  // A job email's link or a tapped notification opens that job.
+  useEffect(() => listenForTaskLinks((taskId) => setDetail({ type: "task", taskId })), []);
   // A ?delegate= link opens Delegate task with the job filled in, ready to check and send.
   useEffect(() => {
     const prompt = takeDelegateDraft();
@@ -379,7 +386,7 @@ function WorkspaceShell({
       ? activeTask.status === "waiting_approval"
         ? `Ready to review · ${activeTask.title}`
         : activeTask.status === "waiting_input"
-          ? `Needs your input · ${activeTask.title}`
+          ? `Needs your answer · ${activeTask.title}`
           : (activity?.label ?? activeTask.title)
       : data?.tasks.some((task) => task.status === "queued")
         ? "Picking up your next task…"

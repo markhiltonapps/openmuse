@@ -160,6 +160,8 @@ export interface AgentArtifact {
   summary: string;
   data: Record<string, unknown>;
   createdAt: string;
+  /** The finished job's own summary, saved as a report; the job's page already shows it. */
+  final?: boolean;
 }
 export interface AgentNotification {
   id: string;
@@ -198,6 +200,8 @@ export interface AgentIdentity {
   showChatUpdates?: boolean;
   /** Where background updates show: a pop-up by the bell (default), only the bell, or in chat. */
   updatesDisplay?: "popup" | "bell" | "chat";
+  /** Email the person when a job they handed off is done, needs them, or fails (on unless false). */
+  emailJobUpdates?: boolean;
 }
 /** A person's own avatar: an uploaded photo (data URL) or a designed SVG. */
 export interface AvatarImage {

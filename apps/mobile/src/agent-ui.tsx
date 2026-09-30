@@ -6,6 +6,8 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CircleAlert,
+  CircleCheck,
   CircleDollarSign,
   FileText,
   Globe2,
@@ -99,7 +101,7 @@ const TASK_STATUS: Record<string, string> = {
   waiting_approval: "Waiting for your OK",
   paused: "Paused",
   succeeded: "Done",
-  failed: "Didn’t finish",
+  failed: "Couldn’t finish",
   cancelled: "Cancelled",
 };
 const taskStatus = (value: string) => TASK_STATUS[value] ?? statusLabel(value);
@@ -109,7 +111,7 @@ const STEP_STATUS: Record<string, string> = {
   running: "In progress",
   waiting: "Waiting for you",
   succeeded: "Done",
-  failed: "Didn’t finish",
+  failed: "Couldn’t finish",
 };
 /** The step it's on reads "Waiting for you" while the task waits for the person. */
 const stepStatus = (value: string, task?: string) =>
@@ -337,6 +339,288 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
     </View>
   );
 }
+const ALERTS_DECLINED = "openmuse.job-alerts-declined";
+/**
+ * While a job someone handed off is running: an offer to get a notification on this device when
+ * it's done, shown until they turn notifications on or say not now.
+ */
+function DoneAlertsOffer() {
+  const { api } = useWorkspace();
+  const { data } = useAgentWorkspace();
+  const [state, setState] = useState<PushState>();
+  const [declined, setDeclined] = useState(() => {
+    try {
+      return globalThis.localStorage?.getItem(ALERTS_DECLINED) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  /** What happened, in the line that stays when the card goes; focus moves there too. */
+  const [note, setNote] = useState("");
+  const noteRef = useRef<Text>(null);
+  useEffect(() => {
+    void pushState().then(setState, () => setState("unsupported"));
+  }, []);
+  useEffect(() => {
+    if (note && Platform.OS === "web")
+      setTimeout(() => (noteRef.current as unknown as HTMLElement | null)?.focus(), 60);
+  }, [note]);
+  const email = data?.identity.emailJobUpdates !== false;
+  const decline = () => {
+    try {
+      globalThis.localStorage?.setItem(ALERTS_DECLINED, "1");
+    } catch {
+      // Private browsing: it asks again next time.
+    }
+    setDeclined(true);
+    setNote(
+      state === "off"
+        ? "OK. You can turn notifications on later in Apps › Alerts."
+        : "OK. Once Neato_Muse is on your Home Screen, turn notifications on in Apps › Alerts.",
+    );
+  };
+  const offer = !note && !declined && !!state && ["off", "install-first"].includes(state);
+  return (
+    <View style={{ gap: 8 }}>
+      {offer && (
+        <Card style={{ gap: 10, backgroundColor: colors.sky }}>
+          <Text role="heading" aria-level={3} style={s.heading}>
+            Want a notification when it’s done?
+          </Text>
+          <Text style={[s.muted, { color: colors.mutedStrong }]}>
+            {state === "install-first"
+              ? "On iPhone, notifications need Neato_Muse on your Home Screen: tap Share, then “Add to Home Screen”, and open it from there."
+              : "I’ll send one to this device, so you can close the app."}
+            {email ? " I’ll email you either way." : ""}
+          </Text>
+          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+            {state === "off" && (
+              <Button
+                primary
+                icon={Bell}
+                busy={busy}
+                onPress={() => {
+                  setBusy(true);
+                  setError("");
+                  void enablePush(api)
+                    .then(() => setNote("Notifications are on. I’ll send one when it’s done."))
+                    .catch((e) => setError(errorText(e)))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Turn on notifications
+              </Button>
+            )}
+            <Button disabled={busy} onPress={decline}>
+              {state === "off" ? "No thanks" : "Got it"}
+            </Button>
+          </View>
+          <ErrorNotice error={error} />
+        </Card>
+      )}
+      {/* Always here, so the change is read out when the card goes. */}
+      <Text
+        ref={noteRef}
+        role="status"
+        aria-live="polite"
+        {...({ tabIndex: -1 } as object)}
+        style={[s.small, { color: colors.mutedStrong }]}
+      >
+        {note}
+      </Text>
+    </View>
+  );
+}
+/** A page that showed an error or a block instead of what was asked for. */
+const FAILED_PAGE =
+  /something went wrong|access denied|page not found|\b404\b|robot check|are you a (human|robot)|captcha|unusual traffic|temporarily unavailable/i;
+/** What a file a job made is, for its button: "the report" (when one was asked for), "the spreadsheet". */
+function fileKind(file: Artifact, prompt: string) {
+  const name = file.name.toLowerCase();
+  if (/\.(xlsx?|csv)$/.test(name) || file.mimeType.includes("sheet")) return "the spreadsheet";
+  if (/\.pptx?$/.test(name) || file.mimeType.includes("presentation")) return "the slides";
+  if (/\.(pdf|docx?)$/.test(name) || /pdf|word/.test(file.mimeType))
+    return /\breport\b/i.test(prompt) ? "the report" : "the document";
+  return "the file";
+}
+/** "You asked" only adds something when the request says more than the job's title. */
+function saysMore(prompt: string, title: string) {
+  const plain = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/…$/, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const asked = plain(prompt);
+  const named = plain(title);
+  return !asked.startsWith(named) || asked.length - named.length > 40;
+}
+/** A finished job: that it's done, what was asked, and the file it made, one tap away. */
+function DoneCard({
+  task,
+  file,
+  onOpenFile,
+}: {
+  task: AgentTask;
+  file?: Artifact;
+  onOpenFile: (file: Artifact) => void;
+}) {
+  const kind = file && fileKind(file, task.prompt);
+  return (
+    <Card style={{ gap: 12, backgroundColor: colors.green }}>
+      <View style={[s.row, { gap: 10 }]}>
+        <CircleCheck size={22} color={colors.greenText} />
+        <Text role="heading" aria-level={3} style={[s.heading, { fontSize: 17 }]}>
+          Done
+        </Text>
+      </View>
+      {task.input.handedOff === true && saysMore(askedFor(task.prompt), task.title) && (
+        <Text numberOfLines={2} style={[s.muted, { color: colors.mutedStrong }]}>
+          You asked: {askedFor(task.prompt)}
+        </Text>
+      )}
+      {file && (
+        <View style={{ gap: 6 }}>
+          <Button
+            strong
+            icon={FileText}
+            style={{ alignSelf: "stretch", maxWidth: 360, minHeight: 52 }}
+            accessibilityLabel={`Open ${kind}: ${file.name}`}
+            onPress={() => onOpenFile(file)}
+          >
+            {`Open ${kind}`}
+          </Button>
+          <Text style={[s.small, { fontSize: 13, lineHeight: 19, color: colors.mutedStrong }]}>
+            {`${file.name} · ${fileLine(file)}`}
+          </Text>
+        </View>
+      )}
+    </Card>
+  );
+}
+/** "1 page · saved in Files", with spaces that keep each phrase whole. */
+function fileLine(file: Artifact) {
+  const pages = file.pageCount
+    ? `${file.pageCount}\u00a0${file.pageCount === 1 ? "page" : "pages"} · `
+    : "";
+  return `${pages}saved\u00a0in\u00a0Files`;
+}
+/** A job that couldn't be finished: what happened, in plain words, and one way on. */
+function StoppedCard({
+  task,
+  busy,
+  onRetry,
+}: {
+  task: AgentTask;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <Card style={{ gap: 12, backgroundColor: colors.errorBg }}>
+      <View style={[s.row, { gap: 10 }]}>
+        <CircleAlert size={22} color={colors.danger} />
+        <Text role="heading" aria-level={3} style={[s.heading, { fontSize: 17 }]}>
+          Couldn’t finish
+        </Text>
+      </View>
+      {task.input.handedOff === true && saysMore(askedFor(task.prompt), task.title) && (
+        <Text numberOfLines={2} style={[s.muted, { color: colors.mutedStrong }]}>
+          You asked: {askedFor(task.prompt)}
+        </Text>
+      )}
+      <Text style={s.text}>Something went wrong and I had to stop.</Text>
+      {!!task.error && (
+        <Text
+          numberOfLines={3}
+          selectable
+          style={[s.small, { fontSize: 13, lineHeight: 19, color: colors.mutedStrong }]}
+        >
+          Error message: {task.error}
+        </Text>
+      )}
+      <Button
+        strong
+        icon={RefreshCw}
+        busy={busy}
+        style={{ alignSelf: "stretch", maxWidth: 360, minHeight: 52 }}
+        onPress={onRetry}
+      >
+        Try again
+      </Button>
+    </Card>
+  );
+}
+/** Where a job looked, as plain links; a page that showed an error says so. */
+function SourceLinks({ items }: { items: Evidence[] }) {
+  const { workspace, open } = useWorkspace();
+  const [error, setError] = useState("");
+  return (
+    <View>
+      {items.map((item, index) => {
+        const url = item.url && /^https?:\/\//i.test(item.url) ? item.url : undefined;
+        let host = "";
+        try {
+          host = url ? new URL(url).hostname.replace(/^www\./, "") : "";
+        } catch {
+          host = "";
+        }
+        const failed = FAILED_PAGE.test(item.title);
+        const mail =
+          item.kind === "mail" ? workspace.mail.find((m) => m.id === item.id) : undefined;
+        const file =
+          item.kind === "file" ? workspace.files.find((f) => f.id === item.id) : undefined;
+        const onPress = url
+          ? () => void Linking.openURL(url).catch((e) => setError(errorText(e)))
+          : mail
+            ? () => open({ type: "mail", mail })
+            : file
+              ? () => open({ type: "file", file })
+              : undefined;
+        const title = failed ? "A page that showed an error" : item.title;
+        const where =
+          host || (mail ? "Email" : file ? "Files" : item.kind === "user" ? "From you" : "");
+        return (
+          // The divider sits outside the rounded press highlight, so it stays a straight line.
+          <View
+            key={item.id}
+            style={{ borderTopWidth: index ? 1 : 0, borderTopColor: colors.line }}
+          >
+            <Pressable
+              accessibilityRole={onPress ? "link" : undefined}
+              accessibilityLabel={`${title}${where ? `, ${where}` : ""}`}
+              disabled={!onPress}
+              onPress={onPress}
+              style={({ pressed }) => [
+                {
+                  gap: 2,
+                  paddingVertical: 10,
+                  paddingHorizontal: 10,
+                  marginHorizontal: -10,
+                  borderRadius: 12,
+                },
+                pressed && { backgroundColor: colors.subtle },
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[
+                  s.text,
+                  { fontSize: 14, color: onPress && !failed ? colors.blueText : colors.text },
+                ]}
+              >
+                {title}
+              </Text>
+              {!!where && <Text style={[s.small, { color: colors.mutedStrong }]}>{where}</Text>}
+            </Pressable>
+          </View>
+        );
+      })}
+      <ErrorNotice error={error} />
+    </View>
+  );
+}
 /**
  * What a task's AI has cost so far, from the server's estimate: " · AI cost about $0.08". Its
  * spaces don't break, so a wrapped subtitle keeps the phrase whole.
@@ -364,6 +648,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   const [showFieldJson, setShowFieldJson] = useState(false);
   const [fields, setFields] = useState<Record<string, string | boolean>>({});
   const [showDetails, setShowDetails] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const task = data?.tasks.find((item) => item.id === taskId) || detail?.task;
   useEffect(() => {
     let active = true;
@@ -388,6 +673,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
       active = false;
     };
   }, [api, taskId, task?.updatedAt]);
+  /** Whether it went through; a failure shows as an error here. */
   async function act(path: string, body: unknown) {
     setBusy(true);
     setError("");
@@ -397,8 +683,10 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         setAnswer("");
         setFields({});
       }
+      return true;
     } catch (e) {
       setError(errorText(e));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -456,6 +744,21 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     !!task &&
     ["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(task.status);
   const canCancel = !!task && activeTask(task);
+  const files = detail?.files ?? [];
+  const handedOff = task?.input.handedOff === true;
+  // After "Try again" the card goes; focus moves to the line that says it's under way.
+  const [retried, setRetried] = useState(false);
+  const workingLine = useRef<Text>(null);
+  useEffect(() => {
+    if (!retried || task?.status === "failed" || Platform.OS !== "web") return;
+    setRetried(false);
+    setTimeout(() => (workingLine.current as unknown as HTMLElement | null)?.focus(), 60);
+  }, [retried, task?.status]);
+  // Opening a job answers its updates, so its pop-up and the bell don't ask about it again.
+  const unread = !!data?.notifications.some((n) => n.taskId === taskId && !n.read);
+  useEffect(() => {
+    if (unread) void mutate("/notifications/read", { taskId }).catch(() => undefined);
+  }, [unread, taskId, mutate]);
   return (
     <Sheet
       title={task?.title || "Task"}
@@ -562,18 +865,43 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               </Button>
             </Card>
           )}
-          {/* The result comes first, formatted the way the agent wrote it. */}
+          {/* Jobs the person handed off (or that made a file); routines just show their result. */}
+          {task.status === "succeeded" && (handedOff || files.length > 0) && (
+            <DoneCard
+              task={task}
+              file={files[0]}
+              onOpenFile={(file) => open({ type: "file", file })}
+            />
+          )}
+          {task.status === "failed" && (
+            <StoppedCard
+              task={task}
+              busy={busy}
+              onRetry={() =>
+                void act("control", { action: "retry" }).then((ok) => ok && setRetried(true))
+              }
+            />
+          )}
+          {/* The answer, once, formatted the way the agent wrote it. */}
           {!!task.result && <AssistantResponse content={resultSummary(task.result)} />}
           {!task.result && ["queued", "running", "scheduled"].includes(task.status) && (
-            <Text style={[s.text, { color: colors.mutedStrong }]}>
+            <Text
+              ref={workingLine}
+              {...({ tabIndex: -1 } as object)}
+              style={[s.text, { color: colors.mutedStrong }]}
+            >
               {task.status === "running"
                 ? "Working on it."
                 : task.status === "scheduled" && task.nextRunAt
                   ? `Scheduled for ${stamp(task.nextRunAt)}.`
                   : "Waiting to start."}{" "}
-              The result will show here when it’s done.
+              {task.input.handedOff === true
+                ? "You can leave this page. I’ll let you know when it’s done."
+                : "The result will show here when it’s done."}
             </Text>
           )}
+          {task.input.handedOff === true &&
+            ["queued", "running", "scheduled"].includes(task.status) && <DoneAlertsOffer />}
           {!task.result && !!task.plan.length && (
             <Card style={{ gap: 15 }}>
               <Text style={s.heading}>Plan</Text>
@@ -598,7 +926,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               ))}
             </Card>
           )}
-          <ErrorNotice error={task.error ?? undefined} />
+          {task.status !== "failed" && <ErrorNotice error={task.error ?? undefined} />}
           {detail?.browsers?.map((browser) => (
             <Card key={browser.id} style={{ gap: 10 }}>
               <Text style={s.heading}>{browser.title || "Agent browser"}</Text>
@@ -634,11 +962,14 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               </Button>
             </Card>
           ))}
-          {detail?.files?.map((file) => (
+          {(task.status === "succeeded" && (handedOff || files.length > 0)
+            ? files.slice(1)
+            : files
+          ).map((file) => (
             <LinkRow
               key={file.id}
               title={file.name}
-              detail={`${file.pageCount} pages · PDF`}
+              detail={fileLine(file)}
               icon={FileText}
               onPress={() => open({ type: "file", file })}
             />
@@ -647,16 +978,40 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             data?.artifacts.filter((artifact) => artifact.taskId === taskId) ||
             detail?.artifacts ||
             []
-          ).map((artifact) => (
-            <ArtifactCard key={artifact.id} artifact={artifact} />
-          ))}
+          )
+            // The finished job's summary is saved as a report too; it's already shown above.
+            .filter(
+              (artifact) =>
+                !artifact.final &&
+                !(artifact.kind === "report" && artifact.summary === task.result),
+            )
+            .map((artifact) => (
+              <ArtifactCard key={artifact.id} artifact={artifact} />
+            ))}
           {!!task.evidence.length && (
-            <View style={{ gap: 14 }}>
-              <Text style={s.heading}>Sources</Text>
-              <EvidenceList items={task.evidence} />
+            <View style={{ gap: 10 }}>
+              <Pressable
+                role="button"
+                aria-expanded={showSources}
+                accessibilityLabel={`Where I looked, ${task.evidence.length} ${
+                  task.evidence.length === 1 ? "place" : "places"
+                }`}
+                onPress={() => setShowSources((open) => !open)}
+                style={[s.row, { gap: 6, minHeight: 44, alignSelf: "flex-start" }]}
+              >
+                <Text style={[s.text, { fontWeight: "600" }]}>
+                  {`Where I looked (${task.evidence.length})`}
+                </Text>
+                {showSources ? (
+                  <ChevronUp size={17} color={colors.text} />
+                ) : (
+                  <ChevronDown size={17} color={colors.text} />
+                )}
+              </Pressable>
+              {showSources && <SourceLinks items={task.evidence} />}
             </View>
           )}
-          {(canPause || task.status === "paused" || task.status === "failed" || canCancel) && (
+          {(canPause || task.status === "paused" || canCancel) && (
             <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
               {canPause && (
                 <Button
@@ -678,16 +1033,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   Resume
                 </Button>
               )}
-              {task.status === "failed" && (
-                <Button
-                  small
-                  icon={RefreshCw}
-                  busy={busy}
-                  onPress={() => void act("control", { action: "retry" })}
-                >
-                  Retry task
-                </Button>
-              )}
+
               {canCancel && (
                 <Button
                   small
@@ -792,7 +1138,8 @@ function display(value: unknown): string {
 export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
   const [expanded, setExpanded] = useState(false);
   if (artifact.kind === "finance") return <FinanceArtifact artifact={artifact} />;
-  const rows = Object.entries(artifact.data);
+  // Where the agent looked is shown as links on the job, not as raw page text here.
+  const rows = Object.entries(artifact.data).filter(([key]) => key !== "evidence");
   return (
     <Card style={{ gap: 13, backgroundColor: colors.card }}>
       <View style={s.between}>
@@ -2492,6 +2839,7 @@ export function AppsScreen() {
       )}
       {tab === "alerts" && (
         <>
+          <JobAlertsCard />
           <MailAlertsCard />
           <AppAlertsCard />
           <PhoneAppCard />
@@ -2935,6 +3283,45 @@ function AgentEmailCard() {
     </Card>
   );
 }
+/** How the agent tells the person that a job they handed off is done, needs them, or failed. */
+function JobAlertsCard() {
+  const { notify } = useWorkspace();
+  const { data, mutate } = useAgentWorkspace();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const name = data?.identity.name || "your agent";
+  const on = data?.identity.emailJobUpdates !== false;
+  const shows = updatesDisplay(data?.identity);
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await mutate("/identity", { emailJobUpdates: !on });
+      notify(on ? "Job emails are off." : "Job emails are on.");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card style={{ gap: 12 }}>
+      <SectionHeading title="Jobs you hand off" />
+      <Text style={s.muted}>
+        {`When ${name} finishes a job you handed off, needs your answer, or can’t finish, you’ll see ${
+          shows === "popup"
+            ? "a pop-up in the app"
+            : shows === "chat"
+              ? "it in the chat"
+              : "it in the bell"
+        }. Devices with notifications on get a notification too.`}
+      </Text>
+      <CheckRow label="Email me about jobs I hand off" checked={on} onPress={() => void toggle()} />
+      <ErrorNotice error={error} />
+    </Card>
+  );
+}
 /** Home-screen install and push notifications for the web app. */
 function PhoneAppCard() {
   const { api, notify } = useWorkspace();
@@ -2972,14 +3359,14 @@ function PhoneAppCard() {
       )}
       <Text style={s.muted}>
         {state === "on"
-          ? "This device gets a notification when a routine finishes, a task needs your details, or something is ready for review."
+          ? "This device gets a notification when a job or routine finishes, or something needs you."
           : state === "install-first"
             ? "Notifications work once Neato_Muse is on your Home Screen."
             : state === "blocked"
               ? "Notifications are blocked for this site. Allow them in your browser settings, then come back."
               : state === "unsupported"
                 ? "This browser can't show notifications from Neato_Muse."
-                : "Get a notification when a routine finishes or something needs your review."}
+                : "Get a notification when a job or routine finishes, or something needs you."}
       </Text>
       {(state === "on" || state === "off") && (
         <Button primary={state === "off"} busy={busy} onPress={() => void toggle()}>

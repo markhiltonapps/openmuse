@@ -122,11 +122,14 @@ export function Button({
   style,
   accessibilityLabel,
   selected,
+  strong,
 }: {
   children: ReactNode;
   onPress: () => void;
   icon?: LucideIcon;
   primary?: boolean;
+  /** The one thing to do on a card: dark, like the send button. */
+  strong?: boolean;
   disabled?: boolean;
   busy?: boolean;
   small?: boolean;
@@ -137,7 +140,7 @@ export function Button({
   /** For a choice among buttons: announced as pressed (react-native-web reads aria-*). */
   selected?: boolean;
 }) {
-  const color = danger ? colors.danger : colors.text;
+  const color = strong ? colors.onInverse : danger ? colors.danger : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -149,6 +152,7 @@ export function Button({
       style={({ pressed }) => [
         s.button,
         primary ? s.primary : s.secondary,
+        strong && { backgroundColor: colors.inverse },
         small && { minHeight: 38, paddingVertical: 7, paddingHorizontal: 13 },
         (disabled || busy) && { opacity: 0.5 },
         pressed && { transform: [{ scale: 0.98 }] },

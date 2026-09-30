@@ -53,6 +53,7 @@ import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import type { HealthService } from "../health.ts";
 import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
+import { jobEmail } from "../job-email.ts";
 import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
 import type { MealCheckIns } from "../meal-checkins.ts";
@@ -910,7 +911,7 @@ export class AgentService {
         title: idea.title,
         prompt: idea.prompt,
         kind: idea.kind,
-        input: idea.input,
+        input: { ...idea.input, handedOff: true },
         goalId: goal.id,
       },
       `idea:${id}`,
@@ -976,6 +977,13 @@ export class AgentService {
   recipes?: RecipeKitchen;
   /** Purchase guardrails for connected-app actions. */
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
+  /** Emails the person about jobs they handed off; set when the server can send email. */
+  jobMail?: {
+    send(message: { to: string; subject: string; text: string; html: string }): Promise<void>;
+    appUrl: string;
+    /** The person's own address, from their account. */
+    to(owner: string): Promise<string | undefined>;
+  };
   /** Phone and browser notifications; set when web push is available. */
   push?: {
     notify(
@@ -1000,16 +1008,60 @@ export class AgentService {
       createdAt: date(),
       read: false,
     };
-    if ((await this.db.insertIfAbsent(owner, "notifications", value)) && this.push)
+    const inserted = Boolean(await this.db.insertIfAbsent(owner, "notifications", value));
+    if (inserted && this.push)
       void this.push
         .notify(owner, {
           title,
           body,
           tag: value.id,
-          // A check-in opens chat with its card, ready to answer.
-          ...(extra.checkInId ? { url: `/?checkin=${encodeURIComponent(extra.checkInId)}` } : {}),
+          // A check-in opens chat with its card, ready to answer; a job opens that job.
+          ...(extra.checkInId
+            ? { url: `/?checkin=${encodeURIComponent(extra.checkInId)}` }
+            : taskId
+              ? { url: `/?task=${encodeURIComponent(taskId)}` }
+              : {}),
         })
         .catch((error) => backgroundFailure("push notification", error));
+    return inserted;
+  }
+  /** A job the person started (Delegate task, the chat, an idea) rather than a routine or rule. */
+  async delegate(owner: string, raw: unknown, idempotencyKey?: string) {
+    const input = createTaskSchema.parse(raw);
+    return this.createTask(
+      owner,
+      { ...input, input: { ...input.input, handedOff: true } },
+      idempotencyKey,
+    );
+  }
+  /** Emails the person about a job they handed off, unless they turned these emails off. */
+  private async emailJob(owner: string, task: AgentTask, outcome: "done" | "question" | "failed") {
+    const mail = this.jobMail;
+    if (!mail || task.input.handedOff !== true) return;
+    const identity = await this.db.get<AgentIdentity>(owner, "agent-settings", "identity");
+    if (identity?.emailJobUpdates === false) return;
+    const to = await mail.to(owner);
+    if (!to) return;
+    const files = (await this.db.list<Artifact>(owner, "files"))
+      .filter((file) => task.artifactIds.includes(file.id))
+      .map((file) => file.name);
+    await mail.send({
+      to,
+      ...jobEmail({
+        outcome,
+        title: task.title,
+        body:
+          (outcome === "done"
+            ? task.result
+            : outcome === "question"
+              ? task.question
+              : task.error) ?? task.title,
+        agentName: identity?.name || "Neddy",
+        appUrl: mail.appUrl,
+        taskId: task.id,
+        files,
+      }),
+    });
   }
   async timeZone(owner: string) {
     const settings = await this.db.get<{ timeZone?: string }>(
@@ -1176,6 +1228,7 @@ export class AgentService {
       summary,
       data,
       createdAt: date(),
+      ...(key === "final" ? { final: true } : {}),
     };
     await this.db.put(owner, "agent-artifacts", value);
     return value;
@@ -1327,14 +1380,21 @@ export class AgentService {
   }
   private async publishOutcome(owner: string, saved: AgentTask) {
     const task = await this.getTask(owner, saved.id);
-    if (task.status === "succeeded") {
-      await this.notify(
-        owner,
-        task.title,
-        task.result ?? "Work completed",
-        task.id,
-        `task-done:${task.id}`,
+    const email = (outcome: "done" | "question" | "failed") =>
+      void this.emailJob(owner, task, outcome).catch((error) =>
+        backgroundFailure("job email", error),
       );
+    if (task.status === "succeeded") {
+      if (
+        await this.notify(
+          owner,
+          task.title,
+          task.result ?? "It’s done.",
+          task.id,
+          `task-done:${task.id}`,
+        )
+      )
+        email("done");
       if (task.goalId) {
         for (let attempt = 0; attempt < 8; attempt++) {
           const goal = await this.db.get<Goal>(owner, "goals", task.goalId);
@@ -1354,21 +1414,28 @@ export class AgentService {
         }
       }
     } else if (task.status === "failed") {
-      await this.notify(
-        owner,
-        "Task needs attention",
-        task.error ?? task.title,
-        task.id,
-        `task-error:${task.id}:${task.attempts}`,
-      );
+      if (
+        await this.notify(
+          owner,
+          `Couldn’t finish: ${task.title}`,
+          // The reason itself is on the job's page; an error message isn't for a notification.
+          "Something went wrong. Open it to try again.",
+          task.id,
+          `task-error:${task.id}:${task.attempts}`,
+        )
+      )
+        email("failed");
     } else if (task.status === "waiting_input") {
-      await this.notify(
-        owner,
-        "Your details are needed",
-        task.question ?? task.title,
-        task.id,
-        `input:${task.id}:${hash(task.question ?? "")}`,
-      );
+      if (
+        await this.notify(
+          owner,
+          `Needs your answer: ${task.title}`,
+          task.question ?? task.title,
+          task.id,
+          `input:${task.id}:${hash(task.question ?? "")}`,
+        )
+      )
+        email("question");
     } else if (task.status === "waiting_approval") {
       await this.notify(
         owner,

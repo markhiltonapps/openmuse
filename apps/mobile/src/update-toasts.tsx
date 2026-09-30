@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react-native";
-import { AlarmClock, ArrowRight, Bell, Check, Hand, X } from "lucide-react-native";
+import { AlarmClock, ArrowRight, Bell, Check, CircleAlert, Hand, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, useWindowDimensions, View } from "react-native";
 import type {
@@ -120,6 +120,13 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
 
   const tasks = data?.tasks;
   const kindOf = (item: AgentNotification) => updateKind(item, tasks);
+  const handedOff = (item: AgentNotification) =>
+    tasks?.find((t) => t.id === item.taskId && t.input.handedOff === true);
+  /** A job the person handed off is finished: its pop-up stays until they open or close it. */
+  const jobDone = (item: AgentNotification) => handedOff(item)?.status === "succeeded";
+  /** A job the person handed off couldn't be finished: it stays too. */
+  const jobFailed = (item: AgentNotification) => handedOff(item)?.status === "failed";
+  const jobEnded = (item: AgentNotification) => jobDone(item) || jobFailed(item);
 
   // New unread updates join the queue. At first load, only what needs the person pops up (and
   // wasn't put off here before); the rest is already waiting in the bell.
@@ -130,9 +137,10 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
       (n) => !n.read && !n.checkInId && (n.taskId || n.reminderId),
     );
     if (!seen.current) {
+      // Jobs that finished while the app was closed still pop up; other updates wait in the bell.
       seen.current = new Set([
         ...putOff(),
-        ...candidates.filter((n) => kindOf(n) === "update").map((n) => n.id),
+        ...candidates.filter((n) => kindOf(n) === "update" && !jobEnded(n)).map((n) => n.id),
       ]);
     }
     const unread = new Set(candidates.map((n) => n.id));
@@ -158,6 +166,35 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
       setToast(undefined),
     );
   }, [fade]);
+
+  // Escape closes it while focus is inside, and its keyup is held back so nothing else closes too.
+  useEffect(() => {
+    if (!toast || typeof document === "undefined") return;
+    let closing = false;
+    const inside = () => {
+      const node = card.current as unknown as HTMLElement | null;
+      return !!node?.contains(document.activeElement);
+    };
+    const down = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !inside()) return;
+      closing = true;
+      event.stopPropagation();
+      event.preventDefault();
+      laterRef.current?.();
+    };
+    const up = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !closing) return;
+      closing = false;
+      event.stopPropagation();
+    };
+    document.addEventListener("keydown", down, true);
+    document.addEventListener("keyup", up, true);
+    return () => {
+      document.removeEventListener("keydown", down, true);
+      document.removeEventListener("keyup", up, true);
+    };
+  }, [toast]);
+  const laterRef = useRef<() => void>(undefined);
 
   // Read elsewhere (in the bell, on another device): it goes away here too.
   useEffect(() => {
@@ -200,11 +237,16 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
 
   // Updates that don't need the person slide away, unless someone is looking at or using them.
   const paused = hovering || touched || focused || working || !!error;
+  const done = !!toast?.items.some(jobEnded);
+  const failed = !!toast && toast.items.length === 1 && toast.items.every(jobFailed);
+  const allDone = !!toast && toast.items.length > 1 && toast.items.every(jobDone);
+  /** One finished job, or several all finished: the green tick, tile and label. */
+  const doneLook = allDone || (done && !failed && toast?.items.length === 1);
   useEffect(() => {
-    if (toast?.kind !== "update" || paused) return;
+    if (toast?.kind !== "update" || paused || done) return;
     const timer = setTimeout(dismiss, SHOW_MS);
     return () => clearTimeout(timer);
-  }, [toast, paused, dismiss]);
+  }, [toast, paused, dismiss, done]);
 
   const first = display === "popup" ? toast?.items[0] : undefined;
   const count = toast?.items.length ?? 0;
@@ -213,8 +255,14 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
   const label =
     kind === "update"
       ? many
-        ? "Updates"
-        : "Update"
+        ? allDone
+          ? "Done"
+          : "Updates"
+        : failed
+          ? "Couldn’t finish"
+          : done
+            ? "Done"
+            : "Update"
       : kind === "reminder"
         ? "Reminder"
         : "Needs you";
@@ -222,9 +270,11 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
     ? ""
     : many
       ? kind === "update"
-        ? `${count} new updates`
+        ? allDone
+          ? `${count} jobs done`
+          : `${count} new updates`
         : `${count} things need you`
-      : nameOf(first);
+      : (handedOff(first)?.title ?? nameOf(first));
 
   // Said once when the card appears: reminders interrupt, everything else waits its turn.
   useEffect(() => {
@@ -235,7 +285,9 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
         ? `${heading}: ${namesOf(toast.items)}. They're in the bell.`
         : `${heading}: ${namesOf(toast.items)}.`
       : kind === "update"
-        ? `Update: ${end(heading)} It's in the bell.`
+        ? toast.items.some(jobEnded)
+          ? `${label}: ${end(heading)}`
+          : `Update: ${end(heading)} It's in the bell.`
         : `${label}: ${end(heading)}`;
     setSaid({ text, urgent: kind === "reminder" && !many });
   }, [toast]);
@@ -254,9 +306,10 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
   if (!toast || !first) return <>{announcer}</>;
 
   const later = () => {
-    if (kind !== "update") rememberPutOff(toast.items.map((n) => n.id));
+    if (kind !== "update" || done) rememberPutOff(toast.items.map((n) => n.id));
     dismiss();
   };
+  laterRef.current = later;
   async function act(work: () => Promise<unknown>) {
     setWorking(true);
     try {
@@ -285,7 +338,16 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
     open({ type: "notifications" });
   };
 
-  const Icon: LucideIcon = kind === "reminder" ? AlarmClock : kind === "decision" ? Hand : Bell;
+  const Icon: LucideIcon =
+    kind === "reminder"
+      ? AlarmClock
+      : kind === "decision"
+        ? Hand
+        : failed
+          ? CircleAlert
+          : doneLook
+            ? Check
+            : Bell;
   const detail = many
     ? namesOf(toast.items)
     : kind === "reminder"
@@ -349,15 +411,35 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
                 width: 30,
                 height: 30,
                 borderRadius: 10,
-                backgroundColor: kind === "update" ? colors.sky : colors.lavender,
+                backgroundColor: failed
+                  ? colors.errorBg
+                  : doneLook
+                    ? colors.green
+                    : kind === "update"
+                      ? colors.sky
+                      : colors.lavender,
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Icon size={15} color={colors.blueDark} />
+              <Icon
+                size={15}
+                color={failed ? colors.danger : doneLook ? colors.greenText : colors.blueDark}
+              />
             </View>
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={s.small}>{label}</Text>
+              <Text
+                style={[
+                  s.small,
+                  failed
+                    ? { color: colors.danger, fontWeight: "600" }
+                    : doneLook
+                      ? { color: colors.greenText, fontWeight: "600" }
+                      : null,
+                ]}
+              >
+                {label}
+              </Text>
               <Text numberOfLines={2} style={[s.text, { fontWeight: "600" }]}>
                 {heading}
               </Text>
@@ -374,7 +456,7 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
           <View style={[s.row, { gap: 8, flexWrap: "wrap", marginLeft: 40 }]}>
             {many ? (
               <Button small primary icon={ArrowRight} onPress={seeAll}>
-                {kind === "update" ? "See updates" : "See them"}
+                {kind === "update" && !allDone ? "See updates" : "See them"}
               </Button>
             ) : kind === "reminder" ? (
               <>

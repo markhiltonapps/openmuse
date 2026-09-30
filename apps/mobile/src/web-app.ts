@@ -362,6 +362,57 @@ export function takeDelegateDraft() {
   return text.slice(0, 2000);
 }
 
+/**
+ * A job to open, from a link in a job email or a tapped notification: /?task=… on arrival, or a
+ * message from the service worker when the app is already open. Tidies the address bar.
+ */
+const PENDING_TASK = "openmuse.pending-task";
+/** Kept for a day, so a job link opened while signed out still opens the job after signing in. */
+if (typeof window !== "undefined" && typeof window.location !== "undefined") {
+  const id = new URL(window.location.href).searchParams.get("task")?.trim();
+  if (id)
+    try {
+      window.localStorage?.setItem(PENDING_TASK, JSON.stringify({ id, at: Date.now() }));
+    } catch {
+      // Private browsing: the link still works while signed in.
+    }
+}
+function takePendingTask() {
+  try {
+    const saved = window.localStorage?.getItem(PENDING_TASK);
+    window.localStorage?.removeItem(PENDING_TASK);
+    const pending = saved ? (JSON.parse(saved) as { id?: string; at?: number }) : undefined;
+    return pending?.id && Date.now() - (pending.at ?? 0) < 86_400_000 ? pending.id : "";
+  } catch {
+    return "";
+  }
+}
+export function listenForTaskLinks(onOpen: (taskId: string) => void) {
+  if (!web()) return () => undefined;
+  const idOf = (href: string) => {
+    try {
+      return new URL(href, window.location.origin).searchParams.get("task")?.trim() || "";
+    } catch {
+      return "";
+    }
+  };
+  const url = new URL(window.location.href);
+  const pending = takePendingTask();
+  const first = idOf(url.href) || pending;
+  if (url.searchParams.has("task")) {
+    url.searchParams.delete("task");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  if (first) onOpen(first.slice(0, 200));
+  const message = (event: MessageEvent) => {
+    const data = event.data as { type?: string; url?: string } | undefined;
+    const id = data?.type === "notification-open" && data.url ? idOf(data.url) : "";
+    if (id) onOpen(id.slice(0, 200));
+  };
+  navigator.serviceWorker?.addEventListener("message", message);
+  return () => navigator.serviceWorker?.removeEventListener("message", message);
+}
+
 /** Lets the person choose a picture; returns it as a small square JPEG data URL. */
 export function pickImage(size = 256): Promise<string | undefined> {
   if (!web()) return Promise.resolve(undefined);

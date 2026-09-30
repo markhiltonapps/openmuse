@@ -228,7 +228,7 @@ export class ConversationAgent extends AbstractAgent {
         parameters: createTaskSchema.extend({
           kind: z.enum(["agent", "document", "finance", "plan"]).default("agent"),
         }),
-        execute: async (args) => this.service.createTask(this.owner, args, key("task", args)),
+        execute: async (args) => this.service.delegate(this.owner, args, key("task", args)),
       }),
       defineTool({
         name: "agent_status",
