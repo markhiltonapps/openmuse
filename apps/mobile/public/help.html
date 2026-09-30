@@ -133,8 +133,15 @@
         display: flex;
         gap: 8px;
         overflow-x: auto;
+        scroll-padding-inline: 16px;
         padding: 0 0 12px;
         scrollbar-width: none;
+      }
+      @media (min-width: 700px) {
+        .chips {
+          flex-wrap: wrap;
+          overflow-x: visible;
+        }
       }
       .chips::-webkit-scrollbar {
         display: none;
@@ -394,6 +401,23 @@
         gap: 12px;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       }
+      .steps + .stuck {
+        margin-top: 16px;
+      }
+      #jobs .steps {
+        grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+      }
+      #jobs .step {
+        display: flex;
+        flex-direction: column;
+      }
+      #jobs .step p {
+        margin-bottom: 10px;
+      }
+      #jobs .step .path {
+        margin-top: auto;
+        align-self: flex-start;
+      }
       .chat {
         display: flex;
         flex-direction: column;
@@ -538,6 +562,7 @@
           <a href="#start"><img src="/help/wave.webp" alt="" />Start</a>
           <a href="#tour"><img src="/help/puzzle.webp" alt="" />Find your way</a>
           <a href="#ask"><img src="/help/chat.webp" alt="" />Things to ask</a>
+          <a href="#jobs"><img src="/help/globe.webp" alt="" />Website jobs</a>
           <a href="#safe"><img src="/help/shield.webp" alt="" />You're in control</a>
           <a href="#tips"><img src="/help/bulb.webp" alt="" />Tips</a>
           <a href="#fix"><img src="/help/toolbox.webp" alt="" />Fix a problem</a>
@@ -768,6 +793,103 @@
             <img class="pic" src="/help/news.webp" alt="" />
             <h3>Your feed</h3>
             <p>"Make me a feed about local news and the Warriors."</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="jobs">
+        <div class="head">
+          <img src="/help/globe.webp" alt="" />
+          <h2>Hand Neddy a job on a website</h2>
+        </div>
+        <p class="lede">
+          Neddy can work on a website in his own browser while you do something else: download a
+          statement, check a bill, fill in a form or compare prices. He stops and asks you before he pays, sends
+          or submits anything.
+        </p>
+        <div class="steps">
+          <div class="card step tint-teal">
+            <img class="pic" src="/help/key-lock.webp" alt="" />
+            <h3>Save the site's password</h3>
+            <p>
+              If the site needs a sign-in, tap <b>Add a password</b>, fill in the website, your
+              username or email and your password, then tap <b>Save password</b>. Neddy never sees it,
+              and he asks you before each sign-in unless you untick
+              <b>Ask me before each sign-in</b>.
+            </p>
+            <span class="path">Apps › Account › Passwords</span>
+          </div>
+          <div class="card step tint-sky">
+            <img class="pic" src="/help/memo.webp" alt="" />
+            <h3>Hand over the job</h3>
+            <p>
+              Tap the menu <span aria-hidden="true">(☰)</span> at the top left, then
+              <b>Delegate task</b>. Choose <b>General task</b>, say what you'd like done, and tap
+              <b>Delegate task</b>. You can also just ask Neddy in chat.
+            </p>
+            <span class="path">Menu › Delegate task</span>
+          </div>
+          <div class="card step tint-lavender">
+            <img class="pic" src="/help/eyes.webp" alt="" />
+            <h3>Follow along</h3>
+            <p>
+              The job opens as soon as you hand it over; find it again in <b>Activity</b>. When he
+              needs you, you'll get an update under the bell. Agent computer shows his screen as he
+              works.
+            </p>
+            <span class="path">Menu › Agent computer</span>
+          </div>
+          <div class="card step tint-orange">
+            <img class="pic" src="/help/check.webp" alt="" />
+            <h3>Approve when he asks</h3>
+            <p>
+              He asks before he signs in (unless you turned that off), and always before he pays or
+              submits. Open the job, tap
+              <b>Review action</b>, check the details, then tap <b>Approve</b>. If the site sent you a
+              code, type it there. Files he downloads go to <b>Files &amp; media</b>.
+            </p>
+          </div>
+        </div>
+        <p class="lede stuck">
+          <b>If he gets stuck</b> on a "prove you're human" check or a code only you can get, the job
+          says what's needed. Open Agent computer, tap <b>Take control</b> and do that step
+          yourself. Then, in the job, write "Done" under <b>Your answer</b> and tap
+          <b>Continue task</b>.
+        </p>
+        <p class="lede">Things you can say:</p>
+        <div class="chats">
+          <div class="card chat">
+            <div class="row"><img src="/help/money.webp" alt="" />Statements and bills</div>
+            <div class="me">
+              Sign in to my electric company's website, download my latest bill and set up the payment
+              with the card I have saved there.
+            </div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>Your bill is in Files &amp; media. The $84.20 payment is set up and waiting for your OK.</div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/cart.webp" alt="" />Shopping</div>
+            <div class="me">Compare the price of a Vitamix E310 at three stores and put it in a table.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>
+                Done. The cheapest is $329 with free shipping, $20 less than the next store. The table
+                is in Files &amp; media.
+              </div>
+            </div>
+          </div>
+          <div class="card chat">
+            <div class="row"><img src="/help/files.webp" alt="" />Forms</div>
+            <div class="me">Fill in the change-of-address form on my bank's website with my new address.</div>
+            <div class="bot">
+              <img src="/icon-192.png" alt="" />
+              <div>
+                It's filled in and waiting for you. Open the job and tap Review action to check it
+                before it's sent.
+              </div>
+            </div>
           </div>
         </div>
       </section>
