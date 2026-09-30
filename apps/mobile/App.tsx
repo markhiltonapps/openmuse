@@ -590,6 +590,8 @@ function WorkspaceShell({
             }}
           >
             <View
+              role="tablist"
+              aria-label="Sections"
               style={{
                 flexDirection: "row",
                 width: "100%",
@@ -611,9 +613,10 @@ function WorkspaceShell({
                 return (
                   <Pressable
                     key={item.id}
-                    accessibilityRole="tab"
-                    accessibilityLabel={item.label}
-                    accessibilityState={{ selected: active }}
+                    // react-native-web reads role and aria-*, not accessibilityState.
+                    role="tab"
+                    aria-label={item.label}
+                    aria-selected={active}
                     onPress={() => navigate(item.id)}
                     style={{
                       flex: 1,
