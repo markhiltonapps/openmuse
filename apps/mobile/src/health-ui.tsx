@@ -286,7 +286,7 @@ export function HealthSection() {
       <SectionHeading title="Health" action="Open Health" onPress={openHealth} />
       <Text style={s.text}>{line ? `Today: ${line}` : "Nothing logged today yet."}</Text>
       <Text style={[s.small, { color: colors.mutedStrong, fontSize: 13, lineHeight: 19 }]}>
-        Your food log, charts of each week and your workouts are in Spaces → Health.
+        Your food log, charts of each week and your workouts are in Spaces › Health.
       </Text>
     </Card>
   );

@@ -36,7 +36,12 @@ export function SpacesScreen() {
   const agentName = data?.identity.name || "Neddy";
   const [, rerender] = useState(0);
   const [busy, setBusy] = useState<SpaceKind | "">("");
-  const [error, setError] = useState("");
+  // A space a chat button couldn't start says why here, once.
+  const [error, setError] = useState(() => {
+    const failed = spacesView.error ?? "";
+    spacesView.error = undefined;
+    return failed;
+  });
   async function start(kind: SpaceKind) {
     setBusy(kind);
     setError("");
@@ -155,7 +160,13 @@ function Pill({
   onPress,
   children,
   focusRef,
+  suffix,
 }: {
+  /**
+   * Words that always show after the label, which alone may be cut short with "…" when there's
+   * no room: "Bakery socials… chat". The pill's gap separates them.
+   */
+  suffix?: string;
   /** Set to focus this pill later (a tab chosen from inside the page). */
   focusRef?: (node: { focus?: () => void } | null) => void;
   role: "tab" | "link";
@@ -185,11 +196,30 @@ function Pill({
         borderRadius: 22,
         backgroundColor: selected ? colors.inverse : colors.subtle,
         opacity: pressed ? 0.8 : 1,
+        ...(suffix ? { flexShrink: 1, maxWidth: "100%" as const } : {}),
       })}
     >
-      {Icon && <Icon size={15} color={color} />}
-      <Text style={{ fontSize: 14, fontWeight: "600", color }}>{children}</Text>
-      {Trailing && <Trailing size={14} color={colors.muted} />}
+      {Icon && (
+        <View style={{ flexShrink: 0 }}>
+          <Icon size={15} color={color} />
+        </View>
+      )}
+      <Text
+        numberOfLines={1}
+        style={{ fontSize: 14, fontWeight: "600", color, flexShrink: suffix ? 1 : 0 }}
+      >
+        {children}
+      </Text>
+      {suffix && (
+        <Text style={{ fontSize: 14, fontWeight: "600", color, flexShrink: 0, marginLeft: -2 }}>
+          {suffix}
+        </Text>
+      )}
+      {Trailing && (
+        <View style={{ flexShrink: 0 }}>
+          <Trailing size={14} color={colors.muted} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -247,21 +277,35 @@ function SpaceView({
           <Text style={[s.text, { fontWeight: "500" }]}>All spaces</Text>
         </Pressable>
       )}
-      {/* The name, with the space's chat beside it (it opens on its own screen); what the space
-          is runs the full width below. */}
+      {/* The name, with the space's chat beside it (it opens on its own screen), or under it when
+          both don't fit on one line; what the space is runs the full width below. */}
       <View style={{ gap: 4 }}>
-        <View style={[s.between, { gap: 12 }]}>
-          <Text {...heading(2)} style={[s.title, { flex: 1 }]}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            columnGap: 12,
+            rowGap: 8,
+          }}
+        >
+          <Text
+            {...heading(2)}
+            style={[s.title, { flexGrow: 1, flexShrink: 1, flexBasis: "auto" }]}
+          >
             {space.name}
           </Text>
+          {/* Named for its space, so it isn't mistaken for "Back to chat". */}
           <Pill
             role="link"
             icon={MessageCircle}
             trailing={ArrowUpRight}
             label={`Open the ${space.name} chat`}
             onPress={() => openChat(space)}
+            suffix="chat"
           >
-            Chat
+            {space.name}
           </Pill>
         </View>
         <Text style={s.muted}>

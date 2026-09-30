@@ -42,6 +42,7 @@ import type {
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AppAlertsCard } from "./app-alerts-ui";
+import { PlaceAnchor } from "./app-places-ui";
 import { AppearanceCard } from "./appearance-ui";
 import { AlwaysAllowedCard, AppPermissionsCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
@@ -275,7 +276,9 @@ export function AgentActivityScreen() {
           detail="Delegate a task in Chat. Its plan, progress and results stay here."
         />
       )}
-      <SectionHeading title="Reviews & receipts" />
+      <PlaceAnchor id="reviews" label="Reviews & receipts">
+        <SectionHeading title="Reviews & receipts" />
+      </PlaceAnchor>
       <ActivityScreen />
     </View>
   );
@@ -1611,13 +1614,15 @@ export function GoalsScreen() {
   return (
     <View>
       <AgentStatus />
-      <SectionHead
-        title="Tracking"
-        tint={colors.greenDark}
-        ring={dark ? "#0E3620" : "#DDF3E6"}
-        onAdd={() => setAdding("Tracking")}
-        addLabel="Track something new"
-      />
+      <PlaceAnchor id="tracking" label="Tracking">
+        <SectionHead
+          title="Tracking"
+          tint={colors.greenDark}
+          ring={dark ? "#0E3620" : "#DDF3E6"}
+          onAdd={() => setAdding("Tracking")}
+          addLabel="Track something new"
+        />
+      </PlaceAnchor>
       {routines.map((r) => (
         <ListRow
           key={r.id}
@@ -2532,7 +2537,9 @@ export function AppsScreen() {
             </Button>
           </Card>
           <Card style={{ gap: 12 }}>
-            <SectionHeading title="Memory" />
+            <PlaceAnchor id="memory" label="Memory">
+              <SectionHeading title="Memory" />
+            </PlaceAnchor>
             <Text style={s.muted}>Context you can inspect, correct or forget.</Text>
             {!!data?.memorySuggestions.length && (
               <>

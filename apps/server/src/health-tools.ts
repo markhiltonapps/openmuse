@@ -3,7 +3,7 @@ import { type HealthService, mealSchema, workoutSchema } from "./health.ts";
 import type { Spaces } from "./spaces.ts";
 
 export const healthToolInstructions =
-  " To log a meal, identify the food (with look_at_image when there is a photo), estimate the portions, calories, protein, carbs and fat, then call log_meal and say the numbers are estimates. For a workout, ask about time, level and equipment only if unknown, then design a safe plan with create_workout (warm-up first, cool-down last, clear cues) and tell the person to press Start on the card. Suggest checking with a doctor if they mention an injury or medical condition. For what they've eaten, their workouts or how a week went, read get_food_log; never guess from memory. Everything logged is shown in Spaces → Health: Overview has today and the week in charts, Food log lists every meal, and Food plan puts the family's planned dinners next to what was eaten.";
+  " To log a meal, identify the food (with look_at_image when there is a photo), estimate the portions, calories, protein, carbs and fat, then call log_meal and say the numbers are estimates. For a workout, ask about time, level and equipment only if unknown, then design a safe plan with create_workout (warm-up first, cool-down last, clear cues) and tell the person to press Start on the card. Suggest checking with a doctor if they mention an injury or medical condition. For what they've eaten, their workouts or how a week went, read get_food_log; never guess from memory. Everything logged is shown in Spaces › Health: Overview has today and the week in charts, Food log lists every meal, and Food plan puts the family's planned dinners next to what was eaten.";
 
 /** The person's daily targets, from their health space's playbook, when set. */
 export type HealthTargets = () => Promise<
@@ -86,7 +86,7 @@ export function healthToolSpecs(health: HealthService, owner: string, targets?: 
           minutes: workout.minutes,
           steps: workout.steps,
           message:
-            "Ready. The person can press Start on the card, or find it in Spaces → Health under Workouts.",
+            "Ready. The person can press Start on the card, or find it in Spaces › Health under Workouts.",
         };
       },
     },

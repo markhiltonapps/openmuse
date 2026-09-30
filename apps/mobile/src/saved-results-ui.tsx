@@ -2,6 +2,7 @@ import { useState } from "react";
 import { type LayoutChangeEvent, Pressable, ScrollView, Text, View } from "react-native";
 import type { AgentArtifact } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
+import { PlaceAnchor } from "./app-places-ui";
 import { type Column, DataTable, Segmented } from "./charts";
 import { artifactKind, choiceFits, savedDate, savedResults } from "./plans";
 import { Button, Card, colors, InfoTip, s } from "./ui";
@@ -95,62 +96,64 @@ export function SavedResults() {
     />
   );
   return (
-    <Card style={{ gap: 14 }}>
-      <View style={[s.row, { gap: 6 }]}>
-        <Text role="heading" aria-level={2} style={s.heading}>
-          Saved by {agent}
-        </Text>
-        <InfoTip
-          term={`Saved by ${agent}`}
-          text={`Reports, comparisons, plans and trackers ${agent} saves while working on something for you.`}
-        />
-      </View>
-      {rows.length === 0 ? (
-        <Text style={s.muted}>
-          Reports, comparisons, plans and trackers {agent} makes for you will show up here. Ask for
-          one in chat, like “Compare the best family SUVs under $40k.”
-        </Text>
-      ) : (
-        <>
-          <View
-            style={{ gap: 14 }}
-            onLayout={(event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width)}
-          >
-            {kinds.length > 1 &&
-              width > 0 &&
-              (choiceFits(
-                choices.map((choice) => choice.label),
-                width,
-              ) ? (
-                filter
-              ) : (
-                // Too many to share the width without cutting words: they keep their own size
-                // and scroll sideways, out to the card's edges.
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={{ marginHorizontal: -20 }}
-                  contentContainerStyle={{ paddingHorizontal: 20 }}
-                >
-                  <View style={{ minWidth: 420 }}>{filter}</View>
-                </ScrollView>
-              ))}
-            {width > 0 && (
-              <DataTable
-                label="Saved results"
-                columns={columns}
-                rows={visible}
-                rowKey={(row) => row.id}
-              />
+    <PlaceAnchor id="saved" label={`Saved by ${agent}`} radius={23}>
+      <Card style={{ gap: 14 }}>
+        <View style={[s.row, { gap: 6 }]}>
+          <Text role="heading" aria-level={2} style={s.heading}>
+            Saved by {agent}
+          </Text>
+          <InfoTip
+            term={`Saved by ${agent}`}
+            text={`Reports, comparisons, plans and trackers ${agent} saves while working on something for you.`}
+          />
+        </View>
+        {rows.length === 0 ? (
+          <Text style={s.muted}>
+            Reports, comparisons, plans and trackers {agent} makes for you will show up here. Ask
+            for one in chat, like “Compare the best family SUVs under $40k.”
+          </Text>
+        ) : (
+          <>
+            <View
+              style={{ gap: 14 }}
+              onLayout={(event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width)}
+            >
+              {kinds.length > 1 &&
+                width > 0 &&
+                (choiceFits(
+                  choices.map((choice) => choice.label),
+                  width,
+                ) ? (
+                  filter
+                ) : (
+                  // Too many to share the width without cutting words: they keep their own size
+                  // and scroll sideways, out to the card's edges.
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginHorizontal: -20 }}
+                    contentContainerStyle={{ paddingHorizontal: 20 }}
+                  >
+                    <View style={{ minWidth: 420 }}>{filter}</View>
+                  </ScrollView>
+                ))}
+              {width > 0 && (
+                <DataTable
+                  label="Saved results"
+                  columns={columns}
+                  rows={visible}
+                  rowKey={(row) => row.id}
+                />
+              )}
+            </View>
+            {shown.length > FIRST && (
+              <Button small style={{ alignSelf: "flex-start" }} onPress={() => setAll(!all)}>
+                {all ? "Show fewer" : `Show all ${shown.length}`}
+              </Button>
             )}
-          </View>
-          {shown.length > FIRST && (
-            <Button small style={{ alignSelf: "flex-start" }} onPress={() => setAll(!all)}>
-              {all ? "Show fewer" : `Show all ${shown.length}`}
-            </Button>
-          )}
-        </>
-      )}
-    </Card>
+          </>
+        )}
+      </Card>
+    </PlaceAnchor>
   );
 }

@@ -41,6 +41,8 @@ export interface WorkspaceContextValue {
   close: () => void;
   notify: (message: string) => void;
   ask: (prompt: string) => void;
+  /** A panel (sheet) is open over the page. */
+  panelOpen?: boolean;
 }
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 export function useWorkspace() {

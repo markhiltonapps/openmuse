@@ -346,7 +346,7 @@ export function checkInToolSpecs(checkIns: MealCheckIns, owner: string) {
           times: settings.times,
           meals: settings.meals,
           days: settings.days,
-          next: 'Confirm the times in plain words (for example 8:30 am, 12:30 pm and 6:30 pm). Tell them the questions show up as a notification and as a card just above the chat box, and everything they log is in Spaces → Health (Food log shows every meal; Overview has the charts), and they can change the meals and times in Spaces → Health → Playbook, under "Ask me what I ate".',
+          next: 'Confirm the times in plain words (for example 8:30 am, 12:30 pm and 6:30 pm). Tell them the questions show up as a notification and as a card just above the chat box, and everything they log is in Spaces › Health (Food log shows every meal; Overview has the charts), and they can change the meals and times in Spaces › Health › Playbook, under "Ask me what I ate".',
         };
       },
     },

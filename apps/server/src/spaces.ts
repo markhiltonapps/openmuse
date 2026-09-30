@@ -54,7 +54,7 @@ export const FAMILY_RUNDOWN_STEPS = `1. Today: work out today's date and day in 
 export const HEALTH_CHECKIN_STEPS = `1. Read last week (the Monday-to-Sunday week that just ended) with get_food_log, giving any date in it, and this week so far. The playbook has the person's goals, food rules and targets.
 2. Write a short check-in, under 150 words, in everyday words and an encouraging tone: how many days they logged, average calories and protein a logged day against their targets (when set), workout minutes against their weekly target, and one thing that went well. Count only what was logged; never guess what wasn't, and don't scold a day with nothing logged.
 3. Suggest one small, concrete change for the week ahead that fits their goals and food rules, such as a high-protein breakfast they'd like or a 20-minute walk on their two busiest days.
-4. No medical advice: if a number looks worrying or they mention a condition, suggest checking with a doctor. End by saying their week is in Spaces → Health, where the charts and the food log are.`;
+4. No medical advice: if a number looks worrying or they mention a condition, suggest checking with a doctor. End by saying their week is in Spaces › Health, where the charts and the food log are.`;
 
 export const digestSteps = (kind: SpaceKind) =>
   kind === "family"

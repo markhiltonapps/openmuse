@@ -72,6 +72,33 @@ export default function TipLayer() {
       // A mouse can move onto the tip to read it; it goes when the mouse leaves.
       onMouseEnter={holdTip}
       onMouseLeave={leaveTip}
+      // A press on a hover tip is meant for what's under it (the message box under the voice
+      // button's tip): the tip goes, and the press reaches that control.
+      // It acts on release, like every other control: sliding off before letting go cancels.
+      onPointerDown={(event) => {
+        if (tip.sticky) return;
+        event.preventDefault();
+        const bubbleNode = bubble.current;
+        if (bubbleNode) bubbleNode.style.display = "none";
+        const control = (x: number, y: number) => {
+          const node = document.elementFromPoint(x, y) as HTMLElement | null;
+          return (
+            node?.closest<HTMLElement>("input, textarea, [contenteditable=true]") ??
+            node?.closest<HTMLElement>('button, a, [role="button"], [role="tab"], [role="radio"]')
+          );
+        };
+        const pressed = control(event.clientX, event.clientY);
+        hideTip();
+        window.addEventListener(
+          "pointerup",
+          (up) => {
+            if (!pressed || control(up.clientX, up.clientY) !== pressed) return;
+            if (pressed.matches("input, textarea, [contenteditable=true]")) pressed.focus();
+            else pressed.click();
+          },
+          { once: true },
+        );
+      }}
       style={{
         position: "fixed",
         zIndex: 2147483000,

@@ -14,6 +14,10 @@ const TABS: { id: AppsTab; label: string; emoji: string }[] = [
 ];
 /** The last tab opened, so coming back to Apps (from Mail or Files, say) lands where you were. */
 let lastTab: AppsTab = "apps";
+/** Sets the tab the Apps screen opens on next, e.g. Money from a button in chat. */
+export function showAppsTab(tab: AppsTab) {
+  lastTab = tab;
+}
 
 export function useAppsTab() {
   const [tab, setTab] = useState<AppsTab>(lastTab);
@@ -39,16 +43,17 @@ export function AppsTabs({
 }) {
   return (
     // Wraps onto a second row on a phone, so every tab is in view.
-    <View accessibilityRole="tablist" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+    <View role="tablist" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {TABS.map((item) => {
         const selected = item.id === tab;
         const badge = badges[item.id] ?? 0;
         return (
           <Pressable
             key={item.id}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            accessibilityLabel={badge ? `${item.label}, ${badge} to review` : item.label}
+            // react-native-web reads role and aria-*, not accessibilityState.
+            role="tab"
+            aria-selected={selected}
+            aria-label={badge ? `${item.label}, ${badge} to review` : item.label}
             onPress={() => onTab(item.id)}
             style={({ pressed }) => ({
               flexDirection: "row",

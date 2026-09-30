@@ -13,7 +13,7 @@ import type { HealthPlaybookPatch, HealthSpace, Space } from "../../../packages/
 import { type Bar, BarChart, DataTable, Segmented, StatTile } from "./charts";
 import { useHealth, type Workout, WorkoutPlayer } from "./health-ui";
 import { MEAL_NAMES, MealCheckIns, type MealEntry, MealRow } from "./meal-checkins-ui";
-import { showSpace } from "./space-view";
+import { showSpace, spacesView } from "./space-view";
 import {
   AddLine,
   Digest,
@@ -512,7 +512,12 @@ interface FoodDay {
 /** Every meal logged, as a table per day; a day's Change switches it to rows that can be fixed. */
 export function HealthFoodLog({ agentName }: { agentName: string }) {
   const { api, open } = useWorkspace();
-  const [range, setRange] = useState<Range>("week");
+  // "This week" unless a button asked for another range.
+  const [range, setRange] = useState<Range>(() => {
+    const asked = spacesView.range ?? "week";
+    spacesView.range = undefined;
+    return asked;
+  });
   const [history, setHistory] = useState<{ today: string; days: FoodDay[] }>();
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<string>();

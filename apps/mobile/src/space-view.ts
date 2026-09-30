@@ -12,6 +12,10 @@ export const spacesView: {
   kind?: SpaceKind;
   list?: boolean;
   tab: SpaceTab;
+  /** The Food log's time range to open on, once. */
+  range?: "today" | "week" | "month";
+  /** Why a space a button tried to start didn't start, shown once on the list. */
+  error?: string;
 } = {
   tab: "overview",
 };

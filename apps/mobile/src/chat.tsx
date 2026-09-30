@@ -40,6 +40,7 @@ import { z } from "zod";
 import { chatActivity } from "./activity";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { PlaceButtons, setVoiceAway, usePlace } from "./app-places-ui";
 import { AssistantResponse } from "./assistant-response";
 import { setChatActivity } from "./avatar";
 import { BackgroundUpdates } from "./background-updates";
@@ -76,6 +77,11 @@ import { dictate, dictationAvailable, takeSharedText } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 const displayParameters = z.record(z.string(), z.unknown());
+type ToolCall = NonNullable<Extract<Message, { role: "assistant" }>["toolCalls"]>[number];
+/** The chat last on screen, which keeps the agent's status current while another screen shows. */
+let lastActiveChat = "";
+/** Messages sent from this screen, so their replies' cards know they're new. */
+const sentHere = new Set<string>();
 /** What the message box says when pasted pictures couldn't be added. */
 const failedText = (count: number) =>
   count === 1
@@ -154,6 +160,14 @@ export function WorkspaceTools() {
     ),
   });
   useRenderTool({
+    name: "show_in_app",
+    description: "Show buttons that take the person to places in the app",
+    parameters: displayParameters,
+    render: ({ toolCallId, result, status }) => (
+      <PlaceButtons toolCallId={toolCallId} result={result} status={status} />
+    ),
+  });
+  useRenderTool({
     name: "show_products",
     description: "Show products as cards",
     parameters: displayParameters,
@@ -227,7 +241,16 @@ function ServerToolCard({
   loading: boolean;
 }) {
   const { data } = useAgentWorkspace();
-  const { navigate } = useWorkspace();
+  const { go } = usePlace({
+    place:
+      name === "Goal"
+        ? "goals"
+        : name === "Tracking"
+          ? "tracking"
+          : name === "Memory"
+            ? "memory"
+            : "activity",
+  });
   let value = result;
   if (typeof value === "string") {
     try {
@@ -257,18 +280,7 @@ function ServerToolCard({
           {loading ? "Waiting for the server." : "Open the workspace to see the saved result."}
         </Text>
       )}
-      <Button
-        small
-        onPress={() =>
-          navigate(
-            name === "Goal" || name === "Tracking"
-              ? "goals"
-              : name === "Memory"
-                ? "apps"
-                : "activity",
-          )
-        }
-      >
+      <Button small onPress={go}>
         View {name.toLowerCase()}
       </Button>
     </Card>
@@ -283,7 +295,7 @@ export function ChatScreen({
   thread?: Selection;
   active?: boolean;
 }) {
-  const { api, workspace: w, refresh, navigate } = useWorkspace();
+  const { api, workspace: w, refresh, navigate, section } = useWorkspace();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
   const agentName = agentWorkspace?.identity.name || "your agent";
   const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
@@ -395,8 +407,9 @@ export function ChatScreen({
     setSpeakingId(undefined);
     listenForTurn();
   }, [listenForTurn]);
+  // Space or Escape interrupts, but only on the chat: elsewhere those keys belong to the page.
   useEffect(() => {
-    if (Platform.OS !== "web" || !speakingId) return;
+    if (Platform.OS !== "web" || !speakingId || !active) return;
     const onKey = (event: KeyboardEvent) => {
       const typing = (event.target as HTMLElement | null)?.closest?.("input, textarea");
       if (event.key === "Escape" || (event.key === " " && !typing)) {
@@ -406,7 +419,7 @@ export function ChatScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [speakingId, interrupt]);
+  }, [speakingId, interrupt, active]);
   const toggleVoiceMode = () => {
     if (voiceModeRef.current) return endVoiceMode();
     primeSpeech();
@@ -418,6 +431,7 @@ export function ChatScreen({
   };
   const [focused, setFocused] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
+  const [composerWidth, setComposerWidth] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -545,6 +559,7 @@ export function ChatScreen({
   const [queue] = useState(() => new ConversationQueue());
   const outbox = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const followLatest = useRef(true);
+  const lastOffset = useRef(0);
   const [awayFromLatest, setAwayFromLatest] = useState(false);
   const runLock = useRef(false);
   const [saveError, setSaveError] = useState("");
@@ -640,7 +655,10 @@ export function ChatScreen({
       runLock.current = true;
       setBusy(true);
       setError("");
-      if (message) agent.addMessage({ id: message.id, role: "user", content: message.text });
+      if (message) {
+        agent.addMessage({ id: message.id, role: "user", content: message.text });
+        sentHere.add(message.id);
+      }
       const before = agent.messages.length;
       const reading = voiceModeRef.current || voiceSettings().readAloud ? followReply() : undefined;
       const following = reading
@@ -764,12 +782,124 @@ export function ChatScreen({
   const visible = messages.filter(
     (m) => (m.role === "user" || m.role === "assistant") && !hidden.has(m.id),
   );
+  // Take-me-there buttons go under the finished reply: after the last message of its turn, even
+  // when the agent asked for them before writing its answer.
+  const placesAfter = new Map<string, ToolCall[]>();
+  {
+    let pending: ToolCall[] = [];
+    let last: string | undefined;
+    const settle = () => {
+      if (last && pending.length) placesAfter.set(last, pending);
+      pending = [];
+      last = undefined;
+    };
+    for (const message of visible) {
+      if (message.role === "user") settle();
+      else {
+        last = message.id;
+        for (const call of "toolCalls" in message ? message.toolCalls || [] : [])
+          if (call.function.name === "show_in_app") pending.push(call);
+      }
+    }
+    settle();
+  }
   const replying = busy || agent.isRunning;
   const activity = chatActivity(messages, replying);
+  // The chat on screen says what the agent is doing; so does the last one open while another
+  // screen is showing (a button in its reply may have opened that screen mid-reply).
   useEffect(() => {
-    if (active) setChatActivity(activity);
-  }, [active, activity]);
+    if (active) lastActiveChat = agentId;
+    if (active || (section !== "chat" && lastActiveChat === agentId)) setChatActivity(activity);
+  }, [active, activity, section, agentId]);
+  // Voice mode goes on while another screen shows: its state, Interrupt and End show there too.
+  useEffect(() => {
+    if (lastActiveChat !== agentId) return;
+    setVoiceAway(
+      voiceMode
+        ? {
+            label: listening
+              ? "Listening…"
+              : speakingId
+                ? "Speaking…"
+                : replying
+                  ? "Thinking…"
+                  : "Voice mode",
+            interrupt: speakingId ? interrupt : undefined,
+            end: endVoiceMode,
+          }
+        : undefined,
+    );
+  }, [voiceMode, listening, speakingId, replying, interrupt, endVoiceMode, agentId, active]);
+  useEffect(
+    () => () => {
+      if (lastActiveChat === agentId) setVoiceAway(undefined);
+    },
+    [agentId],
+  );
   useEffect(() => () => setChatActivity(undefined), []);
+  // The message box: beside the buttons, or on its own line above them when they leave it less
+  // than about 150px (every phone, where it was squeezed to a sliver).
+  const narrow = composerWidth > 0 && composerWidth < 400;
+  // Its height was measured at the other width: start again from one line.
+  useEffect(() => setInputHeight(44), [narrow]);
+  const messageBox = (
+    <TextInput
+      ref={input}
+      accessibilityLabel={`Message ${agentName}`}
+      value={draft}
+      onChangeText={(text) => {
+        noteTyping();
+        setDraft(text);
+        // An empty box goes back to one line; typing grows it again.
+        if (!text) setInputHeight(44);
+      }}
+      onContentSizeChange={(event) =>
+        setInputHeight(Math.max(44, Math.min(140, event.nativeEvent.contentSize.height)))
+      }
+      placeholder={
+        !isReady
+          ? "Connecting…"
+          : !loaded
+            ? historyError
+              ? "Conversation unavailable"
+              : "Loading conversation…"
+            : "Message…"
+      }
+      placeholderTextColor={colors.muted}
+      selectionColor={colors.blueDark}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        ...(narrow ? { alignSelf: "stretch", paddingHorizontal: 10 } : { flex: 1 }),
+        color: colors.text,
+        height: inputHeight,
+        minHeight: 44,
+        maxHeight: 140,
+        fontSize: 17,
+        lineHeight: 24,
+        ...(narrow ? {} : { paddingHorizontal: 2 }),
+        paddingTop: 10,
+        paddingBottom: 10,
+        // The composer around it shows focus, not a square ring inside it.
+        outlineWidth: 0,
+      }}
+      multiline
+      editable
+      onKeyPress={
+        Platform.OS === "web"
+          ? (event) => {
+              if (
+                event.nativeEvent.key === "Enter" &&
+                !("shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey)
+              ) {
+                event.preventDefault();
+                send();
+              }
+            }
+          : undefined
+      }
+    />
+  );
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
@@ -778,8 +908,13 @@ export function ChatScreen({
         contentContainerStyle={{ gap: 13, paddingTop: 15, paddingBottom: 20, flexGrow: 1 }}
         onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
           const nearEnd = contentSize.height - contentOffset.y - layoutMeasurement.height < 100;
-          followLatest.current = nearEnd;
-          setAwayFromLatest(visible.length > 0 && !nearEnd);
+          // Only scrolling up stops following: a reply and its cards growing under the view at
+          // once is not the person leaving the latest messages.
+          const scrolledUp = contentOffset.y < lastOffset.current - 2;
+          lastOffset.current = contentOffset.y;
+          if (nearEnd) followLatest.current = true;
+          else if (scrolledUp) followLatest.current = false;
+          setAwayFromLatest(visible.length > 0 && !nearEnd && !followLatest.current);
         }}
         scrollEventThrottle={100}
         onContentSizeChange={() => {
@@ -853,7 +988,13 @@ export function ChatScreen({
           visible.map((message) => {
             const user = message.role === "user";
             const text = typeof message.content === "string" ? message.content : "";
-            const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
+            // Its cards, with the turn's take-me-there buttons moved under the last message.
+            const toolCalls = [
+              ...("toolCalls" in message ? message.toolCalls || [] : []).filter(
+                (call) => call.function.name !== "show_in_app",
+              ),
+              ...(placesAfter.get(message.id) ?? []),
+            ];
             return (
               <View
                 key={message.id}
@@ -975,6 +1116,10 @@ export function ChatScreen({
                     running: busy || agent.isRunning,
                     active:
                       (busy || agent.isRunning) && messages.indexOf(message) > latestUserIndex,
+                    fresh:
+                      messages.indexOf(message) > latestUserIndex &&
+                      sentHere.has(messages[latestUserIndex]?.id ?? ""),
+                    shown: active,
                   }}
                 >
                   {toolCalls.map((toolCall) => {
@@ -1248,8 +1393,10 @@ export function ChatScreen({
           style={{
             backgroundColor: colors.surface,
             borderRadius: 32,
-            borderWidth: 1,
-            borderColor: focused ? colors.blue : colors.line,
+            // Focus shows as a 2px border; the margin keeps the composer from shifting.
+            borderWidth: focused ? 2 : 1,
+            margin: focused ? -1 : 0,
+            borderColor: focused ? colors.blueDark : colors.line,
             padding: 8,
             shadowColor: "#18384B",
             shadowOpacity: focused ? 0.1 : 0.06,
@@ -1360,7 +1507,12 @@ export function ChatScreen({
               ))}
             </View>
           )}
-          <View style={[s.row, { gap: 7, alignItems: "flex-end" }]}>
+          {/* On a narrow screen the message box gets its own line, above the buttons. */}
+          {narrow && messageBox}
+          <View
+            onLayout={(event) => setComposerWidth(event.nativeEvent.layout.width)}
+            style={[s.row, { gap: 7, alignItems: "flex-end" }]}
+          >
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Attach a document"
@@ -1379,58 +1531,8 @@ export function ChatScreen({
                 +
               </Text>
             </Pressable>
-            <TextInput
-              ref={input}
-              accessibilityLabel={`Message ${agentName}`}
-              value={draft}
-              onChangeText={(text) => {
-                noteTyping();
-                setDraft(text);
-              }}
-              onContentSizeChange={(event) =>
-                setInputHeight(Math.max(44, Math.min(140, event.nativeEvent.contentSize.height)))
-              }
-              placeholder={
-                !isReady
-                  ? "Connecting…"
-                  : !loaded
-                    ? historyError
-                      ? "Conversation unavailable"
-                      : "Loading conversation…"
-                    : "Message…"
-              }
-              placeholderTextColor={colors.muted}
-              selectionColor={colors.blueDark}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              style={{
-                flex: 1,
-                color: colors.text,
-                height: inputHeight,
-                minHeight: 44,
-                maxHeight: 140,
-                fontSize: 17,
-                lineHeight: 24,
-                paddingHorizontal: 2,
-                paddingTop: 10,
-                paddingBottom: 10,
-              }}
-              multiline
-              editable
-              onKeyPress={
-                Platform.OS === "web"
-                  ? (event) => {
-                      if (
-                        event.nativeEvent.key === "Enter" &&
-                        !("shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey)
-                      ) {
-                        event.preventDefault();
-                        send();
-                      }
-                    }
-                  : undefined
-              }
-            />
+            {narrow && <View style={{ flex: 1 }} />}
+            {!narrow && messageBox}
             {dictationAvailable() && speechAvailable() && !draft.trim() && (
               <Pressable
                 accessibilityRole="button"

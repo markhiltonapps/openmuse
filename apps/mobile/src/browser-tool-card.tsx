@@ -6,7 +6,17 @@ import type { BrowserSession } from "../../../packages/domain/src";
 import { Button, Card, colors, ErrorNotice, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-export const BrowserRunContext = createContext({ running: false, active: false });
+/**
+ * The chat's run, for the cards in a message: `active` while the message's reply is coming in,
+ * `fresh` for a reply to a message sent from this screen (not one loaded with an old chat), and
+ * `shown` while this chat is the one on screen.
+ */
+export const BrowserRunContext = createContext({
+  running: false,
+  active: false,
+  fresh: false,
+  shown: false,
+});
 
 const observationSchema = z.object({
   sessionId: z.string(),

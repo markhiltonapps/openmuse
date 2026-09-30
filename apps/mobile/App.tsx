@@ -49,6 +49,7 @@ import {
   redeemSignInLink,
   serverInfo,
 } from "./src/api";
+import { BackToChat, usePillsRoom } from "./src/app-places-ui";
 import { AgentAvatar, Mascot, type Mood, useChatActivity } from "./src/avatar";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
@@ -278,7 +279,18 @@ function WorkspaceApp({ token }: { token: string }) {
     );
   return (
     <WorkspaceContext.Provider
-      value={{ workspace, api, section, navigate, refresh, open, close, notify: setToast, ask }}
+      value={{
+        workspace,
+        api,
+        section,
+        navigate,
+        refresh,
+        open,
+        close,
+        notify: setToast,
+        ask,
+        panelOpen: !!detail,
+      }}
     >
       <AgentWorkspaceProvider>
         <ComputerDraftProvider key={token}>
@@ -391,6 +403,7 @@ function WorkspaceShell({
   const utility = ["mail", "calendar", "browser"].includes(section);
   const chat = section === "chat";
   const headerHeight = chat ? (desktop ? 150 : 128) : desktop ? 158 : 132;
+  const pillsRoom = usePillsRoom(section);
   return (
     <>
       <WorkspaceTools />
@@ -517,7 +530,8 @@ function WorkspaceShell({
                 contentContainerStyle={{
                   paddingHorizontal: desktop ? 42 : 22,
                   paddingTop: headerHeight,
-                  paddingBottom: 28,
+                  // Room for "Back to chat" (and voice mode) at the end, over the last controls.
+                  paddingBottom: 28 + pillsRoom,
                 }}
                 keyboardShouldPersistTaps="handled"
               >
@@ -531,6 +545,10 @@ function WorkspaceShell({
                   </Button>
                 )}
                 <Text
+                  // Where focus lands when a button in the chat opens this screen.
+                  nativeID="page-title"
+                  role="heading"
+                  aria-level={1}
                   style={[
                     s.title,
                     { fontSize: 34, letterSpacing: -1, fontWeight: "600", marginBottom: 22 },
@@ -582,6 +600,8 @@ function WorkspaceShell({
                 <ChatScreen prompt={prompt} active={section === "chat"} />
               )}
             </View>
+            {/* After a button in the chat brought them here. */}
+            <BackToChat section={section} onBack={() => navigate("chat")} />
           </View>
           <View
             style={{

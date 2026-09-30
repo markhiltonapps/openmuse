@@ -100,7 +100,15 @@ const targetOf = (event: unknown) => (event as { currentTarget?: unknown })?.cur
 // On the web, whether the last thing the person did was a key or a pointer: a tip on focus is for
 // keyboard users, not for the focus a tap or a sheet opening moves around.
 let lastInput: "key" | "pointer" = "pointer";
+/**
+ * When the mouse last moved, and when it last pressed: a control that appears under a pointer
+ * that hasn't moved since its press (after "Back to chat", say) gets no tip.
+ */
+let lastMove = 0;
+let lastPress = 0;
 if (Platform.OS === "web" && typeof window !== "undefined") {
+  window.addEventListener("pointermove", () => (lastMove = performance.now()), true);
+  window.addEventListener("pointerup", () => (lastPress = performance.now()), true);
   // These run before the tip layer's own listeners, which are added later.
   window.addEventListener(
     "keydown",
@@ -149,6 +157,7 @@ export function tipProps(
   return {
     onHoverIn: (event: unknown) => {
       own.onHoverIn?.(event as never);
+      if (Platform.OS === "web" && lastMove <= lastPress) return;
       measure(targetOf(event), (rect) => showTip({ text, rect }, { delay: HOVER_WAIT }));
     },
     onHoverOut: (event: unknown) => {

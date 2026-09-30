@@ -12,9 +12,10 @@ import {
   monitorInputSchema,
   routineInputSchema,
 } from "../../../../packages/domain/src/agent.ts";
+import type { ShowInApp } from "../../../../packages/domain/src/app-places.ts";
 import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tools.ts";
 import { appEventInstructions, appEventToolSpecs } from "../app-events.ts";
-import { appGuideInstructions } from "../app-guide.ts";
+import { appGuideInstructions, showInAppInstructions, showInAppToolSpec } from "../app-guide.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { areaInstructions, areaToolSpecs } from "../area.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
@@ -533,6 +534,14 @@ export class ConversationAgent extends AbstractAgent {
         }),
       ),
     );
+    const showInApp = showInAppToolSpec();
+    tools.push(
+      defineTool({
+        ...showInApp,
+        parameters: showInApp.parameters as z.ZodObject,
+        execute: async (args: unknown) => showInApp.execute(args as ShowInApp),
+      }),
+    );
     tools.push(
       ...richCardToolSpecs(this.service.geocode).map((spec) =>
         defineTool({
@@ -639,7 +648,8 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.weather ? weatherInstructions : "") +
         (this.service.sandbox ? codeSandboxInstructions : "") +
         computerInstructions +
-        appGuideInstructions,
+        appGuideInstructions +
+        showInAppInstructions,
     });
     return new Observable((subscriber) => {
       let subscription: Subscription | undefined;
