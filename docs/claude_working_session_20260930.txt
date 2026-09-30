@@ -64,6 +64,15 @@ Design division
   with names for screen readers, keyboard focus that lands in the right place after Mark done
   or Undo, units in the numbers tables, meal check-ins called the same thing everywhere.
 
+COMMITTED AND DEPLOYED
+----------------------
+- aa8e1fc Health space, tips, and tables and charts for every kind of data (59 files).
+  Railway: api and web SUCCESS at 10:03–10:04 CDT; clean start-up logs. The only errors after
+  the restart were six 502s in the first 90 seconds from an Agent computer window asking for an
+  old browser session's picture (not part of this change; none since).
+- Backups: refs/backups/before-commit-20260930-150223 (the working tree just before the
+  commit) and refs/backups/before-review-20260930-133254 (before the design review).
+
 TEST RESULTS
 ------------
 - Full suite (Biome lint, typecheck, worker typecheck, tests): 414 passed, 0 failed.
