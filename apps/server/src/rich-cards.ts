@@ -8,7 +8,14 @@ import { previewImage } from "./link-preview.ts";
  * server finds where each place is (OpenStreetMap's geocoder, cached) and each product's picture
  * (the picture its page shares), so neither is made up.
  */
-export type Geocoder = (query: string) => Promise<{ lat: number; lng: number } | undefined>;
+/**
+ * Where a place is; undefined when there's no such place. With `strict`, a lookup that failed
+ * (busy, down) throws instead of looking like no match.
+ */
+export type Geocoder = (
+  query: string,
+  options?: { strict?: boolean },
+) => Promise<{ lat: number; lng: number } | undefined>;
 
 /** OpenStreetMap's Nominatim, one request a second as its policy asks, with answers cached. */
 export function nominatim(
@@ -19,7 +26,7 @@ export function nominatim(
 ): Geocoder {
   let queue = Promise.resolve();
   let last = 0;
-  return async (query) => {
+  return async (query, options) => {
     const text = query.trim().replace(/\s+/g, " ").slice(0, 300);
     if (!text) return undefined;
     const id = createHash("sha256").update(text.toLowerCase()).digest("hex");
@@ -54,6 +61,7 @@ export function nominatim(
     const found = await turn.catch(() => null);
     // Errors aren't cached, so a busy moment doesn't hide a place for a month.
     if (found !== null) await db.put("system", "geocode", { id, ...found, at: now() });
+    else if (options?.strict) throw new Error("The place lookup didn't answer");
     return found ?? undefined;
   };
 }

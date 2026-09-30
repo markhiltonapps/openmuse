@@ -166,7 +166,16 @@ export function AreaPrompt({ onSaved, onDismiss }: { onSaved: () => void; onDism
 }
 
 /** "Local news and weather are for Houston, Texas", with a way to change it. */
-export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void }) {
+export function AreaRow({
+  area,
+  weather = true,
+  onSaved,
+}: {
+  area?: string;
+  /** Whether the Feed has weather for this city: US cities only. */
+  weather?: boolean;
+  onSaved: () => void;
+}) {
   const { api, notify } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
@@ -197,7 +206,7 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
       >
         <MapPin size={15} color={colors.muted} />
         <Text style={[s.text, { textDecorationLine: "underline" }]}>
-          Add your city for local news and weather
+          {weather ? "Add your city for local news and weather" : "Add your city for local news"}
         </Text>
       </Pressable>
     );
@@ -206,7 +215,8 @@ export function AreaRow({ area, onSaved }: { area?: string; onSaved: () => void 
       <MapPin size={16} color={colors.muted} style={{ marginTop: 3 }} />
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={s.text}>
-          Local news and weather are for <Text style={{ fontWeight: "600" }}>{area}</Text>
+          {weather ? "Local news and weather are for " : "Local news is for "}
+          <Text style={{ fontWeight: "600" }}>{area}</Text>
         </Text>
         <View style={[s.row, { gap: 16 }]}>
           <Pressable

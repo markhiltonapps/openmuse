@@ -284,7 +284,8 @@ export class WeatherService {
         `city:${query.toLowerCase()}`,
         7 * 24 * HOUR,
         async () => {
-          const found = await geocode(query);
+          // A lookup that failed throws (the weather "didn't answer"); only a real miss is NotFound.
+          const found = await geocode(query, { strict: true });
           if (!found) throw new NotFound();
           return found;
         },
@@ -438,7 +439,7 @@ function unavailable(reason: WeatherUnavailable, place: string | undefined, back
       : "No home city is saved. Ask which city they live in and save it with set_home_area.";
   if (reason === "outside-us") return `This forecast covers US cities only. ${elsewhere}`;
   if (reason === "not-found")
-    return `The forecast couldn't find their home city${place ? ` (${place})` : ""}. ${elsewhere}`;
+    return `Couldn't get a forecast for their home city${place ? ` (${place})` : ""}. ${elsewhere}`;
   if (reason === "unreachable") return `The Weather Service didn't answer just now. ${elsewhere}`;
   return `The forecast isn't set up here. ${elsewhere}`;
 }
@@ -481,7 +482,8 @@ export function weatherToolSpecs(
             chanceOf(w.today.rain, todaySky) ?? "",
           ]
             .filter(Boolean)
-            .join(", "),
+            .join(", ")
+            .replace(/^./, (c) => c.toUpperCase()),
           nextHours: w.hours.map(
             (h) =>
               `${hourOf(h.time)}: ${h.temp}°F, ${h.sky.toLowerCase()}${h.rain ? `, ${chanceOf(h.rain, h.sky)}` : ""}`,

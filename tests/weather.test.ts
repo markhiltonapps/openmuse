@@ -206,8 +206,9 @@ test("the service finds the city once, shares forecasts, and says why when there
   let geocoderBusy = false;
   const weather = new WeatherService({
     areas,
-    geocode: async (query) => {
+    geocode: async (query, options) => {
       geocoded.push(query);
+      if (geocoderBusy && options?.strict) throw new Error("busy");
       return geocoderBusy ? undefined : places[query];
     },
     userAgent: "test",
@@ -216,7 +217,8 @@ test("the service finds the city once, shares forecasts, and says why when there
   });
 
   assert.deepEqual(await weather.forOwner("nia"), { unavailable: "no-area" });
-  // The geocoder was busy: said so, but not remembered, so the next look finds the city.
+  // The place lookup was busy: the weather "didn't answer", and it isn't remembered, so the
+  // next look finds the city. A city with no match at all is "not found".
   geocoderBusy = true;
   const missed = await weather.forArea({
     id: "area",
@@ -226,8 +228,18 @@ test("the service finds the city once, shares forecasts, and says why when there
     country: "US",
     setAt: "",
   });
-  assert.deepEqual(missed, { unavailable: "not-found" });
+  assert.deepEqual(missed, { unavailable: "unreachable" });
+
   geocoderBusy = false;
+  const nowhere = await weather.forArea({
+    id: "area",
+    label: "Nowhere, Kansas",
+    city: "Nowhere",
+    region: "Kansas",
+    country: "US",
+    setAt: "",
+  });
+  assert.deepEqual(nowhere, { unavailable: "not-found" });
   geocoded.length = 0;
   await db.put("nia", "agent-settings", {
     id: "area",

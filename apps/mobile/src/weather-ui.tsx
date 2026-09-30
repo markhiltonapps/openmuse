@@ -1,6 +1,14 @@
 import { ChevronRight } from "lucide-react-native";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { AppState, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import {
+  AppState,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import {
   precipWord,
   type Weather,
@@ -42,19 +50,14 @@ export function useWeather() {
       return api.request<WeatherResult>("/api/weather").then(
         (next) => {
           // A blip at the Weather Service doesn't take away a forecast that's already showing.
-          setResult((current) =>
-            current &&
-            "weather" in current &&
-            "unavailable" in next &&
-            next.unavailable === "unreachable"
-              ? current
-              : next,
-          );
-          try {
-            globalThis.localStorage?.setItem(SHOWN, "weather" in next ? "1" : "0");
-          } catch {
-            // Private browsing: the loading line just shows.
-          }
+          const blip = "unavailable" in next && next.unavailable === "unreachable";
+          setResult((current) => (current && "weather" in current && blip ? current : next));
+          if (!blip)
+            try {
+              globalThis.localStorage?.setItem(SHOWN, "weather" in next ? "1" : "0");
+            } catch {
+              // Private browsing: the loading line just shows.
+            }
         },
         // A failed fetch keeps what's showing; with nothing yet, it says so.
         () => setResult((current) => current ?? { unavailable: "unreachable" }),
@@ -157,8 +160,11 @@ export function WeatherToday({
   result,
   reload,
   askingForArea,
+  city,
 }: {
   result?: WeatherResult;
+  /** The saved city, to name when its weather can't be found. */
+  city?: string;
   /** Fetches the forecast again; `fresh` for a new city. */
   reload: (fresh?: boolean) => void;
   /** The Feed is already asking where local is (or is still loading), so this doesn't ask too. */
@@ -203,14 +209,14 @@ export function WeatherToday({
         <PressRow
           label={
             missing
-              ? "Couldn’t find the weather for your city. Change city"
+              ? `Couldn’t find the weather for ${city ?? "your city"}. Change city`
               : "Add your city to see the weather"
           }
           onPress={() => setAddingCity(true)}
         >
           {missing ? (
             <Text style={s.text}>
-              Couldn’t find the weather for your city.{" "}
+              Couldn’t find the weather for {city ?? "your city"}.{" "}
               <Text style={{ textDecorationLine: "underline" }}>Change city</Text>
             </Text>
           ) : (
@@ -228,14 +234,14 @@ export function WeatherToday({
   const parts = todayParts(w);
   // An older forecast standing in says when it's from.
   const old = Date.now() - new Date(w.updatedAt).getTime() > 90 * 60_000;
-  const asOf = old ? `as of ${timeIn(w.updatedAt, w.timeZone)}` : "";
+  const asOf = old ? `As of ${timeIn(w.updatedAt, w.timeZone)}` : "";
   const details = [...parts, asOf].filter(Boolean);
   const feels = feelsOf(w);
   const numbers = [
     w.today.high !== undefined ? `High ${w.today.high} degrees` : "",
     w.today.low !== undefined ? `low ${w.today.low} degrees` : "",
     chanceLine(w.today.rain, w.days[0]?.sky ?? w.now.sky),
-    asOf,
+    asOf.toLowerCase(),
   ].filter(Boolean);
   const label = [
     `Weather in ${w.place}: ${w.now.temp} degrees, ${w.now.sky.toLowerCase()}${feels !== undefined ? `, feels like ${feels} degrees` : ""}.`,
@@ -343,7 +349,7 @@ function AlertBand({
   return (
     <Pressable
       role="button"
-      aria-label={`Weather alert: ${alert.event}${until(alert.ends, timeZone) ? `, ${until(alert.ends, timeZone).toLowerCase()}` : ""}.${more ? ` ${moreAlerts(more)}.` : ""} Opens the details.`}
+      aria-label={`Weather alert: ${alert.event}${until(alert.ends, timeZone) ? `, ${until(alert.ends, timeZone).replace(/^U/, "u")}` : ""}.${more ? ` ${moreAlerts(more)}.` : ""} Opens the details.`}
       onPress={onPress}
       style={({ pressed }) => [
         s.row,
@@ -546,6 +552,7 @@ function Hours({ hours }: { hours: WeatherHour[] }) {
       <View
         key={hour.time}
         role="img"
+        accessible
         aria-label={`${i ? hourOf(hour.time) : "Now"}: ${hour.temp} degrees, ${hour.sky.toLowerCase()}${chance ? `, ${chance}` : ""}`}
         style={{
           ...(fits ? { flex: 1, minWidth: 56 } : { width: 64 }),
@@ -579,7 +586,8 @@ function Hours({ hours }: { hours: WeatherHour[] }) {
         ) : (
           <ScrollView
             horizontal
-            showsHorizontalScrollIndicator={false}
+            // A mouse can't swipe: the web keeps its scrollbar.
+            showsHorizontalScrollIndicator={Platform.OS === "web"}
             style={{ marginHorizontal: -edge }}
             contentContainerStyle={{ gap: 8, paddingHorizontal: edge }}
           >

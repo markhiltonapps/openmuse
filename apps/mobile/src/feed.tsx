@@ -13,7 +13,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
-import { AreaPrompt, AreaRow, areaPromptDismissed, LOCAL_TOPIC } from "./area-ui";
+import { AreaPrompt, AreaRow, areaPromptDismissed, homeCountry, LOCAL_TOPIC } from "./area-ui";
 import { AssistantResponse } from "./assistant-response";
 import { type AppDay, calendarName } from "./calendar-apps";
 import { Emoji } from "./emoji";
@@ -391,6 +391,7 @@ export function FeedScreen() {
           result={weather}
           reload={(fresh) => (fresh ? citySaved() : void loadWeather())}
           askingForArea={!feed || askArea}
+          city={feed?.area}
         />
         <DayRow emoji="📅">
           {events.slice(0, 3).map((e) => (
@@ -581,7 +582,18 @@ export function FeedScreen() {
         {feed && !feed.searchAvailable && (
           <Text style={s.muted}>The Feed needs web search, which isn't set up on this server.</Text>
         )}
-        {feed?.searchAvailable && !askArea && <AreaRow area={feed.area} onSaved={citySaved} />}
+        {feed?.searchAvailable && !askArea && (
+          <AreaRow
+            area={feed.area}
+            // Outside the US (or, with no city, a device outside it) there's no weather to promise.
+            weather={
+              feed.area
+                ? !(weather && "unavailable" in weather && weather.unavailable === "outside-us")
+                : !homeCountry() || homeCountry() === "US"
+            }
+            onSaved={citySaved}
+          />
+        )}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {feed?.topics.map((item) => (
             <Pressable
