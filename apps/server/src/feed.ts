@@ -4,15 +4,19 @@ import type { SearchPlace } from "./area.ts";
 import type { Store } from "./db.ts";
 import { hasEmojiPicture } from "./emoji.ts";
 import { AppError } from "./errors.ts";
-import { previewImage } from "./link-preview.ts";
+import { type PagePreview, pagePreview } from "./link-preview.ts";
+import { articleCandidates, linkKind, sameLink } from "./news-links.ts";
 import type { UsageSink } from "./usage.ts";
 import { type SearchSource, type Story, type WebSearch, withoutCitations } from "./web-search.ts";
 
 export const feedTopicsSchema = z.object({
   topics: z.array(z.string().trim().min(2).max(80)).max(8),
 });
-/** Items saved before the Feed told news as stories are fetched again once. */
-const FORMAT = 2;
+/**
+ * Items saved in an older format are fetched again once: 2 told the news as stories, 3 checks
+ * that each story opens its own article.
+ */
+const FORMAT = 3;
 interface FeedSettings {
   id: "feed";
   topics: string[];
@@ -46,6 +50,37 @@ export interface FeedItem {
   createdAt: string;
 }
 const KEEP_DAYS = 7;
+const sameSite = (a: string, b: string) => {
+  try {
+    const host = (url: string) => new URL(url).hostname.replace(/^www\./, "");
+    return host(a) === host(b);
+  } catch {
+    return false;
+  }
+};
+/** Links in a summary to home, section or topic pages become plain words. */
+const plainListingLinks = (text: string) =>
+  text.replace(/\[([^\]]+)\]\((https:[^)\s]+)\)/g, (match, phrase: string, link: string) =>
+    linkKind(link) === "listing" ? phrase : match,
+  );
+/**
+ * What a saved item shows: only stories that open their own article. An older item keeps its
+ * first article result; one without any isn't shown.
+ */
+function openable(item: FeedItem): FeedItem[] {
+  if (item.stories) {
+    const stories = item.stories.filter((s) => s.url && linkKind(s.url) !== "listing");
+    return stories.length ? [{ ...item, stories }] : [];
+  }
+  const first = item.sources.find((s) => linkKind(s.url) !== "listing");
+  if (!first) return [];
+  return [
+    {
+      ...item,
+      sources: [first, ...item.sources.filter((s) => sameLink(s.url) !== sameLink(first.url))],
+    },
+  ];
+}
 const hash = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 32);
 
 /** The local date and hour for a time zone. */
@@ -75,8 +110,8 @@ export class FeedService {
   usage?: (owner: string) => UsageSink;
   /** Where the person lives, so local topics are about their area. */
   where?: (owner: string) => Promise<SearchPlace | undefined>;
-  /** Finds an article's share picture. */
-  preview: (url: string) => Promise<string | undefined> = (url) => previewImage(url);
+  /** Reads the top of an article: its share picture, whether it says it's an article, its own address. */
+  inspect: (url: string) => Promise<PagePreview | undefined> = (url) => pagePreview(url);
   constructor(
     private readonly db: Store,
     private readonly search: WebSearch | undefined,
@@ -102,9 +137,10 @@ export class FeedService {
         stories: item.stories?.map((story) => ({
           ...story,
           headline: withoutCitations(story.headline),
-          summary: withoutCitations(story.summary),
+          summary: plainListingLinks(withoutCitations(story.summary)),
         })),
-      }));
+      }))
+      .flatMap(openable);
     const where = await this.where?.(owner).catch(() => undefined);
     return {
       topics: settings.topics,
@@ -178,16 +214,28 @@ export class FeedService {
         where,
       );
       if (found.stories.length) {
-        const stories = await Promise.all(
-          found.stories.map(async (story) => {
-            const image = await this.picture(story);
-            return {
-              ...story,
-              emoji: hasEmojiPicture(story.emoji) ? story.emoji : "📰",
-              ...(image ? { image } : {}),
-            } satisfies FeedStory;
-          }),
-        );
+        const stories = (
+          await Promise.all(
+            found.stories.map(async (story): Promise<FeedStory | undefined> => {
+              const article = await this.article(story, found.sources);
+              // A story whose own article can't be found is left out, not linked to a home page.
+              if (!article) return undefined;
+              const summary = plainListingLinks(story.summary);
+              const image = article.image ?? (await this.picture(summary));
+              return {
+                ...story,
+                summary,
+                url: article.url,
+                emoji: hasEmojiPicture(story.emoji) ? story.emoji : "📰",
+                ...(image ? { image } : {}),
+              };
+            }),
+          )
+        ).filter((story): story is FeedStory => Boolean(story));
+        if (!stories.length) {
+          console.warn(`[OpenMuse] No Feed story for a topic had its own article`);
+          return undefined;
+        }
         return {
           stories,
           summary: stories.map((story) => `**${story.headline}** ${story.summary}`).join("\n\n"),
@@ -213,27 +261,64 @@ export class FeedService {
       found.answer.slice(0, 400);
     const short =
       paragraph.length <= 400 ? paragraph : `${paragraph.slice(0, 400).replace(/\s+\S*$/, "")}…`;
+    const article = await this.article({ headline: topic }, found.sources, true);
+    if (!article) return undefined;
     return {
       stories: [
         {
           emoji: "📰",
           headline: topic,
-          summary: short,
-          ...(found.sources[0] ? { url: found.sources[0].url } : {}),
+          summary: plainListingLinks(short),
+          url: article.url,
+          ...(article.image ? { image: article.image } : {}),
         },
       ],
       summary: found.answer,
       sources: found.sources.slice(0, 4),
     };
   }
-  /** The story's own picture, or one from an article its summary links to. */
-  private async picture(story: Story) {
-    const pages = [
-      story.url,
-      ...[...story.summary.matchAll(/\]\((https:[^)\s]+)\)/g)].map((match) => match[1]),
-    ].filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index);
-    for (const page of pages.slice(0, 3)) {
-      const image = await this.preview(page).catch(() => undefined);
+  /**
+   * The story's own article: the link the search found for it, or a result whose title matches
+   * its headline, free sites first. A link counts when the page says it's an article, or when its
+   * address clearly is one (a date, an id, the headline in it) and the search found it. Home,
+   * section, topic and live pages never count. Undefined when none does.
+   */
+  private async article(
+    story: Pick<Story, "headline" | "url">,
+    sources: SearchSource[],
+    anyResult = false,
+  ) {
+    const candidates = anyResult
+      ? articleCandidates({ headline: story.headline }, sources, true)
+      : articleCandidates(story, sources);
+    for (const candidate of candidates.slice(0, 3)) {
+      const page = await this.inspect(candidate.url).catch(() => undefined);
+      const kind = linkKind(candidate.url);
+      const says = page?.type;
+      if (says && !says.includes("article") && kind !== "article") continue;
+      if (!says?.includes("article") && !(kind === "article" && (page || candidate.fromSearch)))
+        continue;
+      // The page's own address, when it's an article on the same site (no tracking or copies).
+      const own =
+        page?.canonical &&
+        sameSite(page.canonical, candidate.url) &&
+        linkKind(page.canonical) !== "listing"
+          ? page.canonical
+          : undefined;
+      const url = own ?? page?.url ?? candidate.url;
+      // An article that has gone and now sends people to the home page doesn't count.
+      if (linkKind(url) === "listing") continue;
+      return { url, ...(page?.image ? { image: page.image } : {}) };
+    }
+    return undefined;
+  }
+  /** A picture from an article the story's summary links to. */
+  private async picture(summary: string) {
+    const pages = [...summary.matchAll(/\]\((https:[^)\s]+)\)/g)]
+      .map((match) => match[1])
+      .filter((url, index, all): url is string => Boolean(url) && all.indexOf(url) === index);
+    for (const page of pages.slice(0, 2)) {
+      const image = (await this.inspect(page).catch(() => undefined))?.image;
       if (image) return image;
     }
     return undefined;

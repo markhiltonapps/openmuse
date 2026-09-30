@@ -94,14 +94,52 @@ export function imageFromHtml(html: string, base: string) {
   return undefined;
 }
 
+/** What a page says about itself: its kind (og:type, or a news article in its structured data) and its own address. */
+export function pageFacts(html: string, base: string) {
+  let type: string | undefined;
+  let canonical: string | undefined;
+  for (const [tag] of html.matchAll(/<(?:meta|link)\b[^>]*>/gi)) {
+    const attribute = (name: string) => {
+      const found = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(
+        tag,
+      );
+      return found ? decode(found[2] ?? found[3] ?? found[4] ?? "") : undefined;
+    };
+    const key = (attribute("property") ?? attribute("name") ?? "").toLowerCase();
+    if (key === "og:type" && !type) type = attribute("content")?.toLowerCase();
+    const rel = attribute("rel")?.toLowerCase();
+    const address =
+      rel === "canonical" ? attribute("href") : key === "og:url" ? attribute("content") : undefined;
+    if (address && !canonical)
+      try {
+        const url = new URL(address, base);
+        if (url.protocol === "https:") canonical = url.toString();
+      } catch {
+        // Not an address.
+      }
+  }
+  if (!type && /"@type"\s*:\s*"(News|Report|Blog)?(Article|Posting)"/i.test(html)) type = "article";
+  return { ...(type ? { type } : {}), ...(canonical ? { canonical } : {}) };
+}
+
+export interface PagePreview {
+  /** Where the page was read, after redirects. */
+  url: string;
+  image?: string;
+  /** Its og:type, such as "article" or "website". */
+  type?: string;
+  canonical?: string;
+}
+
 /**
- * Finds the picture a news page shares with links to it. Only public pages are read (every
- * redirect is checked again), for at most five seconds and the first 512 KB.
+ * Reads the top of a public page: its share picture, what kind of page it says it is and its
+ * own address. Only public pages are read (every redirect is checked again), for at most five
+ * seconds and the first 512 KB. Undefined when it can't be read.
  */
-export async function previewImage(
+export async function pagePreview(
   page: string,
   options: { fetcher?: typeof fetch; resolve?: Lookup } = {},
-) {
+): Promise<PagePreview | undefined> {
   const fetcher = options.fetcher ?? fetch;
   const resolve = options.resolve ?? resolveAll;
   let url = await publicUrl(page, resolve);
@@ -138,7 +176,16 @@ export async function previewImage(
     } finally {
       void reader.cancel().catch(() => undefined);
     }
-    return imageFromHtml(html, url.toString());
+    const image = imageFromHtml(html, url.toString());
+    return { url: url.toString(), ...(image ? { image } : {}), ...pageFacts(html, url.toString()) };
   }
   return undefined;
+}
+
+/** The picture a news page shares with links to it. */
+export async function previewImage(
+  page: string,
+  options: { fetcher?: typeof fetch; resolve?: Lookup } = {},
+) {
+  return (await pagePreview(page, options))?.image;
 }

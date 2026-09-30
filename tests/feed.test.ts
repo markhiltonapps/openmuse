@@ -21,13 +21,16 @@ test("the Feed searches each followed topic once each morning", async () => {
         searched.push(query);
         return {
           answer: `News for ${query.slice(15, 30)}`,
-          sources: [{ title: "Source", url: "https://news.example/a" }],
+          sources: [
+            { title: "Source", url: "https://news.example/2026/09/27/houston-news-roundup" },
+          ],
         };
       },
     },
     async () => "America/Chicago",
     () => now,
   );
+  feed.inspect = async () => undefined;
   const owner = "reader";
   const settled = () => new Promise((resolve) => setTimeout(resolve, 20));
   await feed.setTopics(owner, { topics: ["Houston Astros", "AI agents", "AI agents"] });
@@ -37,7 +40,9 @@ test("the Feed searches each followed topic once each morning", async () => {
   let state = await feed.get(owner);
   assert.deepEqual(state.topics, ["Houston Astros", "AI agents"]);
   assert.equal(state.items.length, 2);
-  assert.deepEqual(state.items[0]?.sources, [{ title: "Source", url: "https://news.example/a" }]);
+  assert.deepEqual(state.items[0]?.sources, [
+    { title: "Source", url: "https://news.example/2026/09/27/houston-news-roundup" },
+  ]);
 
   // Before 6 am local time the morning refresh waits.
   await feed.refreshDue();
@@ -68,7 +73,10 @@ test("the Feed searches each followed topic once each morning", async () => {
   );
 });
 
-test("the Feed tells the news as stories with headlines and pictures", async () => {
+test("each story opens its own article, never a home page, free sites first", async () => {
+  const ads = "https://news.example/2026/09/28/meta-restores-documentary-ads";
+  const deal = "https://free.example/entertainment/documentary-streaming-deal-signed-netflix";
+  const boxOffice = "https://free.example/2026/09/27/documentary-box-office";
   const feed = new FeedService(
     db,
     {
@@ -78,30 +86,84 @@ test("the Feed tells the news as stories with headlines and pictures", async () 
           {
             emoji: "🎬",
             headline: `${topic}: ads restored`,
-            summary: "Meta called it an error and [restored the ads](https://news.example/ads).",
-            url: "https://news.example/ads",
+            summary: `[Meta](https://news.example/) called it an error and [restored the ads](${ads}).`,
+            url: `${ads}?utm_source=search`,
           },
-          { emoji: "📰", headline: "A second story", summary: "Without a picture this time." },
+          // The model gave the site's home page; the search found the article itself.
+          {
+            emoji: "📺",
+            headline: "Streaming deal signed for the documentary",
+            summary: "A streaming service bought it.",
+            url: "https://news.example/",
+          },
+          // A site that asks readers to subscribe, when a free one has the story too.
+          {
+            emoji: "🎟️",
+            headline: "Documentary box office numbers beat forecasts",
+            summary: "More people saw it than expected.",
+            url: "https://www.wsj.com/business/media/documentary-box-office-numbers-8a7b6c",
+          },
+          // A topic page, and a page that says it's no article: both left out.
+          {
+            emoji: "📰",
+            headline: "Another take",
+            summary: "More.",
+            url: "https://news.example/hub/films",
+          },
+          {
+            emoji: "📰",
+            headline: "An opinion",
+            summary: "More.",
+            url: "https://short.example/opinion-x",
+          },
         ],
-        sources: [{ title: "News", url: "https://news.example/ads" }],
+        sources: [
+          { title: "Meta restores documentary ads", url: `${ads}?utm_source=search` },
+          { title: "Documentary streaming deal signed with Netflix", url: deal },
+          {
+            title: "Documentary box office numbers beat forecasts",
+            url: "https://www.wsj.com/business/media/documentary-box-office-numbers-8a7b6c",
+          },
+          { title: "Documentary box office numbers beat forecasts - Free", url: boxOffice },
+        ],
       }),
     },
     async () => "UTC",
   );
-  feed.preview = async (url) => (url.endsWith("/ads") ? "https://img.example/ads.jpg" : undefined);
+  const read: string[] = [];
+  feed.inspect = async (url) => {
+    read.push(url);
+    if (url.startsWith(ads))
+      return { url, image: "https://img.example/ads.jpg", type: "article", canonical: ads };
+    if (url === deal) return { url, type: "article" };
+    if (url.startsWith("https://short.example")) return { url, type: "website" };
+    return undefined;
+  };
   await feed.setTopics("stories", { topics: ["Musk documentary"] });
   await new Promise((resolve) => setTimeout(resolve, 20));
   const [item] = (await feed.get("stories")).items;
-  assert.equal(item?.stories?.length, 2);
+  assert.deepEqual(
+    item?.stories?.map((s) => s.url),
+    [ads, deal, boxOffice],
+  );
   assert.deepEqual(item?.stories?.[0], {
     emoji: "🎬",
     headline: "Musk documentary: ads restored",
-    summary: "Meta called it an error and [restored the ads](https://news.example/ads).",
-    url: "https://news.example/ads",
+    summary: `Meta called it an error and [restored the ads](${ads}).`,
+    url: ads,
     image: "https://img.example/ads.jpg",
   });
-  assert.equal(item?.stories?.[1]?.image, undefined);
-  assert.match(item?.summary ?? "", /\*\*A second story\*\*/);
+  assert.equal(item?.stories?.[2]?.image, undefined);
+  assert.ok(!read.some((url) => url.includes("wsj.com")), "the free article was enough");
+  assert.match(item?.summary ?? "", /\*\*Streaming deal signed for the documentary\*\*/);
+
+  // Stories saved before this, with a home page link, aren't shown.
+  await db.put("stories", "feed-items", {
+    ...(item as FeedItem),
+    id: "older",
+    stories: [{ emoji: "📰", headline: "Old", summary: "Old.", url: "https://news.example/" }],
+  });
+  assert.equal((await feed.get("stories")).items.length, 1);
 });
 
 test("story replies are read safely, and pictures come only from public pages", async () => {
@@ -164,23 +226,36 @@ test("thumbs up and down steer later stories, and old text items are fetched aga
       search: async () => ({
         answer:
           "I'll search for that. **Weather:** A storm is flooding the coast. Thousands lost power. Roads are closed. More rain is coming Monday.",
-        sources: [{ title: "NPR", url: "https://npr.example/storm" }],
+        sources: [{ title: "NPR", url: "https://npr.example/2026/09/28/coast-storm-flooding" }],
       }),
       stories: async (topic, _usage, taste) => {
         tastes.push(taste);
         return {
           stories: [
-            { emoji: "🦄🦄", headline: `${topic} one`, summary: "First story here." },
-            { emoji: "🌧️", headline: `${topic} two`, summary: "Second story here." },
+            {
+              emoji: "🦄🦄",
+              headline: `${topic} one`,
+              summary: "First story here.",
+              url: "https://npr.example/2026/09/28/weather-story-one",
+            },
+            {
+              emoji: "🌧️",
+              headline: `${topic} two`,
+              summary: "Second story here.",
+              url: "https://npr.example/2026/09/28/weather-story-two",
+            },
           ],
-          sources: [],
+          sources: [
+            { title: "One", url: "https://npr.example/2026/09/28/weather-story-one" },
+            { title: "Two", url: "https://npr.example/2026/09/28/weather-story-two" },
+          ],
         };
       },
     },
     async () => "UTC",
     () => now,
   );
-  feed.preview = async () => undefined;
+  feed.inspect = async () => undefined;
   const owner = "taste";
   // An item saved the old way, before stories.
   await db.put(owner, "agent-settings", {
@@ -232,13 +307,14 @@ test("thumbs up and down steer later stories, and old text items are fetched aga
       search: async () => ({
         answer:
           "I'll search for that. **Weather:** A storm is flooding the coast. Thousands lost power. Roads are closed. More rain is coming Monday.",
-        sources: [{ title: "NPR", url: "https://npr.example/storm" }],
+        sources: [{ title: "NPR", url: "https://npr.example/2026/09/28/coast-storm-flooding" }],
       }),
       stories: async () => ({ stories: [], sources: [] }),
     },
     async () => "UTC",
     () => now,
   );
+  plain.inspect = async () => undefined;
   await plain.setTopics("plain", { topics: ["Storms"] });
   await new Promise((resolve) => setTimeout(resolve, 20));
   const [item] = (await plain.get("plain")).items;
@@ -248,7 +324,7 @@ test("thumbs up and down steer later stories, and old text items are fetched aga
       headline: "Storms",
       summary:
         "A storm is flooding the coast. Thousands lost power. Roads are closed. More rain is coming Monday.",
-      url: "https://npr.example/storm",
+      url: "https://npr.example/2026/09/28/coast-storm-flooding",
     },
   ]);
 });
