@@ -1,6 +1,7 @@
-import { Dumbbell, Pause, Play, SkipForward, Trash2, Utensils } from "lucide-react-native";
+import { Dumbbell, Pause, Play, SkipForward, Utensils } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
+import { showSpace } from "./space-view";
 import { Button, Card, colors, ErrorNotice, SectionHeading, Sheet, s } from "./ui";
 import { primeSpeech, speak, stopSpeaking } from "./voice";
 import { useWorkspace } from "./workspace";
@@ -54,10 +55,10 @@ function parse<T>(result: unknown): T | undefined {
 }
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.max(0, seconds) % 60).padStart(2, "0")}`;
-/** "1,450 kcal · 62 g protein · 20 min workout" */
+/** "1,450 calories · 62 g protein · 20 min workout" */
 export function todayLine(today: HealthSummary["today"]) {
   const parts = [
-    today.meals ? `${today.calories.toLocaleString()} kcal` : "",
+    today.meals ? `${today.calories.toLocaleString()} calories` : "",
     today.protein ? `${today.protein} g protein` : "",
     today.workoutMinutes ? `${today.workoutMinutes} min workout` : "",
   ].filter(Boolean);
@@ -252,7 +253,7 @@ export function MealToolCard({ result, loading }: { result: unknown; loading: bo
         <Utensils size={17} color={colors.blueDark} />
         <Text style={[s.heading, { flex: 1 }]}>{entry.title}</Text>
         {entry.calories !== undefined && (
-          <Text style={s.text}>{Math.round(entry.calories)} kcal</Text>
+          <Text style={s.text}>{Math.round(entry.calories).toLocaleString()} calories</Text>
         )}
       </View>
       <Text style={s.small}>
@@ -270,93 +271,23 @@ export function MealToolCard({ result, loading }: { result: unknown; loading: bo
   );
 }
 
-/** Goals → Health: today's totals, the week's log, and workouts to start again. */
+/** On the Goals tab: today at a glance, and the way to the Health space, where it all lives. */
 export function HealthSection() {
-  const { api, open } = useWorkspace();
-  const { summary, reload } = useHealth();
-  const [playing, setPlaying] = useState<Workout>();
-  const [error, setError] = useState("");
+  const { navigate } = useWorkspace();
+  const { summary } = useHealth();
   if (!summary) return null;
   const line = todayLine(summary.today);
+  const openHealth = () => {
+    showSpace("health");
+    navigate("spaces");
+  };
   return (
-    <Card style={{ gap: 12 }}>
-      <SectionHeading
-        title="Health"
-        action="View food log"
-        onPress={() => open({ type: "food" })}
-      />
+    <Card style={{ gap: 10 }}>
+      <SectionHeading title="Health" action="Open Health" onPress={openHealth} />
       <Text style={s.text}>{line ? `Today: ${line}` : "Nothing logged today yet."}</Text>
-      <Text style={s.small}>
-        Snap a meal in chat and tap "Log this meal", or ask for a workout like "a 15-minute workout
-        with no equipment".
+      <Text style={[s.small, { color: colors.mutedStrong, fontSize: 13, lineHeight: 19 }]}>
+        Your food log, charts of each week and your workouts are in Spaces → Health.
       </Text>
-      {summary.entries.slice(0, 8).map((entry) => (
-        <View key={entry.id} style={[s.row, { gap: 10 }]}>
-          {entry.kind === "meal" ? (
-            <Utensils size={15} color={colors.muted} />
-          ) : (
-            <Dumbbell size={15} color={colors.muted} />
-          )}
-          <Text style={[s.text, { flex: 1 }]} numberOfLines={1}>
-            {entry.title}
-          </Text>
-          <Text style={s.small}>
-            {entry.kind === "meal"
-              ? entry.calories !== undefined
-                ? `${Math.round(entry.calories)} kcal`
-                : ""
-              : `${entry.minutes} min`}
-            {" · "}
-            {new Date(entry.at).toLocaleDateString(undefined, { weekday: "short" })}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${entry.title}`}
-            hitSlop={8}
-            onPress={() =>
-              void api
-                .request(`/api/health-log/${entry.id}/delete`, {})
-                .then(reload, (e) => setError(e instanceof Error ? e.message : String(e)))
-            }
-          >
-            <Trash2 size={15} color={colors.muted} />
-          </Pressable>
-        </View>
-      ))}
-      {summary.workouts.length > 0 && (
-        <>
-          <Text style={[s.small, { fontWeight: "600", color: colors.text, marginTop: 6 }]}>
-            Workouts
-          </Text>
-          {summary.workouts.slice(0, 5).map((workout) => (
-            <View key={workout.id} style={[s.row, { gap: 10 }]}>
-              <Text style={[s.text, { flex: 1 }]} numberOfLines={1}>
-                {workout.title} · {workout.minutes} min
-              </Text>
-              <Button
-                small
-                icon={Play}
-                onPress={() => {
-                  primeSpeech();
-                  setPlaying(workout);
-                }}
-              >
-                Start
-              </Button>
-            </View>
-          ))}
-        </>
-      )}
-      <ErrorNotice error={error} />
-      {playing && (
-        <WorkoutPlayer
-          workout={playing}
-          onClose={() => {
-            setPlaying(undefined);
-            void reload();
-          }}
-        />
-      )}
     </Card>
   );
 }

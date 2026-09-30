@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import {
+  type ChoreStars,
   dishEmoji,
   type FamilyWeek,
   type GroceryItem,
@@ -20,11 +21,12 @@ import {
   type WeekSummary,
 } from "../../../packages/domain/src/family-week";
 import type { FamilySpace } from "../../../packages/domain/src/spaces";
+import { type Column, DataTable } from "./charts";
 import { Emoji } from "./emoji";
 import { DinnerRecipes } from "./recipe-ui";
 import { heading, replace, useOpenChat } from "./spaces";
 import { dark } from "./theme";
-import { Button, Card, colors, ErrorNotice, Sheet, s } from "./ui";
+import { Button, Card, colors, ErrorNotice, InfoTip, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /**
@@ -802,6 +804,99 @@ function Ideas({ week }: { week: FamilyWeek }) {
   );
 }
 
+/** One person's row in the stars table: their stars in each week shown, oldest first. */
+interface StarRow {
+  who: string;
+  weeks: (ChoreStars | undefined)[];
+  stars: number;
+}
+/**
+ * Each person's chore stars in the last few weeks that are over: one row per person, one column
+ * per week and a total. Three weeks fit a phone, where the total folds under the name; six when
+ * there's room.
+ */
+function StarsByWeek({ space, past }: { space: FamilySpace; past: WeekSummary[] }) {
+  const [width, setWidth] = useState(0);
+  const wide = width >= 480;
+  const weeks = past
+    .slice(0, wide ? 6 : 3)
+    .map((w) => ({ weekStart: w.weekStart, people: w.chores.people ?? [] }))
+    .reverse();
+  if (!weeks.some((week) => week.people.length)) return null;
+  const rows = new Map<string, StarRow>();
+  // Newest week first, so each person is named as they are now.
+  for (const [i, week] of [...weeks.entries()].reverse())
+    for (const person of week.people) {
+      const key = person.who.toLowerCase();
+      const row = rows.get(key) ?? { who: person.who, weeks: weeks.map(() => undefined), stars: 0 };
+      row.weeks[i] = person;
+      row.stars += person.stars;
+      rows.set(key, row);
+    }
+  const columns: Column<StarRow>[] = [
+    {
+      title: "Who",
+      flex: 1.5,
+      render: (row) => (
+        <View style={[s.row, { gap: 6, minWidth: 0 }]}>
+          <Avatar name={row.who} color={personColor(space, row.who).strong} size={22} />
+          <Text
+            numberOfLines={1}
+            style={[s.text, { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20 }]}
+          >
+            {row.who}
+          </Text>
+        </View>
+      ),
+    },
+    ...weeks.map(
+      (week, i): Column<StarRow> => ({
+        title: monthDay(week.weekStart),
+        align: "right",
+        minWidth: 44,
+        // A week without a chore for them shows a dash, not a zero they didn't earn.
+        render: (row) => (row.weeks[i] ? String(row.weeks[i]?.stars) : "–"),
+      }),
+    ),
+    {
+      title: "Total",
+      align: "right",
+      minWidth: 40,
+      // On a phone the total sits under the name instead: "Total 22".
+      fold: (row) => `Total ${row.stars}`,
+      render: (row) => (
+        <Text style={[s.text, { fontSize: 14, lineHeight: 20, fontWeight: "700" }]}>
+          {row.stars}
+        </Text>
+      ),
+    },
+  ];
+  return (
+    <Card>
+      <View style={{ gap: 12 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+        <View style={{ gap: 2 }}>
+          <View style={[s.row, { gap: 6 }]}>
+            <Text {...heading(3)} style={s.heading}>
+              Chore stars
+            </Text>
+            <InfoTip
+              term="Chore stars"
+              text="A star for each day someone did their chore. Give stars on the Overview tab."
+            />
+          </View>
+          <Text style={s.muted}>Each person’s stars, week by week</Text>
+        </View>
+        <DataTable
+          label="Chore stars by week"
+          columns={columns}
+          rows={[...rows.values()]}
+          rowKey={(row) => row.who}
+        />
+      </View>
+    </Card>
+  );
+}
+
 /** "Our weeks": past weeks with their dinners and how chores went, and one opened up. */
 export function OurWeeks({ space, agentName }: { space: FamilySpace; agentName: string }) {
   const { api, notify } = useWorkspace();
@@ -961,6 +1056,7 @@ export function OurWeeks({ space, agentName }: { space: FamilySpace; agentName: 
               </View>
             </View>
           )}
+          {!words && <StarsByWeek space={space} past={past} />}
           <View style={{ gap: 12 }}>
             <Text {...heading(3)} style={s.heading}>
               Past weeks

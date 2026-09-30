@@ -72,6 +72,37 @@ export const localDay = (at: string | number, timeZone: string) =>
     day: "2-digit",
   }).format(new Date(at));
 
+/** A calendar date (YYYY-MM-DD) moved by whole days. */
+export function addDays(day: string, days: number) {
+  const date = new Date(`${day}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+/** The Monday on or before a calendar date: weeks start on Monday, as on the family board. */
+export const mondayOf = (day: string) =>
+  addDays(day, -((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7));
+
+export interface HealthDay {
+  date: string;
+  meals: HealthEntry[];
+  workouts: HealthEntry[];
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  workoutMinutes: number;
+}
+/** One past week at a glance, for the trend. */
+export interface HealthWeekSummary {
+  weekStart: string;
+  /** Days with at least one meal logged. */
+  daysLogged: number;
+  /** Per logged day, so a day with nothing logged doesn't pull it down. */
+  averageCalories: number;
+  averageProtein: number;
+  workoutMinutes: number;
+}
+
 /** Meals and workouts the person logs, and the workout plans the agent designs. */
 export class HealthService {
   constructor(
@@ -166,6 +197,59 @@ export class HealthService {
   async remove(owner: string, id: string) {
     if (!(await this.db.take(owner, "health-log", id))) throw new AppError("Entry not found", 404);
     return { ok: true };
+  }
+  /**
+   * A week, Monday to Sunday, in the person's time zone: each day's meals, workouts and totals,
+   * and the weeks before it at a glance (`weeks`, oldest first, this one last).
+   */
+  async week(owner: string, start?: string, weeksBack = 8) {
+    const zone = await this.timeZone(owner);
+    const today = localDay(this.now(), zone);
+    const weekStart = mondayOf(start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? start : today);
+    const first = addDays(weekStart, -7 * (weeksBack - 1));
+    const end = addDays(weekStart, 7);
+    const entries = (await this.db.list<HealthEntry>(owner, "health-log"))
+      .map((entry) => ({ entry, day: localDay(entry.at, zone) }))
+      .filter(({ day }) => day >= first && day < end)
+      .sort((a, b) => a.entry.at.localeCompare(b.entry.at));
+    const dayOf = (date: string): HealthDay => {
+      const on = entries.filter(({ day }) => day === date).map(({ entry }) => entry);
+      const meals = on.filter((entry) => entry.kind === "meal");
+      const sum = (key: "calories" | "protein" | "carbs" | "fat") =>
+        Math.round(meals.reduce((total, entry) => total + (entry[key] ?? 0), 0));
+      const workouts = on.filter((entry) => entry.kind === "workout");
+      return {
+        date,
+        meals,
+        workouts,
+        calories: sum("calories"),
+        protein: sum("protein"),
+        carbs: sum("carbs"),
+        fat: sum("fat"),
+        workoutMinutes: workouts.reduce((total, entry) => total + (entry.minutes ?? 0), 0),
+      };
+    };
+    const weekOf = (monday: string): HealthWeekSummary => {
+      const days = Array.from({ length: 7 }, (_, index) => dayOf(addDays(monday, index)));
+      const logged = days.filter((day) => day.meals.length);
+      const average = (key: "calories" | "protein") =>
+        logged.length
+          ? Math.round(logged.reduce((total, day) => total + day[key], 0) / logged.length)
+          : 0;
+      return {
+        weekStart: monday,
+        daysLogged: logged.length,
+        averageCalories: average("calories"),
+        averageProtein: average("protein"),
+        workoutMinutes: days.reduce((total, day) => total + day.workoutMinutes, 0),
+      };
+    };
+    return {
+      today,
+      weekStart,
+      days: Array.from({ length: 7 }, (_, index) => dayOf(addDays(weekStart, index))),
+      weeks: Array.from({ length: weeksBack }, (_, index) => weekOf(addDays(first, 7 * index))),
+    };
   }
   /** The last week of entries, today's totals and recent workout plans. */
   async summary(owner: string) {

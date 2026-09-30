@@ -10,6 +10,7 @@ import type {
   Section,
   Workspace,
 } from "../../../packages/domain/src";
+import type { AgentArtifact } from "../../../packages/domain/src/agent";
 import type { MuseApi } from "./api";
 export type Detail =
   | { type: "mail"; mail: Mail }
@@ -23,6 +24,12 @@ export type Detail =
   | { type: "notifications" }
   | { type: "food"; log?: boolean }
   | { type: "computer" }
+  /** Plans & bookings: everything being kept track of, coming up or past. */
+  | { type: "commitments"; tab?: "upcoming" | "past" }
+  /** Every reminder: coming up, and sent in the last 7 days. */
+  | { type: "reminders" }
+  /** A report, comparison, plan or tracker the agent saved. */
+  | { type: "saved"; artifact: AgentArtifact }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

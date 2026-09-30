@@ -7,7 +7,10 @@ import { Hono } from "hono";
 import { createApp } from "../apps/server/src/app.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
+import { AppError } from "../apps/server/src/errors.ts";
 import { FamilyWeeks } from "../apps/server/src/family-weeks.ts";
+import { HealthService } from "../apps/server/src/health.ts";
+import { SocialWeeks } from "../apps/server/src/social-weeks.ts";
 import { ScheduledPosts } from "../apps/server/src/space-posts.ts";
 import { spaceRoutes } from "../apps/server/src/space-routes.ts";
 import { spaceContext, spaceToolSpecs } from "../apps/server/src/space-tools.ts";
@@ -284,10 +287,90 @@ test("the spaces API lists, creates, edits and removes a person's spaces", async
   assert.equal(prompt.json.prompts.at(-1)?.text, "What worked?");
   const digest = await call(`/api/spaces/${id}/digest`, { on: true });
   assert.ok(digest.json.digestRoutineId);
+  // Everyone has a health space: it's made the first time their spaces are listed.
   const list = (await (await api.request("/api/spaces")).json()) as Space[];
-  assert.equal(list.length, 1);
+  assert.deepEqual(
+    list.map((space) => space.kind),
+    ["social", "health"],
+  );
   await call(`/api/spaces/${id}/delete`, {});
+  const health = ((await (await api.request("/api/spaces")).json()) as Space[])[0];
+  assert.equal(health?.name, "Health");
+  // Removed, it stays removed.
+  await call(`/api/spaces/${health?.id}/delete`, {});
   assert.deepEqual(await (await api.request("/api/spaces")).json(), []);
+  assert.deepEqual(await (await api.request("/api/spaces")).json(), []);
+});
+
+test("a health space's week: meals and workouts by day, targets and the family's dinners", async () => {
+  const owner = "harriet";
+  const now = Date.parse("2026-09-30T14:00:00Z"); // Wednesday, 9 am in Chicago
+  const health = new HealthService(
+    db,
+    async () => "America/Chicago",
+    () => now,
+  );
+  const spaces = new Spaces(db);
+  const weeks = new FamilyWeeks(db, () => new Date(now));
+  const api = new Hono<{ Variables: { owner: string } }>();
+  api.onError((error, c) =>
+    c.json({ error: error.message }, error instanceof AppError ? error.status : 500),
+  );
+  api.use(async (c, next) => {
+    c.set("owner", owner);
+    await next();
+  });
+  api.route(
+    "/api/spaces",
+    spaceRoutes(
+      spaces,
+      server.agent,
+      new ScheduledPosts(db, undefined, async () => {}),
+      undefined,
+      {
+        weeks,
+        results: new SocialWeeks(db),
+        recipes: () => undefined,
+        timeZone: async () => "America/Chicago",
+        health,
+      },
+    ),
+  );
+  await spaces.ensureHealth(owner);
+  const healthSpace = (await spaces.list(owner)).find((space) => space.kind === "health");
+  assert.ok(healthSpace);
+  await spaces.update(owner, healthSpace.id, { calorieTarget: 2000, proteinTarget: 120 });
+  const family = await spaces.create(owner, { kind: "family" });
+  await weeks.save(
+    owner,
+    family.id,
+    {
+      week: "this",
+      dinners: [{ day: "Wednesday", dish: "Tacos", emoji: "🌮", cook: true }],
+    },
+    "America/Chicago",
+  );
+  await health.logMeal(owner, { title: "Tacos", meal: "dinner", calories: 700, protein: 35 });
+
+  const response = await api.request(`/api/spaces/${healthSpace.id}/health`);
+  assert.equal(response.status, 200);
+  const week = (await response.json()) as {
+    weekStart: string;
+    targets: { calories: number; protein: number };
+    planned: { date: string; dish: string; cook: boolean }[];
+    days: { date: string; calories: number }[];
+    familySpaceId: string;
+  };
+  assert.equal(week.weekStart, "2026-09-28");
+  assert.deepEqual(week.targets, { calories: 2000, protein: 120 });
+  assert.deepEqual(
+    week.planned.map(({ date, dish, cook }) => ({ date, dish, cook })),
+    [{ date: "2026-09-30", dish: "Tacos", cook: true }],
+  );
+  assert.equal(week.days[2]?.calories, 700);
+  assert.equal(week.familySpaceId, family.id);
+  // Other kinds of space have no food log.
+  assert.equal((await api.request(`/api/spaces/${family.id}/health`)).status, 404);
 });
 
 test("a family space: its own playbook and rules, a daily rundown and a week plan", async () => {

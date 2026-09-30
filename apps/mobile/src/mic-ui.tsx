@@ -1,6 +1,7 @@
 import { ChevronUp, MicOff, X } from "lucide-react-native";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, Text, View } from "react-native";
+import { tipProps } from "./tips";
 import { Button, colors, ErrorNotice, IconButton, Sheet, s } from "./ui";
 import { updateVoiceSettings, useVoiceSettings, voiceSettings } from "./voice";
 import { microphoneName, SPEAKING_LEVEL, watchMicrophones } from "./web-app";
@@ -53,6 +54,7 @@ export function MicChooserButton() {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={name ? `Choose a microphone, now using ${name}` : "Choose a microphone"}
+      {...tipProps(name ? `Change microphone (now ${name})` : "Choose a microphone")}
       onPress={openMicPicker}
       style={({ pressed }) => ({
         width: 44,

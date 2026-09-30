@@ -29,7 +29,7 @@ import {
   useOpenChat,
   usePlaybookSave,
 } from "./spaces";
-import { Button, Card, colors, dateLabel, ErrorNotice, plainPreview, s } from "./ui";
+import { Button, Card, colors, dateLabel, ErrorNotice, InfoTip, plainPreview, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /**
@@ -80,10 +80,14 @@ export function FamilyOverview({
   const [all, setAll] = useState(false);
   const { board, error: boardError, change, load: reloadBoard } = useWeekBoard(space);
   const week = board?.week;
-  // "Plan next week" names the week, so this week's plan on the board stays as it is.
+  // Each request names its week: "Plan next week" leaves this week's board as it is, and with
+  // this week's board empty, "Plan this week" fills it.
   const nextWeekRequest = board
     ? `Please plan next week, the week of ${monthDay(board.nextWeek)}.`
     : "Please plan next week.";
+  const thisWeekRequest = board
+    ? `Please plan this week, the week of ${monthDay(board.thisWeek)}.`
+    : WEEK_REQUEST;
   const waiting = workspace.actions.filter(
     (action) =>
       action.status === "awaiting_review" &&
@@ -270,19 +274,14 @@ export function FamilyOverview({
               </Pressable>
             )}
             <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+              {/* This week's board is empty here, so the button fills it, even under an older plan. */}
               <Button
                 small
-                primary={space.setupDone && !plan}
+                primary={space.setupDone}
                 icon={CalendarClock}
-                onPress={() =>
-                  openChat(space, space.setupDone && plan ? nextWeekRequest : WEEK_REQUEST)
-                }
+                onPress={() => openChat(space, thisWeekRequest)}
               >
-                {!space.setupDone
-                  ? "Set up the basics and plan the week"
-                  : plan
-                    ? "Plan next week"
-                    : "Plan the week"}
+                {space.setupDone ? "Plan this week" : "Set up the basics and plan the week"}
               </Button>
               <Button small icon={ShoppingCart} onPress={() => openChat(space, GROCERY_REQUEST)}>
                 Grocery list
@@ -297,6 +296,10 @@ export function FamilyOverview({
           <Text {...heading(3)} style={s.heading}>
             Needs you
           </Text>
+          <InfoTip
+            term="Needs you"
+            text={`Changes ${agentName} wants to make to your calendar or lists. Nothing is added until you OK it.`}
+          />
           {waiting.length > 0 && (
             <View
               style={{

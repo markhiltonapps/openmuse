@@ -52,6 +52,7 @@ import {
   recentHistory,
 } from "./memory-import.ts";
 import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.ts";
+import { monitorChecks } from "./monitor-history.ts";
 import { PastChats } from "./past-chats.ts";
 import { PushService } from "./push.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
@@ -137,7 +138,14 @@ export async function createApp(
       const problem = await spending.check(owner, input.data.amountUsd);
       if (problem) throw new AppError(problem, 409);
     },
-    execute: async (owner, input, connectionId, targetVersion, approval): Promise<string> => {
+    execute: async (
+      owner,
+      input,
+      connectionId,
+      targetVersion,
+      approval,
+      actionId,
+    ): Promise<string> => {
       if (input.kind === "agent_email.send") return inbox.send(owner, input.data);
       if (input.kind === "browser.step") return runApprovedStep(browser, owner, input.data);
       if (input.kind === "browser.signin")
@@ -149,7 +157,7 @@ export async function createApp(
       // A meeting added or moved shows on the Feed's day card straight away.
       if (/calendar|outlook/i.test(input.data.app)) calendarToday.forget(owner);
       if (isPurchase(input.data.tool) && input.data.amountUsd)
-        await spending.record(owner, "", input.data.amountUsd);
+        await spending.record(owner, actionId ?? "", input.data.amountUsd);
       const detail = data === undefined ? "" : JSON.stringify(data).slice(0, 300);
       return `Done in ${input.data.app} · ${input.data.tool}${detail ? ` · ${detail}` : ""}`;
     },
@@ -676,6 +684,10 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  // A watched page's last checks, for its chart and table.
+  app.get("/api/monitors/:id/checks", async (c) =>
+    c.json({ checks: await monitorChecks(db, c.get("owner"), c.req.param("id")) }),
+  );
   app.route(
     "/api/spaces",
     spaceRoutes(
@@ -693,6 +705,7 @@ export async function createApp(
         results: new SocialWeeks(db),
         recipes: () => agent.recipes,
         timeZone: (owner) => agent.timeZone(owner),
+        health,
       },
     ),
   );
@@ -742,6 +755,7 @@ export async function createApp(
   app.post("/api/spending", async (c) =>
     c.json(await spending.update(c.get("owner"), await c.req.json())),
   );
+  app.get("/api/spending/purchases", async (c) => c.json(await spending.purchases(c.get("owner"))));
   app.get("/api/health-log", async (c) => c.json(await health.summary(c.get("owner"))));
   app.post("/api/health-log/meals", async (c) =>
     c.json(await health.logMeal(c.get("owner"), await c.req.json()), 201),

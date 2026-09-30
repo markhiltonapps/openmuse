@@ -36,9 +36,18 @@ import Svg, {
 import { aimProgress, type SocialWeek, weekReach } from "../../../packages/domain/src/social-week";
 import type { ScheduledPost, SocialSpace } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
+import { type Column, DataTable, Segmented } from "./charts";
 import { monthDay, weekRange } from "./family-week-ui";
 import { clockTime } from "./meal-checkins-ui";
-import { appBadge, DAY_NAMES, heading, PLAN_REQUEST, replace, useOpenChat } from "./spaces";
+import {
+  appBadge,
+  DAY_NAMES,
+  heading,
+  PLAN_REQUEST,
+  replace,
+  useOpenChat,
+  useSpaces,
+} from "./spaces";
 import { dark } from "./theme";
 import { Button, Card, colors, ErrorNotice, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -1113,8 +1122,157 @@ function SheetPart({ title, children }: { title: string; children: ReactNode }) 
   );
 }
 
-/** The Results tab: how the posts did each week, from the numbers the weekly digest saves. */
+/** Posts that are done: they went out, didn't, or were cancelled. */
+const FINISHED: ScheduledPost["status"][] = ["posted", "failed", "cancelled"];
+type PastFilter = "posted" | "missed" | "all";
+const PAST_FILTERS: { id: PastFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "posted", label: "Posted" },
+  { id: "missed", label: "Didn’t go out" },
+];
+const PAST_EMPTY: Record<PastFilter, string> = {
+  posted: "None have gone out yet. Posts show up here once they do.",
+  missed: "Every post went out. Any that don’t go out show up here.",
+  all: "",
+};
+const PAST_SHOWN = 10;
+/** When a finished post went out, or was meant to. */
+const pastAt = (post: ScheduledPost) => post.postedAt ?? post.postAt;
+
+/**
+ * A past post's cell: its badge and words (tap for all of them), then its day and platform. Where
+ * room is tight the badge gives way, since the platform's name is right under the words.
+ */
+function PastPostCell({ post, tight }: { post: ScheduledPost; tight: boolean }) {
+  const [whole, setWhole] = useState(false);
+  const words = post.summary.replace(PLATFORM_PREFIX, "");
+  const failed = statusOf(post).label === "Didn’t go out";
+  return (
+    <View style={[s.row, { gap: 8, alignItems: "flex-start" }]}>
+      {!tight && (
+        <View style={{ paddingTop: 1 }}>
+          <Badge app={post.app} size={20} />
+        </View>
+      )}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Pressable
+          role="button"
+          aria-expanded={whole}
+          onPress={() => setWhole(!whole)}
+          style={({ pressed }) => ({ minHeight: 44, opacity: pressed ? 0.7 : 1 })}
+        >
+          <Text
+            numberOfLines={whole ? undefined : 2}
+            style={[s.text, { fontSize: 14, lineHeight: 20 }]}
+          >
+            {words.charAt(0).toUpperCase() + words.slice(1)}
+          </Text>
+          <Text style={[s.small, { fontSize: 12, lineHeight: 17, color: colors.mutedStrong }]}>
+            {shortDate(new Date(pastAt(post)))} · {platformName(post.app)}
+          </Text>
+        </Pressable>
+        {failed && !!post.error?.trim() && (
+          <Text style={[s.small, { fontSize: 12, lineHeight: 17, color: colors.danger }]}>
+            {reason(post).charAt(0).toUpperCase() + reason(post).slice(1)}.
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Every post that's done, newest first: what it said, where and when, and how it went. */
+function PastPosts({ space, agentName }: { space: SocialSpace; agentName: string }) {
+  const { posts } = useSpaces();
+  const [filter, setFilter] = useState<PastFilter>("all");
+  const [shown, setShown] = useState(PAST_SHOWN);
+  const [width, setWidth] = useState(0);
+  const tight = width > 0 && width < 300;
+  const past = posts
+    .filter((post) => post.spaceId === space.id && FINISHED.includes(post.status))
+    .sort((a, b) => pastAt(b).localeCompare(pastAt(a)));
+  const rows = past.filter(
+    (post) => filter === "all" || (filter === "posted") === (post.status === "posted"),
+  );
+  const columns: Column<ScheduledPost>[] = [
+    { title: "Post", flex: 3, render: (post) => <PastPostCell post={post} tight={tight} /> },
+    {
+      title: "How it went",
+      flex: 1,
+      minWidth: 100,
+      render: (post) => {
+        const status = statusOf(post);
+        return (
+          <Text
+            numberOfLines={1}
+            style={{ fontSize: 14, lineHeight: 20, fontWeight: "600", color: status.color }}
+          >
+            {status.label}
+          </Text>
+        );
+      },
+    },
+  ];
+  return (
+    <Card>
+      <View style={{ gap: 14 }} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+        <View style={{ gap: 2 }}>
+          <Text {...heading(3)} style={s.heading}>
+            Past posts
+          </Text>
+          <Text style={s.muted}>What went out, and what didn’t</Text>
+        </View>
+        {past.length === 0 ? (
+          <Text style={[s.text, { color: colors.mutedStrong }]}>
+            Posts show up here after they go out, with how each one went. To get started, ask{" "}
+            {agentName} to plan this week’s posts.
+          </Text>
+        ) : (
+          <>
+            <Segmented
+              label="Which past posts"
+              options={PAST_FILTERS}
+              value={filter}
+              onChange={(id) => {
+                setFilter(id);
+                setShown(PAST_SHOWN);
+              }}
+            />
+            <DataTable
+              label="Past posts"
+              columns={columns}
+              rows={rows.slice(0, shown)}
+              rowKey={(post) => post.id}
+              empty={PAST_EMPTY[filter]}
+            />
+            {rows.length > shown && (
+              <Button
+                small
+                style={{ alignSelf: "flex-start" }}
+                onPress={() => setShown(shown + PAST_SHOWN)}
+              >
+                Show more
+              </Button>
+            )}
+          </>
+        )}
+      </View>
+    </Card>
+  );
+}
+
+/** The Results tab: how the posts did each week, and every post that's done. */
 export function SocialResults({ space, agentName }: { space: SocialSpace; agentName: string }) {
+  return (
+    <View style={{ gap: 26 }}>
+      <WeeklyResults space={space} agentName={agentName} />
+      <PastPosts space={space} agentName={agentName} />
+    </View>
+  );
+}
+
+/** How the posts did each week, from the numbers the weekly digest saves. */
+function WeeklyResults({ space, agentName }: { space: SocialSpace; agentName: string }) {
   const { api, open, navigate } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const openChat = useOpenChat();

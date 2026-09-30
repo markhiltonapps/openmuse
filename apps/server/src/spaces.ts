@@ -50,11 +50,23 @@ export const FAMILY_RUNDOWN_STEPS = `1. Today: work out today's date and day in 
 2. Plan the week ahead first when today is the planning day (the playbook's planningDay; Sunday when unset) or when thisWeek isn't planned yet. On the planning day, first save a two-line recap of the week that's ending (what was cooked, how chores went, one highlight) with save_week_plan, week "this" and recap. Then plan the week ahead (week "next" on a Saturday or Sunday): dinners for the week (dinnersPerWeek, or 5) that fit foodRules, favorites and cookingTime, with a line on why each night's pick (a busy night gets something quick); the grocery list for them, grouped by aisle; the schedule from weekShape and the calendar, with clashes and who's driving called out; chores for the week by person; two or three activity ideas for free time that fit interests, ages and the week's forecast (get_weather). Save it to the board with save_week_plan: summary, dinners (each with a short note, one food emoji, and cook: false for leftovers, takeout or eating out, true for the rest), schedule, groceries by aisle (for an item only for dinners, list those nights in for), chores by person and ideas. When save_week_plan's result says recipes are being written, mention in one line that they'll show on the board within a few minutes.
 3. Every run: a short rundown, under 150 words, in the playbook's tone (warm when none is set): the weather in a few words when it matters for the day (get_weather: rain at pickup time, a coat, a weather alert); today's schedule with times; dinner tonight and any prep to start early; chores due today; one thing to get ready for tomorrow; one encouraging line. Put the rundown first and, on a planning day, the week's plan under it.
 4. Nothing is added to a calendar, bought or sent without the person's approval. No medical, legal or money advice: an allergy is planned around, never advised on.`;
+/** A health space's weekly check-in: how the week went against the person's targets. */
+export const HEALTH_CHECKIN_STEPS = `1. Read last week (the Monday-to-Sunday week that just ended) with get_food_log, giving any date in it, and this week so far. The playbook has the person's goals, food rules and targets.
+2. Write a short check-in, under 150 words, in everyday words and an encouraging tone: how many days they logged, average calories and protein a logged day against their targets (when set), workout minutes against their weekly target, and one thing that went well. Count only what was logged; never guess what wasn't, and don't scold a day with nothing logged.
+3. Suggest one small, concrete change for the week ahead that fits their goals and food rules, such as a high-protein breakfast they'd like or a 20-minute walk on their two busiest days.
+4. No medical advice: if a number looks worrying or they mention a condition, suggest checking with a doctor. End by saying their week is in Spaces → Health, where the charts and the food log are.`;
+
 export const digestSteps = (kind: SpaceKind) =>
-  kind === "family" ? FAMILY_RUNDOWN_STEPS : DIGEST_STEPS;
+  kind === "family"
+    ? FAMILY_RUNDOWN_STEPS
+    : kind === "health"
+      ? HEALTH_CHECKIN_STEPS
+      : DIGEST_STEPS;
 
 /** The digest routine's task: the playbook and the steps come from get_space_playbook. */
 export function digestPrompt(space: Pick<Space, "id" | "name" | "kind">) {
+  if (space.kind === "health")
+    return `Weekly health check-in for the space "${space.name}" (space id ${space.id}). First call get_space_playbook with this space id, then follow its weeklyCheckInSteps and its playbook: goals, food rules and targets.`;
   if (space.kind === "family")
     return `Daily family rundown for the space "${space.name}" (space id ${space.id}). First call get_space_playbook with this space id, then follow its dailyRundownSteps and its playbook: who's in the family, food rules and favorites, the week's shape, chores, routines, interests and tone.`;
   return `Weekly social media digest for the space "${space.name}" (space id ${space.id}). First call get_space_playbook with this space id, then follow its weeklyDigestSteps and its playbook: products and competitors, platforms in order, voice, never-do list, how often to post and budget.`;
@@ -96,6 +108,25 @@ export class Spaces {
         404,
       );
     return found;
+  }
+  /**
+   * Everyone has a health space: it's where their food log and workouts are. It's made once, the
+   * first time their spaces are listed, and isn't made again if they remove it.
+   */
+  async ensureHealth(owner: string) {
+    const first = await this.db.insertIfAbsent(owner, "agent-settings", {
+      id: "health-space",
+      at: this.now().toISOString(),
+    });
+    if (!first) return;
+    const spaces = await this.list(owner);
+    if (spaces.some((space) => space.kind === "health")) return;
+    // No room yet: try again next time, rather than never.
+    if (spaces.length >= MAX_SPACES) {
+      await this.db.take(owner, "agent-settings", "health-space");
+      return;
+    }
+    await this.create(owner, { kind: "health" });
   }
   async create(owner: string, raw: unknown) {
     const input = createSpaceSchema.parse(raw ?? {});
@@ -187,7 +218,7 @@ export class Spaces {
       return this.save(owner, { ...space, digestRoutineId: undefined });
     }
     const schedule = {
-      title: `${space.name} ${space.kind === "family" ? "rundown" : "digest"}`,
+      title: `${space.name} ${space.kind === "family" ? "rundown" : space.kind === "health" ? "check-in" : "digest"}`,
       prompt: digestPrompt(space),
       time: input.time,
       days: input.days ?? [input.day],

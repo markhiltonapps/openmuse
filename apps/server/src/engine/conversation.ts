@@ -14,6 +14,7 @@ import {
 } from "../../../../packages/domain/src/agent.ts";
 import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tools.ts";
 import { appEventInstructions, appEventToolSpecs } from "../app-events.ts";
+import { appGuideInstructions } from "../app-guide.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { areaInstructions, areaToolSpecs } from "../area.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
@@ -26,7 +27,7 @@ import { hiddenMessages, withoutHidden } from "../data-controls.ts";
 import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
-import { healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
+import { healthTargets, healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { ownAppToolSpecs } from "../mcp-apps.ts";
 import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
@@ -408,7 +409,7 @@ export class ConversationAgent extends AbstractAgent {
     if (health)
       tools.push(
         ...[
-          ...healthToolSpecs(health, this.owner),
+          ...healthToolSpecs(health, this.owner, healthTargets(spaces, this.owner)),
           ...(checkIns ? checkInToolSpecs(checkIns, this.owner) : []),
         ].map((spec) =>
           defineTool({
@@ -637,7 +638,8 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.areas ? areaInstructions : "") +
         (this.service.weather ? weatherInstructions : "") +
         (this.service.sandbox ? codeSandboxInstructions : "") +
-        computerInstructions,
+        computerInstructions +
+        appGuideInstructions,
     });
     return new Observable((subscriber) => {
       let subscription: Subscription | undefined;

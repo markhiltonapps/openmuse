@@ -19,7 +19,9 @@ import { type AppDay, calendarName } from "./calendar-apps";
 import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
 import { MealsToday } from "./meal-checkins-ui";
+import { COMMITMENT_EMOJI, type Commitment, onPlansChanged, type Reminder } from "./plans";
 import { dark } from "./theme";
+import { tipProps } from "./tips";
 import { Button, Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWeather, WeatherToday } from "./weather-ui";
 import { useWorkspace } from "./workspace";
@@ -42,28 +44,6 @@ interface FeedItem {
   day: string;
   createdAt: string;
 }
-interface Reminder {
-  id: string;
-  text: string;
-  when: string;
-}
-interface Commitment {
-  id: string;
-  kind: "reservation" | "delivery" | "trip" | "appointment" | "bill" | "event" | "other";
-  title: string;
-  when: string;
-  where?: string;
-  link?: string;
-}
-const COMMITMENT_EMOJI: Record<Commitment["kind"], string> = {
-  reservation: "🍽️",
-  delivery: "📦",
-  trip: "✈️",
-  appointment: "🩺",
-  bill: "💳",
-  event: "🎟️",
-  other: "📌",
-};
 interface FeedState {
   topics: string[];
   /** Where local news is for, such as "Houston, Texas". */
@@ -148,16 +128,20 @@ const hash = (text: string) => [...text].reduce((sum, c) => (sum * 31 + c.charCo
 
 /** Your day at a glance, then what's new on the topics you follow. */
 export function FeedScreen() {
-  const { workspace: w, api, navigate, ask } = useWorkspace();
+  const { workspace: w, api, navigate, ask, open } = useWorkspace();
   const { data } = useAgentWorkspace();
   const health = useHealth();
   const { result: weather, load: loadWeather } = useWeather();
   const [feed, setFeed] = useState<FeedState>();
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [sentReminders, setSentReminders] = useState(0);
   const loadReminders = useCallback(
     () =>
-      api.request<{ upcoming: Reminder[] }>("/api/reminders").then(
-        (list) => setReminders(list.upcoming),
+      api.request<{ upcoming: Reminder[]; sent?: Reminder[] }>("/api/reminders").then(
+        (list) => {
+          setReminders(list.upcoming);
+          setSentReminders(list.sent?.length ?? 0);
+        },
         () => undefined,
       ),
     [api],
@@ -165,11 +149,13 @@ export function FeedScreen() {
   useEffect(() => {
     void loadReminders();
   }, [loadReminders]);
-  const [commitments, setCommitments] = useState<Commitment[]>([]);
+  // Finished ones too, so Plans & bookings can be opened while nothing is coming up.
+  const [allCommitments, setAllCommitments] = useState<Commitment[]>([]);
+  const commitments = allCommitments.filter((item) => item.status === "upcoming");
   const loadCommitments = useCallback(
     () =>
-      api.request<{ commitments: Commitment[] }>("/api/commitments").then(
-        (list) => setCommitments(list.commitments),
+      api.request<{ commitments: Commitment[] }>("/api/commitments?all=1").then(
+        (list) => setAllCommitments(list.commitments),
         () => undefined,
       ),
     [api],
@@ -177,6 +163,15 @@ export function FeedScreen() {
   useEffect(() => {
     void loadCommitments();
   }, [loadCommitments]);
+  // Something marked done or cancelled in Plans & bookings or Reminders shows here too.
+  useEffect(
+    () =>
+      onPlansChanged(() => {
+        void loadCommitments();
+        void loadReminders();
+      }),
+    [loadCommitments, loadReminders],
+  );
   // Events from connected calendar apps (Outlook, Google Calendar), which chat reads too.
   const [appDay, setAppDay] = useState<AppDay>();
   useEffect(() => {
@@ -341,6 +336,7 @@ export function FeedScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add to my feed"
+              {...tipProps("Add to my feed")}
               onPress={() => addTopics(topic)}
               style={{
                 width: 44,
@@ -461,7 +457,8 @@ export function FeedScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Mark done: ${item.title}`}
-                hitSlop={8}
+                {...tipProps("Mark done")}
+                style={smallTarget}
                 onPress={() =>
                   void api
                     .request(`/api/commitments/${item.id}`, { status: "done" })
@@ -475,10 +472,20 @@ export function FeedScreen() {
             </View>
           </DayRow>
         ))}
-        {commitments.length > 3 && (
-          <Text style={[s.small, { marginLeft: 48, color: colors.mutedStrong }]}>
-            + {commitments.length - 3} more coming up
-          </Text>
+        {allCommitments.length > 0 && (
+          <View style={[s.row, { marginLeft: 48, gap: 18, flexWrap: "wrap" }]}>
+            {commitments.length > 3 && (
+              <SmallLink
+                label={`${commitments.length - 3} more coming up. Open Plans & bookings`}
+                onPress={() => open({ type: "commitments" })}
+              >
+                + {commitments.length - 3} more coming up
+              </SmallLink>
+            )}
+            <SmallLink strong onPress={() => open({ type: "commitments" })}>
+              See all plans & bookings
+            </SmallLink>
+          </View>
         )}
         {reminders.slice(0, 3).map((reminder) => (
           <DayRow key={reminder.id} emoji="⏰">
@@ -492,7 +499,8 @@ export function FeedScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Cancel reminder: ${reminder.text}`}
-                hitSlop={8}
+                {...tipProps("Cancel reminder")}
+                style={smallTarget}
                 onPress={() =>
                   void api
                     .request(`/api/reminders/${reminder.id}/cancel`, {})
@@ -507,9 +515,14 @@ export function FeedScreen() {
           </DayRow>
         ))}
         {reminders.length > 3 && (
-          <Text style={[s.small, { marginLeft: 48, color: colors.mutedStrong }]}>
-            + {reminders.length - 3} more reminders
-          </Text>
+          <View style={{ marginLeft: 48, alignSelf: "flex-start" }}>
+            <SmallLink
+              label={`${reminders.length - 3} more ${reminders.length === 4 ? "reminder" : "reminders"}. Open Reminders`}
+              onPress={() => open({ type: "reminders" })}
+            >
+              + {reminders.length - 3} more {reminders.length === 4 ? "reminder" : "reminders"}
+            </SmallLink>
+          </View>
         )}
         {health.summary && (
           <DayRow emoji="🥗">
@@ -534,15 +547,16 @@ export function FeedScreen() {
             </DayRow>
           </Pressable>
         )}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => ask("I'd like to set a reminder.")}
-          style={{ alignSelf: "flex-start", marginLeft: 48 }}
-        >
-          <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
+        <View style={[s.row, { marginLeft: 48, gap: 18, flexWrap: "wrap" }]}>
+          <SmallLink strong onPress={() => ask("I’d like to set a reminder.")}>
             + Add a reminder
-          </Text>
-        </Pressable>
+          </SmallLink>
+          {reminders.length + sentReminders > 0 && (
+            <SmallLink strong onPress={() => open({ type: "reminders" })}>
+              See all reminders
+            </SmallLink>
+          )}
+        </View>
       </View>
 
       {askArea && <AreaPrompt onSaved={citySaved} onDismiss={() => setAreaLater(true)} />}
@@ -652,6 +666,55 @@ export function FeedScreen() {
   );
 }
 
+/** A 44px target around a small icon, without making its row taller. */
+const smallTarget = {
+  width: 44,
+  height: 44,
+  margin: -12,
+  alignItems: "center",
+  justifyContent: "center",
+} as const;
+
+/** Small words on the day card that open something, 44px tall without spreading the card out. */
+function SmallLink({
+  children,
+  label,
+  strong,
+  onPress,
+}: {
+  children: ReactNode;
+  /** When the words alone don't say where it goes. */
+  label?: string;
+  /** Blue and bold, like "+ Add a reminder"; otherwise underlined. */
+  strong?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        marginVertical: -12,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+      })}
+    >
+      <Text
+        style={[
+          s.small,
+          strong
+            ? { color: colors.blueDark, fontWeight: "600" }
+            : { color: colors.text, textDecorationLine: "underline" },
+        ]}
+      >
+        {children}
+      </Text>
+    </Pressable>
+  );
+}
+
 function DayRow({ emoji, children }: { emoji: string; children: ReactNode }) {
   return (
     <View style={[s.row, { gap: 12, alignItems: "flex-start" }]}>
@@ -731,6 +794,7 @@ function StoryRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={value === "up" ? "More like this" : "Less like this"}
+        {...tipProps(value === "up" ? "More like this" : "Less like this")}
         accessibilityState={{ selected: chosen }}
         hitSlop={8}
         onPress={() => onRate?.(value)}
@@ -796,6 +860,7 @@ function StoryRow({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel={`Open ${site(story.url)}`}
+              {...tipProps(`Open ${site(story.url)}`)}
               onPress={open}
               hitSlop={8}
             >

@@ -9,6 +9,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
 import { dark } from "./theme";
+import { tipProps } from "./tips";
 import { Button, colors, ErrorNotice, plainPreview, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -417,7 +418,8 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
           {/* Last in the tab order, after the card's own actions; shown in the top corner. */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close. It stays in the bell."
+            accessibilityLabel="Close. It stays under Updates."
+            {...tipProps("Close. It stays under Updates.")}
             onPress={later}
             style={{ position: "absolute", top: 8, right: 8, padding: 14, margin: -10 }}
           >

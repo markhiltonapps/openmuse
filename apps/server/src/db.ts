@@ -193,6 +193,22 @@ export class Store {
     );
     return result.rows.map((row) => row.data as T);
   }
+  /**
+   * Records of one kind whose data holds every field in `fields` (such as a task's events of one
+   * kind), newest first by their `date`, at most `limit`.
+   */
+  async listWhere<T>(
+    owner: string,
+    kind: string,
+    fields: Record<string, string | number | boolean>,
+    limit: number,
+  ): Promise<T[]> {
+    const result = await this.db.query(
+      "SELECT data FROM records WHERE owner=$1 AND kind=$2 AND data @> $3::jsonb ORDER BY data->>'date' DESC,id LIMIT $4",
+      [owner, kind, JSON.stringify(fields), limit],
+    );
+    return result.rows.map((row) => row.data as T);
+  }
   /** How many records of one kind have ids starting with `prefix`. */
   async count(owner: string, kind: string, prefix = "") {
     const result = await this.db.query(

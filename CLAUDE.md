@@ -84,6 +84,14 @@ Time Log — <Project Name>
   `accessibilityState`; and `Pressable` ignores `hitSlop`. For a small control, make the
   `Pressable` itself 44×44 (negative margins keep the row's height) and draw the small shape
   inside it.
+- **Keyboard focus on web:** react-native-web 0.21's `Pressable` ignores `focusable={false}`; it
+  reads `tabIndex`. A press target that shouldn't be a Tab stop (chart bars and points) needs
+  `tabIndex={-1}` (keep `focusable={false}` for native).
+- **One-line text on the web:** react-native-web gives `numberOfLines={1}` text `max-width: 100%`,
+  so it can't be wider than its parent even with its own `width`. To let a label use more room
+  (a chart's month name over two columns), put it in a wider `View`.
+- **Escape over a sheet:** an RN `Modal` on the web closes on Escape's key *up*. Anything that
+  handles Escape itself above a sheet (a tip) has to hold back that keyup too, or both close.
 - **Sheets hide toasts:** `Sheet` is an RN `Modal`, a separate top layer on the web, so a toast
   (`notify`) from inside a sheet can't be seen. Say what happened in the sheet itself.
 - **Live regions:** keep a `role="status"` line mounted all the time and change its text; one
@@ -95,5 +103,12 @@ Time Log — <Project Name>
   so weather can only be tested locally with mocked responses. Live checks happen on Railway.
 - **Playwright on this app:** the bottom bar's buttons are `role="tab"`. Short names like "Open"
   or "Details" need `exact: true`.
+- **Web builds:** Expo bakes `EXPO_PUBLIC_API_URL` into the bundle and caches it, so builds for
+  different servers (helpers testing in parallel) can pick up each other's address. Use
+  `npx expo export --clear` whenever more than one build is going. Serve the build with
+  `python3 -m http.server --directory <dir>` so it survives a rebuild, and give background servers
+  a long timeout (the default stops them after 30 minutes).
+- **Typing in tests:** Playwright's `fill()` doesn't always reach a React Native `TextInput`'s
+  `onChangeText`; use `pressSequentially()`.
 - **Local sample server:** the API keeps its database at `${DATA_DIR}/postgres`. Seed into that
   folder, and only while the server is stopped (a running one can overwrite it).

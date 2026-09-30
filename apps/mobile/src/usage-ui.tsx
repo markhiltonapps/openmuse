@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { Card, SectionHeading, s } from "./ui";
+import { BarChart } from "./charts";
+import { Card, colors, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 interface UsageLine {
@@ -46,6 +47,28 @@ const monthName = (month: string) =>
     month: "long",
     year: "numeric",
   });
+/** "2026-09" as "Sep". */
+/** A compact amount for a chart's scale and narrow bars: "$12", "$2.5", "$0.60". */
+const shortDollars = (value: number) =>
+  value >= 10 || Number.isInteger(value)
+    ? `$${Math.round(value).toLocaleString("en-US")}`
+    : `$${value.toFixed(value < 1 ? 2 : 1)}`;
+const shortMonth = (month: string) =>
+  new Date(`${month}-15T12:00:00Z`).toLocaleDateString(undefined, { month: "short" });
+/** Every month from the oldest with usage (at most a year back) to this one, oldest first. */
+function monthsTo(current: string, history: Usage["history"]) {
+  const [year, month] = current.split("-").map(Number) as [number, number];
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const date = new Date(Date.UTC(year, month - 12 + i, 1));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const known = new Set(history.map((h) => h.month));
+  const first = months.findIndex((m) => known.has(m));
+  return months.slice(first < 0 ? 11 : first).map((m) => {
+    const found = history.find((h) => h.month === m);
+    return { month: m, cost: found?.cost ?? 0, calls: found?.calls ?? 0 };
+  });
+}
 const tokens = (value: number) =>
   value >= 1_000_000
     ? `${(value / 1_000_000).toFixed(1)}M`
@@ -76,7 +99,7 @@ export function UsageCard() {
     entry.priced &&= line.cost !== undefined;
     byKind.set(line.kind, entry);
   }
-  const earlier = usage.history.filter((m) => m.month !== usage.month).slice(0, 3);
+  const months = monthsTo(usage.month, usage.history);
   const totals = usage.lines.reduce(
     (sum, line) => ({
       read: sum.read + line.input + line.cacheRead,
@@ -106,10 +129,25 @@ export function UsageCard() {
           the cache) and wrote {tokens(totals.written)}.
         </Text>
       )}
-      {earlier.length > 0 && (
-        <Text style={s.muted}>
-          Earlier: {earlier.map((m) => `${monthName(m.month)} ${dollars(m.cost)}`).join(" · ")}
-        </Text>
+      {months.length > 1 && (
+        <View style={{ gap: 10, marginTop: 6 }}>
+          <Text style={[s.label, { color: colors.mutedStrong }]}>By month</Text>
+          <BarChart
+            label="AI costs by month"
+            bars={months.map((m) => ({
+              key: m.month,
+              label: shortMonth(m.month),
+              name: monthName(m.month),
+              value: m.cost,
+              tip: m.calls
+                ? `${monthName(m.month)}: about ${dollars(m.cost)}, ${m.calls.toLocaleString()} ${m.calls === 1 ? "model call" : "model calls"}`
+                : `${monthName(m.month)}: no AI use`,
+              strong: m.month === usage.month,
+            }))}
+            format={dollars}
+            short={shortDollars}
+          />
+        </View>
       )}
       <Text style={s.muted}>
         Chat uses {usage.models.chat ?? "no model"}

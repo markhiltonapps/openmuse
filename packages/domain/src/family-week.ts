@@ -118,8 +118,32 @@ export interface WeekSummary {
   summary?: string;
   recap?: string;
   dinners: WeekDinner[];
-  chores: { stamped: number; total: number };
+  chores: {
+    stamped: number;
+    total: number;
+    /** Each person's stars that week, in the order their chores are listed. */
+    people?: ChoreStars[];
+  };
   groceries: number;
+}
+/** One person's chore stars in a week: a star a day for each chore they had. */
+export interface ChoreStars {
+  who: string;
+  stars: number;
+  /** How many stars they could have had: seven for each chore. */
+  total: number;
+}
+/** Each person's stars in a week's chores; chores for the same name (any case) count together. */
+export function choreStars(chores: Pick<WeekChore, "who" | "stamps">[]): ChoreStars[] {
+  const people = new Map<string, ChoreStars>();
+  for (const chore of chores) {
+    const key = chore.who.trim().toLowerCase();
+    const person = people.get(key) ?? { who: chore.who.trim(), stars: 0, total: 0 };
+    person.stars += chore.stamps.filter(Boolean).length;
+    person.total += 7;
+    people.set(key, person);
+  }
+  return [...people.values()];
 }
 
 const text = (max: number) => z.string().trim().min(1).max(max);

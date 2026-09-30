@@ -27,6 +27,8 @@ interface Options {
     connectionId?: string,
     targetVersion?: string,
     approval?: Approval,
+    /** The approved action's id, so what it did can point back to it. */
+    actionId?: string,
   ) => Promise<string>;
   prepare?: (
     owner: string,
@@ -208,6 +210,7 @@ export class ActionService {
         claimed.connectionId,
         claimed.targetVersion,
         approval,
+        claimed.id,
       );
       finished = { ...claimed, status: "succeeded", result };
     } catch (error) {

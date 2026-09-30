@@ -6,6 +6,7 @@ import {
   CalendarHeart,
   Check,
   FileText,
+  HeartPulse,
   Lock,
   Megaphone,
   MessageCircle,
@@ -40,15 +41,31 @@ import {
   WeekPosts,
 } from "./social-dashboard-ui";
 import { parseDollars, parseTime } from "./space-input";
+import { type SpaceTab, showSpace, spacesView } from "./space-view";
 import { useMuseThread } from "./threads";
-import { Button, Card, colors, dateLabel, ErrorNotice, Field, plainPreview, s } from "./ui";
+import { tipProps } from "./tips";
+import {
+  Button,
+  Card,
+  colors,
+  dateLabel,
+  ErrorNotice,
+  Field,
+  InfoTip,
+  plainPreview,
+  s,
+} from "./ui";
 import { useWorkspace } from "./workspace";
 
 /** The social media parts of this file work on their own kind of space. */
 type Space = SocialSpace;
 
 const setupMessage = (kind: AnySpace["kind"]) =>
-  kind === "family" ? "Let's set up my family planner." : "Let's set up my social media space.";
+  kind === "family"
+    ? "Let’s set up my family planner."
+    : kind === "health"
+      ? "Let’s set up my health space."
+      : "Let’s set up my social media space.";
 
 // One list of spaces for the whole app: the Spaces screen keeps it fresh, and the chat reads it
 // to show which space a chat belongs to.
@@ -131,25 +148,17 @@ function patched<B extends object>(playbook: B, patch: object): B {
   return next as B;
 }
 
-/** The space shown when Spaces opens (or the list, when asked for), and its tab; kept across visits. */
-export const spacesView: {
-  shown?: string;
-  list?: boolean;
-  tab: "overview" | "weeks" | "results" | "playbook";
-} = {
-  tab: "overview",
-};
+export { type SpaceTab, spacesView } from "./space-view";
 
 /** What each kind of space is: its icon and tint, how it's started, and what it does. */
 export const KINDS: Record<
   AnySpace["kind"],
-  { icon: LucideIcon; tint: string; start: string; more: string; about: (agent: string) => string }
+  { icon: LucideIcon; tint: string; start: string; about: (agent: string) => string }
 > = {
   social: {
     icon: Megaphone,
     tint: colors.lavender,
     start: "Start a social media space",
-    more: "New social media space",
     about: (agent) =>
       `${agent} learns your brand, keeps an eye on competitors and drafts your posts. Nothing goes out without your OK.`,
   },
@@ -157,11 +166,29 @@ export const KINDS: Record<
     icon: CalendarHeart,
     tint: colors.sky,
     start: "Start a family planner",
-    more: "New family planner",
     about: (agent) =>
       `${agent} plans the week's dinners and grocery list, keeps the family schedule straight, hands out chores and sends a morning rundown.`,
   },
+  health: {
+    icon: HeartPulse,
+    tint: colors.green,
+    start: "Start a health space",
+    about: (agent) =>
+      `${agent} logs your meals from a photo or a sentence and charts them against your own targets, day by day and week by week.`,
+  },
 };
+
+/** Opens a kind of space on one of its tabs, from anywhere in the app ("Open the family board"). */
+export function useOpenSpace() {
+  const { navigate } = useWorkspace();
+  return useCallback(
+    (kind: AnySpace["kind"], tab: SpaceTab = "overview") => {
+      showSpace(kind, tab);
+      navigate("spaces");
+    },
+    [navigate],
+  );
+}
 
 /** Above a space's chat: which space this is, and the way back to it. Other chats show `children`. */
 export function SpaceChip({ threadId, children }: { threadId: string; children?: ReactNode }) {
@@ -176,6 +203,9 @@ export function SpaceChip({ threadId, children }: { threadId: string; children?:
       accessibilityLabel={`${space.name} space. Open its overview`}
       onPress={() => {
         spacesView.shown = space.id;
+        spacesView.kind = undefined;
+        spacesView.list = false;
+        spacesView.tab = "overview";
         navigate("spaces");
       }}
       style={({ pressed }) => [
@@ -332,6 +362,10 @@ export function Overview({
           <Text {...heading(3)} style={s.heading}>
             Needs you
           </Text>
+          <InfoTip
+            term="Needs you"
+            text={`Posts and ads ${agentName} drafted for you. Nothing goes out until you approve it here.`}
+          />
           {needs > 0 && (
             <View
               style={{
@@ -373,6 +407,7 @@ export function Overview({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Don’t post: ${post.summary}`}
+                    {...tipProps("Don’t post")}
                     onPress={() => void decide(post, "cancel")}
                     style={{
                       width: 44,
@@ -419,6 +454,7 @@ export function Overview({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Dismiss: ${post.summary}`}
+                  {...tipProps("Dismiss")}
                   onPress={() => void decide(post, "cancel")}
                   style={{
                     width: 44,
@@ -468,9 +504,15 @@ export function Overview({
       <PlanProgress space={space} agentName={agentName} onPlaybook={onPlaybook} />
 
       <View style={{ gap: 10 }}>
-        <Text {...heading(3)} style={s.heading}>
-          Weekly digest
-        </Text>
+        <View style={[s.row, { gap: 6 }]}>
+          <Text {...heading(3)} style={s.heading}>
+            Weekly digest
+          </Text>
+          <InfoTip
+            term="Weekly digest"
+            text={`Once a week, ${agentName} checks what competitors posted and how your posts did, and drafts next week’s posts for your OK.`}
+          />
+        </View>
         {routine ? (
           <Card style={{ gap: 10 }}>
             <View style={[s.row, { gap: 10 }]}>
@@ -728,11 +770,13 @@ function FillIn({
         : /activit|interest|hobby/i.test(label)
           ? space.playbook.interests
           : []
-      : /competitor/i.test(label)
-        ? unique(space.playbook.products.flatMap((product) => product.competitors))
-        : /product/i.test(label)
-          ? space.playbook.products.map((product) => product.name)
-          : [];
+      : space.kind === "health"
+        ? []
+        : /competitor/i.test(label)
+          ? unique(space.playbook.products.flatMap((product) => product.competitors))
+          : /product/i.test(label)
+            ? space.playbook.products.map((product) => product.name)
+            : [];
   const set = (index: number, value: string) =>
     setValues((current) => current.map((item, i) => (i === index ? value : item)));
   const ask = () => {
@@ -818,9 +862,15 @@ export function SavedQuestions({
   return (
     <View style={{ gap: 10 }}>
       <View style={s.between}>
-        <Text {...heading(3)} style={s.heading}>
-          Saved questions
-        </Text>
+        <View style={[s.row, { gap: 6 }]}>
+          <Text {...heading(3)} style={s.heading}>
+            Saved questions
+          </Text>
+          <InfoTip
+            term="Saved questions"
+            text="Questions you ask often. Tap one to ask it in this space’s chat."
+          />
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Edit saved questions"
@@ -879,6 +929,7 @@ export function SavedQuestions({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Remove “${prompt.text}”`}
+                {...tipProps("Remove")}
                 onPress={() => void remove(prompt.id, prompt.text)}
                 style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
               >
@@ -1256,6 +1307,7 @@ function Products({ space, save, ...state }: SectionState & { space: Space; save
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Remove ${product.name}`}
+              {...tipProps("Remove")}
               onPress={() => setConfirming(product.name)}
               style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
             >
@@ -1364,6 +1416,7 @@ function Platforms({ space, save, ...state }: SectionState & { space: Space; sav
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Move ${platformName(name)} up`}
+              {...tipProps("Move up")}
               onPress={() => {
                 const next = [...platforms];
                 next.splice(index - 1, 2, name, platforms[index - 1] as string);
@@ -1377,6 +1430,7 @@ function Platforms({ space, save, ...state }: SectionState & { space: Space; sav
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove ${platformName(name)}`}
+            {...tipProps("Remove")}
             onPress={() =>
               set(
                 platforms.filter((p) => p !== name),
@@ -1904,7 +1958,16 @@ export const TIMES = [
   { label: "Evening, 6 PM", time: "18:00" },
 ];
 
-function Digest({ space }: { space: Space }) {
+/** A space's weekly routine: the social digest, or a health space's check-in. */
+export function Digest({
+  space,
+  title = "Weekly digest",
+  about = "What competitors posted, how you did and next week’s drafts, once a week in your time zone.",
+}: {
+  space: AnySpace;
+  title?: string;
+  about?: string;
+}) {
   const { api, notify } = useWorkspace();
   const { data } = useAgentWorkspace();
   const routine = data?.routines.find((item) => item.id === space.digestRoutineId);
@@ -1926,11 +1989,9 @@ function Digest({ space }: { space: Space }) {
     setError("");
     try {
       replace(
-        await api.request<Space>(`/api/spaces/${space.id}/digest`, { on, day, time: chosen }),
+        await api.request<AnySpace>(`/api/spaces/${space.id}/digest`, { on, day, time: chosen }),
       );
-      notify(
-        on ? `Weekly digest: ${DAY_NAMES[day]}s at ${clockTime(chosen)}` : "Weekly digest off",
-      );
+      notify(on ? `${title}: ${DAY_NAMES[day]}s at ${clockTime(chosen)}` : `${title} off`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1938,10 +1999,8 @@ function Digest({ space }: { space: Space }) {
     }
   }
   return (
-    <Section title="Weekly digest">
-      <Text style={s.muted}>
-        What competitors posted, how you did and next week’s drafts, once a week in your time zone.
-      </Text>
+    <Section title={title}>
+      <Text style={s.muted}>{about}</Text>
       <View
         role="group"
         aria-label="Day"
@@ -2031,7 +2090,13 @@ export function RemoveSpace({ space, onRemoved }: { space: AnySpace; onRemoved: 
         <View style={{ gap: 8, padding: 12, borderRadius: 12, backgroundColor: colors.errorBg }}>
           <Text style={s.text}>
             Remove the {space.name} space? Its playbook, saved questions and{" "}
-            {space.kind === "family" ? "morning rundown" : "weekly digest"} go too.
+            {space.kind === "family"
+              ? "morning rundown"
+              : space.kind === "health"
+                ? "weekly check-in"
+                : "weekly digest"}{" "}
+            go too.
+            {space.kind === "health" && " What you’ve eaten and your workouts stay in your log."}
           </Text>
           <Pressable
             role="checkbox"

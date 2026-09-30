@@ -1,11 +1,12 @@
 import type { LucideIcon } from "lucide-react-native";
-import { ArrowLeft, ArrowUpRight, LayoutGrid, MessageCircle, Plus } from "lucide-react-native";
-import { useState } from "react";
+import { ArrowLeft, ArrowUpRight, MessageCircle, Plus, UsersRound } from "lucide-react-native";
+import { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Space, SpaceKind } from "../../../packages/domain/src/spaces";
 import { useAgentWorkspace } from "./agent-workspace";
 import { FamilyOverview, FamilyPlaybook } from "./family-space";
 import { OurWeeks } from "./family-week-ui";
+import { HealthFoodLog, HealthFoodPlan, HealthOverview, HealthPlaybook } from "./health-space-ui";
 import { SocialResults } from "./social-dashboard-ui";
 import {
   fail,
@@ -13,6 +14,7 @@ import {
   KINDS,
   Overview,
   Playbook,
+  type SpaceTab,
   spacesView,
   useOpenChat,
   useSpaces,
@@ -25,7 +27,7 @@ import { useWorkspace } from "./workspace";
  * Overview and Playbook tabs. Each kind of space brings its own two tabs.
  */
 
-type Tab = "overview" | "weeks" | "results" | "playbook";
+type Tab = SpaceTab;
 
 export function SpacesScreen() {
   const { spaces, load, failure } = useSpaces(true);
@@ -41,6 +43,7 @@ export function SpacesScreen() {
     try {
       const space = await api.request<Space>("/api/spaces", { kind });
       spacesView.shown = space.id;
+      spacesView.kind = undefined;
       spacesView.list = false;
       spacesView.tab = "overview";
       await load();
@@ -53,6 +56,7 @@ export function SpacesScreen() {
   /** Opens a space, or the list of them (where a second kind can be started). */
   const show = (id?: string) => {
     spacesView.shown = id;
+    spacesView.kind = undefined;
     spacesView.list = !id;
     spacesView.tab = "overview";
     rerender((n) => n + 1);
@@ -68,11 +72,16 @@ export function SpacesScreen() {
     ) : (
       <Text style={s.muted}>Loading your spaces…</Text>
     );
-  // The only space opens by itself, until "All spaces" is asked for.
+  // A space asked for opens; otherwise the only space opens by itself, until "All spaces" is
+  // asked for. While Health (which everyone has) is the only one, the list shows instead, so the
+  // other kinds can be found; and a kind asked for that's gone (a removed Health) shows the list,
+  // where it can be started again.
+  const only = spaces.length === 1 && spaces[0]?.kind !== "health" ? spaces[0] : undefined;
   const space = spacesView.list
     ? undefined
     : (spaces.find((item) => item.id === spacesView.shown) ??
-      (spaces.length === 1 ? spaces[0] : undefined));
+      (spacesView.kind ? spaces.find((item) => item.kind === spacesView.kind) : undefined) ??
+      (spacesView.kind ? undefined : only));
   if (space)
     return (
       <SpaceView
@@ -83,7 +92,11 @@ export function SpacesScreen() {
         onRemoved={() => show(undefined)}
       />
     );
-  const starters = (Object.keys(KINDS) as SpaceKind[]).map((kind) => (
+  // Everyone has one health space; it can be started again only after it's been removed.
+  const kinds = (Object.keys(KINDS) as SpaceKind[]).filter(
+    (kind) => kind !== "health" || !spaces.some((item) => item.kind === "health"),
+  );
+  const starters = kinds.map((kind) => (
     <Button
       key={kind}
       icon={spaces.length ? Plus : KINDS[kind].icon}
@@ -91,7 +104,7 @@ export function SpacesScreen() {
       disabled={!!busy && busy !== kind}
       onPress={() => void start(kind)}
     >
-      {spaces.length ? KINDS[kind].more : KINDS[kind].start}
+      {KINDS[kind].start}
     </Button>
   ));
   return (
@@ -99,22 +112,30 @@ export function SpacesScreen() {
       <ErrorNotice error={error} />
       {spaces.length ? (
         <Card style={{ gap: 4 }}>
-          {spaces.map((item) => (
-            <LinkRow
-              key={item.id}
-              icon={KINDS[item.kind].icon}
-              tint={KINDS[item.kind].tint}
-              title={item.name}
-              detail={item.setupDone ? `Run by ${agentName}` : "Not set up yet"}
-              onPress={() => show(item.id)}
-            />
-          ))}
+          {[...spaces]
+            .sort((a, b) => Number(b.kind === "health") - Number(a.kind === "health"))
+            .map((item) => (
+              <LinkRow
+                key={item.id}
+                icon={KINDS[item.kind].icon}
+                tint={KINDS[item.kind].tint}
+                title={item.name}
+                detail={
+                  item.kind === "health"
+                    ? "Your food log and workouts"
+                    : item.setupDone
+                      ? `Run by ${agentName}`
+                      : "Not set up yet"
+                }
+                onPress={() => show(item.id)}
+              />
+            ))}
         </Card>
       ) : (
         <Empty
-          icon={LayoutGrid}
+          icon={UsersRound}
           title={`Hand an area of your life to ${agentName}`}
-          detail={`Your social media, or the family week. ${agentName} runs it from a playbook you can see and change, and nothing goes out or gets booked without your OK.`}
+          detail={`Your social media, the family week or your health. ${agentName} runs it from a playbook you can see and change, and nothing goes out or gets booked without your OK.`}
         >
           <View style={{ gap: 8, alignSelf: "stretch" }}>{starters}</View>
         </Empty>
@@ -133,7 +154,10 @@ function Pill({
   label,
   onPress,
   children,
+  focusRef,
 }: {
+  /** Set to focus this pill later (a tab chosen from inside the page). */
+  focusRef?: (node: { focus?: () => void } | null) => void;
   role: "tab" | "link";
   selected?: boolean;
   icon?: LucideIcon;
@@ -145,6 +169,9 @@ function Pill({
   const color = selected ? colors.onInverse : colors.text;
   return (
     <Pressable
+      ref={
+        focusRef ? (node) => focusRef(node as unknown as { focus?: () => void } | null) : undefined
+      }
       role={role}
       aria-selected={role === "tab" ? selected : undefined}
       accessibilityLabel={label ?? children}
@@ -154,8 +181,8 @@ function Pill({
         alignItems: "center",
         gap: 6,
         paddingHorizontal: 16,
-        height: 40,
-        borderRadius: 20,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: selected ? colors.inverse : colors.subtle,
         opacity: pressed ? 0.8 : 1,
       })}
@@ -179,15 +206,35 @@ function SpaceView({
   onRemoved: () => void;
 }) {
   const [tab, setTabState] = useState<Tab>(spacesView.tab);
+  const pills = useRef<Partial<Record<Tab, { focus?: () => void } | null>>>({});
   const setTab = (next: Tab) => {
     spacesView.tab = next;
     setTabState(next);
   };
+  /** A tab chosen from inside the page ("View food log"): focus follows to the tab. */
+  const goTo = (next: Tab) => {
+    setTab(next);
+    setTimeout(() => pills.current[next]?.focus?.(), 0);
+  };
+  const tabPill = (id: Tab, name: string) => (
+    <Pill
+      role="tab"
+      selected={tab === id}
+      onPress={() => setTab(id)}
+      focusRef={(node) => {
+        pills.current[id] = node;
+      }}
+    >
+      {name}
+    </Pill>
+  );
   const openChat = useOpenChat();
   const promise =
     space.kind === "family"
       ? "Nothing goes on the calendar without your OK."
-      : "Nothing posts or costs you money without your OK.";
+      : space.kind === "health"
+        ? `Only you and ${agentName} see it.`
+        : "Nothing posts or costs you money without your OK.";
   return (
     <View style={{ gap: 20 }}>
       {onBack && (
@@ -200,50 +247,58 @@ function SpaceView({
           <Text style={[s.text, { fontWeight: "500" }]}>All spaces</Text>
         </Pressable>
       )}
+      {/* The name, with the space's chat beside it (it opens on its own screen); what the space
+          is runs the full width below. */}
       <View style={{ gap: 4 }}>
-        <Text {...heading(2)} style={s.title}>
-          {space.name}
-        </Text>
-        <Text style={s.muted}>
-          {space.setupDone
-            ? `Run by ${agentName}. ${promise}`
-            : `${agentName} sets this up with you in a few minutes.`}
-        </Text>
-      </View>
-      {/* The two tabs, then the chat, which opens on its own screen. */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <View
-          role="tablist"
-          style={{ flexDirection: "row", flexWrap: "wrap", flexShrink: 1, gap: 8 }}
-        >
-          <Pill role="tab" selected={tab === "overview"} onPress={() => setTab("overview")}>
-            Overview
-          </Pill>
-          {space.kind === "family" ? (
-            <Pill role="tab" selected={tab === "weeks"} onPress={() => setTab("weeks")}>
-              Our weeks
-            </Pill>
-          ) : (
-            <Pill role="tab" selected={tab === "results"} onPress={() => setTab("results")}>
-              Results
-            </Pill>
-          )}
-          <Pill role="tab" selected={tab === "playbook"} onPress={() => setTab("playbook")}>
-            Playbook
+        <View style={[s.between, { gap: 12 }]}>
+          <Text {...heading(2)} style={[s.title, { flex: 1 }]}>
+            {space.name}
+          </Text>
+          <Pill
+            role="link"
+            icon={MessageCircle}
+            trailing={ArrowUpRight}
+            label={`Open the ${space.name} chat`}
+            onPress={() => openChat(space)}
+          >
+            Chat
           </Pill>
         </View>
-        <Pill
-          role="link"
-          icon={MessageCircle}
-          trailing={ArrowUpRight}
-          label={`Open the ${space.name} chat`}
-          onPress={() => openChat(space)}
-        >
-          Chat
-        </Pill>
+        <Text style={s.muted}>
+          {space.kind === "health"
+            ? `${agentName} keeps your meals and exercise here, day by day and week by week. ${promise}`
+            : space.setupDone
+              ? `Run by ${agentName}. ${promise}`
+              : `${agentName} sets this up with you in a few minutes.`}
+        </Text>
+      </View>
+      {/* The tabs, which wrap onto a second line when they don't fit, so every one shows. */}
+      <View role="tablist" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {tabPill("overview", "Overview")}
+        {space.kind === "family" ? (
+          tabPill("weeks", "Our weeks")
+        ) : space.kind === "health" ? (
+          <>
+            {tabPill("food", "Food log")}
+            {tabPill("plan", "Food plan")}
+          </>
+        ) : (
+          tabPill("results", "Results")
+        )}
+        {tabPill("playbook", "Playbook")}
       </View>
       <View role="tabpanel">
-        {space.kind === "family" ? (
+        {space.kind === "health" ? (
+          tab === "food" ? (
+            <HealthFoodLog agentName={agentName} />
+          ) : tab === "plan" ? (
+            <HealthFoodPlan space={space} agentName={agentName} />
+          ) : tab === "playbook" ? (
+            <HealthPlaybook space={space} agentName={agentName} onRemoved={onRemoved} />
+          ) : (
+            <HealthOverview space={space} agentName={agentName} onTab={goTo} />
+          )
+        ) : space.kind === "family" ? (
           tab === "overview" ? (
             <FamilyOverview
               space={space}

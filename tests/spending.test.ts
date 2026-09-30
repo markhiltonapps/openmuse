@@ -120,7 +120,66 @@ test("purchases through connected apps need a total, the limits and approval", a
     assert.equal(done.status, "succeeded");
     assert.deepEqual(executed, ["SHOPIFY_CREATE_ORDER"]);
     assert.equal((await spending.settings(owner)).spentThisMonth, 38);
+    // The ledger points back at the approved action, so the purchase says what it was.
+    const { purchases, months } = await spending.purchases(owner);
+    assert.deepEqual(
+      purchases.map(({ id, amount, what, app }) => ({ id, amount, what, app })),
+      [
+        {
+          id: proposal.id,
+          amount: 38,
+          what: "Order two packs of coffee filters",
+          app: "shopify",
+        },
+      ],
+    );
+    assert.equal(months.length, 6);
+    assert.equal(months.at(-1)?.total, 38);
   } finally {
     await server.agent.stop();
   }
+});
+
+test("purchases list this month's buys, newest first, and six months of totals", async () => {
+  let now = Date.parse("2026-02-20T12:00:00Z");
+  const spending = new SpendingService(db, () => now);
+  const owner = "ledger";
+  await db.put(owner, "actions", {
+    id: "act-lamp",
+    title: "Buy a desk lamp",
+    kind: "app.action",
+    data: { app: "amazon", tool: "AMAZON_BUY", arguments: {}, summary: "Buy a desk lamp" },
+    status: "succeeded",
+  });
+  await spending.record(owner, "old-1", 12.5);
+  now = Date.parse("2026-06-03T09:00:00Z");
+  await spending.record(owner, "old-2", 40);
+  now = Date.parse("2026-07-01T08:00:00Z");
+  await spending.record(owner, "act-lamp", 24.99);
+  now = Date.parse("2026-07-14T17:30:00Z");
+  await spending.record(owner, "gone", 10.1);
+  await spending.record(owner, "gone", 99); // the same action is only counted once
+  const { month, purchases, months } = await spending.purchases(owner);
+  assert.equal(month, "2026-07");
+  assert.deepEqual(
+    purchases.map((p) => [p.id, p.amount, p.what, p.app]),
+    [
+      ["gone", 10.1, "A purchase", undefined],
+      ["act-lamp", 24.99, "Buy a desk lamp", "amazon"],
+    ],
+  );
+  assert.deepEqual(months, [
+    { month: "2026-02", total: 12.5 },
+    { month: "2026-03", total: 0 },
+    { month: "2026-04", total: 0 },
+    { month: "2026-05", total: 0 },
+    { month: "2026-06", total: 40 },
+    { month: "2026-07", total: 35.09 },
+  ]);
+  // Across a new year, the months run on from December.
+  now = Date.parse("2027-01-05T12:00:00Z");
+  assert.deepEqual(
+    (await spending.purchases(owner, 3)).months.map((m) => m.month),
+    ["2026-11", "2026-12", "2027-01"],
+  );
 });

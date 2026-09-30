@@ -47,6 +47,8 @@ import { AlwaysAllowedCard, AppPermissionsCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
 import { AssistantResponse } from "./assistant-response";
 import { AvatarPicker } from "./avatar-settings";
+import { BarChart, DataTable, Meter } from "./charts";
+import { LineChart } from "./charts-extra";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
@@ -58,6 +60,7 @@ import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { PasswordsCard } from "./sign-in-ui";
 import { SubscriptionsCard } from "./subscriptions-ui";
 import { dark } from "./theme";
+import { tipProps } from "./tips";
 import {
   Button,
   Card,
@@ -67,6 +70,7 @@ import {
   Empty,
   ErrorNotice,
   Field,
+  InfoTip,
   LinkRow,
   plainPreview,
   resultSummary,
@@ -1342,6 +1346,7 @@ function SectionHead({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={addLabel}
+          {...tipProps(addLabel ?? "Add")}
           hitSlop={10}
           onPress={onAdd}
         >
@@ -1990,6 +1995,165 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
     </Card>
   );
 }
+/** Dollars with cents, as money shows everywhere in the app: "$1,049.99". */
+const money = (value: number) =>
+  `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** A compact amount for tight spots, such as a chart's scale: "$171", "$2.5", "$0.60". */
+const shortMoney = (value: number) =>
+  value >= 10 || Number.isInteger(value)
+    ? `$${Math.round(value).toLocaleString("en-US")}`
+    : `$${value.toFixed(value < 1 ? 2 : 1)}`;
+/** A day in the person's own calendar: "Sep 29". */
+const shortDay = (value: string | number) =>
+  new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+/** The day on one line and the time under it, in the person's own calendar. */
+function WhenCell({ at }: { at: string }) {
+  return (
+    <View>
+      <Text style={[s.text, { fontSize: 14, lineHeight: 20, fontVariant: ["tabular-nums"] }]}>
+        {shortDay(at)}
+      </Text>
+      <Text
+        style={[
+          s.small,
+          { fontSize: 12, color: colors.mutedStrong, fontVariant: ["tabular-nums"] },
+        ]}
+      >
+        {new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+      </Text>
+    </View>
+  );
+}
+/** One check of a watched page, as the server keeps it. */
+interface MonitorCheck {
+  at: string;
+  value: string;
+  price?: number;
+  changed?: boolean;
+  found?: boolean;
+}
+/** What a check saw, in a few words. */
+function checkSaw(monitor: Monitor, check: MonitorCheck) {
+  if (monitor.condition === "price_below") {
+    if (check.price === undefined) return "No price on the page";
+    const target = Number(monitor.value);
+    return Number.isFinite(target) && check.price < target
+      ? `${money(check.price)}, below your price`
+      : money(check.price);
+  }
+  if (monitor.condition === "contains")
+    return check.found ? `Found “${monitor.value.trim()}”` : "Not on the page";
+  return check.changed === undefined ? "First look" : check.changed ? "Changed" : "No change";
+}
+const CHECKS_SHOWN = 8;
+/** The watch's last checks: a price watch's prices as a line, and a table of what each saw. */
+function MonitorChecks({ monitor }: { monitor: Monitor }) {
+  const { api } = useWorkspace();
+  const { data } = useAgentWorkspace();
+  const agentName = data?.identity.name || "your agent";
+  const [checks, setChecks] = useState<MonitorCheck[]>();
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    void api.request<{ checks: MonitorCheck[] }>(`/api/monitors/${monitor.id}/checks`).then(
+      (value) => setChecks(value.checks),
+      () => undefined,
+    );
+  }, [api, monitor.id, monitor.checks, monitor.lastCheckedAt]);
+  if (!checks) return null;
+  const priced = checks.filter((check) => check.price !== undefined);
+  const target = Number(monitor.value);
+  // All on one day: the times say more than the date.
+  const oneDay = new Set(priced.map((check) => shortDay(check.at))).size <= 1;
+  const newest = [...checks].reverse();
+  const rows = all ? newest : newest.slice(0, CHECKS_SHOWN);
+  return (
+    <>
+      {monitor.condition === "price_below" && priced.length > 0 && (
+        <View style={{ gap: 8 }}>
+          <View style={[s.between, { gap: 8, flexWrap: "wrap" }]}>
+            <Text style={[s.label, { color: colors.mutedStrong }]}>Price at each check</Text>
+            <Text style={[s.small, { fontSize: 13, color: colors.mutedStrong }]}>
+              Latest{" "}
+              <Text style={{ color: colors.text, fontWeight: "700" }}>
+                {money(priced.at(-1)?.price ?? 0)}
+              </Text>
+            </Text>
+          </View>
+          <LineChart
+            label="Price at each check"
+            points={priced.map((check) => ({
+              key: check.at,
+              at: Date.parse(check.at),
+              value: check.price as number,
+              tip: `${stamp(check.at)}: ${money(check.price as number)}`,
+            }))}
+            format={money}
+            when={(at) =>
+              oneDay
+                ? new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+                : shortDay(at)
+            }
+            target={Number.isFinite(target) && target > 0 ? target : undefined}
+            targetLabel={
+              Number.isFinite(target) && target > 0 ? `Your price ${money(target)}` : undefined
+            }
+          />
+        </View>
+      )}
+      <View style={{ gap: 8 }}>
+        <View style={[s.row, { gap: 6 }]}>
+          <Text style={[s.label, { color: colors.mutedStrong }]}>Recent checks</Text>
+          <InfoTip
+            term="Recent checks"
+            text={`Each time ${agentName} looked at the page, newest first, up to the last 60.`}
+          />
+        </View>
+        <DataTable
+          label="Recent checks"
+          columns={[
+            {
+              title: "When",
+              flex: 1,
+              minWidth: 64,
+              render: (check) => <WhenCell at={check.at} />,
+            },
+            {
+              title: "What it saw",
+              flex: 2,
+              render: (check) => (
+                <View style={{ gap: 2 }}>
+                  <Text style={[s.text, { fontSize: 14, lineHeight: 20 }]}>
+                    {checkSaw(monitor, check)}
+                  </Text>
+                  {monitor.condition === "change" && check.changed !== false && !!check.value && (
+                    <Text
+                      numberOfLines={2}
+                      style={[s.small, { fontSize: 12, color: colors.mutedStrong }]}
+                    >
+                      {check.value}
+                    </Text>
+                  )}
+                </View>
+              ),
+            },
+          ]}
+          rows={rows}
+          rowKey={(check) => check.at}
+          empty={
+            monitor.status === "stopped"
+              ? "This watch stopped before it looked at the page."
+              : "Each check shows up here. Tap Check now to look right away."
+          }
+        />
+        {checks.length > CHECKS_SHOWN && (
+          <Button small style={{ alignSelf: "flex-start" }} onPress={() => setAll(!all)}>
+            {all ? "Show fewer" : `Show all ${checks.length}`}
+          </Button>
+        )}
+      </View>
+    </>
+  );
+}
 function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: () => void }) {
   const { mutate } = useAgentWorkspace();
   const [error, setError] = useState("");
@@ -2070,6 +2234,7 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
           Change availability
         </Button>
       )}
+      <MonitorChecks monitor={monitor} />
       <TaskLink taskId={monitor.taskId} onOpen={onOpenTask} />
     </Card>
   );
@@ -2414,10 +2579,114 @@ interface SpendingSettings {
   monthlyLimit: number;
   spentThisMonth: number;
 }
+interface Purchases {
+  /** The month the monthly limit counts now: "2026-09". */
+  month: string;
+  /** This month's, newest first. */
+  purchases: { id: string; amount: number; at: string; what: string; app?: string }[];
+  /** Oldest first. */
+  months: { month: string; total: number }[];
+}
+/** "2026-09" as "September 2026", or "Sep" when `short`. */
+const monthName = (month: string, short = false) =>
+  new Date(`${month}-15T12:00:00Z`).toLocaleDateString(
+    undefined,
+    short ? { month: "short" } : { month: "long", year: "numeric" },
+  );
+/** What the agent spent: this month against the limit, six months of totals, and each purchase. */
+function SpendingViews({ settings, spent }: { settings: SpendingSettings; spent?: Purchases }) {
+  const limit = settings.monthlyLimit;
+  // From the settings, so this month's line stays even when the purchases can't load.
+  const used = settings.spentThisMonth;
+  const total = spent?.purchases.reduce((sum, p) => sum + p.amount, 0) ?? 0;
+  const label = [s.label, { color: colors.mutedStrong }];
+  return (
+    <View style={{ gap: 26, marginTop: 6 }}>
+      <View style={{ gap: 8 }}>
+        <View style={[s.between, { gap: 8, flexWrap: "wrap" }]}>
+          <Text style={label}>This month</Text>
+          <Text style={[s.text, { fontVariant: ["tabular-nums"] }]}>
+            <Text style={{ fontWeight: "700" }}>{money(used)}</Text> of {money(limit)}
+          </Text>
+        </View>
+        <Meter
+          value={used}
+          max={limit}
+          label={`${money(used)} of your ${money(limit)} monthly limit used`}
+        />
+        <Text style={[s.small, { fontSize: 12, color: colors.mutedStrong }]}>
+          {used >= limit
+            ? "You’ve reached this month’s limit. Raise it below to allow more."
+            : `${money(limit - used)} left this month`}
+        </Text>
+      </View>
+      {!!spent?.months.some((m) => m.total > 0) && (
+        <View style={{ gap: 10 }}>
+          <Text style={label}>Last 6 months</Text>
+          <BarChart
+            label="Spending by month"
+            bars={spent.months.map((m) => ({
+              key: m.month,
+              label: monthName(m.month, true),
+              name: monthName(m.month),
+              value: m.total,
+              tip: `${monthName(m.month)}: ${money(m.total)}`,
+              strong: m.month === spent.month,
+            }))}
+            target={limit}
+            targetLabel={`Limit ${money(limit)}`}
+            format={money}
+            short={shortMoney}
+          />
+        </View>
+      )}
+      {spent && (
+        <View style={{ gap: 8 }}>
+          <Text style={label}>This month’s purchases</Text>
+          <DataTable
+            label="This month’s purchases"
+            columns={[
+              { title: "Date", flex: 0.8, minWidth: 52, render: (p) => shortDay(p.at) },
+              {
+                title: "What",
+                flex: 2.2,
+                render: (p) => (
+                  <View style={{ gap: 1 }}>
+                    <Text numberOfLines={2} style={[s.text, { fontSize: 14, lineHeight: 20 }]}>
+                      {p.what}
+                    </Text>
+                    {!!p.app && (
+                      <Text style={[s.small, { fontSize: 12, color: colors.mutedStrong }]}>
+                        {p.app.charAt(0).toUpperCase() + p.app.slice(1)}
+                      </Text>
+                    )}
+                  </View>
+                ),
+              },
+              {
+                title: "Amount",
+                align: "right",
+                flex: 1,
+                minWidth: 72,
+                render: (p) => money(p.amount),
+              },
+            ]}
+            rows={spent.purchases}
+            rowKey={(p) => p.id}
+            empty="Nothing bought this month. Purchases you approve show up here."
+            footer={["Total", "", money(total)]}
+          />
+        </View>
+      )}
+      <View style={[s.divider, { marginVertical: 0 }]} />
+    </View>
+  );
+}
 /** Purchase guardrails: off by default, capped per purchase and per month. */
 function SpendingCard() {
   const { api, notify } = useWorkspace();
   const [settings, setSettings] = useState<SpendingSettings>();
+  const [spent, setSpent] = useState<Purchases>();
   const [perPurchase, setPerPurchase] = useState("");
   const [monthly, setMonthly] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2429,8 +2698,13 @@ function SpendingCard() {
   };
   useEffect(() => {
     void api.request<SpendingSettings>("/api/spending").then(apply, () => undefined);
+    void api.request<Purchases>("/api/spending/purchases").then(setSpent, () => undefined);
   }, [api]);
   if (!settings) return null;
+  // With purchases off and nothing spent lately, there's nothing to show yet. This month's line
+  // comes from the settings, so it stays even if the purchases can't load.
+  const views =
+    settings.enabled || settings.spentThisMonth > 0 || !!spent?.months.some((m) => m.total > 0);
   async function save(enabled: boolean) {
     setBusy(true);
     setError("");
@@ -2455,9 +2729,10 @@ function SpendingCard() {
       <SectionHeading title="Spending" />
       <Text style={s.muted}>
         {settings.enabled
-          ? `Purchases through connected apps are on. Each one waits for your approval. $${settings.spentThisMonth.toFixed(2)} of $${settings.monthlyLimit.toFixed(2)} used this month.`
+          ? "Purchases through connected apps are on. Each one waits for your approval."
           : "Purchases are off. Turn them on to let your agent prepare orders and payments in connected apps, each waiting for your approval."}
       </Text>
+      {views && <SpendingViews settings={settings} spent={spent} />}
       <Field
         label="Most for one purchase (USD)"
         value={perPurchase}

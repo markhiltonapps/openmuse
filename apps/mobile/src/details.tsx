@@ -32,7 +32,9 @@ import {
   type Mail,
   type ProposalInput,
 } from "../../../packages/domain/src";
-import { DelegateSheet, NotificationsSheet, TaskDetail } from "./agent-ui";
+import type { AgentArtifact } from "../../../packages/domain/src/agent";
+import { ArtifactCard, DelegateSheet, NotificationsSheet, TaskDetail } from "./agent-ui";
+import { useAgentWorkspace } from "./agent-workspace";
 import BrowserConsole from "./BrowserConsole";
 import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
@@ -41,6 +43,8 @@ import { localDateTime, zonedInstant } from "./date-time";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import { FoodLogSheet } from "./meal-checkins-ui";
 import PdfReader from "./PdfReader";
+import { artifactKind, savedDate } from "./plans";
+import { CommitmentsSheet, RemindersSheet } from "./plans-ui";
 import { ShareLinkCard } from "./share-ui";
 import { codeReady, SignInReview } from "./sign-in-ui";
 import {
@@ -68,6 +72,9 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "delegate") return <DelegateSheet />;
   if (detail.type === "notifications") return <NotificationsSheet />;
   if (detail.type === "food") return <FoodLogSheet log={detail.log} />;
+  if (detail.type === "commitments") return <CommitmentsSheet tab={detail.tab} />;
+  if (detail.type === "reminders") return <RemindersSheet />;
+  if (detail.type === "saved") return <SavedResultSheet artifact={detail.artifact} />;
   if (detail.type === "mail") return <MailDetail mail={detail.mail} />;
   if (detail.type === "email") return <EmailEditor draft={detail.draft} />;
   if (detail.type === "event")
@@ -95,6 +102,33 @@ export function Details({ detail }: { detail: Detail }) {
           }}
         />
       ))}
+    </Sheet>
+  );
+}
+/** A saved report, comparison, plan or tracker, drawn as it is in the task it came from. */
+function SavedResultSheet({ artifact }: { artifact: AgentArtifact }) {
+  const { close, open } = useWorkspace();
+  const { data } = useAgentWorkspace();
+  const task = data?.tasks.find((item) => item.id === artifact.taskId);
+  return (
+    <Sheet
+      title={artifact.title}
+      subtitle={`${artifactKind(artifact.kind).label} · Saved ${savedDate(artifact.createdAt)}`}
+      onClose={close}
+    >
+      <View style={{ gap: 16 }}>
+        <ArtifactCard key={artifact.id} artifact={artifact} />
+        {!!task && (
+          <Button
+            icon={Clock3}
+            style={{ alignSelf: "flex-start" }}
+            accessibilityLabel={`See the task it came from: ${task.title}`}
+            onPress={() => open({ type: "task", taskId: task.id })}
+          >
+            See the task it came from
+          </Button>
+        )}
+      </View>
     </Sheet>
   );
 }

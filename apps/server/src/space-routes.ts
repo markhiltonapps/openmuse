@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { AppError } from "./errors.ts";
 import type { FamilyWeeks } from "./family-weeks.ts";
+import { addDays, type HealthService } from "./health.ts";
 import type { RecipeKitchen } from "./recipe-writer.ts";
 import type { SocialWeeks } from "./social-weeks.ts";
 import type { ScheduledPosts } from "./space-posts.ts";
@@ -23,6 +24,8 @@ export function spaceRoutes(
     /** Writes dinner recipes; undefined when the Anthropic API isn't configured. */
     recipes: () => RecipeKitchen | undefined;
     timeZone: (owner: string) => Promise<string>;
+    /** The food log and workouts, for the health space. */
+    health?: HealthService;
   },
 ) {
   const app = new Hono<Env>();
@@ -33,6 +36,36 @@ export function spaceRoutes(
       const found = await spaces.get(c.get("owner"), c.req.param("id") ?? "");
       return found.id;
     };
+    // A health space's week: what was eaten and the workouts each day, against the playbook's
+    // targets, with the family board's dinners for the same week.
+    app.get("/:id/health", async (c) => {
+      const owner = c.get("owner");
+      const found = await spaces.get(owner, c.req.param("id"));
+      if (found.kind !== "health" || !boards.health)
+        throw new AppError("Only a health space has a food log", 404);
+      const week = await boards.health.week(owner, c.req.query("week"));
+      const family = (await spaces.list(owner)).find((space) => space.kind === "family");
+      const board = family ? await weeks.get(owner, family.id, week.weekStart) : undefined;
+      const planned = (board?.dinners ?? []).map((dinner) => {
+        const recipe = dinner.recipes?.[dinner.chosen ?? 0];
+        return {
+          date: addDays(week.weekStart, dinner.day),
+          dish: dinner.dish,
+          emoji: dinner.emoji,
+          cook: dinner.cook !== false,
+          recipe: recipe
+            ? { name: recipe.name, minutes: (recipe.prepMinutes ?? 0) + (recipe.cookMinutes ?? 0) }
+            : undefined,
+        };
+      });
+      const { calorieTarget, proteinTarget, workoutMinutes } = found.playbook;
+      return c.json({
+        ...week,
+        targets: { calories: calorieTarget, protein: proteinTarget, workoutMinutes },
+        planned,
+        familySpaceId: family?.id,
+      });
+    });
     app.get("/:id/weeks", async (c) => {
       const owner = c.get("owner");
       const board = await weeks.board(owner, await space(c), await timeZone(owner));
@@ -132,7 +165,11 @@ export function spaceRoutes(
       );
     });
   }
-  app.get("/", async (c) => c.json(await spaces.list(c.get("owner"))));
+  app.get("/", async (c) => {
+    const owner = c.get("owner");
+    await spaces.ensureHealth(owner);
+    return c.json(await spaces.list(owner));
+  });
   // The app's own post scheduler: the person approves or cancels queued posts.
   app.get("/posts", async (c) => c.json(await posts.list(c.get("owner"))));
   app.post("/posts/:postId/approve", async (c) =>

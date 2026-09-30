@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  choreStars,
   cooked,
   dinnerRecipesSchema,
   type FamilyWeek,
@@ -518,6 +519,7 @@ export function summarize(week: FamilyWeek): WeekSummary {
     chores: {
       stamped: week.chores.reduce((n, c) => n + c.stamps.filter(Boolean).length, 0),
       total: week.chores.length * 7,
+      people: choreStars(week.chores),
     },
     groceries: week.groceries.length,
   };

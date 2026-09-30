@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import type { ActionProposal } from "../../../packages/domain/src/index.ts";
 import type { Store } from "./db.ts";
 
 /** Write actions that spend money. Read-only actions never reach this check. */
@@ -30,6 +31,32 @@ export const spendingSettingsSchema = z.object({
 export type SpendingSettings = z.infer<typeof spendingSettingsSchema>;
 const DEFAULTS: SpendingSettings = { enabled: false, perPurchaseLimit: 100, monthlyLimit: 500 };
 const month = (at: number) => new Date(at).toISOString().slice(0, 7);
+/** "2026-09" and the `count - 1` months before it, oldest first. */
+function monthsTo(last: string, count: number) {
+  const [year, index] = last.split("-").map(Number) as [number, number];
+  return Array.from({ length: count }, (_, i) => {
+    const date = new Date(Date.UTC(year, index - 1 - (count - 1 - i), 1));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+}
+const cents = (value: number) => Math.round(value * 100) / 100;
+interface LedgerEntry {
+  /** The approved action that paid, when it was recorded with one. */
+  id: string;
+  amount: number;
+  month: string;
+  at: string;
+}
+/** One purchase as the person sees it: when, what and how much. */
+export interface Purchase {
+  id: string;
+  amount: number;
+  at: string;
+  /** What was bought, from its approved action. */
+  what: string;
+  /** The app it went through, such as "shopify". */
+  app?: string;
+}
 
 /** Purchase guardrails: off until enabled, then capped per purchase and per calendar month. */
 export class SpendingService {
@@ -50,6 +77,41 @@ export class SpendingService {
     const input = spendingSettingsSchema.parse(raw);
     await this.db.put(owner, "agent-settings", { id: "spending", ...input });
     return this.settings(owner);
+  }
+  /**
+   * This month's purchases, newest first, with what each one was (from its approved action), and
+   * the total for each of the last `count` months, oldest first. Months are the ones the monthly
+   * limit counts.
+   */
+  async purchases(owner: string, count = 6) {
+    const current = month(this.now());
+    const ledger = await this.db.list<LedgerEntry>(owner, "spending");
+    const mine = ledger
+      .filter((entry) => entry.month === current)
+      .sort((a, b) => b.at.localeCompare(a.at));
+    const actions = await Promise.all(
+      mine.map((entry) =>
+        entry.id ? this.db.get<ActionProposal>(owner, "actions", entry.id) : null,
+      ),
+    );
+    const purchases: Purchase[] = mine.map((entry, i) => {
+      const action = actions[i];
+      const app = typeof action?.data.app === "string" ? action.data.app : undefined;
+      return {
+        id: entry.id,
+        amount: cents(entry.amount),
+        at: entry.at,
+        what: action?.title || "A purchase",
+        ...(app ? { app } : {}),
+      };
+    });
+    const months = monthsTo(current, count).map((id) => ({
+      month: id,
+      total: cents(
+        ledger.filter((entry) => entry.month === id).reduce((sum, e) => sum + e.amount, 0),
+      ),
+    }));
+    return { month: current, purchases, months };
   }
   async spent(owner: string) {
     const current = month(this.now());

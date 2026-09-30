@@ -1,0 +1,90 @@
+Claude working session — 2026-09-30
+===================================
+
+WHAT CHANGED
+------------
+You asked for items 2–4 from last night's list, tips wherever they help, a place to see your
+health data (meals eaten, nutrition charts, the food plan, workouts), and tables and charts for
+every other kind of data the app keeps ("everything at once").
+
+Bottom bar (items 2–4)
+- Labels under every tab ("Files" for Files & media), a people icon (UsersRound) for Spaces,
+  and a blue pill behind the selected tab's icon. All 8 tabs stay on small phones (labels are
+  10px below 360px wide).
+- The family board: when it's empty, the button reads "Plan this week" and plans this week
+  (it used to plan next week).
+
+Tips (hover, keyboard, and press and hold on phones)
+- New: apps/mobile/src/tips.ts, TipLayer.web.tsx, TipLayer.native.tsx.
+- A tip shows when a mouse rests on a control (350ms), when the keyboard moves to it, and on a
+  touch screen when a finger holds it (700ms). The chat's Send and mic buttons don't have the
+  hold, so a slow press still sends.
+- An ⓘ next to a term opens its tip on a tap; it stays until the next tap, a scroll or Escape.
+- On the web the tip is drawn above everything, sheets included. Escape closes only the tip,
+  not the sheet under it. A mouse can move onto a tip to read it.
+- Tips are on icon-only buttons across the app, on every bar and point in the charts, and ⓘ
+  tips explain terms (Needs you, Weekly digest, Saved questions, Week by week, and others).
+
+Health space (Spaces → Health)
+- Everyone gets one (made the first time Spaces loads; if they remove it, "Start a health
+  space" brings it back with their log).
+- Overview: today's calories, protein and exercise against their targets; a "By day" bar chart
+  for any week (Previous / Next week), switchable between calories, protein and exercise, with
+  "Show the numbers" for a table of the same; "Week by week" (the last 8 weeks as a table);
+  Workouts to start again.
+- Food log: every meal as a table, per day, for today, this week or 30 days, with totals; Change
+  fixes a meal.
+- Food plan: the Family space's planned dinners next to what was eaten, week by week.
+- Playbook: goals, food rules, targets (calories, protein, weekly exercise), "Ask me what I ate"
+  (meal check-ins and their times), and the weekly check-in.
+- Goals › Health, Feed's "View food log" and the "Log a meal" sheet all lead here.
+- Server: GET /api/spaces/:id/health?week= (apps/server/src/health.ts), and a get_food_log tool
+  so Neddy can answer "what have I eaten this week?".
+- Neddy now has a map of the app (apps/server/src/app-guide.ts), so when someone asks where to
+  find something it gives the real path, like "Spaces → Health → Food log".
+
+Views for every other data gap (built by two helpers, reviewed with the rest)
+- Plans & bookings (Feed → "See all plans & bookings"): upcoming and past, mark done or
+  cancelled, with Undo.
+- Reminders (Feed → "See all reminders"): upcoming, and those sent in the last 7 days.
+- Saved by Neddy (Files): every report, comparison, plan and finance tracker Neddy saved.
+- Money (Apps → Money): this month's purchases, spending by month (chart), AI usage by month.
+- Tracking (Goals): a price chart for a price watch, and every check a watch made.
+- Social media › Results: past posts, including the ones that didn't go out and why.
+- Family › Our weeks: chore stars by week.
+
+Shared pieces
+- apps/mobile/src/charts.tsx: bar chart, table (it folds a column under the first one on narrow
+  phones), stat tiles, meters, and a choice control that works with the arrow keys.
+- apps/mobile/src/charts-extra.tsx: the line chart for price watches.
+
+Design division
+- Three rounds with the UI Designer (visual), UX Researcher (usability) and copy reviewers.
+  All three approved. Among the fixes: nothing cut off or split mid-word at 320px, tables
+  with names for screen readers, keyboard focus that lands in the right place after Mark done
+  or Undo, units in the numbers tables, meal check-ins called the same thing everywhere.
+
+TEST RESULTS
+------------
+- Full suite (Biome lint, typecheck, worker typecheck, tests): 414 passed, 0 failed.
+- New tests: the weekly food log and the health week route (tests/health.test.ts,
+  tests/spaces.test.ts), Health made for everyone and removable (tests/spaces.test.ts),
+  plain-text previews (tests/plain-text.test.ts), plans and reminders
+  (apps/mobile/test/plans.test.ts, tests/data-views.test.ts).
+- Browser checks at 320, 390 and 1280 wide, light and dark, on three sample servers: every new
+  view, tips (mouse, keyboard, touch), Escape over a sheet, charts' tips and tables.
+
+KNOWN ISSUES
+------------
+- Deferred small items from the reviews: the week arrows' margin when the header wraps; a line
+  saying why "View food log" landed on the list after Health was removed; a next step for a
+  post that didn't go out (reconnect, or ask Neddy to post it again); long purchase names are
+  cut at 2 lines; "Create a goal" sits close to the Health card on Goals; the help page mixes
+  "→" and "›" in paths.
+- In the sample data, one Facebook post's error mentions Instagram (sample text, not a bug).
+
+PENDING
+-------
+- Pricing: still waiting for Settings > Usage, the Railway / CopilotKit / Composio bills, who
+  the customers are, and hard limits vs fair use.
+- Time log: hours for 2026-09-29 (evening) and today.

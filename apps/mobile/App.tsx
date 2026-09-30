@@ -4,7 +4,6 @@ import {
   Bell,
   Check,
   FolderOpen,
-  LayoutGrid,
   Lightbulb,
   type LucideIcon,
   Menu,
@@ -13,6 +12,7 @@ import {
   PanelsTopLeft,
   Shapes,
   SquareCheck,
+  UsersRound,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,21 +66,24 @@ import {
 import { SignInCard } from "./src/sign-in";
 import { SpaceChip } from "./src/spaces";
 import { SpacesScreen } from "./src/spaces-screen";
+import TipLayer from "./src/TipLayer";
 import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
+import { tipProps } from "./src/tips";
 import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
 import { listenForCheckIns, registerServiceWorker } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
-const nav: { id: Section; label: string; icon: LucideIcon }[] = [
+/** The bottom bar. `short` is the word under the icon when the full name is too long for it. */
+const nav: { id: Section; label: string; short?: string; icon: LucideIcon }[] = [
   { id: "chat", label: "Chat", icon: MessageCircle },
   { id: "feed", label: "Feed", icon: Newspaper },
-  { id: "spaces", label: "Spaces", icon: LayoutGrid },
+  { id: "spaces", label: "Spaces", icon: UsersRound },
   { id: "activity", label: "Activity", icon: PanelsTopLeft },
   { id: "ideas", label: "Ideas", icon: Lightbulb },
   { id: "goals", label: "Goals", icon: SquareCheck },
-  { id: "files", label: "Files & media", icon: FolderOpen },
+  { id: "files", label: "Files & media", short: "Files", icon: FolderOpen },
   { id: "apps", label: "Apps", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
@@ -582,8 +585,8 @@ function WorkspaceShell({
           </View>
           <View
             style={{
-              // Eight buttons: a narrow phone gives the bar nearly all its width, 44px a button from
-              // 360px wide.
+              // Eight tabs: a narrow phone gives the bar nearly all its width, 44px a tab from 360px
+              // wide.
               paddingHorizontal: width < 420 ? 3 : 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,
@@ -611,8 +614,8 @@ function WorkspaceShell({
               }}
             >
               {nav.map((item) => {
-                const pill = width < 420 ? 38 : 44;
                 const active = section === item.id || (item.id === "apps" && utility);
+                const ink = active ? colors.text : colors.mutedStrong;
                 return (
                   <Pressable
                     key={item.id}
@@ -623,33 +626,38 @@ function WorkspaceShell({
                     onPress={() => navigate(item.id)}
                     style={{
                       flex: 1,
-                      height: 47,
+                      height: 54,
                       alignItems: "center",
                       justifyContent: "center",
+                      gap: 2,
                       // Rounds the keyboard focus ring too.
-                      borderRadius: 28,
+                      borderRadius: 22,
                     }}
                   >
-                    {/* The selected circle is drawn inside the button, so the whole width stays
-                        tappable, and it's the same shape at every width. */}
-                    {active && (
-                      <View
-                        style={{
-                          position: "absolute",
-                          top: (47 - pill) / 2,
-                          left: "50%",
-                          marginLeft: -pill / 2,
-                          width: pill,
-                          height: pill,
-                          borderRadius: pill / 2,
-                          backgroundColor: colors.subtle,
-                        }}
-                      />
-                    )}
-                    {/* In a View so it's drawn above the circle on the web too. */}
-                    <View>
-                      <item.icon size={23} strokeWidth={1.8} color={colors.text} />
+                    {/* The selected tab's icon sits on a blue pill, and its name is bold. */}
+                    <View
+                      style={{
+                        width: width < 420 ? 36 : 48,
+                        height: 28,
+                        borderRadius: 14,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: active ? colors.blue : "transparent",
+                      }}
+                    >
+                      <item.icon size={21} strokeWidth={active ? 2 : 1.8} color={ink} />
                     </View>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: ink,
+                        fontSize: width < 360 ? 10 : 11,
+                        lineHeight: 14,
+                        fontWeight: active ? "700" : "500",
+                      }}
+                    >
+                      {item.short ?? item.label}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -657,6 +665,8 @@ function WorkspaceShell({
           </View>
           {/* Background updates pop up under the bell; they wait while a sheet covers the page. */}
           <UpdateToasts hold={!!chatNow || !!detail || threadsOpen} />
+          {/* The tip for the control under the mouse or finger. */}
+          <TipLayer />
         </View>
         {/* Always there, so screen readers hear each confirmation as it appears. */}
         <View
@@ -683,6 +693,7 @@ function WorkspaceShell({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss notification"
+                {...tipProps("Dismiss")}
                 onPress={clearToast}
               >
                 <X size={16} color={colors.onInverse} />

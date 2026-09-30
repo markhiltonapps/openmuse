@@ -2,6 +2,7 @@ import { AlarmClock, ArrowRight, Bell, Check, X } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
+import { tipProps } from "./tips";
 import { Button, Card, colors, ErrorNotice, plainPreview, s } from "./ui";
 import { updatesDisplay } from "./update-toasts";
 import { useWorkspace } from "./workspace";
@@ -61,6 +62,7 @@ export function BackgroundUpdates() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={reminder ? "Dismiss reminder" : "Dismiss background update"}
+          {...tipProps(reminder ? "Dismiss reminder" : "Dismiss")}
           disabled={busy}
           onPress={() => void dismiss()}
           hitSlop={10}

@@ -15,7 +15,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
-import { Button, Card, CheckRow, colors, Empty, ErrorNotice, Field, Sheet, s } from "./ui";
+import { Button, Card, CheckRow, colors, ErrorNotice, Field, Sheet, s } from "./ui";
 import { voiceSettings } from "./voice";
 import { CHECK_IN_OPENED, dictate, dictationAvailable } from "./web-app";
 
@@ -26,11 +26,13 @@ const changed = () => {
     window.dispatchEvent(new Event(CHECK_INS_CHANGED));
 };
 
+import { showSpace } from "./space-view";
+import { tipProps } from "./tips";
 import { useWorkspace } from "./workspace";
 
 type Meal = "breakfast" | "lunch" | "dinner";
 const MEALS: Meal[] = ["breakfast", "lunch", "dinner"];
-const MEAL_NAMES: Record<string, string> = {
+export const MEAL_NAMES: Record<string, string> = {
   breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
@@ -55,7 +57,7 @@ interface CheckIns {
   replaced: { id: string; title: string; time: string; enabled: boolean }[];
   open: CheckIn[];
 }
-interface MealEntry {
+export interface MealEntry {
   id: string;
   title: string;
   at: string;
@@ -64,12 +66,6 @@ interface MealEntry {
   calories?: number;
   protein?: number;
   estimated?: boolean;
-}
-interface FoodDay {
-  day: string;
-  meals: MealEntry[];
-  calories: number;
-  protein: number;
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -87,7 +83,7 @@ const shiftTime = (time: string, minutes: number) => {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 };
 const kcal = (value?: number) =>
-  value === undefined ? "" : `${Math.round(value).toLocaleString()} kcal`;
+  value === undefined ? "" : `${Math.round(value).toLocaleString()} calories`;
 
 export function useCheckIns() {
   const { api } = useWorkspace();
@@ -244,6 +240,7 @@ export function SayOrType({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={action}
+        {...tipProps(action)}
         disabled={!text.trim() || busy}
         onPress={send}
         style={{
@@ -493,10 +490,15 @@ export function MealsToday({
   line,
 }: {
   logged: string[];
-  /** Today's totals, such as "1,450 kcal · 62 g protein". */
+  /** Today's totals, such as "1,450 calories · 62 g protein". */
   line: string;
 }) {
-  const { open } = useWorkspace();
+  const { open, navigate } = useWorkspace();
+  // The food log lives in the Health space, with the week's charts.
+  const viewLog = () => {
+    showSpace("health", "food");
+    navigate("spaces");
+  };
   return (
     <View style={{ gap: 8, flex: 1 }}>
       <Pressable
@@ -504,7 +506,7 @@ export function MealsToday({
         accessibilityLabel={`Food log. ${MEALS.map(
           (m) => `${MEAL_NAMES[m]} ${logged.includes(m) ? "logged" : "not logged yet"}`,
         ).join(", ")}`}
-        onPress={() => open({ type: "food" })}
+        onPress={viewLog}
         style={{ gap: 3 }}
       >
         <View style={[s.row, { gap: 12, flexWrap: "wrap" }]}>
@@ -534,7 +536,7 @@ export function MealsToday({
         </Button>
         <Pressable
           accessibilityRole="button"
-          onPress={() => open({ type: "food" })}
+          onPress={viewLog}
           hitSlop={6}
           style={({ pressed }) => ({
             minHeight: 38,
@@ -737,16 +739,13 @@ function CheckInSettings({ state, reload }: { state: CheckIns; reload: () => Pro
   );
 }
 
-const dayName = (day: string, today: string) => {
-  if (day === today) return "Today";
-  const date = new Date(`${day}T12:00:00`);
-  const yesterday = new Date(`${today}T12:00:00`);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-};
-
-function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Promise<unknown> }) {
+export function MealRow({
+  entry,
+  onChanged,
+}: {
+  entry: MealEntry;
+  onChanged: () => Promise<unknown>;
+}) {
   const { api, notify } = useWorkspace();
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -825,6 +824,7 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Change ${entry.title}`}
+            {...tipProps("Change")}
             hitSlop={8}
             onPress={() => setEditing(true)}
             style={({ pressed }) => ({
@@ -947,89 +947,51 @@ function MealRow({ entry, onChanged }: { entry: MealEntry; onChanged: () => Prom
   );
 }
 
-/** Everything eaten, by day, with check-in times and a way to log by voice. */
+/**
+ * Log a meal by voice or typing; the agent logs it in chat. Everything logged is in the Health
+ * space's Food log, with the check-in settings in its Playbook.
+ */
 export function FoodLogSheet({ log }: { log?: boolean }) {
-  const { api, ask, close } = useWorkspace();
-  const { state, load } = useCheckIns();
-  const [history, setHistory] = useState<{ today: string; days: FoodDay[] }>();
-  const [error, setError] = useState("");
-  const [logging, setLogging] = useState(!!log);
-  const loadHistory = useCallback(
-    () =>
-      api
-        .request<{ today: string; days: FoodDay[] }>("/api/food-log?days=60")
-        .then(setHistory, (e) => setError(message(e))),
-    [api],
-  );
-  useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
+  const { ask, close, navigate } = useWorkspace();
   return (
     <Sheet
-      title="Food log"
-      subtitle="What you’ve eaten, by day. Calories are estimates unless you changed them."
+      title="Log a meal"
+      subtitle="Say or type what you ate. Calories are estimates unless you change them."
       onClose={close}
     >
       <View style={{ gap: 16 }}>
-        {logging ? (
-          <Card style={{ gap: 14 }}>
-            <Text accessibilityRole="header" style={s.heading}>
-              What did you eat?
-            </Text>
-            <SayOrType
-              placeholder="what you ate"
-              action="Log this meal"
-              listenNow={!!log}
-              onSubmit={(text) => {
-                close();
-                ask(`Log a meal I just had: ${text}`);
-              }}
-            />
-          </Card>
-        ) : (
-          <Button
-            primary
-            icon={Mic}
-            style={{ alignSelf: "flex-start" }}
-            onPress={() => setLogging(true)}
-          >
-            Log a meal
-          </Button>
-        )}
-        {state && <CheckInSettings state={state} reload={load} />}
-        <ErrorNotice error={error} />
-        {!history ? (
-          <ActivityIndicator color={colors.blueDark} style={{ padding: 30 }} />
-        ) : history.days.length === 0 ? (
-          <Empty
-            icon={Utensils}
-            title="Nothing logged yet"
-            detail="Answer when I ask what you ate, tap Log a meal, or send a photo of your plate in chat and tap Log this meal."
+        <Card style={{ gap: 14 }}>
+          <Text accessibilityRole="header" style={s.heading}>
+            What did you eat?
+          </Text>
+          <SayOrType
+            placeholder="what you ate"
+            action="Log this meal"
+            listenNow={!!log}
+            onSubmit={(text) => {
+              close();
+              ask(`Log a meal I just had: ${text}`);
+            }}
           />
-        ) : (
-          history.days.map((day) => (
-            <Card key={day.day} style={{ gap: 0, paddingBottom: 8 }}>
-              <View style={[s.between, { marginBottom: 6, gap: 10 }]}>
-                <Text accessibilityRole="header" style={s.heading}>
-                  {dayName(day.day, history.today)}
-                </Text>
-                <Text
-                  style={[s.small, { color: colors.mutedStrong, fontVariant: ["tabular-nums"] }]}
-                >
-                  {[kcal(day.calories), day.protein ? `${day.protein} g protein` : ""]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </Text>
-              </View>
-              {[...day.meals]
-                .sort((a, b) => a.at.localeCompare(b.at))
-                .map((entry) => (
-                  <MealRow key={entry.id} entry={entry} onChanged={loadHistory} />
-                ))}
-            </Card>
-          ))
-        )}
+        </Card>
+        <Button
+          style={{ alignSelf: "flex-start" }}
+          onPress={() => {
+            close();
+            showSpace("health", "food");
+            navigate("spaces");
+          }}
+        >
+          View food log
+        </Button>
       </View>
     </Sheet>
   );
+}
+
+/** Meal check-ins in the Health space's Playbook: which meals the agent asks about, and when. */
+export function MealCheckIns() {
+  const { state, load } = useCheckIns();
+  if (!state) return null;
+  return <CheckInSettings state={state} reload={load} />;
 }

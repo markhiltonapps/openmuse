@@ -1,6 +1,7 @@
 import { ShieldCheck, X } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { tipProps } from "./tips";
 import { Card, CheckRow, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -62,6 +63,7 @@ export function AlwaysAllowedCard() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Ask again before ${rule.tool ? actionLabel(rule) : appLabel(rule.app)}`}
+            {...tipProps("Ask again before doing this")}
             hitSlop={8}
             onPress={() =>
               void api

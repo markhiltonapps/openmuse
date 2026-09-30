@@ -21,6 +21,7 @@ import {
 } from "../apps/server/src/recipe-writer.ts";
 import { Spaces } from "../apps/server/src/spaces.ts";
 import {
+  choreStars,
   cooked,
   dishEmoji,
   type FamilyWeek,
@@ -38,6 +39,21 @@ after(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 const LA = "America/Los_Angeles";
+
+test("chore stars add up per person, whatever the case of their name", () => {
+  const day = (n: number) => Array.from({ length: 7 }, (_, i) => i < n);
+  assert.deepEqual(
+    choreStars([
+      { who: "Maya", stamps: day(3) },
+      { who: "Leo ", stamps: day(0) },
+      { who: "maya", stamps: day(5) },
+    ]),
+    [
+      { who: "Maya", stars: 8, total: 14 },
+      { who: "Leo", stars: 0, total: 7 },
+    ],
+  );
+});
 
 test("weeks start on Monday in the family's own time zone", () => {
   // 2 AM Tuesday in London is still Monday evening in Los Angeles.
@@ -155,6 +171,11 @@ test("a planned week keeps ticks and stars when it's rewritten, and becomes a pa
     board.past.map((w) => [w.weekStart, w.recap, w.chores.stamped, w.chores.total, w.groceries]),
     [["2026-09-28", "Leo tried peas.", 1, 14, 3]],
   );
+  // Each person's stars, for the stars-per-person table in "Our weeks".
+  assert.deepEqual(board.past[0]?.chores.people, [
+    { who: "Maya", stars: 1, total: 7 },
+    { who: "Leo", stars: 0, total: 7 },
+  ]);
   // Last week's grocery list comes back unticked.
   const reused = await weeks.reuseGroceries("ana", "fam", "2026-09-28", "2026-10-05");
   assert.deepEqual(

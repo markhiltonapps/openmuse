@@ -3,7 +3,6 @@ import {
   Archive,
   CalendarDays,
   FileText,
-  LayoutGrid,
   LifeBuoy,
   MessageCircle,
   Monitor,
@@ -11,6 +10,7 @@ import {
   RefreshCw,
   Settings2,
   Trash2,
+  UsersRound,
 } from "lucide-react-native";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
@@ -227,9 +227,9 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
               }}
             />
             <LinkRow
-              icon={LayoutGrid}
+              icon={UsersRound}
               title="Spaces"
-              detail="Social media and the family week, run for you"
+              detail="Social media, the family week and your health"
               onPress={() => go("spaces")}
             />
             {confirmDelete("main", "Delete everything in your main chat and start it fresh?") ?? (

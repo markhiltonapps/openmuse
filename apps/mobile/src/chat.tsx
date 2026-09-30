@@ -60,6 +60,7 @@ import { useSpaces } from "./spaces";
 import { replyText } from "./speakable";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
+import { tipProps } from "./tips";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
 import { noteTyping } from "./update-toasts";
 import { chooseAndUpload, uploadToFiles } from "./upload";
@@ -284,6 +285,7 @@ export function ChatScreen({
 }) {
   const { api, workspace: w, refresh, navigate } = useWorkspace();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
+  const agentName = agentWorkspace?.identity.name || "your agent";
   const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
   const selection = thread || { id: "local", existing: false };
   // A space's chat starts with its saved questions instead of the general ones.
@@ -1128,6 +1130,7 @@ export function ChatScreen({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Remove queued message: ${message.text}`}
+                  {...tipProps("Remove from the queue")}
                   hitSlop={10}
                   onPress={() => queue.remove(message.id)}
                   style={{ padding: 8 }}
@@ -1378,7 +1381,7 @@ export function ChatScreen({
             </Pressable>
             <TextInput
               ref={input}
-              accessibilityLabel="Message your agent"
+              accessibilityLabel={`Message ${agentName}`}
               value={draft}
               onChangeText={(text) => {
                 noteTyping();
@@ -1431,7 +1434,12 @@ export function ChatScreen({
             {dictationAvailable() && speechAvailable() && !draft.trim() && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={voiceMode ? "End voice conversation" : "Talk with your agent"}
+                accessibilityLabel={voiceMode ? "End voice conversation" : `Talk with ${agentName}`}
+                {...tipProps(
+                  voiceMode ? "End voice conversation" : `Talk with ${agentName}`,
+                  {},
+                  { hold: false },
+                )}
                 accessibilityState={{ selected: voiceMode }}
                 onPress={toggleVoiceMode}
                 style={({ pressed }) => ({
@@ -1458,6 +1466,11 @@ export function ChatScreen({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
+                  {...tipProps(
+                    listening ? "Stop voice input" : "Speak a message",
+                    {},
+                    { hold: false },
+                  )}
                   accessibilityState={{ selected: listening }}
                   onPress={toggleDictation}
                   style={({ pressed }) => ({
@@ -1481,6 +1494,7 @@ export function ChatScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}
+              {...tipProps(replying ? "Stop reply" : "Send message", {}, { hold: false })}
               disabled={!replying && (!draft.trim() || !loaded || !isReady || pasting > 0)}
               onPress={replying ? () => void stop() : () => send()}
               style={({ pressed }) => ({

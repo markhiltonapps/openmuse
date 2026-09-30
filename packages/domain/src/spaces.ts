@@ -5,9 +5,10 @@ import { z } from "zod";
  * chat, a playbook the agent follows, saved prompts and a digest that runs on a schedule. The
  * kinds are social media and the family week; a playbook is what the agent learns while setting
  * the space up (from a brand guide, web research and the person's answers) and what every later
- * run follows.
+ * run follows. The health space is there for everyone: what they've eaten, their workouts and the
+ * week's food plan, against the targets in its playbook.
  */
-export type SpaceKind = "social" | "family";
+export type SpaceKind = "social" | "family" | "health";
 
 export interface SocialProduct {
   name: string;
@@ -105,6 +106,22 @@ export interface FamilyPlaybook {
   notes?: string;
 }
 
+/** What the health space follows: the person's goals, food rules and daily targets. */
+export interface HealthPlaybook {
+  /** In the person's words: "More protein", "Lose 10 pounds by March". */
+  goals: string[];
+  /** Diets, allergies and foods they avoid: never suggested. */
+  foodRules: string[];
+  /** Calories a day to aim for. */
+  calorieTarget?: number;
+  /** Grams of protein a day to aim for. */
+  proteinTarget?: number;
+  /** Minutes of exercise a week to aim for. */
+  workoutMinutes?: number;
+  /** Anything else to keep in mind. */
+  notes?: string;
+}
+
 export interface SavedPrompt {
   id: string;
   text: string;
@@ -132,7 +149,11 @@ export interface FamilySpace extends SpaceBase {
   kind: "family";
   playbook: FamilyPlaybook;
 }
-export type Space = SocialSpace | FamilySpace;
+export interface HealthSpace extends SpaceBase {
+  kind: "health";
+  playbook: HealthPlaybook;
+}
+export type Space = SocialSpace | FamilySpace | HealthSpace;
 
 /**
  * A post queued by the app's own scheduler: a connected app's action with its exact arguments,
@@ -226,17 +247,33 @@ export const familyPlaybookPatchSchema = z
   .partial();
 export type FamilyPlaybookPatch = z.infer<typeof familyPlaybookPatchSchema>;
 
+export const healthPlaybookPatchSchema = z
+  .object({
+    goals: z.array(line(160)).max(12),
+    foodRules: z.array(line(120)).max(20),
+    calorieTarget: z.number().int().min(800).max(6000).nullable(),
+    proteinTarget: z.number().int().min(10).max(400).nullable(),
+    workoutMinutes: z.number().int().min(0).max(3000).nullable(),
+    notes: z.string().trim().max(1500).nullable(),
+  })
+  .partial();
+export type HealthPlaybookPatch = z.infer<typeof healthPlaybookPatchSchema>;
+
 /** The patch schema for a space's kind; unknown fields are dropped. */
 export const patchSchemaFor = (kind: SpaceKind) =>
-  kind === "family" ? familyPlaybookPatchSchema : playbookPatchSchema;
+  kind === "family"
+    ? familyPlaybookPatchSchema
+    : kind === "health"
+      ? healthPlaybookPatchSchema
+      : playbookPatchSchema;
 
 export const spaceNameSchema = z.object({ name: line(60) });
 export const createSpaceSchema = z.object({
-  kind: z.enum(["social", "family"]).default("social"),
+  kind: z.enum(["social", "family", "health"]).default("social"),
   name: line(60).optional(),
 });
 export const defaultSpaceName = (kind: SpaceKind) =>
-  kind === "family" ? "Family" : "Social media";
+  kind === "family" ? "Family" : kind === "health" ? "Health" : "Social media";
 
 export const digestSchema = z.object({
   on: z.boolean(),
@@ -273,14 +310,30 @@ export const STARTER_FAMILY_PROMPTS = [
   "Move [activity] to another day",
   "What’s in this week’s plan?",
 ];
+/** The prompts a health space starts with. */
+export const STARTER_HEALTH_PROMPTS = [
+  "What have I eaten this week?",
+  "How am I doing against my targets?",
+  "Log what I just ate",
+  "A 20-minute workout with no equipment",
+  "Ideas for a high-protein lunch",
+  "Set my daily targets",
+];
 export const starterPromptsFor = (kind: SpaceKind) =>
-  kind === "family" ? STARTER_FAMILY_PROMPTS : STARTER_SOCIAL_PROMPTS;
+  kind === "family"
+    ? STARTER_FAMILY_PROMPTS
+    : kind === "health"
+      ? STARTER_HEALTH_PROMPTS
+      : STARTER_SOCIAL_PROMPTS;
 
 /** Composio apps that belong to social media work, for the space's "Needs you" list. */
 export const SOCIAL_APPS =
   /instagram|facebook|linkedin|youtube|tiktok|twitter|threads|pinterest|metaads|meta_ads|postiz|higgsfield|buffer|hootsuite/i;
 /** Apps a family planner reaches for: calendars and to-do lists. */
 export const FAMILY_APPS = /calendar|todoist|tasks|reminders|notion|trello|anylist/i;
+/** Fitness and food apps a health space reads from. */
+export const HEALTH_APPS =
+  /fitbit|strava|garmin|oura|whoop|myfitnesspal|withings|googlefit|google_fit/i;
 
 export function emptyPlaybook(): SocialPlaybook {
   return { products: [], platforms: [], voice: "", avoid: [] };
@@ -288,5 +341,12 @@ export function emptyPlaybook(): SocialPlaybook {
 export function emptyFamilyPlaybook(): FamilyPlaybook {
   return { family: [], foodRules: [], favorites: [], chores: [], interests: [] };
 }
+export function emptyHealthPlaybook(): HealthPlaybook {
+  return { goals: [], foodRules: [] };
+}
 export const emptyPlaybookFor = (kind: SpaceKind) =>
-  kind === "family" ? emptyFamilyPlaybook() : emptyPlaybook();
+  kind === "family"
+    ? emptyFamilyPlaybook()
+    : kind === "health"
+      ? emptyHealthPlaybook()
+      : emptyPlaybook();

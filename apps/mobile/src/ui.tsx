@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, ChevronRight, type LucideIcon, X } from "lucide-react-native";
+import { ArrowUpRight, Check, ChevronRight, Info, type LucideIcon, X } from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { plainText, readableResult } from "../../../packages/domain/src/plain-text";
 import { palette } from "./theme";
+import { tipProps, toggleTip } from "./tips";
 export const colors = palette;
 export const s = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center" },
@@ -163,6 +164,7 @@ export function Button({
     </Pressable>
   );
 }
+/** A round button that's only an icon; its label shows as a tip on hover or press and hold. */
 export function IconButton({
   icon: Icon,
   label,
@@ -177,6 +179,7 @@ export function IconButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
+      {...tipProps(label)}
       style={({ pressed }) => [
         {
           width: 44,
@@ -189,6 +192,31 @@ export function IconButton({
       ]}
     >
       <Icon size={20} strokeWidth={1.8} color={colors.text} />
+    </Pressable>
+  );
+}
+/**
+ * A small ⓘ beside a term that needs explaining. Its explanation shows on hover, keyboard focus or
+ * a tap, and a screen reader reads it with the button's name.
+ */
+export function InfoTip({ term, text }: { term: string; text: string }) {
+  return (
+    <Pressable
+      role="button"
+      aria-label={`${term}: ${text}`}
+      {...tipProps(text, {}, { hold: false })}
+      // A tap opens it to stay while it's read; the next tap, a scroll or Escape closes it.
+      onPress={(event) => toggleTip(text, event)}
+      // A 44px target around the small icon, without making the row taller.
+      style={{
+        width: 44,
+        height: 44,
+        margin: -14,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Info size={15} strokeWidth={2} color={colors.mutedStrong} />
     </Pressable>
   );
 }
@@ -310,7 +338,7 @@ export function Sheet({
               </Text>
               {!!subtitle && <Text style={s.muted}>{subtitle}</Text>}
             </View>
-            <IconButton icon={X} label="Close details" onPress={onClose} />
+            <IconButton icon={X} label="Close" onPress={onClose} />
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
