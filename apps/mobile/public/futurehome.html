@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neato_Muse · What it does today, and what's next</title>
+<meta name="description" content="Neato_Muse is a personal AI agent from Neato Ventures. See what it does today, in an invite-only beta, and what's coming soon: jobs behind your sign-ins, with approvals built in.">
+<!-- Kept out of search results for now, by the owner's choice; delete the robots line below to index the page -->
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#F6F5EE">
+<meta name="color-scheme" content="light">
+<meta property="og:title" content="Neato_Muse · What it does today, and what's next">
+<meta property="og:description" content="Neato_Muse is a personal AI agent from Neato Ventures. See what it does today, in an invite-only beta, and what's coming soon: jobs behind your sign-ins, with approvals built in.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-2 -2 28 28'%3E%3Crect x='-2' y='-2' width='28' height='28' rx='7' fill='%23F6F5EE'/%3E%3Cg fill='none' stroke='%2345C4C2' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='1'/%3E%3Cpath d='M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z'/%3E%3Cpath d='M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300..700&display=swap">
+<link rel="preload" as="image" href="/home/neddy-wave-hero.webp" imagesrcset="/home/neddy-wave-hero-560.webp 560w, /home/neddy-wave-hero.webp 1000w" imagesizes="(max-width:759px) 66vw, 300px" fetchpriority="high">
+<style>
+/* ============ Tokens (Neato Ventures brand v1.0, as home.html) ============ */
+:root{
+  --cream:#F6F5EE; --ink:#291A14; --teal:#45C4C2; --orange:#F75A33; --mustard:#F2C84A;
+  --retro:#804C37; --plate:#F0EEE6; --taupe:#CFC2BE; --bezel:#2A1B14; --phosphor:#A8F7C9;
+  --orange-ink:#A53012; --teal-ink:#1E6B6B;
+  --muted:var(--retro);
+  --shadow:rgba(128,76,55,.18);
+  --shadow-teal:rgba(69,196,194,.7);
+  --rule:rgba(207,194,190,.95);
+  --wall:#F4DCC3;
+  --mono:"Space Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"Outfit",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --gutter:clamp(16px,4vw,48px);
+  --max:1200px;
+  --nav-h:72px;
+  --pad:clamp(72px,9vw,128px);
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .16 0 0 0 0 .1 0 0 0 0 .08 0 0 0 .16 -.04'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --scan:repeating-linear-gradient(180deg,rgba(41,26,20,.04) 0 2px,transparent 2px 4px);
+  --star:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='2 2 20 20'%3E%3Cpath d='M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z'/%3E%3C/svg%3E");
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-padding-top:calc(var(--nav-h) + 8px);scrollbar-color:rgba(128,76,55,.55) var(--plate)}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{
+  margin:0;min-width:320px;color:var(--ink);
+  background:var(--grain),var(--cream);background-color:var(--cream);
+  font-family:var(--sans);font-size:17px;font-weight:400;line-height:1.55;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-x:clip;caret-color:var(--orange-ink);
+}
+::selection{background:var(--mustard);color:var(--ink)}
+img,svg{display:block;max-width:100%}
+img{height:auto}
+a{color:inherit}
+p{margin:0}
+h1,h2,h3,h4{margin:0;font-family:var(--mono);font-weight:700;text-transform:uppercase;letter-spacing:.02em;line-height:1.08}
+h1,h2,h3{text-wrap:balance}
+p,dd,li{text-wrap:pretty}
+ul,ol,dl,dd,figure,blockquote,fieldset{margin:0;padding:0}
+ul,ol{list-style:none}
+button{font:inherit}
+.ico{width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.wrap{width:100%;max-width:calc(var(--max) + 2*var(--gutter));margin-inline:auto;padding-inline:var(--gutter)}
+
+/* Focus: teal ink ring on light grounds, mustard where the focused thing sits on retro brown */
+:focus-visible{outline:3px solid var(--teal-ink);outline-offset:3px}
+.quiet a:focus-visible,.foot a:focus-visible{border-radius:4px}
+.chrome :focus-visible{outline-color:var(--mustard)}
+.chrome .ticket :focus-visible{outline-color:var(--teal-ink)}
+main:focus,section[tabindex="-1"]:focus{outline:none}
+
+/* ============ Type helpers ============ */
+.eyebrow{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.3em;text-transform:uppercase;color:var(--teal-ink);line-height:1.5}
+.star{display:inline-block;width:.8em;height:.8em;vertical-align:-.05em;background:currentColor;
+  -webkit-mask:var(--star) center/contain no-repeat;mask:var(--star) center/contain no-repeat;
+  overflow:hidden;text-indent:200%;white-space:nowrap;letter-spacing:0}
+.nw{white-space:nowrap}
+@media (max-width:400px){.eyebrow{letter-spacing:.22em}}
+.label{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;line-height:1.5}
+.lede{font-size:clamp(18px,1.2vw + 12px,21px);line-height:1.5;color:var(--muted);max-width:32em}
+.nm{font-weight:600;white-space:nowrap}
+.us{color:var(--orange)}
+
+/* ============ Status chips (BETA / COMING SOON on this page) ============ */
+.chip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;line-height:1;padding:7px 10px 7px 9px;border-radius:999px;white-space:nowrap}
+.chip-beta{color:var(--teal-ink);background:rgba(69,196,194,.14);border:2px solid var(--teal)}
+.chip-beta::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--teal)}
+.chip-soon{color:var(--ink);background:var(--mustard);border:2px solid var(--mustard)}
+.chip-soon::before{content:"";width:8px;height:8px;border-radius:50%;border:2px solid var(--ink)}
+
+/* ============ Buttons (Googie) ============ */
+.btn{
+  --bs:5px;
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:14px 22px;
+  font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:.14em;text-transform:uppercase;line-height:1.2;text-decoration:none;white-space:nowrap;
+  border-radius:8px;border:2px solid transparent;cursor:pointer;
+  transition:transform .16s ease,box-shadow .16s ease,background-color .16s ease;
+}
+.btn .ico{width:18px;height:18px}
+.btn-primary{background:var(--orange);color:var(--ink);border-color:var(--orange);box-shadow:var(--bs) var(--bs) 0 rgba(128,76,55,.55)}
+.btn-primary:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--retro)}
+.btn-primary:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--retro)}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--retro)}
+.btn-ghost:hover{background:rgba(128,76,55,.08)}
+.btn-outline{background:transparent;color:var(--orange-ink);border-color:var(--orange-ink)}
+.btn-outline:hover{background:rgba(165,48,18,.07)}
+.btn-sm{min-height:44px;padding:10px 16px;font-size:12px}
+.quiet{font-size:15px;color:var(--muted)}
+.quiet a{display:inline-block;padding:12px 6px;margin:-12px -6px;color:var(--ink);font-weight:600;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:var(--teal)}
+.quiet a:hover{text-decoration-color:var(--orange-ink)}
+/* The mailto note: says what the button does and shows the address for people without a mail app */
+.mailnote{display:grid;gap:8px}
+.addr-row{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 8px;max-width:100%}
+.addr{color:var(--ink);font-weight:600;-webkit-user-select:all;user-select:all}
+.copy{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:3px 10px;border:2px solid rgba(128,76,55,.55);border-radius:6px;background:var(--cream);color:var(--ink);font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;line-height:1.2;cursor:pointer}
+.copy::after{content:"";position:absolute;inset:-8px -4px}
+.copy:hover{border-color:var(--retro);background:#EFE6DF}
+.copy .ico{width:14px;height:14px}
+
+/* ============ Skip link ============ */
+.skip{position:absolute;left:12px;top:-100px;z-index:100;background:var(--ink);color:var(--cream);padding:12px 16px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
+.skip:focus{top:12px}
+
+/* ============ Nav (the one glass surface) ============ */
+.nav{position:sticky;top:0;z-index:50;background:rgba(246,245,238,.72);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:2px solid rgba(207,194,190,.9)}
+.nav-in{position:relative;display:flex;align-items:center;gap:24px;height:var(--nav-h)}
+.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;min-height:44px;padding-right:4px}
+.atom-turn{display:inline-grid;transition:transform .6s ease}
+.brand:hover .atom-turn,.brand:focus-visible .atom-turn{transform:rotate(180deg)}
+.atom{width:30px;height:30px;color:var(--teal);stroke-width:2.2}
+.wordmark{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:.1em;text-transform:uppercase;line-height:1;white-space:nowrap}
+.nav-links{display:flex;gap:4px;margin-left:auto}
+.nav-links a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;text-decoration:none;border-radius:6px}
+.nav-links a:hover{background:rgba(128,76,55,.08)}
+@media (min-width:1080px) and (max-width:1279px){
+  .nav-links a{letter-spacing:.14em;padding:0 9px}
+  .nav-actions .nav-signin{display:none}
+}
+.nav-actions{display:flex;align-items:center;gap:8px}
+.nav-cta{white-space:nowrap}
+.nav-signin{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;text-decoration:none;color:var(--ink);border-radius:6px}
+.nav-signin:hover{background:rgba(128,76,55,.08)}
+.nav .btn-outline{background:var(--cream)}
+.nav .btn-outline:hover{background:#EFE6DF}
+.short,.tiny,.xs{display:none}
+.nav-more{display:none}
+.nav-menu{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:44px;padding:0 12px;border:2px solid var(--retro);border-radius:8px;background:var(--cream);color:var(--ink);font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;line-height:1;cursor:pointer}
+.nav-menu:hover{background:#EFE6DF}
+.nav-menu .ico{width:20px;height:20px}
+.nav-menu .i-close,.nav-menu[aria-expanded="true"] .i-open{display:none}
+.nav-menu[aria-expanded="true"] .i-close{display:block}
+.nav-panel{position:absolute;top:calc(100% + 8px);right:var(--gutter);width:min(340px,calc(100% - 2*var(--gutter)));padding:6px 0;background:var(--scan),var(--cream);background-color:var(--cream);border:2px solid var(--taupe);border-radius:12px;box-shadow:5px 5px 0 var(--shadow)}
+.nav-panel{max-height:calc(100vh - var(--nav-h) - 16px);max-height:calc(100dvh - var(--nav-h) - 16px);overflow-y:auto;overscroll-behavior:contain}
+.nav-panel[hidden]{display:none}
+.nav-panel li+li{border-top:2px dashed var(--rule)}
+.nav-panel a{display:flex;align-items:center;min-height:48px;padding:0 20px;font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.2em;text-transform:uppercase;text-decoration:none;color:var(--ink)}
+.nav-panel a:hover{background:rgba(128,76,55,.08)}
+.nav-panel a:focus-visible{outline-offset:-4px}
+.nav-panel .p-signin a{color:var(--teal-ink)}
+.nav-panel .p-invite a{color:var(--orange-ink)}
+@media (prefers-reduced-motion:no-preference){
+  /* One slow half-turn on load, then still (the atom is symmetric, so it ends where it began) */
+  .atom-spin{animation:turn-once 3s ease-in-out .4s 1}
+}
+@keyframes turn-once{from{transform:rotate(0)}to{transform:rotate(180deg)}}
+@media (max-width:1079px){.nav-links{display:none}.nav-actions{margin-left:auto}.nav-more{display:block}}
+@media (min-width:1080px){.nav-actions{border-left:2px solid var(--taupe);padding-left:16px}}
+@media (min-width:640px){.nav-panel .p-signin{display:none}}
+@media (min-width:360px){.nav-panel .p-invite{display:none}}
+@media (max-width:759px){.menu-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.nav-menu{padding:0}}
+@media (max-width:639px){
+  :root{--nav-h:64px}
+  .nav-in{gap:8px}
+  .nav-signin{display:none}
+  .long{display:none}.short{display:inline}
+  .nav .nav-cta{padding-inline:10px;letter-spacing:.08em}
+  .brand{gap:6px}
+  .wordmark{font-size:17px}
+  .atom{width:22px;height:22px}
+}
+@media (max-width:389px){.nav .short{display:none}.nav .tiny{display:inline}}
+@media (max-width:359px){.nav .tiny{display:none}.nav .xs{display:inline}}
+
+/* ============ Surfaces ============ */
+.paper{background:var(--grain),var(--cream);background-color:var(--cream)}
+.plate{background:var(--scan),var(--plate);background-color:var(--plate);border-block:2px solid var(--taupe)}
+.chrome{background:var(--retro);color:var(--cream)}
+.section{padding-block:var(--pad);position:relative}
+.sec-head{position:relative;display:grid;gap:18px;margin-bottom:clamp(40px,5vw,64px)}
+.sec-head::before{content:"";height:2px;background:rgba(128,76,55,.5);margin-bottom:10px}
+.sec-head h2{font-size:clamp(26px,1.8vw + 16px,42px);max-width:22ch}
+/* Anchor landings: the section's rule sits about 32px under the nav */
+.section[id]{scroll-margin-top:calc(24px - var(--pad))}
+/* A lede with its status chip beside it (the chip wraps above it on a narrow column) */
+.lede-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 16px}
+.lede-row .chip{margin-top:.2em}
+
+/* Googie data plate */
+.card{position:relative;background:var(--cream);border:2px solid var(--taupe);border-radius:12px;box-shadow:5px 5px 0 var(--shadow);transition:transform .16s ease,box-shadow .16s ease}
+.paper .card{background:var(--scan),var(--plate)}
+.card:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--shadow-teal)}
+.badge{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:50%;background:rgba(69,196,194,.16);border:2px solid var(--teal);color:var(--teal-ink)}
+.badge .ico{width:22px;height:22px}
+
+/* Portholes: Neddy behind a teal-ringed round window, the showroom wall showing through */
+.porthole{position:relative;width:132px;aspect-ratio:1;border-radius:50%;overflow:hidden;border:3px solid var(--teal);box-shadow:0 0 0 6px var(--cream),0 0 0 8px var(--taupe),5px 5px 0 8px var(--shadow);background:var(--wall)}
+.porthole img{width:100%;height:100%;object-fit:cover}
+.porthole::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(41,26,20,.05) 0 2px,transparent 2px 4px)}
+
+/* ============ Hero ============ */
+.hero{overflow:clip;padding-block:clamp(40px,6vw,88px) clamp(56px,7vw,104px)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,.88fr);gap:clamp(24px,4vw,64px);align-items:center}
+.hero-copy{display:grid;gap:24px;align-content:center;position:relative;z-index:2}
+.hero-top{display:flex;align-items:center;gap:16px}
+.mini-port{display:none;flex:none;position:relative;width:60px;height:60px;margin:6px;border-radius:50%;overflow:hidden;border:2px solid var(--teal);background:var(--wall);box-shadow:0 0 0 4px var(--cream),0 0 0 6px var(--taupe),3px 3px 0 6px var(--shadow)}
+.mini-port img{width:100%;height:100%;object-fit:cover}
+.mini-port::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(41,26,20,.05) 0 2px,transparent 2px 4px)}
+.hero h1{font-size:clamp(32px,3vw + 14px,58px);line-height:1.05}
+.hero h1 .l1,.hero h1 .l2{display:block}
+.hero h1 .l2{color:var(--teal-ink)}
+@media (max-width:359px){.hero h1 .nw{display:block;white-space:normal}}
+.cursor{color:var(--orange)}
+@media (prefers-reduced-motion:no-preference){.cursor{animation:blink 1.2s steps(1) 3}}
+@keyframes blink{50%{opacity:0}}
+/* The status key: teaches the page's two chips once, up front */
+.key{display:grid;gap:12px;padding:16px 0 2px;border-top:2px dashed var(--rule)}
+.key li{display:grid;grid-template-columns:148px minmax(0,1fr);gap:6px 14px;align-items:center;font-size:16px;line-height:1.45}
+.key .chip{justify-self:start}
+@media (max-width:419px){.key li{grid-template-columns:1fr}}
+.cta-row{display:flex;flex-wrap:wrap;gap:14px 16px;align-items:center;margin-top:2px}
+
+/* The showroom: Neddy in an arch on a turntable, the atom rings around him, a museum label below */
+.showroom{position:relative;width:100%;max-width:500px;margin-inline:auto;padding-top:24px;container:showroom/inline-size}
+.pedestal{position:relative}
+.burst{position:absolute;left:-10%;top:-22%;width:120%;aspect-ratio:1;pointer-events:none;z-index:0;
+  background:radial-gradient(circle at 50% 50%,rgba(242,200,74,.55) 0,rgba(242,200,74,.28) 22%,rgba(242,200,74,0) 58%)}
+.burst::before{content:"";position:absolute;inset:0;border-radius:50%;
+  background:repeating-conic-gradient(from 4deg,rgba(242,200,74,.55) 0 3deg,rgba(242,200,74,0) 3deg 15deg);
+  -webkit-mask:radial-gradient(circle,#000 0 14%,rgba(0,0,0,.5) 30%,transparent 56%);mask:radial-gradient(circle,#000 0 14%,rgba(0,0,0,.5) 30%,transparent 56%);
+  filter:blur(5px)}
+.orb{position:absolute;left:50%;top:70%;width:100%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+.rings{z-index:0;color:var(--teal);opacity:.9}
+.rings-near{z-index:2}
+.rings svg{width:100%;height:100%}
+.rings ellipse{fill:none;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke}
+.stage{--face:9.6cqw;--band:2.8cqw;position:relative;z-index:1;width:70%;margin-inline:auto;padding-bottom:calc(var(--face)/2 + var(--band) + 5px)}
+.arch{position:relative;z-index:2;padding:9px;background:var(--plate);border:2px solid var(--taupe);border-radius:999px 999px 18px 18px;box-shadow:5px 5px 0 var(--shadow)}
+.arch-window{position:relative;overflow:hidden;border-radius:999px 999px 10px 10px;aspect-ratio:4/5;background:var(--wall)}
+.arch-window img{width:100%;height:100%;object-fit:cover}
+.arch-window::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(41,26,20,.05) 0 2px,transparent 2px 4px)}
+.turntable{position:absolute;z-index:1;left:50%;bottom:5px;width:124%;height:calc(var(--face) + var(--band));transform:translateX(-50%);filter:drop-shadow(5px 5px 0 var(--shadow))}
+.turntable::before{content:"";position:absolute;left:0;right:0;top:calc(var(--face)/2);bottom:0;background:var(--retro);
+  border-radius:0 0 50% 50% / 0 0 calc(var(--face)/2) calc(var(--face)/2);
+  box-shadow:inset 0 2px 0 rgba(246,245,238,.35)}
+.turntable::after{content:"";position:absolute;left:0;right:0;top:0;height:var(--face);border-radius:50%;background:var(--plate);border:2px solid var(--taupe);
+  box-shadow:inset 0 0 0 7px var(--plate),inset 0 0 0 9px var(--teal)}
+.placard{position:relative;z-index:3;width:min(280px,84%);margin:18px auto 0;padding:14px 16px 16px;display:grid;gap:6px}
+.placard .label{color:var(--muted)}
+.placard .pt{font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:.06em;text-transform:uppercase;line-height:1.1}
+.placard p:last-child{font-size:15px;line-height:1.45;color:var(--ink)}
+@container showroom (max-width:399px){.stage{width:74%}}
+
+@media (min-width:900px){
+  .hero-grid{grid-template-columns:minmax(0,1fr) minmax(0,min(440px,42%));gap:32px}
+  .hero h1{font-size:clamp(40px,2.6vw + 18px,52px)}
+  .showroom{max-width:440px}
+}
+@media (min-width:760px) and (max-width:899px){
+  .hero-grid{grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:24px}
+  .hero h1{font-size:clamp(36px,5vw - 2px,42px)}
+  .showroom{max-width:360px}
+}
+@media (max-width:759px){
+  .hero-grid{grid-template-columns:1fr}
+  .showroom{max-width:420px;margin-top:8px}
+}
+@media (min-width:521px) and (max-width:759px){.hero h1{font-size:clamp(34px,6vw,46px)}}
+@media (max-width:520px){.hero h1{font-size:33px}}
+@media (max-width:400px){
+  .hero{padding-top:28px}
+  .hero-copy{gap:18px}
+  .hero .lede{font-size:16.5px;line-height:1.5}
+}
+@media (min-width:521px) and (max-width:1079px){.cta-row .btn{min-width:280px}}
+@media (max-width:520px){
+  .mini-port{display:block}
+  /* Beside the porthole the status takes its own line, so no line starts or ends on the separator dot */
+  .hero-top .eb-sep{display:none}
+  .hero-top .eb-status{display:block}
+  .cta-row .btn{flex:1 1 100%}
+  .placard{width:100%}
+}
+
+/* ============ 01 · Today ============ */
+/* Neddy's porthole is riveted onto the section's rule, at its right end */
+.has-port{--ps:clamp(76px,6vw + 40px,124px)}
+.sec-port{position:absolute;right:10px;top:calc(1px - var(--ps)/2);width:var(--ps)}
+.has-port .eyebrow{padding-right:calc(var(--ps) + 28px)}
+#today{scroll-margin-top:calc(84px - var(--pad))}
+.today{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:24px}
+.big{grid-column:span 4;padding:26px 24px 24px;display:flex;flex-direction:column;gap:14px}
+/* Side by side, the big plates share rows, so each "Try" field starts on one line across the row */
+@supports (grid-template-rows:subgrid){
+  @media (min-width:700px){
+    .today{row-gap:0}
+    .big{grid-row:span 4;display:grid;grid-template-rows:subgrid;row-gap:14px}
+    .big .ask{margin-top:0;align-self:start}
+    .spaces,.mid{margin-top:24px}
+  }
+  @media (min-width:700px) and (max-width:1099px){.today .big:nth-child(3),.spaces,.mid{margin-top:20px}}
+}
+.big h3{font-size:20px;letter-spacing:.06em;line-height:1.2}
+.big p{font-size:16px;max-width:36em}
+/* "Try" is a printed field on the plate: a dashed rule, a Space Mono field label, the ask in teal ink */
+.ask{margin-top:auto;padding-top:12px;border-top:2px dashed var(--rule);font-size:16px;font-weight:500;line-height:1.45;color:var(--teal-ink)}
+.ask .label{display:block;margin-bottom:4px;color:var(--muted)}
+/* Spaces: one wide plate, the three spaces side by side like panels of one fold-out */
+.spaces{grid-column:1/-1;padding:24px;display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:18px 32px;align-items:start}
+.spaces .sp-head{display:grid;gap:14px;align-content:start}
+.spaces h3{font-size:20px;letter-spacing:.06em;line-height:1.2}
+.sp-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.sp-list li{padding:2px 22px 4px;border-left:2px dashed var(--rule);display:grid;gap:6px;align-content:start}
+.sp-list .label{color:var(--teal-ink)}
+.sp-list p{font-size:16px}
+.mid{grid-column:span 3;padding:22px 22px 24px;display:grid;gap:12px;align-content:start}
+.mid .row{display:flex;align-items:center;gap:14px}
+.mid .badge{width:42px;height:42px}
+.mid .badge .ico{width:20px;height:20px}
+.mid h3{font-size:16px;letter-spacing:.08em;line-height:1.25}
+.mid p{font-size:16px}
+.also{margin-top:36px;display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr);gap:14px 28px;align-items:start;padding:22px 24px;border-radius:12px;border:2px dashed rgba(128,76,55,.45);background:rgba(246,245,238,.7)}
+.also .label{color:var(--teal-ink);padding-top:2px}
+/* Balanced columns (3/2/2 on desktop), so no item sits alone on a last row */
+.also ul{columns:3 240px;column-gap:28px}
+.also li{position:relative;padding-left:20px;font-size:16px;line-height:1.45;break-inside:avoid;margin-bottom:8px}
+.also li:last-child{margin-bottom:0}
+.also li::before{content:"";position:absolute;left:0;top:.42em;width:9px;height:9px;border-radius:50%;border:2px solid var(--teal)}
+@media (max-width:1099px){
+  .today{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px}
+  .big,.mid{grid-column:auto}
+  .today .big:nth-child(3){grid-column:1/-1}
+}
+@media (max-width:999px){.spaces{grid-template-columns:1fr}}
+/* The three spaces stack before their columns get too narrow to read */
+@media (max-width:859px){
+  .sp-list{grid-template-columns:1fr;gap:0}
+  .sp-list li{border-left:0;border-top:2px dashed var(--rule);padding:14px 0}
+  .sp-list li:last-child{padding-bottom:0}
+}
+@media (max-width:699px){
+  .today{grid-template-columns:1fr;row-gap:20px}
+  .also{grid-template-columns:1fr}
+}
+@media (max-width:520px){.big,.spaces,.mid{padding:20px 18px 22px}}
+
+/* ============ 02 · What's next ============ */
+.next{overflow:clip}
+.next-head{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:24px clamp(32px,5vw,72px);align-items:end;margin-bottom:clamp(40px,5vw,64px)}
+.next-head .sec-head{margin-bottom:0}
+.next-head::before,.partner-grid::before{content:"";grid-column:1/-1;height:2px;background:rgba(128,76,55,.5);margin-bottom:4px}
+.next-head .sec-head::before,.partner-grid .sec-head::before{display:none}
+.next-head .lede{max-width:34em}
+/* The name plate: a die-cut data plate on the soft mustard sunburst */
+.name-wrap{position:relative;isolation:isolate;justify-self:end;width:min(100%,380px)}
+.name-wrap .burst{left:50%;top:50%;width:120%;transform:translate(-50%,-50%);z-index:-1}
+.name-wrap .burst::before{opacity:.6}
+.nameplate{padding:22px 22px 24px;display:grid;gap:10px;justify-items:start;background:var(--cream)}
+.paper .nameplate{background:var(--scan),var(--plate)}
+.nameplate .label{color:var(--muted)}
+.fname{font-family:var(--mono);font-weight:700;font-size:clamp(34px,2.6vw + 14px,48px);letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.plate-foot{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-top:4px;padding-top:12px;border-top:2px dashed var(--rule);width:100%}
+.plate-foot .label{color:var(--muted)}
+.blk-h{font-size:clamp(18px,.6vw + 14px,22px);letter-spacing:.08em;line-height:1.2;display:flex;align-items:center;gap:14px}
+.blk-h::after{content:"";flex:1;height:2px;background:repeating-linear-gradient(90deg,rgba(128,76,55,.4) 0 8px,transparent 8px 14px)}
+/* What you'll hand off: one job sheet, six slips */
+.handoff{margin-top:20px;padding:6px 8px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.handoff li{display:grid;grid-template-columns:48px minmax(0,1fr);gap:16px;padding:22px 18px}
+.handoff li:nth-child(n+4){border-top:2px dashed var(--rule)}
+.handoff h4{font-size:15px;letter-spacing:.1em;line-height:1.3;margin:4px 0 6px}
+.handoff p{font-size:16px}
+@media (max-width:999px){
+  .handoff{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .handoff li:nth-child(n+3){border-top:2px dashed var(--rule)}
+}
+@media (max-width:639px){
+  .handoff{grid-template-columns:1fr;padding:2px 4px}
+  .handoff li{padding:18px 14px;gap:14px;grid-template-columns:42px minmax(0,1fr)}
+  .handoff li:nth-child(n+2){border-top:2px dashed var(--rule)}
+  .handoff .badge{width:42px;height:42px}
+}
+/* How it will work: the steps, Neddy looking at them, then the example and the caveat */
+.how{margin-top:clamp(56px,7vw,88px);display:grid;grid-template-columns:minmax(0,1fr) 200px minmax(0,1.08fr);gap:28px clamp(28px,3.4vw,48px);align-items:start}
+.how-main{display:grid;gap:26px;align-content:start}
+.how-side{display:grid;gap:24px;align-content:start}
+.steps{display:grid;counter-reset:s}
+.steps li{position:relative;display:grid;grid-template-columns:52px minmax(0,1fr);gap:18px;padding-bottom:26px}
+.steps li:last-child{padding-bottom:0}
+.steps li:not(:last-child)::before{content:"";position:absolute;left:25px;top:52px;bottom:4px;width:2px;background:repeating-linear-gradient(180deg,var(--teal) 0 6px,transparent 6px 12px)}
+.num{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;border:2px solid var(--teal);background:var(--cream);color:var(--teal-ink);font-family:var(--mono);font-weight:700;font-size:20px;line-height:1}
+.steps h4{font-size:16px;letter-spacing:.08em;margin:13px 0 8px;line-height:1.25}
+.steps p{font-size:16px;max-width:34em}
+/* Neddy, turned toward the steps, in a small showroom arch */
+.ned-look{align-self:center;padding:8px;background:var(--plate);border:2px solid var(--taupe);border-radius:999px 999px 16px 16px;box-shadow:5px 5px 0 var(--shadow)}
+.ned-look .win{position:relative;overflow:hidden;border-radius:999px 999px 9px 9px;aspect-ratio:446/770;background:var(--wall)}
+.ned-look img{width:100%;height:100%;object-fit:cover}
+.ned-look .win::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,rgba(41,26,20,.05) 0 2px,transparent 2px 4px)}
+/* The example CRT (home's), and the caveat card */
+.crt{border:2px solid var(--taupe);border-radius:12px;overflow:hidden;background:var(--bezel);box-shadow:5px 5px 0 var(--shadow)}
+.crt-bar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;row-gap:6px;padding:10px 14px;background:var(--plate);border-bottom:2px solid var(--taupe)}
+.crt-bar i{width:10px;height:10px;border-radius:50%;display:block;flex:none}
+.crt-bar i:nth-child(1){background:var(--orange)}
+.crt-bar i:nth-child(2){background:var(--mustard)}
+.crt-bar i:nth-child(3){background:var(--teal)}
+.crt-title{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);text-align:right;white-space:nowrap}
+/* The unreleased label in mustard, so a screenshot of the screen alone still says Coming soon */
+.crt-title .chip{padding:5px 8px;letter-spacing:.14em}
+.crt-screen{position:relative;padding:22px 22px 24px;color:var(--phosphor);font-family:var(--mono);font-size:14px;line-height:1.6;display:grid;gap:14px;
+  background:radial-gradient(ellipse at 50% 40%,#3a271e 0,var(--bezel) 72%)}
+.crt-screen::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(0,0,0,.22) 0 2px,transparent 2px 4px)}
+.msg{display:grid;grid-template-columns:62px minmax(0,1fr);gap:12px}
+.msg b{font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;padding-top:2px}
+.msg.you b{color:var(--mustard)}
+.msg.bot b{color:var(--teal)}
+.sys{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#CFC2BE;text-align:center;padding:4px 0;border-block:1px dashed rgba(207,194,190,.35)}
+.prompt{color:var(--phosphor)}
+.caption{margin-top:12px;font-size:14px;color:var(--muted)}
+.crt figcaption{color:var(--phosphor)}
+.stop{padding:22px 22px 24px;display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px 18px;align-items:start;border-style:dashed}
+.stop h3{font-size:16px;letter-spacing:.08em;line-height:1.3;margin-top:13px}
+.stop p{grid-column:2;font-size:16px}
+.next-close{margin-top:clamp(40px,5vw,56px);padding-top:22px;border-top:2px dashed var(--rule);font-size:17px}
+@media (max-width:1099px){
+  .how{grid-template-columns:minmax(0,1fr) 190px}
+  .how-side{grid-column:1/-1;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}
+}
+@media (max-width:959px){
+  .next-head{grid-template-columns:1fr;align-items:start}
+  .name-wrap{justify-self:start}
+}
+@media (max-width:859px){.how-side{grid-template-columns:1fr}}
+/* Phones: Neddy stands small beside the "How it will work" heading, still looking at the steps below */
+@media (max-width:639px){
+  .how{grid-template-columns:minmax(0,1fr) 84px;gap:22px 16px}
+  .how-main{display:contents}
+  .how-h{grid-column:1;grid-row:1;align-self:end}
+  .how-h::after{display:none}
+  .ned-look{grid-column:2;grid-row:1;padding:5px;border-radius:999px 999px 12px 12px;box-shadow:4px 4px 0 var(--shadow)}
+  .steps{grid-column:1/-1}
+  .how-side{grid-column:1/-1;margin-top:18px}
+  .stop{grid-template-columns:42px minmax(0,1fr);padding:18px}
+  .stop .badge{width:42px;height:42px}
+  .stop h3{margin-top:10px}
+  .stop p{grid-column:1/-1}
+  .msg{grid-template-columns:1fr;gap:2px}
+  .crt-screen{padding:18px 16px 20px}
+}
+@media (max-width:399px){.crt-title{letter-spacing:.14em}}
+
+/* ============ 03 · Staying safe ============ */
+.charge-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(32px,6vw,88px);align-items:start}
+.charge-grid .sec-head{margin-bottom:28px}
+.orbit{position:relative;width:min(100%,420px);aspect-ratio:1;margin:8px auto 0}
+.orbit svg{position:absolute;inset:0;width:100%;height:100%;color:var(--teal)}
+.orbit ellipse{fill:none;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke}
+/* The rings make one slow turn as the diagram arrives; three rings 60 degrees apart end where they began */
+@media (prefers-reduced-motion:no-preference){
+  .orbit.turning svg{animation:orbit-turn 4s cubic-bezier(.16,1,.3,1) 1}
+}
+@keyframes orbit-turn{from{transform:rotate(-60deg)}to{transform:rotate(0)}}
+.nucleus{position:absolute;left:50%;top:50%;width:34%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:var(--cream);border:2px solid var(--teal);box-shadow:5px 5px 0 var(--shadow);display:grid;place-content:center;text-align:center;gap:4px}
+.nucleus strong{font-family:var(--mono);font-weight:700;font-size:clamp(20px,3vw,28px);letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.nucleus span{font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--teal-ink)}
+.electron{position:absolute;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:999px;background:var(--ink);color:var(--cream);font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.18em;text-transform:uppercase;white-space:nowrap}
+.orbit-cap{margin-top:14px;font-size:15px;color:var(--muted);text-align:center;max-width:40ch;margin-inline:auto;text-wrap:balance}
+.rules{display:grid;border-top:2px solid rgba(128,76,55,.5)}
+.rules div{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:10px 28px;padding:22px 0;border-bottom:2px dashed rgba(128,76,55,.3)}
+.rules dt{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px 12px;align-content:start;font-family:var(--mono);font-weight:700;font-size:14px;letter-spacing:.12em;text-transform:uppercase;line-height:1.4}
+.rules dt .ico{width:20px;height:20px;color:var(--teal-ink);margin-top:-1px}
+.rules dt .chip{grid-column:2;justify-self:start;letter-spacing:.16em}
+.rules dd{font-size:16px;max-width:36em}
+@media (max-width:959px){.charge-grid{grid-template-columns:1fr}.orbit{width:min(100%,380px)}}
+@media (min-width:960px) and (max-width:1279px){.rules div{grid-template-columns:1fr;gap:10px}.rules dt{grid-template-columns:20px auto auto;justify-content:start;align-items:center}.rules dt .chip{grid-column:auto;margin-left:6px}}
+@media (max-width:599px){.rules div{grid-template-columns:1fr}}
+/* Side by side, the diagram rides along beside the rules (the heading scrolls away as usual), so the left column has no dead block at its foot */
+@media (min-width:960px) and (min-height:600px){
+  .charge-grid>div:first-child{align-self:stretch}
+  .charge-grid figure{position:sticky;top:calc(var(--nav-h) + 32px)}
+}
+
+/* ============ 04 · Light by design ============ */
+.lean{display:grid;grid-template-columns:minmax(0,1.15fr) repeat(2,minmax(0,1fr));gap:22px}
+.lp{padding:22px 22px 24px;display:grid;gap:12px;align-content:start}
+.lp .row{display:flex;align-items:center;gap:14px}
+.lp .badge{width:42px;height:42px}
+.lp .badge .ico{width:20px;height:20px}
+.lp h3{font-size:15px;letter-spacing:.09em;line-height:1.3}
+.lp p{font-size:16px}
+.lp-feature{grid-row:span 2;gap:16px}
+/* The feature plate's drawing: one shared machine, each browser in it sealed with its own sign-ins */
+.rack{margin-bottom:6px;border:2px solid var(--taupe);border-radius:10px;overflow:hidden;background:var(--cream)}
+.rack-bar{display:flex;align-items:center;gap:7px;padding:9px 12px;background:var(--plate);border-bottom:2px solid var(--taupe)}
+.rack-bar i{width:9px;height:9px;border-radius:50%;background:var(--taupe)}
+.rack-bar i:nth-child(3){background:var(--teal)}
+.rack-bar span{margin-left:auto;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.rack-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px;background:var(--scan),var(--cream)}
+.win-b{position:relative;display:grid;place-items:center;gap:4px;aspect-ratio:4/3;border:2px dashed rgba(128,76,55,.4);border-radius:7px;color:rgba(128,76,55,.75);padding-top:8px}
+.win-b::before{content:"";position:absolute;left:0;right:0;top:0;height:8px;border-bottom:2px dashed rgba(128,76,55,.3)}
+.win-b .ico{width:18px;height:18px}
+.win-b.you{border:2px solid var(--teal);background:rgba(69,196,194,.14);color:var(--teal-ink)}
+.win-b.you::before{border-bottom:2px solid rgba(69,196,194,.6)}
+.win-b b{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;line-height:1}
+.lean-note{margin-top:28px}
+@media (max-width:959px){
+  .lean{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lp-feature{grid-row:auto;grid-column:1/-1;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:28px}
+  .lp-feature .rack{grid-row:1 / span 2;grid-column:2;margin:0}
+}
+@media (max-width:599px){
+  .lean{grid-template-columns:1fr}
+  .lp-feature{grid-template-columns:1fr}
+  .lp-feature .rack{grid-row:auto;grid-column:auto;margin-bottom:6px}
+}
+
+/* ============ 05 · Partners ============ */
+.partner-grid{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:24px clamp(32px,6vw,88px);align-items:start}
+.partner-grid .sec-head{margin-bottom:0}
+.partner-body{display:grid;gap:24px;padding-top:clamp(0px,3vw,46px)}
+.partner-body>p{font-size:18px;line-height:1.6;max-width:36em}
+.partner-body .btn{justify-self:start}
+@media (max-width:959px){.partner-grid{grid-template-columns:1fr}.partner-body{padding-top:0}}
+@media (max-width:520px){.partner-body>p{font-size:17px}.partner-body .btn{justify-self:stretch}}
+
+/* ============ Closing band + footer (Chrome) ============ */
+.closing{--pt:clamp(72px,9vw,120px);overflow:clip;padding-block:var(--pt) clamp(56px,7vw,88px)}
+.ticket-wrap::before,.close-head h2::before{content:"";position:absolute;z-index:-1;pointer-events:none}
+@media (min-width:1024px){
+  .ticket-wrap::before{inset:-20%;background:radial-gradient(closest-side,rgba(242,200,74,.34) 0,rgba(242,200,74,.2) 62%,rgba(242,200,74,0) 100%)}
+}
+@media (max-width:1023px){
+  .close-head h2{position:relative;isolation:isolate}
+  .close-head h2::before{left:50%;top:50%;width:100%;height:260%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,rgba(242,200,74,.16) 0,rgba(242,200,74,.08) 55%,rgba(242,200,74,0) 100%)}
+}
+.close-grid{position:relative;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:clamp(36px,5vw,72px);align-items:center}
+/* Neddy waves goodbye from a porthole beside the sign-off */
+.close-head{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"port eb" "port h2";column-gap:clamp(22px,3vw,34px);row-gap:14px;align-items:center}
+.close-port{grid-area:port;--ps:clamp(96px,6vw + 50px,140px);width:var(--ps);margin:8px;box-shadow:0 0 0 6px var(--cream),0 0 0 8px var(--taupe),5px 5px 0 8px rgba(41,26,20,.4)}
+.close-head .eyebrow{grid-area:eb;align-self:end;color:var(--cream)}
+.close-head .eyebrow .star{color:var(--mustard)}
+.close-head h2{grid-area:h2;align-self:start;font-size:clamp(33px,3vw + 14px,58px);line-height:1.02;color:var(--mustard)}
+@media (min-width:900px) and (max-width:1360px){.close-head h2{font-size:clamp(40px,2.6vw + 18px,52px)}}
+.closing .lede{color:var(--cream);margin-top:26px}
+.ticket-wrap{position:relative;isolation:isolate;min-width:0}
+.ticket-lift{filter:drop-shadow(5px 5px 0 rgba(41,26,20,.45))}
+.ticket{--seam:74px;display:grid;grid-template-columns:var(--seam) minmax(0,1fr);background:var(--cream);color:var(--ink);border-radius:14px;
+  -webkit-mask:radial-gradient(circle at var(--seam) 0,transparent 13px,#000 13.5px),radial-gradient(circle at var(--seam) 100%,transparent 13px,#000 13.5px);
+  -webkit-mask-composite:source-in;
+  mask:radial-gradient(circle at var(--seam) 0,transparent 13px,#000 13.5px),radial-gradient(circle at var(--seam) 100%,transparent 13px,#000 13.5px);
+  mask-composite:intersect}
+.stub{display:grid;place-items:center;background:var(--mustard);border-radius:14px 0 0 14px;border-right:2px dashed rgba(41,26,20,.45)}
+.stub span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.3em;text-transform:uppercase;white-space:nowrap}
+.ticket-body{padding:28px 28px 26px;display:grid;gap:14px;background:var(--scan)}
+.ticket-body h3{font-size:clamp(22px,1.4vw + 12px,28px);letter-spacing:.04em}
+.ticket-body p{font-size:16px}
+.ticket-body .btn{justify-self:start;margin-top:6px}
+.ticket-body .quiet,.ticket-body .quiet p{font-size:15px}
+.footer{background:var(--retro);color:var(--cream)}
+.foot{padding-block:0 40px;display:grid;grid-template-columns:auto 1fr auto;gap:18px 40px;align-items:start}
+.foot::before{content:"";grid-column:1/-1;height:2px;margin-bottom:18px;background:rgba(246,245,238,.22)}
+.foot-brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.1em;text-transform:uppercase}
+.foot-brand .ico{width:24px;height:24px;color:var(--teal)}
+.foot p{font-size:15px;line-height:1.6;max-width:62ch}
+.foot a{color:var(--cream);text-underline-offset:3px;text-decoration-color:rgba(242,200,74,.8)}
+.foot a:hover{text-decoration-color:var(--cream)}
+.foot-links{display:flex;flex-wrap:wrap;gap:4px 18px;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.2em;text-transform:uppercase}
+.foot-links a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;text-decoration:none}
+.foot-links a:hover{text-decoration:underline}
+.fine{grid-column:1/-1;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;padding-top:18px;border-top:1px dashed rgba(246,245,238,.3);font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase}
+@media (max-width:1023px){.close-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:899px){.foot{grid-template-columns:1fr}}
+@media (min-width:900px){.foot-links{margin-top:-12px}}
+.contact{margin-top:6px}
+.contact a{display:inline-flex;align-items:center;min-height:44px}
+@media (min-width:640px){.contact{margin:-4px 0 -10px}}
+@media (max-width:639px){.contact>span{display:flex}.contact .sep{display:none}}
+/* Phones: the porthole sits beside the eyebrow, and the sign-off takes the full width under it */
+@media (max-width:599px){
+  .close-head{grid-template-areas:"port eb" "h2 h2";row-gap:22px}
+  .close-head .eyebrow{align-self:center}
+  .close-port{--ps:84px}
+  /* Beside the porthole the status takes its own line, so no line ends on the separator dot (as the hero) */
+  .close-head .eb-sep{display:none}
+  .close-head .eb-status{display:block}
+}
+@media (max-width:480px){
+  .ticket{--seam:48px;grid-template-columns:1fr;grid-template-rows:var(--seam) auto;
+    -webkit-mask:radial-gradient(circle at 0 var(--seam),transparent 13px,#000 13.5px),radial-gradient(circle at 100% var(--seam),transparent 13px,#000 13.5px);
+    -webkit-mask-composite:source-in;
+    mask:radial-gradient(circle at 0 var(--seam),transparent 13px,#000 13.5px),radial-gradient(circle at 100% var(--seam),transparent 13px,#000 13.5px);
+    mask-composite:intersect}
+  .stub{border-radius:14px 14px 0 0;border-right:0;border-bottom:2px dashed rgba(41,26,20,.45)}
+  .stub span{writing-mode:horizontal-tb;transform:none;font-size:12px}
+  .ticket-body{padding:22px 20px 24px}
+}
+@media (max-width:359px){.ticket-body{padding-inline:16px}}
+@media (max-width:360px){.btn{letter-spacing:.1em;padding-inline:18px}}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+@media (max-width:639px){body{font-size:16px}}
+@media (forced-colors:active){.chip,.num,.badge{border-color:CanvasText}.chip-beta::before,.chip-soon::before{background:CanvasText}}
+</style>
+</head>
+<body id="top">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-atom" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+<symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="i-layout-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+<symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/></symbol>
+<symbol id="i-audio-lines" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol>
+<symbol id="i-navigation" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-landmark" viewBox="0 0 24 24"><path d="M10 18v-7"/><path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M3 22h18"/><path d="M6 18v-7"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
+<symbol id="i-file-spreadsheet" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+<symbol id="i-hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></symbol>
+<symbol id="i-key-round" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+<symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-mouse-pointer-2" viewBox="0 0 24 24"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></symbol>
+<symbol id="i-badge-check" viewBox="0 0 24 24"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-shield-alert" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+<symbol id="i-scroll-text" viewBox="0 0 24 24"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
+<symbol id="i-text" viewBox="0 0 24 24"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></symbol>
+<symbol id="i-list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M4 18h16"/><path d="M4 6h16"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+</defs></svg>
+
+<a class="skip" href="#main">Skip to main content</a>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="Neato Muse, back to top">
+      <span class="atom-turn" aria-hidden="true"><svg class="ico atom atom-spin" focusable="false"><use href="#i-atom"/></svg></span>
+      <span class="wordmark" aria-hidden="true">Neato<span class="us">_</span>Muse</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#today">Today</a>
+      <a href="#next">What’s next</a>
+      <a href="#safety">Staying safe</a>
+      <a href="#partners">Partners</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="nav-signin" href="/">Sign in</a>
+      <a class="btn btn-outline btn-sm nav-cta" href="mailto:hello@neatoventures.com?subject=Neato_Muse%20invite%20request&amp;body=Hi%2C%20I%E2%80%99d%20like%20an%20invite%20to%20Neato_Muse.%20"><span class="long">Request an invite</span><span class="short">Request invite</span><span class="tiny">Invite me</span><span class="xs">Invite<span class="sr-only"> me</span></span></a>
+    </div>
+    <nav class="nav-more" aria-label="Sections">
+      <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-panel">
+        <svg class="ico i-open" aria-hidden="true" focusable="false"><use href="#i-menu"/></svg><svg class="ico i-close" aria-hidden="true" focusable="false"><use href="#i-x"/></svg><span class="menu-label">Menu</span>
+      </button>
+      <ul class="nav-panel" id="nav-panel" hidden>
+        <li><a href="#today">Today</a></li>
+        <li><a href="#next">What’s next</a></li>
+        <li><a href="#safety">Staying safe</a></li>
+        <li><a href="#partners">Partners</a></li>
+        <li class="p-signin"><a href="/">Sign in</a></li>
+        <li class="p-invite"><a href="mailto:hello@neatoventures.com?subject=Neato_Muse%20invite%20request&amp;body=Hi%2C%20I%E2%80%99d%20like%20an%20invite%20to%20Neato_Muse.%20">Request an invite</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+
+<!-- ============ HERO (Paper + soft mustard starburst) ============ -->
+<section class="hero paper" aria-labelledby="hero-title">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <div class="hero-top">
+        <span class="mini-port" aria-hidden="true"><img src="/home/neddy-wave-porthole.webp" width="360" height="360" alt="" decoding="async"></span>
+        <p class="eyebrow"><span class="star" aria-hidden="true">★</span> <span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span> <span class="nw eb-status"><span class="eb-sep">·&nbsp;</span>Now and next <span class="star" aria-hidden="true">★</span></span></p>
+      </div>
+      <h1 id="hero-title"><span class="l1">It runs <span class="nw">your errands.</span></span> <span class="l2">Next, the <span class="nw">paperwork.<span class="cursor" aria-hidden="true">_</span></span></span></h1>
+      <p class="lede"><span class="nm"><span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span></span> is a personal AI agent you talk to. Today it handles your email, calendar and web errands, and asks before it acts. Next, it gets a private browser that stays signed in to your sites, so Neddy can fetch statements, get bills ready to pay and keep working while you’re away.</p>
+      <ul class="key" aria-label="What the labels on this page mean">
+        <li><span class="chip chip-beta">Beta</span><span>What <span class="nm"><span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span></span> does today. <span class="nw">Invite-only.</span></span></li>
+        <li><span class="chip chip-soon">Coming soon</span><span><!-- FEATURE NAME -->Legwork: jobs behind your <span class="nw">sign-ins.</span> <span class="nw">Not built yet.</span></span></li>
+      </ul>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="mailto:hello@neatoventures.com?subject=Neato_Muse%20invite%20request&amp;body=Hi%2C%20I%E2%80%99d%20like%20an%20invite%20to%20Neato_Muse.%20">Request an invite <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-right"/></svg></a>
+        <a class="btn btn-ghost" href="#next">See what’s next <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-down"/></svg></a>
+      </div>
+      <div class="quiet mailnote">
+        <p>Opens an email to <span class="addr-row"><span class="addr">hello@neatoventures.com</span> <button class="copy" type="button" data-copy="hello@neatoventures.com"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg><span class="copy-t">Copy</span><span class="sr-only"> address</span></button></span></p>
+        <p>Already invited? <a href="/">Sign in</a></p>
+      </div>
+    </div>
+
+    <div class="showroom">
+      <div class="pedestal">
+        <div class="burst" aria-hidden="true"></div>
+        <!-- The rings in two layers: the far (upper) half of each orbit behind the arch, the near (lower) half in front of it -->
+        <div class="orb rings" aria-hidden="true"><svg viewBox="0 0 100 100" focusable="false">
+          <defs>
+            <clipPath id="ring-far"><rect x="0" y="0" width="100" height="50"/></clipPath>
+            <clipPath id="ring-near"><rect x="0" y="50" width="100" height="50"/></clipPath>
+          </defs>
+          <g transform="rotate(-12 50 50)"><ellipse cx="50" cy="50" rx="47" ry="12" clip-path="url(#ring-far)"/></g>
+          <g transform="rotate(12 50 50)"><ellipse cx="50" cy="50" rx="47" ry="12" clip-path="url(#ring-far)"/></g>
+        </svg></div>
+        <div class="stage">
+          <div class="arch">
+            <div class="arch-window">
+              <img src="/home/neddy-wave-hero.webp" srcset="/home/neddy-wave-hero-560.webp 560w, /home/neddy-wave-hero.webp 1000w" sizes="(max-width:759px) 66vw, 300px" width="1000" height="1250" alt="Neddy, the Neato Muse agent, waving hello: a rounded cream robot with teal trim, glowing amber eyes and an atom on his chest." fetchpriority="high" decoding="async">
+            </div>
+          </div>
+          <div class="turntable" aria-hidden="true"></div>
+        </div>
+        <div class="orb rings rings-near" aria-hidden="true"><svg viewBox="0 0 100 100" focusable="false">
+          <g transform="rotate(-12 50 50)"><ellipse cx="50" cy="50" rx="47" ry="12" clip-path="url(#ring-near)"/></g>
+          <g transform="rotate(12 50 50)"><ellipse cx="50" cy="50" rx="47" ry="12" clip-path="url(#ring-near)"/></g>
+        </svg></div>
+      </div>
+      <div class="placard card">
+        <p class="label">Meet your agent</p>
+        <p class="pt">Neddy</p>
+        <p>He does the legwork. You make the calls. Rename him any time.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 01 · TODAY (Plate) ============ -->
+<section class="section plate" id="today" aria-labelledby="today-title">
+  <div class="wrap">
+    <header class="sec-head has-port">
+      <div class="porthole sec-port" aria-hidden="true"><img src="/home/neddy-head.webp" width="360" height="403" loading="lazy" decoding="async" alt="" style="object-position:50% 20%"></div>
+      <p class="eyebrow"><span class="star" aria-hidden="true">★</span> 01 · Today <span class="star" aria-hidden="true">★</span></p>
+      <h2 id="today-title">Already on the&nbsp;job.</h2>
+      <div class="lede-row"><span class="chip chip-beta">Beta</span><p class="lede">In beta and invite-only. Ask in plain words, typed or out loud. Anything that sends, buys, books or changes something waits for your tap.</p></div>
+    </header>
+
+    <ul class="today">
+      <li class="card big">
+        <span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-message-square"/></svg></span>
+        <h3>Chat with Neddy</h3>
+        <p>Type or talk, the way you would to a helpful assistant. Tell him about yourself and he remembers what matters. Pick his tone (warm, concise or thoughtful), rename him, or give him a new look.</p>
+        <p class="ask"><span class="label">Try <span aria-hidden="true">›</span></span>“What’s on tomorrow?”</p>
+      </li>
+      <li class="card big">
+        <span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-mail"/></svg></span>
+        <h3>Email and calendar</h3>
+        <p>Reads, searches and sums up your Gmail or Outlook, and drafts replies for you to check. He can tell you when new mail lands, or follow a rule like “When Dana emails, summarize it.” He lines up calendar changes for your OK. Forward mail to his own address to hand over the work, attachments included.</p>
+        <p class="ask"><span class="label">Try <span aria-hidden="true">›</span></span>“Summarize my unread email and draft replies to anything urgent.”</p>
+      </li>
+      <li class="card big">
+        <span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-globe"/></svg></span>
+        <h3>Web errands that ask first</h3>
+        <p>He searches and reads the web, and works in a browser of his own. He signs in with passwords you save in the app, never in chat, and never sees them. He watches pages for price drops, finds open tables and gets orders ready. Buying is off until you turn it on, with a cap for each purchase and each month. Tap Take control to finish anything yourself.</p>
+        <p class="ask"><span class="label">Try <span aria-hidden="true">›</span></span>“Watch this page and tell me when the price drops.”</p>
+      </li>
+      <li class="card spaces">
+        <div class="sp-head">
+          <span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-layout-grid"/></svg></span>
+          <h3>Spaces for health, family and social media</h3>
+        </div>
+        <ul class="sp-list">
+          <li><p class="label">Health</p><p>Log a meal from a photo or a sentence, answer meal check-ins, see each day and week on a chart, and follow a guided workout.</p></li>
+          <li><p class="label">Family</p><p>The week on one board, with dinners and recipes, groceries, the schedule and chore stars.</p></li>
+          <li><p class="label">Social media</p><p>Neddy plans and schedules your posts, and each one waits for your OK.</p></li>
+        </ul>
+      </li>
+      <li class="card mid">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-brain"/></svg></span><h3>Memory you control</h3></div>
+        <p>He suggests things to remember and asks before he keeps them. See, fix or forget any memory, any time. Import your past chats from ChatGPT or Claude and he can search them.</p>
+      </li>
+      <li class="card mid">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-audio-lines"/></svg></span><h3>Voice</h3></div>
+        <p>Tap the sound-wave button and talk it through, hands-free. Hear the answers out loud, and tap Interrupt to cut in. Choose your microphone right next to the mic.</p>
+      </li>
+      <li class="card mid">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-file-text"/></svg></span><h3>Files and reports</h3></div>
+        <p>He reads PDFs, Word, Excel, PowerPoint and photos. He writes PDFs, Word documents, spreadsheets and slide decks, and makes small mini-apps you can share with a link. Every report, comparison and plan he saves waits in Files. He can bring in files from Google Drive, OneDrive and Dropbox too.</p>
+      </li>
+      <li class="card mid">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-navigation"/></svg></span><h3><span class="nw">Take-me-there</span> buttons</h3></div>
+        <p>Ask where something is, like “Where’s my food log?”, and a button under his answer takes you straight there. Back to chat brings you back.</p>
+      </li>
+    </ul>
+
+    <div class="also">
+      <p class="label" id="also-label">Also in the app</p>
+      <ul aria-labelledby="also-label">
+        <li>Routines and reminders</li>
+        <li>A morning Feed with news and local weather (US)</li>
+        <li>Ideas he offers each day</li>
+        <li>Goals he tracks for you</li>
+        <li>A subscriptions finder</li>
+        <li>Places on a map</li>
+        <li>On your phone and computer, no app store needed</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 · WHAT'S NEXT (Paper + soft starburst) ============ -->
+<section class="section paper next" id="next" aria-labelledby="next-title">
+  <div class="wrap">
+    <div class="next-head">
+      <header class="sec-head">
+        <p class="eyebrow"><span class="star" aria-hidden="true">★</span> 02 · What’s next <span class="star" aria-hidden="true">★</span></p>
+        <h2 id="next-title">Hand off the&nbsp;paperwork.</h2>
+        <p class="lede">This isn’t built yet. Here’s what it will do. You’ll get a private browser of your own that stays signed in to the sites you use, and Neddy gets the tools to work on documents and spreadsheets. Then he can take whole jobs off your list and keep at them while you’re away.</p>
+      </header>
+      <div class="name-wrap">
+        <div class="burst" aria-hidden="true"></div>
+        <div class="card nameplate">
+          <p class="label">Coming to <span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span></p>
+          <p class="fname"><!-- FEATURE NAME -->Legwork</p>
+          <div class="plate-foot"><span class="chip chip-soon">Coming soon</span><span class="label">Not built yet</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="blk-h">What you’ll hand off</h3>
+    <ul class="handoff card">
+      <li><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-landmark"/></svg></span><div><h4>Statements</h4><p>Each month, fetch your bank and card statements and file them in Files.</p></div></li>
+      <li><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-receipt"/></svg></span><div><h4>Bills</h4><p>Sign in to a biller’s site, find the bill and get everything ready up to the Pay button. You tap Pay.</p></div></li>
+      <li><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-search"/></svg></span><div><h4>Research</h4><p>Longer research that runs for hours and saves what it finds as a report.</p></div></li>
+      <li><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-file-spreadsheet"/></svg></span><div><h4>Documents and spreadsheets</h4><p>Fill in a PDF form, update a spreadsheet, or tidy a Word document and turn it into a PDF, with no desktop computer needed.</p></div></li>
+      <li><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-eye"/></svg></span><div><h4>Watch and act</h4><p>Keep an eye on pages you have to sign in to see, like an order’s status or a renewal date, and act when something changes, within your rules.</p></div></li>
+      <li><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-repeat"/></svg></span><div><h4>Repeat jobs</h4><p>Do a job once with you. Next time, he follows the same steps on his own.</p></div></li>
+    </ul>
+
+    <div class="how">
+      <div class="how-main">
+        <h3 class="blk-h how-h">How it will work</h3>
+        <ol class="steps">
+          <li><span class="num" aria-hidden="true">1</span><div><h4><span class="sr-only">Step 1: </span>Sign in once</h4><p>You sign in to a site yourself, in your private browser. It stays signed in, kept apart from everyone else’s. Neddy never sees your passwords.</p></div></li>
+          <li><span class="num" aria-hidden="true">2</span><div><h4><span class="sr-only">Step 2: </span>Hand it over</h4><p>Ask once, or set it to repeat. He reads each page’s words and buttons, fills in what’s needed and saves the results in Files.</p></div></li>
+          <li><span class="num" aria-hidden="true">3</span><div><h4><span class="sr-only">Step 3: </span>Approve what matters</h4><p>Paying, submitting, sending and deleting wait for you in Needs you, with the bill or form attached.</p></div></li>
+          <li><span class="num" aria-hidden="true">4</span><div><h4><span class="sr-only">Step 4: </span>Next time, a recipe</h4><p>The first run records the steps. Later runs follow them, and he only stops to think if the site has changed.</p></div></li>
+        </ol>
+      </div>
+      <div class="ned-look" aria-hidden="true"><div class="win"><img src="/home/neddy-turn-look.webp" width="446" height="770" loading="lazy" decoding="async" alt=""></div></div>
+      <div class="how-side">
+        <div>
+          <figure class="crt" aria-labelledby="ex-cap">
+            <div class="crt-bar"><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><span class="crt-title">Example · Coming soon</span></div>
+            <div class="crt-screen">
+              <p class="msg you"><b>You<span class="sr-only">:</span></b><span>On the 3rd of every month, get my card statement and file it.</span></p>
+              <p class="msg bot"><b>Neddy<span class="sr-only">:</span></b><span>Will do. I’ll use your saved sign-in and put it in Files. If your bank sends a code to your phone, I’ll ask you for it.</span></p>
+              <p class="sys">3rd of the month · 7:02 am</p>
+              <p class="msg bot"><b>Neddy<span class="sr-only">:</span></b><span>Your statement is in Files. Your electric bill is ready at the Pay button, in line with your last three. It’s waiting for you.</span></p>
+              <p class="prompt" aria-hidden="true">&gt; <span class="cursor">_</span></p>
+            </div>
+            <figcaption class="sr-only" id="ex-cap">Illustration of a coming-soon feature: you ask Neddy to file your card statement each month. He files it and gets your electric bill ready for you to pay.</figcaption>
+          </figure>
+          <p class="caption">An illustration of a feature that isn’t built yet. The dates and times are examples.</p>
+        </div>
+        <div class="card stop">
+          <span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-hand"/></svg></span>
+          <h3>Where it will stop and ask</h3>
+          <p>Some sites turn automated browsers away. Some banks send a code to your phone, or ask you to approve each sign-in in their app. When that happens, Neddy stops and asks you, or you tap Take control and finish it yourself.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="quiet next-close">It will arrive in the same app. <a href="#invite">Request an invite</a> to start with what’s there today.</p>
+  </div>
+</section>
+
+<!-- ============ 03 · STAYING SAFE (Plate) ============ -->
+<section class="section plate" id="safety" aria-labelledby="safety-title">
+  <div class="wrap charge-grid">
+    <div>
+      <header class="sec-head">
+        <p class="eyebrow"><span class="star" aria-hidden="true">★</span> 03 · Staying safe <span class="star" aria-hidden="true">★</span></p>
+        <h2 id="safety-title">You still keep the&nbsp;keys.</h2>
+        <p class="lede">The new work follows the rules you already have, plus new ones for money. Each rule says whether it’s here today or coming soon.</p>
+      </header>
+      <figure>
+        <div class="orbit" role="img" aria-label="Diagram: you at the center. Pay, submit, send and delete orbit around you, and each waits for your approval.">
+          <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+            <ellipse cx="50" cy="50" rx="44" ry="15"/>
+            <ellipse cx="50" cy="50" rx="44" ry="15" transform="rotate(60 50 50)"/>
+            <ellipse cx="50" cy="50" rx="44" ry="15" transform="rotate(120 50 50)"/>
+          </svg>
+          <div class="nucleus" aria-hidden="true"><strong>You</strong><span>Approve</span></div>
+          <span class="electron" style="left:28%;top:12%" aria-hidden="true">Pay</span>
+          <span class="electron" style="left:72%;top:12%" aria-hidden="true">Submit</span>
+          <span class="electron" style="left:28%;top:88%" aria-hidden="true">Send</span>
+          <span class="electron" style="left:72%;top:88%" aria-hidden="true">Delete</span>
+        </div>
+        <figcaption class="orbit-cap">You’re still the nucleus. Paying, submitting, sending and deleting wait for your say-so.</figcaption>
+      </figure>
+    </div>
+
+    <dl class="rules">
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-key-round"/></svg><span>Sign-ins he never sees</span><span class="chip chip-beta">Beta</span></dt><dd>Save a site’s password in the app, never in chat. Neddy never sees it. It’s typed in only on that site.</dd></div>
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-shield-check"/></svg><span>Approve first, in Needs&nbsp;you</span><span class="chip chip-beta">Beta</span></dt><dd>Sending, buying, booking and changing things already wait for your tap. Paying, submitting and deleting will too, with the bill or form attached.</dd></div>
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-mouse-pointer-2"/></svg><span>Take control</span><span class="chip chip-beta">Beta</span></dt><dd>Take over his browser any time to sign in or finish something yourself.</dd></div>
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-badge-check"/></svg><span>Known-biller rules</span><span class="chip chip-soon">Coming soon</span></dt><dd>Neddy will pay on his own only when every rule holds: the biller is on a list only you can add to, the amount is under your limit and close to your recent bills, it’s paid once from the account you chose, and he found the bill on the biller’s own site, not through an email link. Anything else waits for you. He never types card numbers.</dd></div>
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-link"/></svg><span>Official connections first</span><span class="chip chip-soon">Coming soon</span></dt><dd>For statements and card payments, he’ll use your bank’s or biller’s official connection where there is one, and the browser only when there isn’t.</dd></div>
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-shield-alert"/></svg><span>A page can’t move your money</span><span class="chip chip-soon">Coming soon</span></dt><dd>A web page can hide instructions, like “pay this person”. That’s why money only goes to billers on your list, and everything else waits for you.</dd></div>
+      <div><dt><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-scroll-text"/></svg><span>Everything on the record</span><span class="chip chip-soon">Coming soon</span></dt><dd>Every payment and submission is logged, with a notice to you and a saved receipt.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ============ 04 · LIGHT BY DESIGN (Paper) ============ -->
+<section class="section paper" id="lean" aria-labelledby="lean-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="eyebrow"><span class="star" aria-hidden="true">★</span> 04 · Light by design <span class="star" aria-hidden="true">★</span></p>
+      <h2 id="lean-title">Built light, on&nbsp;purpose.</h2>
+      <div class="lede-row"><span class="chip chip-soon">Coming soon</span><p class="lede">The costly way to give an AI agent hands is a whole computer for every person, with the AI studying pictures of the screen. We’re building it the light way, so it can stay affordable.</p></div>
+    </header>
+
+    <ul class="lean">
+      <li class="card lp lp-feature">
+        <div class="rack" aria-hidden="true">
+          <div class="rack-bar"><i></i><i></i><i></i><span>Shared machine</span></div>
+          <div class="rack-grid">
+            <span class="win-b you"><svg class="ico"><use href="#i-lock"/></svg><b>Yours</b></span>
+            <span class="win-b"><svg class="ico"><use href="#i-lock"/></svg></span>
+            <span class="win-b"><svg class="ico"><use href="#i-lock"/></svg></span>
+            <span class="win-b"><svg class="ico"><use href="#i-lock"/></svg></span>
+            <span class="win-b"><svg class="ico"><use href="#i-lock"/></svg></span>
+            <span class="win-b"><svg class="ico"><use href="#i-lock"/></svg></span>
+          </div>
+        </div>
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-server"/></svg></span><h3>Shared machines, private browsers</h3></div>
+        <p>Many people’s browsers share one machine, each sealed off with its own sign-ins. Nobody pays for a whole computer that sits idle.</p>
+      </li>
+      <li class="card lp">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-text"/></svg></span><h3>Pages read as text</h3></div>
+        <p>Neddy reads a page’s words and buttons instead of looking at pictures of it. That takes fewer, smaller steps.</p>
+      </li>
+      <li class="card lp">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-list-checks"/></svg></span><h3>Recipes for repeat jobs</h3></div>
+        <p>The first run records the steps. Later runs follow them without calling on the AI, unless the site has changed.</p>
+      </li>
+      <li class="card lp">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-hourglass"/></svg></span><h3>Watches that wait quietly</h3></div>
+        <p>A watch checks the page by itself and only calls on Neddy when something changes.</p>
+      </li>
+      <li class="card lp">
+        <div class="row"><span class="badge" aria-hidden="true"><svg class="ico"><use href="#i-monitor"/></svg></span><h3>A full desktop only when needed</h3></div>
+        <p>For the rare job that needs a desktop program, he uses a full computer for that job alone.</p>
+      </li>
+    </ul>
+    <p class="quiet lean-note">Pricing hasn’t been announced yet.</p>
+  </div>
+</section>
+
+<!-- ============ 05 · PARTNERS AND INVESTORS (Plate) ============ -->
+<section class="section plate" id="partners" aria-labelledby="partners-title">
+  <div class="wrap partner-grid">
+    <header class="sec-head">
+      <p class="eyebrow"><span class="star" aria-hidden="true">★</span> 05 · Partners and investors <span class="star" aria-hidden="true">★</span></p>
+      <h2 id="partners-title">Your partner in&nbsp;tomorrow.</h2>
+    </header>
+    <div class="partner-body">
+      <p><span class="nm"><span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span></span> is a working personal AI agent, in an invite-only beta today. Next, it takes on the jobs behind people’s sign-ins (statements, bills, forms and repeat errands), with approvals built in from the start. We’re building it to run light, on shared machines, pages read as text and recorded recipes, so the cost for each person stays low. Neato Ventures builds AI software and hardware under one roof in Houston, Texas, and has already shipped an AI wearable. If you’d like to partner with us or invest in what comes next, we’d like to talk.</p>
+      <a class="btn btn-ghost" href="mailto:hello@neatoventures.com?subject=Neato_Muse%20partnership">Talk to us <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-right"/></svg></a>
+      <div class="quiet mailnote">
+        <p>Opens an email to <span class="addr-row"><span class="addr">hello@neatoventures.com</span> <button class="copy" type="button" data-copy="hello@neatoventures.com"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg><span class="copy-t">Copy</span><span class="sr-only"> address</span></button></span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CLOSING (Chrome) ============ -->
+<section class="section chrome closing" id="invite" aria-labelledby="close-title">
+  <div class="wrap close-grid">
+    <div>
+      <div class="close-head">
+        <div class="porthole close-port" aria-hidden="true"><img src="/home/neddy-wave-porthole.webp" width="360" height="360" loading="lazy" decoding="async" alt=""></div>
+        <p class="eyebrow"><span class="star" aria-hidden="true">★</span> <span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span> · <span class="nw">Beta <span class="star" aria-hidden="true">★</span></span></p>
+        <h2 id="close-title">Start with&nbsp;today.</h2>
+      </div>
+      <p class="lede">Neato is building the future you were promised. <span class="nm"><span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span></span> runs your errands now, and what’s next is coming to the same app.</p>
+    </div>
+    <div class="ticket-wrap">
+      <div class="ticket-lift"><div class="ticket">
+        <div class="stub" aria-hidden="true"><span>Admit one</span></div>
+        <div class="ticket-body">
+          <p><span class="chip chip-beta">Beta</span></p>
+          <h3>Your invite</h3>
+          <p>Ask for a spot. When one opens, we’ll email you a link to sign in.</p>
+          <a class="btn btn-primary" href="mailto:hello@neatoventures.com?subject=Neato_Muse%20invite%20request&amp;body=Hi%2C%20I%E2%80%99d%20like%20an%20invite%20to%20Neato_Muse.%20">Request an invite <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-right"/></svg></a>
+          <div class="quiet mailnote">
+            <p>Opens an email to <span class="addr-row"><span class="addr">hello@neatoventures.com</span> <button class="copy" type="button" data-copy="hello@neatoventures.com"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-copy"/></svg><span class="copy-t">Copy</span><span class="sr-only"> address</span></button></span></p>
+            <p>Already invited? <a href="/">Sign in</a></p>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer chrome">
+  <div class="wrap foot">
+    <p class="foot-brand"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-atom"/></svg><span aria-hidden="true">Neato<span class="us">_</span>Ventures</span><span class="sr-only">Neato Ventures</span></p>
+    <div>
+      <p><span class="nm"><span aria-hidden="true">Neato<span class="us">_</span>Muse</span><span class="sr-only">Neato Muse</span></span> is made by Neato Ventures in Houston, Texas. We also make other AI software and hardware.</p>
+      <p class="contact"><span><a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a></span><span class="sep"> · </span><span><a href="https://neatoventures.com">neatoventures.com</a></span></p>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="/home.html">Home</a>
+      <a href="/">Sign in</a>
+      <a href="/help.html">Help</a>
+      <a href="#top">Back to top</a>
+    </nav>
+    <div class="fine"><span>© 2026 Neato Ventures</span></div>
+  </div>
+</footer>
+
+<p class="sr-only" id="copy-status" aria-live="polite"></p>
+
+<script>
+(function(){
+  /* Menu under 1080px: a disclosure that closes on a link, on Escape (focus back to the button) and on a click outside */
+  var btn = document.querySelector(".nav-menu"), panel = document.getElementById("nav-panel");
+  function setOpen(open, refocus){
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    panel.hidden = !open;
+    if (!open && refocus) btn.focus();
+  }
+  btn.addEventListener("click", function(){ setOpen(btn.getAttribute("aria-expanded") !== "true"); });
+  panel.addEventListener("click", function(e){
+    var a = e.target.closest("a");
+    if (!a) return;
+    setOpen(false);
+    /* The link is about to be hidden: hand focus to the section it points at, so keyboard users land there */
+    var t = a.hash && document.getElementById(a.hash.slice(1));
+    if (t) { t.setAttribute("tabindex", "-1"); t.focus({ preventScroll: true }); }
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && btn.getAttribute("aria-expanded") === "true") setOpen(false, true);
+  });
+  document.addEventListener("click", function(e){
+    if (btn.getAttribute("aria-expanded") === "true" && !e.target.closest(".nav-more")) setOpen(false);
+  });
+  document.querySelector(".nav-more").addEventListener("focusout", function(e){
+    if (btn.getAttribute("aria-expanded") === "true" && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+  });
+  var wide = window.matchMedia("(min-width:1080px)");
+  var onWide = function(){ if (wide.matches) setOpen(false); };
+  if (wide.addEventListener) wide.addEventListener("change", onWide); else wide.addListener(onWide);
+
+  /* Copy the address, for people whose browser has no mail app set up */
+  var status = document.getElementById("copy-status");
+  document.querySelectorAll(".copy").forEach(function(b){
+    var t = b.querySelector(".copy-t");
+    b.addEventListener("click", function(){
+      var text = b.getAttribute("data-copy");
+      var done = function(){
+        t.textContent = "Copied";
+        status.textContent = "Address copied: " + text;
+        setTimeout(function(){ t.textContent = "Copy"; status.textContent = ""; }, 2500);
+      };
+      var fallback = function(){
+        var addr = b.parentNode.querySelector(".addr"), sel = window.getSelection(), range = document.createRange();
+        range.selectNodeContents(addr); sel.removeAllRanges(); sel.addRange(range);
+        status.textContent = "Address selected. Press Control C or Command C to copy it.";
+      };
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+      else fallback();
+    });
+  });
+
+  /* The safety diagram's rings make one slow turn when it first comes into view (never under reduced motion) */
+  var orbit = document.querySelector(".orbit");
+  var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (orbit && !still && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting) { orbit.classList.add("turning"); io.disconnect(); }
+      });
+    }, { threshold: 0.5 });
+    io.observe(orbit);
+  }
+})();
+</script>
+</body>
+</html>

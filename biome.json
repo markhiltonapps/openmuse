@@ -11,7 +11,8 @@
       "!**/android",
       "!**/.openmuse",
       "!**/artifacts",
-      "!apps/mobile/public/home.html"
+      "!apps/mobile/public/home.html",
+      "!apps/mobile/public/futurehome.html"
     ]
   },
   "formatter": { "enabled": true, "indentStyle": "space", "lineWidth": 100 },
