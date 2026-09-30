@@ -118,6 +118,8 @@ export function useCheckIns() {
  */
 export function SayOrType({
   placeholder,
+  prompt,
+  micLabel: sayLabel = "Say what you had",
   action,
   busy,
   listenNow,
@@ -125,6 +127,10 @@ export function SayOrType({
   onSubmit,
 }: {
   placeholder: string;
+  /** What the inline box shows before anything is typed, instead of "Type it, or tap the mic". */
+  prompt?: string;
+  /** The mic's name for screen readers. */
+  micLabel?: string;
   /** Mic beside the box, for tight spaces such as above the chat box. */
   inline?: boolean;
   /** What the send button does, such as "Log lunch". */
@@ -211,7 +217,7 @@ export function SayOrType({
           listening
             ? "Listening… tap the mic when you’re done"
             : inline && canListen
-              ? "Type it, or tap the mic"
+              ? (prompt ?? "Type it, or tap the mic")
               : canListen
                 ? `Or type it: ${placeholder}`
                 : placeholder
@@ -260,7 +266,7 @@ export function SayOrType({
       </Pressable>
     </View>
   );
-  const micLabel = listening ? "Stop listening" : "Say what you had";
+  const micLabel = listening ? "Stop listening" : sayLabel;
   return (
     <View style={{ gap: 12 }}>
       {inline ? (

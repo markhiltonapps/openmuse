@@ -20,10 +20,11 @@ import {
   Plus,
   RefreshCw,
   Target,
+  UserRound,
   Users,
   X,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import type { Artifact, BrowserSession } from "../../../packages/domain/src";
@@ -39,6 +40,7 @@ import type {
   Routine,
   RunEvent,
 } from "../../../packages/domain/src/agent";
+import { AboutYou } from "./about-you-ui";
 import { AccountCard, PeopleCard } from "./account-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AppAlertsCard } from "./app-alerts-ui";
@@ -2366,6 +2368,18 @@ export function NotificationsSheet() {
 export function AppsScreen() {
   const { navigate, open, notify } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
+  const suggestions = useRef<View>(null);
+  const remembered = useRef<Text>(null);
+  /** A suggestion was kept or dismissed: focus goes to the next one, or to where kept ones go. */
+  function suggestionDone() {
+    if (Platform.OS !== "web") return;
+    setTimeout(() => {
+      const card = suggestions.current as unknown as HTMLElement | null;
+      const next = card?.querySelector<HTMLElement>('[aria-label^="Keep: "]');
+      const heading = remembered.current as unknown as HTMLElement | null;
+      (next ?? heading)?.focus();
+    }, 150);
+  }
   const [query, setQuery] = useState("");
   const [tab, setTab] = useAppsTab();
   const [name, setName] = useState(data?.identity.name || "Neddy");
@@ -2443,7 +2457,7 @@ export function AppsScreen() {
   return (
     <View style={{ gap: 22 }}>
       <AgentStatus />
-      <AppsTabs tab={tab} onTab={setTab} badges={{ agent: data?.memorySuggestions.length }} />
+      <AppsTabs tab={tab} onTab={setTab} badges={{ about: data?.memorySuggestions.length }} />
       {tab === "apps" && (
         <>
           <Field
@@ -2499,6 +2513,70 @@ export function AppsScreen() {
         </>
       )}
       {tab === "help" && <HelpCard />}
+      {tab === "about" && (
+        <>
+          <AboutYou
+            top={
+              !!data?.memorySuggestions.length && (
+                <Card style={{ gap: 12 }}>
+                  <View style={[s.row, { gap: 10 }]}>
+                    <Emoji char="💡" size={28} />
+                    <Text role="heading" aria-level={3} style={[s.heading, { flex: 1 }]}>
+                      Suggested from your chats
+                    </Text>
+                  </View>
+                  <Text style={s.muted}>
+                    Keep the ones that are right. I won’t use them until you do.
+                  </Text>
+                  <View ref={suggestions} style={{ gap: 12 }}>
+                    {data.memorySuggestions.map((item) => (
+                      <SuggestionRow key={item.id} suggestion={item} onDone={suggestionDone} />
+                    ))}
+                  </View>
+                </Card>
+              )
+            }
+          />
+          <Card style={{ gap: 12 }}>
+            <View style={[s.row, { gap: 10 }]}>
+              <Emoji char="🗂️" size={28} />
+              <Text
+                ref={remembered}
+                role="heading"
+                aria-level={3}
+                {...({ tabIndex: -1 } as object)}
+                style={s.heading}
+              >
+                Other things I remember
+              </Text>
+            </View>
+            <Text style={s.muted}>
+              Anything else you’ve told me. Check it, correct it or forget it.
+            </Text>
+            {data?.memories.map((item) => (
+              <MemoryRow key={item.id} memory={item} />
+            ))}
+            <Field
+              label="Something else I should remember"
+              value={memory}
+              onChangeText={setMemory}
+              placeholder="I prefer morning meetings"
+            />
+            <Button
+              busy={busy}
+              disabled={!memory.trim()}
+              style={{ alignSelf: "flex-start" }}
+              onPress={() =>
+                void save("/memories", { text: memory.trim(), source: "User added in Apps" })
+              }
+            >
+              Remember
+            </Button>
+            <View style={s.divider} />
+            <ChatgptImport />
+          </Card>
+        </>
+      )}
       {tab === "agent" && (
         <>
           <Card style={{ gap: 10 }}>
@@ -2569,40 +2647,13 @@ export function AppsScreen() {
               Save name and settings
             </Button>
           </Card>
-          <Card style={{ gap: 12 }}>
-            <PlaceAnchor id="memory" label="Memory">
-              <SectionHeading title="Memory" />
-            </PlaceAnchor>
-            <Text style={s.muted}>Context you can inspect, correct or forget.</Text>
-            {!!data?.memorySuggestions.length && (
-              <>
-                <Text style={s.label}>Suggested from your conversations</Text>
-                {data.memorySuggestions.map((item) => (
-                  <SuggestionRow key={item.id} suggestion={item} />
-                ))}
-                <View style={s.divider} />
-              </>
-            )}
-            {data?.memories.map((item) => (
-              <MemoryRow key={item.id} memory={item} />
-            ))}
-            <Field
-              label="Remember something about me"
-              value={memory}
-              onChangeText={setMemory}
-              placeholder="I prefer morning meetings"
+          <Card style={{ paddingVertical: 3 }}>
+            <LinkRow
+              icon={UserRound}
+              title="About you"
+              detail={`What ${data?.identity.name || "your agent"} knows about you, to check, change or forget`}
+              onPress={() => setTab("about")}
             />
-            <Button
-              busy={busy}
-              disabled={!memory.trim()}
-              onPress={() =>
-                void save("/memories", { text: memory.trim(), source: "User added in Apps" })
-              }
-            >
-              Remember
-            </Button>
-            <View style={s.divider} />
-            <ChatgptImport />
           </Card>
           <PeopleNotesCard />
           <VoiceCard name={data?.identity.name || "Neddy"} />
@@ -2939,12 +2990,21 @@ function PhoneAppCard() {
     </Card>
   );
 }
-function SuggestionRow({ suggestion }: { suggestion: MemorySuggestion }) {
+function SuggestionRow({
+  suggestion,
+  onDone,
+}: {
+  suggestion: MemorySuggestion;
+  /** Kept or dismissed: the row goes, so focus moves on. */
+  onDone: () => void;
+}) {
+  const { notify } = useWorkspace();
   const { mutate } = useAgentWorkspace();
   const [text, setText] = useState(suggestion.text);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const buttons = useRef<View>(null);
   async function decide(action: "keep" | "dismiss") {
     setBusy(true);
     setError("");
@@ -2953,8 +3013,20 @@ function SuggestionRow({ suggestion }: { suggestion: MemorySuggestion }) {
         action,
         ...(action === "keep" ? { text: text.trim() } : {}),
       });
+      notify(action === "keep" ? "Kept. It’s under Other things I remember." : "Dismissed.");
+      onDone();
     } catch (e) {
       setError(errorText(e));
+      // The pressed button was disabled while busy; put focus back on it.
+      if (Platform.OS === "web")
+        setTimeout(() => {
+          const row = buttons.current as unknown as HTMLElement | null;
+          row
+            ?.querySelector<HTMLElement>(
+              `[aria-label^="${action === "keep" ? "Keep" : "Dismiss"}: "]`,
+            )
+            ?.focus();
+        }, 60);
     } finally {
       setBusy(false);
     }
@@ -2969,27 +3041,43 @@ function SuggestionRow({ suggestion }: { suggestion: MemorySuggestion }) {
       }}
     >
       {editing ? (
-        <Field label="Memory" value={text} onChangeText={setText} />
+        <Field label="Memory" value={text} onChangeText={setText} autoFocus />
       ) : (
         <Text style={s.text}>{suggestion.text}</Text>
       )}
-      {!!suggestion.reason && <Text style={s.small}>{suggestion.reason}</Text>}
-      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+      {!!suggestion.reason && (
+        <Text style={[s.small, { color: colors.mutedStrong }]}>{suggestion.reason}</Text>
+      )}
+      <View ref={buttons} style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
         <Button
           small
           primary
           busy={busy}
           disabled={!text.trim()}
+          accessibilityLabel={`Keep: ${text.trim() || suggestion.text}`}
           onPress={() => void decide("keep")}
         >
           Keep
         </Button>
         {!editing && (
-          <Button small disabled={busy} onPress={() => setEditing(true)}>
+          <Button
+            small
+            disabled={busy}
+            // A card-coloured pill, so it shows on the lavender row.
+            style={{ backgroundColor: colors.card }}
+            accessibilityLabel={`Edit: ${suggestion.text}`}
+            onPress={() => setEditing(true)}
+          >
             Edit
           </Button>
         )}
-        <Button small disabled={busy} onPress={() => void decide("dismiss")}>
+        <Button
+          small
+          disabled={busy}
+          style={{ backgroundColor: colors.card }}
+          accessibilityLabel={`Dismiss: ${suggestion.text}`}
+          onPress={() => void decide("dismiss")}
+        >
           Dismiss
         </Button>
       </View>
@@ -3025,7 +3113,11 @@ function MemoryRow({ memory }: { memory: AgentMemory }) {
         <Text style={s.text}>{memory.text}</Text>
       )}
       <Text style={s.small}>
-        {memory.source} · {stamp(memory.createdAt)}
+        {/* Stored as the agent reads it; shown the way the person would say it. */}
+        {memory.source === "User added in Apps" || memory.source === "You"
+          ? "You added this"
+          : memory.source}{" "}
+        · {stamp(memory.createdAt)}
       </Text>
       <View style={[s.row, { gap: 8 }]}>
         {editing ? (

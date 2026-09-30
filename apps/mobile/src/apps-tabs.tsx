@@ -3,10 +3,11 @@ import { Pressable, Text, View } from "react-native";
 import { Emoji } from "./emoji";
 import { colors } from "./ui";
 
-export type AppsTab = "apps" | "agent" | "alerts" | "money" | "account" | "help";
+export type AppsTab = "apps" | "agent" | "about" | "alerts" | "money" | "account" | "help";
 const TABS: { id: AppsTab; label: string; emoji: string }[] = [
   { id: "apps", label: "Apps", emoji: "🧩" },
   { id: "agent", label: "Agent", emoji: "🤖" },
+  { id: "about", label: "About you", emoji: "🙂" },
   { id: "alerts", label: "Alerts", emoji: "🔔" },
   { id: "money", label: "Money", emoji: "💳" },
   { id: "account", label: "Account", emoji: "🔑" },
@@ -43,7 +44,7 @@ export function AppsTabs({
 }) {
   return (
     // Wraps onto a second row on a phone, so every tab is in view.
-    <View role="tablist" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+    <View role="tablist" style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
       {TABS.map((item) => {
         const selected = item.id === tab;
         const badge = badges[item.id] ?? 0;
@@ -58,16 +59,16 @@ export function AppsTabs({
             style={({ pressed }) => ({
               flexDirection: "row",
               alignItems: "center",
-              gap: 6,
-              paddingLeft: 10,
-              paddingRight: 14,
+              gap: 5,
+              paddingLeft: 8,
+              paddingRight: 10,
               height: 40,
               borderRadius: 20,
               backgroundColor: selected ? colors.inverse : colors.subtle,
               opacity: pressed ? 0.8 : 1,
             })}
           >
-            <Emoji char={item.emoji} size={22} />
+            <Emoji char={item.emoji} size={20} />
             <Text
               style={{
                 fontSize: 14,
@@ -77,13 +78,19 @@ export function AppsTabs({
             >
               {item.label}
             </Text>
+            {/* On the pill's corner, so a badge never makes the row wrap. */}
             {badge > 0 && (
               <View
                 style={{
-                  minWidth: 18,
-                  height: 18,
-                  borderRadius: 9,
-                  paddingHorizontal: 5,
+                  position: "absolute",
+                  top: -5,
+                  right: -5,
+                  borderWidth: 2,
+                  borderColor: colors.canvas,
+                  minWidth: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  paddingHorizontal: 4,
                   alignItems: "center",
                   justifyContent: "center",
                   backgroundColor: colors.danger,

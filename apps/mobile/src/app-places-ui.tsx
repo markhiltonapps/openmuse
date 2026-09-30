@@ -117,7 +117,7 @@ const SPACE_TABS: Partial<Record<AppPlaceId, { kind: SpaceKind; tab: SpaceTab }>
 const APPS_TABS: Partial<Record<AppPlaceId, AppsTab>> = {
   apps: "apps",
   "agent-settings": "agent",
-  memory: "agent",
+  memory: "about",
   alerts: "alerts",
   money: "money",
   account: "account",
@@ -318,8 +318,7 @@ export function usePlace(request: PlaceRequest) {
     const appsTab = APPS_TABS[request.place];
     if (appsTab) {
       showAppsTab(appsTab);
-      if (request.place === "memory") anchor = { id: "memory", at: Date.now() };
-      else focusTab();
+      focusTab();
       return toScreen("apps");
     }
     // Panels open over whatever is on screen; closing one comes back to the chat.

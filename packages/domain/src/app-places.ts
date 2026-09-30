@@ -132,12 +132,13 @@ export const APP_PLACES = {
   "agent-settings": {
     name: "Agent settings",
     where: "Apps › Agent",
-    about: "the agent's name and look, memory, people notes, voice, the agent's email",
+    about: "the agent's name and look, people notes, voice, the agent's email",
   },
   memory: {
-    name: "Memory",
-    where: "Apps › Agent",
-    about: "what the agent remembers about them, to check, correct or forget",
+    name: "About you",
+    where: "Apps › About you",
+    about:
+      "what the agent knows about them (name, work, home, apps, how to reach them) and everything else it remembers, to check, correct or forget",
   },
   alerts: { name: "Alerts", where: "Apps", about: "alerts from email and other apps" },
   money: {

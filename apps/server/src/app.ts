@@ -241,6 +241,7 @@ export async function createApp(
     );
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   const calendarToday = new CalendarToday(apps, (owner) => agent.timeZone(owner));
+  agent.persona.accountName = async (owner) => (await accounts.get(owner))?.name;
   agent.areas = new Areas(
     db,
     config.mode === "live"
@@ -1224,6 +1225,19 @@ export async function createApp(
   );
   app.post("/api/logins/:id/delete", async (c) =>
     c.json(await logins.remove(c.get("owner"), c.req.param("id"))),
+  );
+  app.get("/api/persona", async (c) => c.json({ facts: await agent.persona.list(c.get("owner")) }));
+  app.post("/api/persona/:key", async (c) =>
+    c.json(await agent.persona.edit(c.get("owner"), c.req.param("key"), await c.req.json())),
+  );
+  app.post("/api/persona/:key/confirm", async (c) =>
+    c.json(await agent.persona.confirm(c.get("owner"), c.req.param("key"))),
+  );
+  app.post("/api/persona/:key/forget", async (c) =>
+    c.json(await agent.persona.forget(c.get("owner"), c.req.param("key"))),
+  );
+  app.post("/api/persona/:key/restore", async (c) =>
+    c.json(await agent.persona.restore(c.get("owner"), c.req.param("key"), await c.req.json())),
   );
   app.get("/api/people", async (c) => c.json({ people: await agent.people.list(c.get("owner")) }));
   app.post("/api/people", async (c) =>

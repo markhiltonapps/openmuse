@@ -58,6 +58,7 @@ import type { MailAlerts } from "../mail-alerts.ts";
 import type { MealCheckIns } from "../meal-checkins.ts";
 import { MiniApps } from "../mini-apps.ts";
 import { People } from "../people.ts";
+import { Persona } from "../persona.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
@@ -86,6 +87,8 @@ export class AgentService {
   readonly miniApps: MiniApps;
   /** Pages on the people and groups the person deals with. */
   readonly people: People;
+  /** The About you page: what the agent knows about the person. */
+  readonly persona: Persona;
   private maintenance?: ReturnType<typeof setInterval>;
   /** This copy of the server, for the maintenance lease. */
   private readonly instance = randomUUID();
@@ -106,6 +109,7 @@ export class AgentService {
     this.shares = new FileShares(db, files, config.publicUrl);
     this.miniApps = new MiniApps(db, config.publicUrl);
     this.people = new People(db);
+    this.persona = new Persona(db);
     this.chats = new ChatSummaries(db, (owner, previous, transcript) => {
       const model = this.config.workerModel ?? this.config.model;
       if (this.config.agentBackend !== "model" || !model) return Promise.resolve("");

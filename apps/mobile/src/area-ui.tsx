@@ -1,6 +1,6 @@
 import { LocateFixed, MapPin } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { useRef, useState } from "react";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import { Button, colors, ErrorNotice, s } from "./ui";
 import { currentPosition, locationAvailable } from "./web-app";
 import { useWorkspace } from "./workspace";
@@ -30,6 +30,7 @@ export function areaPromptDismissed() {
 
 /** Sets the person's area from their device's location or a city they type. */
 export function AreaEditor({
+  autoFocus,
   onSaved,
   onCancel,
   saved = (area) =>
@@ -37,6 +38,8 @@ export function AreaEditor({
       ? `Weather and local news are now for ${area.label}.`
       : `Local news is now for ${area.label}. Weather is only available for US cities.`,
 }: {
+  /** Puts the cursor in the city box as it opens. */
+  autoFocus?: boolean;
   onSaved: () => void;
   onCancel?: () => void;
   /** The note once it's saved. */
@@ -44,6 +47,7 @@ export function AreaEditor({
 }) {
   const { api, notify } = useWorkspace();
   const [place, setPlace] = useState("");
+  const box = useRef<TextInput>(null);
   const [busy, setBusy] = useState<"locate" | "type">();
   const [error, setError] = useState("");
   async function save(kind: "locate" | "type") {
@@ -62,6 +66,8 @@ export function AreaEditor({
       onSaved();
     } catch (e) {
       setError(message(e));
+      // Back in the box, so a typo can be fixed straight away.
+      if (kind === "type" && Platform.OS === "web") setTimeout(() => box.current?.focus(), 60);
     } finally {
       setBusy(undefined);
     }
@@ -93,8 +99,11 @@ export function AreaEditor({
       )}
       <View style={[s.row, { gap: 8 }]}>
         <TextInput
+          ref={box}
           value={place}
           onChangeText={setPlace}
+          autoFocus={autoFocus}
+          blurOnSubmit={false}
           onSubmitEditing={() => place.trim().length >= 2 && void save("type")}
           returnKeyType="done"
           placeholder={locationAvailable() ? "Or type a city or ZIP code" : "City or ZIP code"}
