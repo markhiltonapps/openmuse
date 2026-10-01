@@ -186,7 +186,13 @@ export class LiveVoice {
     };
     const id = created.session?.id;
     const sdp = created.transport?.sdp;
-    if (!id || !sdp) throw new AppError("OpenAI didn’t start the call. Try again.", 502);
+    if (!id || !sdp) {
+      // Its shape, not its values, so the log never holds a session's details.
+      console.warn(
+        `[OpenMuse] Live voice: OpenAI answered without a session or SDP (keys: ${shape(created)})`,
+      );
+      throw new AppError("OpenAI didn’t start the call. Try again.", 502);
+    }
     const live: Live = {
       id,
       owner,
@@ -366,9 +372,34 @@ interface LiveEvent {
 }
 
 /** OpenAI's refusal in plain words, without anything secret. */
+/** An answer's keys, two levels deep: "session{id,model},transport{sdp}". */
+function shape(value: unknown, depth = 0): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return Object.entries(value)
+    .slice(0, 12)
+    .map(([key, inner]) => {
+      const nested = depth < 1 ? shape(inner, depth + 1) : "";
+      return nested ? `${key}{${nested}}` : key;
+    })
+    .join(",");
+}
+
 async function failure(response: Response, model: string) {
-  const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: { message?: string; type?: string; code?: string; param?: string };
+  };
   const detail = body.error?.message?.slice(0, 300);
+  // OpenAI's own reason, for the server log (it never contains the key).
+  console.warn(
+    `[OpenMuse] Live voice: OpenAI said ${response.status}${[
+      body.error?.type,
+      body.error?.code,
+      body.error?.param,
+    ]
+      .filter(Boolean)
+      .map((part) => ` ${part}`)
+      .join("")}: ${detail ?? "(no message)"}`,
+  );
   if (response.status === 401 || response.status === 403)
     return new AppError(
       `OpenAI turned down the voice key (${response.status}). Check OPENAI_VOICE_API_KEY and that the account can use ${model}.${detail ? ` ${detail}` : ""}`,

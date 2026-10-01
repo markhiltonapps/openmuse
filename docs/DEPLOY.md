@@ -24,10 +24,10 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `CODE_MODEL` | Optional. With `ANTHROPIC_API_KEY` set, Neddy gets a private code sandbox (Anthropic's code execution tool: Python and shell, no internet) for numbers, spreadsheets, charts and file conversions; files it makes are saved to Files. This model runs it (default `claude-sonnet-5`). About 1,550 free sandbox hours a month per organization, then $0.05 an hour; model tokens are billed as usual |
 | `VISION_MODEL` | Optional. Model that looks at pictures in Files; defaults to the Anthropic model in `MODEL` |
 | `AVATAR_MODEL` | Optional. Model that draws avatars from a description; defaults to the Anthropic model in `MODEL` |
-| `OPENAI_VOICE_API_KEY` | Optional. Turns on live talk (the headset in the chat): real-time voice with OpenAI's `gpt-live-1`, for the admin for now. Kept on the server; the browser never sees it. After adding it, choose Deploy. The API's deploy log then says `Live voice on`, or `Live voice off: …` when it's missing |
-| `VOICE_LIVE_MODEL` / `VOICE_LIVE_VOICE` | Optional. Live talk's model (default `gpt-live-1`) and voice (default `marin`) |
-| `VOICE_IDLE_SECONDS` | Optional. Live talk hangs up after this many seconds with nothing said either way (default `90`) |
-| `VOICE_PRICES` | Optional. Per-minute prices for Usage, in dollars: `gpt-live-1=0.05` |
+| `OPENAI_VOICE_API_KEY` | Optional. Turns on live talk (the headset in the chat): real-time voice with OpenAI's `gpt-live-1`, for the admin for now. Kept on the server; the browser never sees it. After adding it, choose Deploy. The API's Deploy Logs then say `Live voice on`, or `Live voice off: …` when it's missing |
+| `VOICE_LIVE_MODEL` / `VOICE_LIVE_VOICE` | Optional. Live talk's model (default `gpt-live-1`) and voice (default `marin`). A different model needs its price in `VOICE_PRICES`, or Usage shows no cost for it |
+| `VOICE_IDLE_SECONDS` | Optional. Live talk hangs up after this many seconds with nothing said either way (default `90`), since silence is billed too |
+| `VOICE_PRICES` | Optional. Adds or corrects the per-minute prices used for cost estimates in Apps → Usage, in dollars: `gpt-live-1=0.05` (already built in) |
 | `CPK_INTELLIGENCE_API_KEY` | Server-only key from `npx copilotkit@latest project select` |
 | `OPENMUSE_ACCESS_KEY` | Random secret of at least 24 characters, used to sign in |
 | `TOKEN_ENCRYPTION_KEY` | `openssl rand -base64 32` |

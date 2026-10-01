@@ -1,4 +1,4 @@
-import { Copy, ExternalLink, Mic, MicOff, PhoneOff } from "lucide-react-native";
+import { Check, Copy, ExternalLink, Mic, MicOff, PhoneOff } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Linking, Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
@@ -100,12 +100,20 @@ export function LiveTalkSheet() {
   const [checking, setChecking] = useState(false);
   const checkingNow = useRef(false);
   const [checkNote, setCheckNote] = useState("");
+  // Something said in the setup view (a copy) that stays until the next check replaces it.
+  const [said, setSaid] = useState("");
   // Said once as the call starts, so a screen reader hears that the check worked.
   const [switchedOn, setSwitchedOn] = useState(false);
+  useEffect(() => {
+    if (state !== "connecting") setSwitchedOn(false);
+  }, [state]);
   const checkAgain = async (quietly = false) => {
     if (checkingNow.current) return;
     checkingNow.current = true;
-    if (!quietly) setChecking(true);
+    if (!quietly) {
+      setChecking(true);
+      setSaid("");
+    }
     // The last note stays (faded) until the answer replaces it, so the sheet doesn't jump.
     try {
       // Once the key is there, this starts the call.
@@ -114,12 +122,12 @@ export function LiveTalkSheet() {
         setNeedsKey(false);
       } else if (!quietly)
         setCheckNote(
-          "Still not switched on. Make sure the variable is on the “api” card and named exactly OPENAI_VOICE_API_KEY, and that you chose “Deploy”. If it’s still deploying, wait a minute, then choose “Check again”.",
+          "Still not switched on. Make sure the variable is on the “api” card and named exactly OPENAI_VOICE_API_KEY, and that you chose “Deploy”. If it’s still deploying, wait a minute, then choose “Check\u00a0again”.",
         );
     } catch {
       if (!quietly)
         setCheckNote(
-          `Couldn’t reach ${name}. Check your internet connection, or if Railway is still deploying, wait a minute. Then choose “Check again”.`,
+          `Couldn’t reach ${name}. Check your internet connection, or wait a minute if Railway is still deploying. Then choose “Check\u00a0again”.`,
         );
     } finally {
       checkingNow.current = false;
@@ -267,17 +275,32 @@ export function LiveTalkSheet() {
     </View>
   );
   const setupControls = (
-    <View
-      nativeID="live-controls"
-      style={[s.row, { gap: 10, flexWrap: "wrap", justifyContent: "center" }]}
-    >
-      {/* Not disabled while checking: a disabled button would lose keyboard focus. */}
-      <Button strong style={{ minWidth: 112 }} onPress={() => void checkAgain()}>
-        {checking ? "Checking…" : "Check again"}
-      </Button>
-      <Button style={{ minWidth: 112 }} onPress={close}>
-        Close
-      </Button>
+    <View style={{ gap: 12, alignSelf: "center", width: "100%", maxWidth: 480 }}>
+      {/* The answer to a check sits by the button that asked, so it's always in view. It fades
+          while checking again and is replaced by the answer, so nothing jumps. */}
+      {checkNote ? (
+        <View style={[s.error, { marginVertical: 0, padding: 12, opacity: checking ? 0.5 : 1 }]}>
+          <Text style={[s.text, { color: colors.danger, fontSize: 14, lineHeight: 20 }]}>
+            {checkNote}
+          </Text>
+        </View>
+      ) : null}
+      {/* Mounted all the time; the note above isn't a live region, so it's read once. */}
+      <Text role="status" style={HIDDEN}>
+        {checking ? "Checking…" : said || checkNote || SETUP_HEADING}
+      </Text>
+      <View
+        nativeID="live-controls"
+        style={[s.row, { gap: 10, flexWrap: "wrap", justifyContent: "center" }]}
+      >
+        {/* Not disabled while checking: a disabled button would lose keyboard focus. */}
+        <Button strong style={{ minWidth: 112 }} onPress={() => void checkAgain()}>
+          {checking ? "Checking…" : "Check again"}
+        </Button>
+        <Button style={{ minWidth: 112 }} onPress={close}>
+          Close
+        </Button>
+      </View>
     </View>
   );
   return (
@@ -288,13 +311,7 @@ export function LiveTalkSheet() {
       footer={needsKey ? setupControls : controls}
     >
       {needsKey ? (
-        <LiveSetup
-          name={name}
-          checking={checking}
-          note={checkNote}
-          link={setupLinks.get(api)}
-          height={height}
-        />
+        <LiveSetup name={name} link={setupLinks.get(api)} height={height} onSay={setSaid} />
       ) : (
         <View style={{ alignItems: "center", gap: 12 }}>
           {!short && (
@@ -317,7 +334,7 @@ export function LiveTalkSheet() {
             {error
               ? `${status} ${error}`
               : state === "connecting" && switchedOn
-                ? `It’s switched on. ${status}`
+                ? `Live talk is on. ${status}`
                 : over || state === "connecting" || muted
                   ? status
                   : `Live. ${name} can hear you. Just speak, and cut in any time.`}
@@ -365,38 +382,44 @@ export function LiveTalkSheet() {
 
 const mono = Platform.OS === "ios" ? "Menlo" : "monospace";
 const KEY_NAME = "OPENAI_VOICE_API_KEY";
+const SETUP_HEADING = "Live talk isn’t switched on yet";
 const SETUP_STEPS = [
   "In Railway, open the “api” card (not “web”), then its Variables tab.",
   `Choose “New Variable”. Name it ${KEY_NAME}, paste your OpenAI key as the value, then choose “Add”.`,
-  "Choose “Deploy” to apply the change. Wait a few minutes for it to finish, then choose “Check again”.",
+  "Choose “Deploy” to apply the change. Wait a few minutes for it to finish, then choose “Check\u00a0again”.",
 ];
 
 /** For the owner while the server has no OpenAI key: what to add (Check again is in the footer). */
 function LiveSetup({
   name,
-  checking,
-  note,
   link,
   height,
+  onSay,
 }: {
   name: string;
-  checking: boolean;
-  note: string;
   /** This service's Variables page in Railway. */
   link?: string;
   height: number;
+  /** For the sheet's status line, which keeps it until the next check. */
+  onSay: (words: string) => void;
 }) {
-  const heading = "Live talk isn’t switched on yet";
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const canCopy =
     Platform.OS === "web" && typeof navigator !== "undefined" && !!navigator.clipboard;
   const copyName = async () => {
     try {
       await navigator.clipboard.writeText(KEY_NAME);
+      setCopyFailed(false);
       setCopied(true);
+      // Cleared first, so copying again is read out again.
+      onSay("");
+      setTimeout(() => onSay("Name copied."), 50);
+      // Only the button goes back; the status line isn't read again.
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Selecting the name still works.
+      setCopyFailed(true);
+      onSay("Couldn’t copy it. Select the name instead.");
     }
   };
   // A phone on its side: the steps matter more than the avatar.
@@ -405,15 +428,11 @@ function LiveSetup({
     <View style={{ gap: 14, alignSelf: "center", width: "100%", maxWidth: 480 }}>
       <View style={{ alignItems: "center", gap: 12 }}>
         {avatar > 0 && <AgentAvatar size={avatar} mood="idle" />}
-        <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{heading}</Text>
+        <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{SETUP_HEADING}</Text>
         <Text style={[s.text, { textAlign: "center", color: colors.mutedStrong }]}>
           {`It needs your OpenAI key, added in Railway. Then you can talk with ${name} here. Only you see this.`}
         </Text>
       </View>
-      {/* Mounted all the time; the visible note below isn't a live region, so it's read once. */}
-      <Text role="status" style={HIDDEN}>
-        {checking ? "Checking…" : copied ? "Copied the name." : note || heading}
-      </Text>
       <View style={{ gap: 12 }}>
         {SETUP_STEPS.map((step, index) => (
           <View key={step} style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
@@ -451,19 +470,17 @@ function LiveSetup({
                 </Button>
               )}
               {index === 1 && canCopy && (
-                <Button icon={Copy} onPress={() => void copyName()}>
+                <Button icon={copied ? Check : Copy} onPress={() => void copyName()}>
                   {copied ? "Copied" : "Copy name"}
                 </Button>
+              )}
+              {index === 1 && copyFailed && (
+                <Text style={s.small}>Couldn’t copy it. Select the name instead.</Text>
               )}
             </View>
           </View>
         ))}
       </View>
-      {note ? (
-        <View style={[s.error, { opacity: checking ? 0.5 : 1 }]}>
-          <Text style={[s.text, { color: colors.danger }]}>{note}</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
