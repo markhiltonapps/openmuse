@@ -506,6 +506,9 @@ PENDING
     "when something they asked for needs it; never share it otherwise", with how to forget it.
     The usability reviewer wasn't run (the owner stopped that agent earlier; no new agent unless
     asked).
+  - Owner said "push it": 28e9518 (call bar polish) and 1c38a86 pushed at 21:12 UTC (no call since
+    20:36); api and web deployed SUCCESS at 21:13, api log "Live voice on (gpt-live-1, voice
+    marin)"; worker SKIPPED.
   - Not in this slice (later): editing Home address by hand doesn't change Where you live (copy
     suggests a hint "For local news and weather" under Where you live); Undo after removing a
     weigh-in; goal weight; kilograms display.
