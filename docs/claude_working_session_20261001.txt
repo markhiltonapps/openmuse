@@ -318,8 +318,9 @@ PENDING
 - The owner tries "what did I have for lunch?" and a reminder on a real call, and says whether
   calls feel smoother on the phone.
 - The owner tries a call that shows results (e.g. "find me a robot vacuum under $300").
-- Owner's choice: a document asked for on a call is made at once (shows on the call screen) or
-  run as a background job.
+- Owner's choice (answered): a document, spreadsheet or slides asked for on a call runs as a
+  background job, and the usual job-done alert (pop-up, push, email) says when it's ready.
+  VOICE_RULES now says so; tested.
 - Later NICEs: collapse a chat card with many answers ("Show N more"). On the call screen, open
   a still-fresh link without fetching, so a slow network can't trip the popup blocker. Announce
   file-row errors with a status line.

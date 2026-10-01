@@ -301,6 +301,11 @@ test("a long answer goes on screen: shown results are collected for the call, fa
   ]);
   // The voice is told to put long answers on screen.
   assert.match(VOICE_RULES, /show_on_screen/);
+  // Documents asked for on a call become a job, and they're told when it's done (owner's choice).
+  assert.match(
+    VOICE_RULES,
+    /document, spreadsheet or slides, don't make it during the call: start it as a job with delegate_task/,
+  );
   // A later question in the call knows what's already on their screen.
   const earlier: CallDetail = {
     id: "d1",
