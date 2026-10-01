@@ -124,13 +124,15 @@ export function LiveTalkSheet() {
     let go: ReturnType<typeof setTimeout>;
     const find = () => {
       const y = places.current.get(target);
-      if (y !== undefined) detailsScroller.current?.scrollTo({ y, animated: false });
-      if (y === undefined && ++tries < 6) go = setTimeout(find, 80);
+      if (y === undefined) {
+        if (++tries < 6) go = setTimeout(find, 80);
+        return;
+      }
+      detailsScroller.current?.scrollTo({ y, animated: false });
+      // Focus there straight away, not on the call's own buttons first.
+      if (Platform.OS === "web") document.getElementById(detailNode(target))?.focus();
     };
     go = setTimeout(find, 80);
-    const focus = setTimeout(() => {
-      if (Platform.OS === "web") document.getElementById(detailNode(target))?.focus();
-    }, 400);
     // Last, as clearing it ends this effect (and its timers).
     const ready = setTimeout(() => {
       setSettling(false);
@@ -138,7 +140,6 @@ export function LiveTalkSheet() {
     }, 600);
     return () => {
       clearTimeout(go);
-      clearTimeout(focus);
       clearTimeout(ready);
     };
   }, [target]);
@@ -201,10 +202,14 @@ export function LiveTalkSheet() {
   const hide = call.shrink;
   const toggleMute = call.toggleMute;
   const over = call.phase === "over";
-  // When the buttons swap (the call ends, or starts again), keep focus on the new ones.
+  // When the buttons swap (the call ends, or starts again), keep focus on the new ones; not when
+  // See it is taking focus to what it named.
+  const targetNow = useRef(target);
+  targetNow.current = target;
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const timer = setTimeout(() => {
+      if (targetNow.current) return;
       const active = document.activeElement;
       if (active && active !== document.body && active.isConnected) return;
       // While it connects Mute waits, and End would be next: a second Enter mustn't end the call
@@ -350,8 +355,23 @@ export function LiveTalkSheet() {
               />
             )}
             {/* Room for two lines during a call, so a longer status never moves what's below it. */}
-            <View style={{ minHeight: over ? 0 : short ? 26 : 52, justifyContent: "center" }}>
-              <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{status}</Text>
+            <View
+              style={{
+                minHeight: over ? 0 : short ? 26 : 52,
+                justifyContent: "center",
+                // Ended, over the details: quieter, and apart from the first answer's heading.
+                marginBottom: over && showingDetails ? 10 : 0,
+              }}
+            >
+              <Text
+                style={
+                  over && showingDetails
+                    ? [s.text, { textAlign: "center", color: colors.mutedStrong }]
+                    : [s.heading, { fontSize: 18, textAlign: "center" }]
+                }
+              >
+                {status}
+              </Text>
             </View>
             {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
             <Text role="status" style={HIDDEN}>

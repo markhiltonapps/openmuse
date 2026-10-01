@@ -460,6 +460,20 @@ PENDING
   - Later: the voice's "shrunk" is fixed when a hand-over starts (if they open or shrink it during
     the check it can name the wrong place); a quieter "Needs your OK" reminder after See it while the
     approval is still undecided; don't hang up for quiet while an Approve card is unseen.
+- See it pushed (cbfa40b) at 20:07 UTC (no call since 19:31); api and web SUCCESS 20:09–20:10.
+- Call bar polish (owner: "go ahead with the follow-up polish"):
+  - the bar keeps one height (116px) with the words or See it, so the page never moves;
+  - an Approve card that's been seen but is still waiting keeps See it as a quieter reminder
+    (outlined pill, "Still needs your OK") until it's approved, declined or expires (expiry checked
+    in the app: the server marks it expired only when someone acts on it), and is carried into the
+    next call; anything new comes first ("New from Neddy · and 1 more");
+  - Talk again is quiet on an ended bar with See it; the ended call screen's status is a muted line;
+  - focus goes straight to the answer See it named; its group is labelled "Needs your OK: <title>"
+    only while it waits; its keyboard ring has room and rounded corners.
+  Design division: copy and visual SIGNED OFF; usability's two MUSTs (expired approvals, new items
+  first) fixed and passing its own scripts (x-expired, x-approve, x-headset); the reviewer was
+  stopped by the owner before confirming. 462 tests pass.
+  Later: the new call's voice doesn't know about a carried approval ("what's under See it?").
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk

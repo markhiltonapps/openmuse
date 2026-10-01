@@ -88,8 +88,11 @@ export interface CallControls {
   toggleMute: () => void;
   /** Lets go of a call that's over (its bar goes). */
   dismiss: () => void;
-  /** Opens the call screen, over whatever is open (it starts a call when there's none). */
-  expand: () => void;
+  /**
+   * Opens the call screen, over whatever is open (it starts a call when there's none). From the
+   * bar, it goes straight to what See it names.
+   */
+  expand: (toNews?: boolean) => void;
   /** Shrinks the call screen to the bar; a call that's over goes. */
   shrink: () => void;
 }
@@ -105,6 +108,8 @@ export interface LiveCallValue extends CallControls {
   details: CallDetail[];
   /** How many of those arrived while the call screen was shrunk. */
   unseen: number;
+  /** What the bar's See it button names, if anything. */
+  row?: NewsRow;
   view: "talk" | "details";
   setView: (view: "talk" | "details") => void;
   /** The agent is looking something up ("hold on, let me check"). */
@@ -154,7 +159,37 @@ export function CallNews({ quiet }: { quiet: boolean }) {
  * opens other things, shown full size on the call screen (a layer over everything) or as a bar.
  */
 export function LiveCallProvider({ children }: { children: ReactNode }) {
-  const { api } = useWorkspace();
+  const { api, workspace } = useWorkspace();
+  // Things from a call still waiting for their OK: their See it stays until approved or declined.
+  // Waiting means not decided and not past its time: the server only marks an approval expired
+  // when someone acts on it, so the time is checked here (as its Approve card does).
+  const [clock, setClock] = useState(0);
+  const waiting = useMemo(() => {
+    const byId = new Map(workspace.actions.map((action) => [action.id, action]));
+    /** Unknown ones are new (the app hasn't heard of them yet), unless `known` is asked for. */
+    return (id: string, known = false) => {
+      const action = byId.get(id);
+      if (!action) return !known;
+      return action.status === "awaiting_review" && Date.parse(action.expiresAt) > Date.now();
+    };
+  }, [workspace.actions, clock]);
+  const waitingNow = useRef(waiting);
+  waitingNow.current = waiting;
+  // The reminder goes when the soonest waiting approval runs out.
+  useEffect(() => {
+    const soonest = Math.min(
+      ...workspace.actions
+        .filter((action) => action.status === "awaiting_review")
+        .map((action) => Date.parse(action.expiresAt))
+        .filter((at) => at > Date.now()),
+    );
+    if (!Number.isFinite(soonest)) return;
+    const timer = setTimeout(
+      () => setClock((n) => n + 1),
+      Math.min(soonest - Date.now() + 500, 2 ** 31 - 1),
+    );
+    return () => clearTimeout(timer);
+  }, [workspace.actions, clock]);
   const { data } = useAgentWorkspace();
   const name = data?.identity.name || "Neddy";
   // The name can change mid-call (settings loading): that mustn't restart it.
@@ -204,6 +239,10 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     if (!attempt) return;
     const me = ++current.current;
     const live = () => current.current === me;
+    // An Approve card from the last call that's still waiting comes along, behind See it.
+    const carried = detailsNow.current.filter((detail) =>
+      approvalIds(detail).some((id) => waitingNow.current(id, true)),
+    );
     setPhase("on");
     setState("connecting");
     setError("");
@@ -212,8 +251,8 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     setMuted(false);
     mutedNow.current = false;
     setLookingUp(false);
-    setDetails([]);
-    setSeen(0);
+    setDetails(carried);
+    setSeen(carried.length);
     setView("talk");
     setStartedAt(undefined);
     let detailCount = 0;
@@ -251,12 +290,12 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         // Something new: the voice is saying it's on the screen, so that's what shows.
         if (next.length > detailCount) {
           setView("details");
-          // The same thing the bar's See it button shows.
-          const row = newsRow(next.slice(seenNow.current), nameNow.current);
+          // What just arrived, as the bar's See it button names it.
+          const row = newsRow(next.slice(detailCount), nameNow.current, waitingNow.current);
           if (row) say(`${rowWords(row)}. Choose “See it” in the bar at the top.`);
         }
         detailCount = next.length;
-        setDetails(next);
+        setDetails([...carried, ...next]);
       },
       onWords: (role, words) => {
         if (!live()) return;
@@ -320,12 +359,14 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (phase !== "over") return;
     // Something still waiting for their OK stays behind See it on the ended bar: say so.
-    const row = newsRow(detailsNow.current.slice(seenNow.current), nameNow.current);
-    const waiting =
+    const row = rowNow.current;
+    const stillWaiting =
       row?.kind === "ok"
         ? ` ${row.title} still needs your OK. Choose “See it” in the bar at the top.`
         : "";
-    say(`${error ? `The call couldn’t start. ${error}` : ended || "The call ended."}${waiting}`);
+    say(
+      `${error ? `The call couldn’t start. ${error}` : ended || "The call ended."}${stillWaiting}`,
+    );
   }, [phase, ended, error, say]);
   // During a call, leaving the page (a refresh, pull to refresh, closing the tab) asks first.
   useEffect(() => {
@@ -375,9 +416,9 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     clearTimeout(newsTimer.current);
     setNews("");
   }, []);
-  const expand = useCallback(() => {
-    // Straight to what the bar's See it named (a waiting Approve card first).
-    const row = newsRow(detailsNow.current.slice(seenNow.current), nameNow.current);
+  const expand = useCallback((toNews = false) => {
+    // From the bar: straight to what its See it named (a waiting Approve card first).
+    const row = toNews ? rowNow.current : undefined;
     setTarget(row?.id);
     if (row) setView("details");
     shownNow.current = true;
@@ -402,6 +443,23 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         bars[bars.length - 1]?.querySelector<HTMLElement>('[role="button"]')?.focus();
       }, 80);
   }, [say]);
+  // What the bar's See it button shows: what's new on screen since they last looked, and anything
+  // from the call still waiting for their OK.
+  const row = useMemo(() => {
+    const fresh = details.slice(seen);
+    const stillWaiting = details
+      .slice(0, seen)
+      .filter((detail) => approvalIds(detail).some((id) => waiting(id)));
+    // What just arrived comes first, so the bar names what the voice just pointed to; an
+    // approval already seen and still waiting is a reminder only when there's nothing new.
+    const found = newsRow(fresh.length ? fresh : stillWaiting, name, waiting);
+    if (!found) return undefined;
+    return fresh.length
+      ? { ...found, fresh: true, more: found.more + stillWaiting.length }
+      : { ...found, fresh: false, label: "Still needs your OK" };
+  }, [details, seen, waiting, name]);
+  const rowNow = useRef(row);
+  rowNow.current = row;
   const controls = useMemo<CallControls>(
     () => ({ phase, shown, start, end, toggleMute, dismiss, expand, shrink }),
     [phase, shown, start, end, toggleMute, dismiss, expand, shrink],
@@ -414,6 +472,7 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       lines,
       details,
       unseen: Math.max(0, details.length - seen),
+      row,
       view,
       setView,
       lookingUp,
@@ -437,6 +496,7 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       startedAt,
       target,
       clearTarget,
+      row,
     ],
   );
   return (
@@ -448,8 +508,15 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** The actions an answer's Approve cards are for. */
+const approvalIds = (detail: CallDetail) =>
+  detail.items.flatMap((item) => {
+    const id = (item.result as { actionId?: unknown } | undefined)?.actionId;
+    return item.tool === "approval" && typeof id === "string" ? [id] : [];
+  });
 /** Something put on screen that waits for their OK (an Approve card). */
-const needsOk = (detail: CallDetail) => detail.items.some((item) => item.tool === "approval");
+const needsOk = (detail: CallDetail, waiting: (id: string) => boolean) =>
+  approvalIds(detail).some(waiting);
 /** A Connect button for an app (connect_app's link, or their own app to check and connect). */
 const connectOf = (detail: CallDetail) => detail.items.find((item) => item.tool === "connect");
 /** What a detail is, in a few words: an Approve card's own title, else the answer's heading. */
@@ -470,14 +537,21 @@ function detailTitle(detail: CallDetail) {
 interface NewsRow {
   /** The answer it names. */
   id: string;
+  /** Not looked at yet (otherwise it's a quieter reminder of something still waiting). */
+  fresh?: boolean;
   kind: "ok" | "connect" | "new";
   label: string;
   title: string;
   more: number;
 }
-function newsRow(unseen: CallDetail[], name: string): NewsRow | undefined {
+function newsRow(
+  unseen: CallDetail[],
+  name: string,
+  isWaiting: (id: string) => boolean,
+): NewsRow | undefined {
   const newest = [...unseen].reverse();
-  const waiting = newest.find(needsOk);
+  // An Approve card that's been decided or has run out is just an answer now.
+  const waiting = newest.find((detail) => needsOk(detail, isWaiting));
   const connect = waiting ? undefined : newest.find((detail) => !!connectOf(detail));
   const pick = waiting ?? connect ?? newest[0];
   if (!pick) return undefined;
@@ -592,10 +666,7 @@ export function CallBar() {
   // What's new on screen and not seen yet, for its See it button (a waiting OK first): during the
   // call, and after it ends, so a waiting OK isn't lost because it went quiet before it was safe
   // to look.
-  const row =
-    call.unseen > 0
-      ? newsRow(call.details.slice(call.details.length - call.unseen), name)
-      : undefined;
+  const row = call.row;
   const live = !over && !call.muted && call.state !== "connecting";
   // Two lines of 14px text hold about one character per 7.6px each: the newest words must fit.
   const room = quoteWidth ? Math.max(60, Math.floor(quoteWidth / 7.6) * 2 - 6) : 80;
@@ -665,7 +736,7 @@ export function CallBar() {
                 : "The call ended. See what was said"
               : `${name} · ${status}. Go back to the call`
           }
-          onPress={call.expand}
+          onPress={() => call.expand(true)}
           style={({ pressed }) => ({
             flex: 1,
             minHeight: 44,
@@ -753,11 +824,18 @@ export function CallBar() {
                 paddingHorizontal: 14,
                 borderRadius: 22,
                 justifyContent: "center",
-                backgroundColor: colors.surface,
+                // Quieter while something waits behind See it: that's the one thing to do.
+                backgroundColor: row ? colors.onInverseSubtle : colors.surface,
                 opacity: pressed ? 0.85 : 1,
               })}
             >
-              <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: row ? colors.onInverse : colors.text,
+                  fontSize: 15,
+                  fontWeight: "700",
+                }}
+              >
                 Talk again
               </Text>
             </Pressable>
@@ -813,73 +891,87 @@ export function CallBar() {
           {why}
         </Text>
       ) : null}
-      {row ? (
-        // Something put on screen while the call is shrunk: a clear button to it, in place of the
-        // words (the voice is saying it's here). An Approve card is behind it, never on the bar.
-        <Pressable
-          role="button"
-          aria-label={`${rowWords(row)}. See it`}
-          onPress={call.expand}
-          style={({ pressed }) => ({
-            // Clear of End above it: a tap aimed here that lands high mustn't end the call.
-            marginTop: 8,
-            minHeight: 48,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            paddingLeft: 12,
-            paddingRight: 6,
-            paddingVertical: 5,
-            borderRadius: 18,
-            backgroundColor: colors.onInverseSubtle,
-            opacity: pressed ? 0.85 : 1,
-          })}
-        >
-          {row.kind === "ok" ? (
-            <ShieldCheck size={20} color={colors.onInverse} />
-          ) : row.kind === "connect" ? (
-            <Link2 size={20} color={colors.onInverse} />
-          ) : (
-            <LayoutList size={20} color={colors.onInverse} />
-          )}
-          <View style={{ flex: 1, gap: 1 }}>
-            <Text numberOfLines={1} style={[{ fontSize: 12 }, soft]}>
-              {[row.label, row.more ? `and ${row.more} more` : ""].filter(Boolean).join(" · ")}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={{ color: colors.onInverse, fontSize: 15, fontWeight: "700" }}
+      {row || !over ? (
+        // One height whether it holds the words or See it, so the page below never moves; 12px
+        // clear of End above it, so a tap aimed here that lands high can't end the call.
+        <View style={{ marginTop: 8, minHeight: 44, justifyContent: "center" }}>
+          {row ? (
+            // Something put on screen while the call is shrunk: a clear button to it, in place of the
+            // words (the voice is saying it's here). An Approve card is behind it, never on the bar.
+            <Pressable
+              role="button"
+              aria-label={`${rowWords(row)}. See it`}
+              onPress={() => call.expand(true)}
+              style={({ pressed }) => ({
+                minHeight: 44,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                paddingLeft: 12,
+                paddingRight: 6,
+                paddingVertical: 4,
+                borderRadius: 18,
+                backgroundColor: colors.onInverseSubtle,
+                opacity: pressed ? 0.85 : 1,
+              })}
             >
-              {row.title}
+              {row.kind === "ok" ? (
+                <ShieldCheck size={20} color={colors.onInverse} />
+              ) : row.kind === "connect" ? (
+                <Link2 size={20} color={colors.onInverse} />
+              ) : (
+                <LayoutList size={20} color={colors.onInverse} />
+              )}
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text numberOfLines={1} style={[{ fontSize: 12 }, soft]}>
+                  {[row.label, row.more ? `and ${row.more} more` : ""].filter(Boolean).join(" · ")}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{ color: colors.onInverse, fontSize: 15, fontWeight: "700" }}
+                >
+                  {row.title}
+                </Text>
+              </View>
+              {/* Already looked at and still waiting: a quieter reminder. */}
+              <View
+                style={{
+                  minHeight: 36,
+                  paddingHorizontal: 14,
+                  borderRadius: 18,
+                  justifyContent: "center",
+                  backgroundColor: row.fresh ? colors.surface : "transparent",
+                  borderWidth: row.fresh ? 0 : 1.5,
+                  borderColor: colors.onInverse,
+                }}
+              >
+                <Text
+                  style={{
+                    color: row.fresh ? colors.text : colors.onInverse,
+                    fontSize: 15,
+                    fontWeight: "700",
+                  }}
+                >
+                  See it
+                </Text>
+              </View>
+            </Pressable>
+          ) : (
+            <Text
+              numberOfLines={2}
+              onLayout={(event) => setQuoteWidth(Math.round(event.nativeEvent.layout.width))}
+              style={{
+                fontSize: 14,
+                lineHeight: 19,
+                paddingHorizontal: 4,
+                color: colors.onInverse,
+                opacity: 0.92,
+              }}
+            >
+              {said ? `“${newest(said, room)}”` : ""}
             </Text>
-          </View>
-          <View
-            style={{
-              minHeight: 36,
-              paddingHorizontal: 14,
-              borderRadius: 18,
-              justifyContent: "center",
-              backgroundColor: colors.surface,
-            }}
-          >
-            <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>See it</Text>
-          </View>
-        </Pressable>
-      ) : !over ? (
-        <Text
-          numberOfLines={2}
-          onLayout={(event) => setQuoteWidth(Math.round(event.nativeEvent.layout.width))}
-          style={{
-            minHeight: 38,
-            fontSize: 14,
-            lineHeight: 19,
-            paddingHorizontal: 4,
-            color: colors.onInverse,
-            opacity: 0.92,
-          }}
-        >
-          {said ? `“${newest(said, room)}”` : ""}
-        </Text>
+          )}
+        </View>
       ) : null}
     </View>
   );

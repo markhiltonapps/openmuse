@@ -29,6 +29,20 @@ const meta = { fontSize: 12, lineHeight: 17, color: colors.mutedStrong };
 /** Cards with their own heading: no heading above them when they're all an answer shows. */
 /** The element id of one answer on the call screen, for See it to scroll and move focus to. */
 export const detailNode = (id: string) => `call-detail-${id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+/**
+ * An answer with an Approve card is named by the card's title, as the bar's See it named it; with
+ * "Needs your OK" only while it's still waiting (afterwards the card says what happened).
+ */
+function approvalTitle(detail: CallDetail, waiting: (actionId: string) => boolean) {
+  for (const item of detail.items) {
+    const { title, actionId } = (item.result ?? {}) as { title?: unknown; actionId?: unknown };
+    if (item.tool !== "approval" || typeof title !== "string" || !title.trim()) continue;
+    return typeof actionId === "string" && waiting(actionId)
+      ? `Needs your OK: ${title.trim()}`
+      : title.trim();
+  }
+  return undefined;
+}
 /** Cards that need the person (Approve, Connect) come before the rest of an answer. */
 const ACTS_FIRST = (tool: string) => (tool === "approval" || tool === "connect" ? 0 : 1);
 const OWN_TITLES = new Set<CallDetail["items"][number]["tool"]>([
@@ -63,6 +77,15 @@ export function CallDetails({
   /** The line between answers: inside a chat bubble it needs to be darker than usual. */
   lineColor?: string;
 }) {
+  const { workspace } = useWorkspace();
+  // Not decided and not past its time (the server marks it expired only when someone acts on it).
+  const isWaiting = (actionId: string) =>
+    workspace.actions.some(
+      (action) =>
+        action.id === actionId &&
+        action.status === "awaiting_review" &&
+        Date.parse(action.expiresAt) > Date.now(),
+    );
   return (
     <View style={{ gap: 22 }}>
       {(onCall ? [...details].reverse() : details).map((detail, index) => (
@@ -73,13 +96,16 @@ export function CallDetails({
             ? {
                 nativeID: detailNode(detail.id),
                 role: "group" as const,
-                "aria-label": detail.title,
+                // An answer with something to approve is named by it, as the bar's See it was.
+                "aria-label": approvalTitle(detail, isWaiting) ?? detail.title,
                 tabIndex: -1 as const,
                 onLayout: (event: LayoutChangeEvent) =>
                   onPlace(detail.id, event.nativeEvent.layout.y),
               }
             : {})}
-          style={{ gap: 10 }}
+          // Its keyboard focus ring sits clear of the content, rounded like the cards, and the
+          // layout doesn't move.
+          style={[{ gap: 10 }, onPlace && { padding: 8, margin: -8, borderRadius: 16 }]}
         >
           {/* Just cards with their own titles (Approve, Connect, emails, calendar): no heading. */}
           {!detail.items.every((item) => OWN_TITLES.has(item.tool)) && (
