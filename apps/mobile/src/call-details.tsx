@@ -16,6 +16,7 @@ import { CalendarCard } from "./calendar-card";
 import { ConnectCard, OwnAppCard } from "./connect-card";
 import { EmailCards, emailItems } from "./email-cards";
 import { fileLabel } from "./file-kinds";
+import { HelpAnswerCard } from "./help-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { colors, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -165,6 +166,8 @@ export function CallDetails({
                   return <EmailCards key={key} emails={emailItems(result)} onCall={onCall} wide />;
                 case "look_at_calendar":
                   return <CalendarCard key={key} result={result} onCall={onCall} wide />;
+                case "get_help":
+                  return <HelpAnswerCard key={key} result={result} onCall={onCall} />;
                 case "connect": {
                   const { app, own } = result as { app?: unknown; own?: unknown };
                   if (typeof own === "string")

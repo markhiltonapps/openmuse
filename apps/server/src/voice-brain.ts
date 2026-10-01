@@ -99,6 +99,15 @@ function shown(tool: CallDetailTool, raw: string) {
       const { shown: _, ...calendar } = result;
       return some("events") || some("reminders") || some("couldNotRead") ? calendar : undefined;
     }
+    case "get_help":
+      // The help topics found, as cards that open them in Help.
+      return some("topics")
+        ? {
+            topics: (result.topics as { id?: unknown; title?: unknown }[])
+              .filter((topic) => typeof topic.id === "string")
+              .map(({ id, title }) => ({ id, title })),
+          }
+        : undefined;
     default:
       return typeof result.id === "string" && typeof result.name === "string"
         ? { id: result.id, name: result.name, pages: result.pages }
@@ -165,6 +174,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Starting a job";
     case "email_from_agent":
       return "Writing the email";
+    case "get_help":
+      return "Looking it up in Help";
     default:
       return nowDoing(tool, args)?.label ?? "Looking into it";
   }
@@ -630,6 +641,8 @@ export function shownText(details: CallDetail[]) {
         lines.push(`- A button to connect ${join(value.app) || "an app"}`);
       else if (tool === "approval")
         lines.push(`- Saved for your OK: ${join(value.title) || "something"}`);
+      else if (tool === "get_help")
+        for (const topic of list("topics").slice(0, 3)) lines.push(`- Help: ${join(topic.title)}`);
       else lines.push(`- ${join(value.name)} (saved in Files)`);
     }
     return lines.join("\n");

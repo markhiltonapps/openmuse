@@ -58,6 +58,7 @@ import { plainText } from "./copy-text";
 import { ToolAppResult } from "./email-cards";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
+import { HelpAnswerCard } from "./help-ui";
 import { useCallControls } from "./live-call";
 import { onCallSaved, SpokenCall, useLiveVoice } from "./live-talk-ui";
 import { MailToolCard } from "./mail-tool-card";
@@ -283,6 +284,15 @@ export function WorkspaceTools() {
       <ToolCalendar result={result} loading={status !== "complete"} />
     ),
   });
+  // "How do I…?": the help topic's steps, with a button to it in Help.
+  useRenderTool({
+    name: "get_help",
+    description: "Show the help topic the agent looked up",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <HelpAnswerCard result={result} loading={status !== "complete"} />
+    ),
+  });
   // A Connect button for an app right where they asked, not a link to find in Apps.
   useRenderTool({
     name: "connect_app",
@@ -420,7 +430,7 @@ export function ChatScreen({
   thread,
   active = true,
 }: {
-  prompt?: { id: number; text: string };
+  prompt?: { id: number; text: string; draft?: boolean };
   thread?: Selection;
   active?: boolean;
 }) {
@@ -933,8 +943,16 @@ export function ChatScreen({
     if (!busy && !agent.isRunning && outbox.pending.length) flush();
   }, [busy, agent.isRunning, outbox.pending.length, flush]);
   useEffect(() => {
-    if (active && prompt && isReady && loaded && claimPrompt(prompt.id) && prompt.text.trim())
-      enqueue(prompt.text);
+    if (!active || !prompt?.text.trim()) return;
+    // A draft goes in the message box for them to finish; it waits for nothing.
+    if (prompt.draft) {
+      if (!claimPrompt(prompt.id)) return;
+      // Anything they'd already typed stays, with the example on a new line.
+      setDraft((typed) => (typed.trim() ? `${typed.trimEnd()}\n${prompt.text}` : prompt.text));
+      setTimeout(() => input.current?.focus(), 0);
+      return;
+    }
+    if (isReady && loaded && claimPrompt(prompt.id)) enqueue(prompt.text);
   }, [active, prompt, isReady, loaded, enqueue, claimPrompt]);
   useEffect(() => {
     const subscription = copilotkit.subscribe({

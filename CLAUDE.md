@@ -63,6 +63,19 @@ Time Log — <Project Name>
 | YYYY-MM-DD | Short, specific description of the day's work                    | 0     |
 ```
 
+## Keep the Help guide up to date
+
+The app has a Help guide (☰ › Help & how-to, Apps › Help) that the agent also answers from by
+voice and chat (`get_help`). Any change people can see or ask for updates it in the same commit:
+
+- Edit `packages/domain/src/help.ts`: add or change the topic (steps, what to say, `place` or
+  `more` for the screens it's about, related topics). A new screen in `APP_PLACES` needs a topic;
+  `tests/help.test.ts` fails until it has one.
+- If a screen in a topic's picture changed, retake its screenshots with `scripts/help-shots.mjs`
+  (instructions at its top), and add a shot there for a new screen that needs one.
+- Admin-only setup (Railway, keys, services) goes in the `admin` group.
+- Mention the Help change in the session notes.
+
 ## Lessons learned
 
 - **Voice first (owner, 2026-10-01):** anything a person can tap or look up must also be doable
@@ -221,3 +234,14 @@ Time Log — <Project Name>
   address, their weight), it should land in a place they can see and change (an About you fact, a
   tracker), not a free-text note. And the voice never says "sure, I can do that" before the answer
   comes back: it doesn't know yet what can be done.
+- **Help screenshots (`scripts/help-shots.mjs`):** each shot's `go()` puts the screen where it
+  should be; `mark()` never scrolls, or the marks drawn earlier end up in the wrong place. Sample
+  approvals need a future `expiresAt` in the mocked workspace, or they show as expired. After
+  taking shots, rebuild the web app (`npx expo export --clear`) before checking them in Help,
+  because the build copies `public/` when it's made.
+- **Example phrases people can tap:** an example that would save, change or start something ("I
+  weighed 173", "Remind me to…") must open the chat with the words in the message box
+  (`draft()` in the workspace), never send in one tap; only questions that change nothing send
+  straight away. Phrases with "this" need somewhere to point (a photo, a call).
+- **Sheets whose contents change size** (search results, pages inside a sheet) take `fill` on
+  `Sheet`, so the sheet keeps one height and nothing moves under a thumb while typing.

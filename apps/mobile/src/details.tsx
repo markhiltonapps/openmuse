@@ -51,6 +51,7 @@ import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
 import { AppEmailSheet } from "./email-cards";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
+import { HelpSheet } from "./help-ui";
 import { FoodLogSheet } from "./meal-checkins-ui";
 import PdfReader from "./PdfReader";
 import { artifactKind, savedDate } from "./plans";
@@ -81,6 +82,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "task") return <TaskDetail taskId={detail.taskId} />;
   if (detail.type === "delegate") return <DelegateSheet prompt={detail.prompt} />;
   if (detail.type === "notifications") return <NotificationsSheet />;
+  if (detail.type === "help") return <HelpSheet topic={detail.topic} />;
   if (detail.type === "food") return <FoodLogSheet log={detail.log} />;
   if (detail.type === "commitments") return <CommitmentsSheet tab={detail.tab} />;
   if (detail.type === "reminders") return <RemindersSheet />;

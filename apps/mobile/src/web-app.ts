@@ -363,6 +363,25 @@ export function takeDelegateDraft() {
 }
 
 /**
+ * A help link, /?help=… (a group or topic of the guide, or empty for its start), from the old
+ * help page or a message. helpLink only reads it, for the sign-in screen; takeHelpLink also
+ * tidies the address bar once the app is open.
+ */
+export function helpLink() {
+  if (!web()) return undefined;
+  const value = new URL(window.location.href).searchParams.get("help");
+  return value === null ? undefined : value.trim().slice(0, 100);
+}
+export function takeHelpLink() {
+  const value = helpLink();
+  if (value === undefined) return undefined;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("help");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return value;
+}
+
+/**
  * A job to open, from a link in a job email or a tapped notification: /?task=… on arrival, or a
  * message from the service worker when the app is already open. Tidies the address bar.
  */

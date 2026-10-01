@@ -152,7 +152,11 @@ export const APP_PLACES = {
     where: "Apps",
     about: "appearance, account, passwords, their data",
   },
-  help: { name: "Help", where: "Apps", about: "help and how-to" },
+  help: {
+    name: "Help",
+    where: "Apps",
+    about: "the help guide: pictures and simple steps for every part of the app, and fixes",
+  },
 } as const satisfies Record<string, { name: string; where: string; about: string }>;
 
 export type AppPlaceId = keyof typeof APP_PLACES;

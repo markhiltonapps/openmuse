@@ -64,7 +64,7 @@ export function startFailure(error: unknown, name: string) {
   if (kind === "NotFoundError")
     return "No microphone was found. Plug one in, then choose “Talk again”.";
   if (kind === "OverconstrainedError")
-    return "The microphone chosen in Apps › Voice isn’t connected. Plug it in or choose another there, then choose “Talk again”.";
+    return "The microphone chosen in Apps › Agent › Voice isn’t connected. Plug it in or choose another there, then choose “Talk again”.";
   if (kind === "NotReadableError")
     return "Another app is using the microphone. Close it, then choose “Talk again”.";
   // No answer, or a page that isn't ours (a proxy's error page during an update).

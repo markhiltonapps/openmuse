@@ -25,7 +25,8 @@ export type Detail =
   /** Delegate task; `prompt` arrives filled in (from a ?delegate= link), as a General task. */
   | { type: "delegate"; prompt?: string }
   | { type: "notifications" }
-  /** Talking with the agent live (real-time voice). */
+  /** The help guide, at a group or topic when given (packages/domain/src/help.ts). */
+  | { type: "help"; topic?: string }
   | { type: "food"; log?: boolean }
   | { type: "computer" }
   /** Plans & bookings: everything being kept track of, coming up or past. */
@@ -45,6 +46,8 @@ export interface WorkspaceContextValue {
   close: () => void;
   notify: (message: string) => void;
   ask: (prompt: string) => void;
+  /** Opens the chat with this in the message box, not sent, for them to finish. */
+  draft: (prompt: string) => void;
   /** A panel (sheet) is open over the page. */
   panelOpen?: boolean;
 }

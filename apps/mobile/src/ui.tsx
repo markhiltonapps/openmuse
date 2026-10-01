@@ -311,6 +311,7 @@ export function Sheet({
   footer,
   closeIcon = X,
   closeLabel = "Close",
+  fill,
 }: {
   title: string;
   subtitle?: string;
@@ -324,8 +325,10 @@ export function Sheet({
   /** When closing does something else, such as shrinking a call to its bar. */
   closeIcon?: LucideIcon;
   closeLabel?: string;
+  /** Keeps one height whatever is inside (search results, pages), so nothing jumps. */
+  fill?: boolean;
 }) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 600;
   const top = useContext(SheetTop);
@@ -363,6 +366,7 @@ export function Sheet({
           style={[
             s.sheet,
             wide && { maxWidth: 1050 },
+            fill && { height: compact ? "94%" : Math.min(height * 0.9, 860) },
             compact && {
               borderBottomLeftRadius: 0,
               borderBottomRightRadius: 0,

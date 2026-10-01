@@ -90,6 +90,7 @@ import {
   listenForTaskLinks,
   registerServiceWorker,
   takeDelegateDraft,
+  takeHelpLink,
   typing,
   watchForUpdates,
 } from "./src/web-app";
@@ -227,7 +228,7 @@ function WorkspaceApp({ token }: { token: string }) {
   const [detail, setDetail] = useState<Detail>();
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
-  const [prompt, setPrompt] = useState<{ id: number; text: string }>();
+  const [prompt, setPrompt] = useState<{ id: number; text: string; draft?: boolean }>();
   const refresh = useCallback(async () => {
     const snapshot = await api.request<Workspace>("/api/workspace");
     setWorkspace(snapshot);
@@ -257,6 +258,10 @@ function WorkspaceApp({ token }: { token: string }) {
   const close = useCallback(() => setDetail(undefined), []);
   const ask = useCallback((text: string) => {
     setPrompt({ id: Date.now(), text });
+    setSection("chat");
+  }, []);
+  const draft = useCallback((text: string) => {
+    setPrompt({ id: Date.now(), text, draft: true });
     setSection("chat");
   }, []);
   // A tapped meal check-in opens chat, where its card is waiting.
@@ -297,6 +302,9 @@ function WorkspaceApp({ token }: { token: string }) {
   useEffect(() => {
     const prompt = takeDelegateDraft();
     if (prompt) setDetail({ type: "delegate", prompt });
+    // A ?help= link opens the help guide at that group or topic.
+    const help = takeHelpLink();
+    if (help !== undefined) setDetail({ type: "help", topic: help || undefined });
   }, []);
   if (!workspace)
     return (
@@ -338,6 +346,7 @@ function WorkspaceApp({ token }: { token: string }) {
         close,
         notify: setToast,
         ask,
+        draft,
         panelOpen: !!detail,
       }}
     >
@@ -389,7 +398,7 @@ function WorkspaceShell({
   toast: string;
   clearToast: () => void;
   error: string;
-  prompt?: { id: number; text: string };
+  prompt?: { id: number; text: string; draft?: boolean };
 }) {
   const { workspace, section, navigate, open } = useWorkspace();
   const { data } = useAgentWorkspace();

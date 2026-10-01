@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { API_URL, requestAccess, requestSignInLink } from "./api";
-import { hasHelp, openHelp } from "./help-ui";
+import { SignedOutHelp } from "./help-ui";
 import { pastedLoginToken } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
+import { helpLink } from "./web-app";
 
 /** Email sign-in links when the server can send them; the access key otherwise, or on request. */
 export function SignInCard({
@@ -31,6 +32,8 @@ export function SignInCard({
   const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
+  // The help guide over the sign-in screen: from "New here?", or a ?help= link.
+  const [help, setHelp] = useState<string | undefined>(() => helpLink());
   useEffect(() => setMethod(emailSignIn ? "email" : "key"), [emailSignIn]);
   const address = email.trim();
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
@@ -270,13 +273,16 @@ export function SignInCard({
           {API_URL}.
         </Text>
       )}
-      {hasHelp && (
-        <Pressable accessibilityRole="link" onPress={() => openHelp("start")}>
-          <Text style={[s.small, { textAlign: "center", textDecorationLine: "underline" }]}>
-            New here? See how Neato_Muse works
-          </Text>
-        </Pressable>
-      )}
+      <Pressable
+        role="button"
+        onPress={() => setHelp("start")}
+        style={{ minHeight: 44, justifyContent: "center" }}
+      >
+        <Text style={[s.small, { textAlign: "center", textDecorationLine: "underline" }]}>
+          New here? See how Neato_Muse works
+        </Text>
+      </Pressable>
+      {help !== undefined && <SignedOutHelp start={help} onClose={() => setHelp(undefined)} />}
     </Card>
   );
 }

@@ -49,7 +49,7 @@ export function YourDataCard() {
     <Card style={{ gap: 12 }}>
       <SectionHeading title="Your data" />
       <Text style={s.muted}>
-        Download a copy of everything your agent keeps: chats, memories, tasks, goals, routines,
+        Download a copy of everything your agent keeps: chats, memories, jobs, goals, routines,
         reminders, your health log and your files. Sign-in secrets for connected apps aren't
         included.
       </Text>

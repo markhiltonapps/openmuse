@@ -14,7 +14,6 @@ import {
 } from "lucide-react-native";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { hasHelp, openHelp } from "./help-ui";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -458,17 +457,15 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         <LinkRow icon={CalendarDays} title="Calendar" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="Files" onPress={() => go("files")} />
         <LinkRow icon={Settings2} title="Apps & settings" onPress={() => go("apps")} />
-        {hasHelp && (
-          <LinkRow
-            icon={LifeBuoy}
-            title="Help & how-to"
-            detail="Pictures and simple steps"
-            onPress={() => {
-              onClose();
-              openHelp();
-            }}
-          />
-        )}
+        <LinkRow
+          icon={LifeBuoy}
+          title="Help & how-to"
+          detail="Pictures and simple steps"
+          onPress={() => {
+            onClose();
+            open({ type: "help" });
+          }}
+        />
         <Button small icon={RefreshCw} onPress={() => void mutate(refresh)}>
           Refresh workspace
         </Button>

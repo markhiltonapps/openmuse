@@ -342,6 +342,7 @@ export async function createApp(
   feed.where = (owner) => agent.searchPlace(owner);
   // A new area means new local news: look it up now rather than tomorrow morning.
   agent.areaChanged = (owner) => void feed.refresh(owner).catch(() => undefined);
+  agent.isAdmin = (owner) => accounts.isAdmin(owner);
   feed.usage = (owner) => usage.sink(owner, "feed");
   agent.feed = feed;
   const health = new HealthService(db, (owner) => agent.timeZone(owner));

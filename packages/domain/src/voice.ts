@@ -8,6 +8,7 @@ export const CALL_DETAIL_TOOLS = [
   "create_spreadsheet",
   "create_presentation",
   "look_at_calendar",
+  "get_help",
 ] as const;
 /**
  * "approval": something saved for their OK, shown as its Approve card. "connect": a button that

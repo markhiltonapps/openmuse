@@ -539,6 +539,79 @@ PENDING
 - Owner asked for a separate agent to propose a better layout for the ☰ menu and the side chats
   (impeccable + the Design division looping to sign-off). Running in the background; proposals
   only, no project files.
+  - Finished: visual signed off in round 2, copy and usability in round 3. Sent to the owner
+    (pictures and proposal.md, from the scratchpad's menu/ folder). Recommendation: Proposal A.
+    Chats move onto the chat screen as a "Main chat ⌄" button under the agent's name, and ☰
+    becomes a short Menu that fits without scrolling: Chats, New job, Calendar, "<agent>'s
+    browser", Apps & settings, Help. Every row has a line saying what it does and something to
+    say instead. Eight voice abilities for chats, with cards in the chat and on calls. About
+    3–4 days. B (a ChatGPT-style drawer) is not recommended. C (V2's Everything menu, no bottom
+    bar) is a later decision.
+  - Plain answers for the owner: "New job" hands the agent background work that carries on
+    after the app is closed. In "Agent computer", the Browser works; the Terminal doesn't (the
+    Docker computer isn't set up and Railway can't run it); Files shows the same PDFs as Files.
+  - Waiting on the owner: go ahead with A? Do they use side chats much? Should the Menu list
+    Spaces and Files too? Retire the "Computer · ready" pill? Hide Terminal and Linux Files,
+    or set up the Linux computer elsewhere? Keep the name "New job"?
+- Help guide (#143–147; owner's picks: a Help screen in the app, real screenshots, the agent
+  answers from it by voice and chat, everyone plus an admin-only part):
+  - Content: packages/domain/src/help.ts. 13 groups and about 89 topics, each with a summary,
+    steps, what to say, related topics and the screens it's about. Every place in the app has a
+    topic, and there's a "Fix a problem" group. The admin group (Railway, the voice key,
+    Composio, email, usage, backups, deploys, the browser service, logs) shows only to the admin.
+    Search ranks title, keywords, summary and body.
+  - App (help-ui.tsx): ☰ › Help & how-to opens a "Help & how-to" sheet; Apps › Help shows the
+    same guide; "New here? See how Neato_Muse works" on the sign-in screen; links
+    `/?help=<topic or group>` (old help.html redirects there). A topic page has "Take me
+    there" buttons, a real screenshot in light or dark with numbered marks, steps, an "Or just
+    say it" box whose buttons ask the agent, Related, and "Still stuck? Ask <agent>".
+  - The agent: a get_help tool (apps/server/src/help-tools.ts) answers from the guide with the
+    agent's name, admin topics only for the admin. Its Help card shows in the chat and on the call
+    screen; "Open in Help" on a call shrinks the call to its bar first.
+  - Screenshots: scripts/help-shots.mjs takes 19 screens from a local sample server, light and
+    dark, 720 px webp (1.6 MB), and writes their sizes to apps/mobile/src/help-shots.ts.
+  - Tests: tests/help.test.ts (5): the guide hangs together; every place has a topic; every shot
+    exists in both looks; search ranking and admin filtering; get_help. 472 tests pass.
+  - Rule added to CLAUDE.md: anything people can see or ask for updates help.ts in the same
+    commit, and changed screens get their screenshots retaken.
+  - When menu Proposal A is built: update find-your-way, side-chats and agent-computer, and
+    retake the home shot.
+  - Design division round 1 (none signed off: visual 5 MUSTs, usability 7, copy 9). Fixed:
+    - Say lines are typed (HelpSay): questions that change nothing go in one tap; examples
+      ("I weighed 173 this morning") open the chat with the words in the message box, not sent
+      (new `draft()` in the workspace); lines that only work on a call or after adding a photo
+      are just shown. A test keeps saving/changing lines out of one-tap.
+    - Search: "in"/"on" no longer ignored, keyword phrases matched on the whole question and
+      worth more the longer they are; new words (log in, can't sign in, didn't get the email,
+      my OK, kg, error, how much…).
+    - The Help sheet keeps one height (Sheet `fill`); back from a search result keeps the search;
+      focus returns to the row that was opened; back buttons say "Back to …"; no focus box
+      around headings; step numbers are the marks' blue; pictures sit on a mat; the Help card
+      uses the app's primary button.
+    - Signed out: "your agent" instead of a name, no buttons that need signing in, "Still
+      stuck? Ask the person who runs Neato_Muse."
+    - get_help offers to just do it ("Want me to connect Gmail for you?") instead of walking
+      through taps.
+    - Copy: weather/address, Ideas buttons, Find my subscriptions, share links, Reconnect,
+      Reload, Email alerts, the approval promise, and 17 smaller wording fixes; also
+      "Apps › Agent › Voice" in live-call.tsx and "jobs" in data-ui.tsx.
+    - Pictures: numbers never cover words (outside the ring's corner, beside words, inside a
+      field's right end, or off a chart's top-right); New job button hidden except where it's
+      the subject; weight marks step 1.
+    - Checks: Biome clean, typecheck, 474 tests pass. Round 2 sent to the reviewers.
+  - Round 2: usability SIGNED OFF; copy SIGNED OFF after one leftover ("Reconnect" in the
+    fix-reconnect summary); visual SIGNED OFF in round 3 after the agent picture's number 3
+    moved inside the Name field. Also from their notes: example lines are read out as "Start a
+    message: …"; signed out, the say box says "Once you’re signed in, just say it…"; get_help
+    tells the agent where a line works; an example adds to text already typed instead of
+    replacing it; focus returns to the right row after two steps back; "change my name" finds
+    About you; a clipped picture keeps its numbers.
+  - Later NICEs (not blocking): numbers that still sit on nearby words no step names (approve,
+    health, family, activity); feed's ring 1 inside the input; a 13px "New here?" link; select
+    the made-up part of an example (“173”) so typing replaces it; one-letter typos in search;
+    sample data in pictures; pictures for the Fix topics; Android back gesture; Apps › Help
+    scroll; emoji aria-hidden.
+  - Checks: Biome clean, typecheck (root, app, worker), 474 tests pass. Committed locally.
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk

@@ -31,6 +31,7 @@ import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthTargets, healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
+import { helpToolInstructions, helpToolSpecs } from "../help-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { ownAppToolSpecs } from "../mcp-apps.ts";
 import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
@@ -585,6 +586,22 @@ export class ConversationAgent extends AbstractAgent {
         execute: async (args: unknown) => approvals.execute(args as { about?: string }),
       }),
     );
+    // "How do I…?": answered from the app's help guide, shown as a card that opens it.
+    tools.push(
+      ...helpToolSpecs(this.owner, {
+        agentName: async (owner) =>
+          (await this.service.db.get<{ name?: string }>(owner, "agent-settings", "identity"))
+            ?.name || "Neddy",
+        isAdmin: this.service.isAdmin,
+      }).map((spec) =>
+        defineTool({
+          ...spec,
+          parameters: spec.parameters as z.ZodObject,
+          execute: async (args: unknown) =>
+            spec.execute(args as { question: string; topic?: string }),
+        }),
+      ),
+    );
     const showInApp = showInAppToolSpec();
     tools.push(
       defineTool({
@@ -701,6 +718,7 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.sandbox ? codeSandboxInstructions : "") +
         computerInstructions +
         appGuideInstructions +
+        helpToolInstructions +
         showInAppInstructions,
     });
     return new Observable((subscriber) => {
