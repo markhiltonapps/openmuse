@@ -432,6 +432,7 @@ PENDING
     after the person came back), now fixed: the card keeps one shape while waiting, checking or
     not yet, with "I’ve signed in" turning into a disabled "Checking…". Live talk status is
     remembered per server. Round 3: visual SIGNED OFF. All three reviewers have signed off.
+    Owner said "push it": 26bcdc6 and e6c6aaa pushed at 16:53 UTC (no live call since 15:05).
   - Deferred NICEs:
     - restart the 5-minute grace when Connect is tapped on a call (now it starts when the card
       appears);
