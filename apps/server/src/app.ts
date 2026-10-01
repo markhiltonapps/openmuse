@@ -280,6 +280,7 @@ export async function createApp(
       model: config.voiceModel,
       voice: config.voiceName,
       idleSeconds: config.voiceIdleSeconds,
+      setupUrl: config.railwayVariablesUrl,
     },
   );
   agent.areas = new Areas(
@@ -1272,7 +1273,7 @@ export async function createApp(
   app.get("/api/voice/live", async (c) => {
     const owner = c.get("owner");
     return c.json({
-      available: await liveVoice.available(owner),
+      ...(await liveVoice.status(owner)),
       minutesThisMonth: (await usage.month(owner)).voiceMinutes,
     });
   });

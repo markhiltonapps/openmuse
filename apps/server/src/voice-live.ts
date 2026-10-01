@@ -25,6 +25,8 @@ export interface LiveVoiceOptions {
   maxMinutes?: number;
   /** …and after this long with nothing said either way (silence is billed too). */
   idleSeconds?: number;
+  /** Where the owner adds the key (this service's Variables page), shown while it's missing. */
+  setupUrl?: string;
 }
 export interface SocketLike {
   send(data: string): void;
@@ -101,6 +103,25 @@ export class LiveVoice {
   }
   async available(owner: string) {
     return this.configured() && (await this.allowedFor(owner).catch(() => false));
+  }
+  /**
+   * Whether this person can talk live now; or, for someone it's meant for, that it only lacks the
+   * key (they see how to add it, so the button never silently goes missing).
+   */
+  async status(owner: string) {
+    const allowed = await this.allowedFor(owner).catch(() => false);
+    const needsKey = allowed && !this.configured();
+    return {
+      available: allowed && this.configured(),
+      needsKey,
+      ...(needsKey && this.options.setupUrl ? { setupUrl: this.options.setupUrl } : {}),
+    };
+  }
+  /** One line for the startup log. Never includes the key. */
+  describe() {
+    return this.configured()
+      ? `Live voice on (${this.model}, voice ${this.voice})`
+      : "Live voice off: OPENAI_VOICE_API_KEY isn't set on this service (add it under Variables, then Deploy)";
   }
   /** Starts a conversation from the browser's WebRTC offer; returns OpenAI's answer. */
   async start(owner: string, offer: string) {

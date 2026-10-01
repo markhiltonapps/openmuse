@@ -1539,29 +1539,34 @@ export function ChatScreen({
             </Pressable>
             {narrow && <View style={{ flex: 1 }} />}
             {!narrow && messageBox}
-            {live && !draft.trim() && !voiceMode && !replying && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Talk live with ${agentName}`}
-                {...tipProps(`Talk live with ${agentName}`)}
-                onPress={() => open({ type: "live" })}
-                style={({ pressed }) => ({
-                  width: 44,
-                  height: 44,
-                  borderRadius: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: pressed ? colors.sky : "transparent",
-                })}
-              >
-                <Headset size={22} color={colors.blueText} />
-              </Pressable>
-            )}
+            {/* Shown to the owner before the key is added too: it says what to add. On a very
+                narrow phone that would push out the voice button that does work, so only when on. */}
+            {(live === "on" || (live === "setup" && windowWidth >= 360)) &&
+              !draft.trim() &&
+              !voiceMode &&
+              !replying && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Talk live with ${agentName}`}
+                  {...tipProps(`Talk live with ${agentName}`)}
+                  onPress={() => open({ type: "live" })}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    borderRadius: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: pressed ? colors.sky : "transparent",
+                  })}
+                >
+                  <Headset size={22} color={colors.blueText} />
+                </Pressable>
+              )}
             {/* On a very narrow phone with live voice, the headset alone leaves room for Send. */}
             {dictationAvailable() &&
               speechAvailable() &&
               !draft.trim() &&
-              !(live && windowWidth < 360 && !voiceMode) && (
+              !(live === "on" && windowWidth < 360 && !voiceMode) && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={

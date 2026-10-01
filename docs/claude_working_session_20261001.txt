@@ -167,8 +167,41 @@ KNOWN ISSUES / NOTES
 - No look-ups or actions while talking yet ("hold on, let me check" comes in slice 1).
 - Calls aren't added to the chat yet; they are saved on the server.
 
+LIVE VOICE · FOLLOW-UP: "I don't see the right microphone"
+==========================================================
+The owner's phone (Android, 416 px) loaded the new version, but showed no headset. The server
+answered "not available" because it couldn't see OPENAI_VOICE_API_KEY. Likely causes: a
+different name, the wrong service, or the variable left staged. Railway holds a new variable
+until you choose Deploy. The owner used the older voice buttons instead, which go through the
+normal chat and are slow. They asked for both fixes below.
+
+1. Server log at startup (index.ts, LiveVoice.describe()), never with the key:
+   - "Live voice on (gpt-live-1, voice marin)", or
+   - "Live voice off: OPENAI_VOICE_API_KEY isn't set on this service (add it under Variables,
+     then Deploy)".
+2. Headset for the owner even without the key.
+   - GET /api/voice/live now returns { available, needsKey, setupUrl? }. needsKey is only ever
+     true for the people live voice is meant for (the admin).
+   - setupUrl links to the api service's Variables page in Railway, built from Railway's own
+     project, service and environment ids. It's sent only while the key is missing.
+   - Tapping the headset opens the same sheet in a setup view, with no microphone prompt:
+     - "Live talk isn’t switched on yet";
+     - three steps (open the “api” card's Variables, New Variable with the exact name, Deploy);
+     - "Open in Railway" and "Copy name" buttons;
+     - Check again and Close.
+   - Check again: if the key is there, the same sheet turns into the call. If not, a note says
+     what to check. The note fades while re-checking, so nothing jumps.
+   - The sheet also checks once quietly when it opens.
+   - Below 360 px wide the headset shows only when live talk is on, so it never pushes out the
+     voice button that works.
+   - docs/DEPLOY.md lists the live voice variables.
+Reviewed by the Design division (visual, usability, copy). Tests: 440 pass, including the new
+status test (owner only, link only while missing, the log line).
+
 PENDING
 -------
+- The owner checks the variable in Railway: on the api service, named OPENAI_VOICE_API_KEY, then
+  Deploy. Then the first real call.
 - Live voice slices 1–5:
   - "hold on, let me check" handed to Claude;
   - calls saved into the chat;

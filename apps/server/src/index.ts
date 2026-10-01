@@ -19,6 +19,7 @@ await moveFromVolume(db, config.dataDir, blobs, {
 });
 await db.recoverInterruptedActions();
 const { app, agent, liveVoice } = await createApp(db, config, { blobs });
+console.log(liveVoice.describe());
 if (config.taskWorkerEnabled) agent.start();
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, () =>
   console.log(`OpenMuse ${config.mode} API ready at ${config.publicUrl}`),

@@ -83,6 +83,8 @@ export interface Config {
   voiceModel?: string;
   voiceName?: string;
   voiceIdleSeconds?: number;
+  /** This service's Variables page in Railway, from the ids Railway sets (not secrets). */
+  railwayVariablesUrl?: string;
   composioUserId?: string;
   composioBaseUrl?: string;
   /** Auth configs to use by app, "brex=ac_…,other=ac_…", when Composio can't sign in to it itself. */
@@ -174,6 +176,12 @@ export function readConfig(): Config {
     voiceModel: process.env.VOICE_LIVE_MODEL?.trim() || undefined,
     voiceName: process.env.VOICE_LIVE_VOICE?.trim() || undefined,
     voiceIdleSeconds: Number(process.env.VOICE_IDLE_SECONDS) || undefined,
+    railwayVariablesUrl:
+      process.env.RAILWAY_PROJECT_ID &&
+      process.env.RAILWAY_SERVICE_ID &&
+      process.env.RAILWAY_ENVIRONMENT_ID
+        ? `https://railway.com/project/${process.env.RAILWAY_PROJECT_ID}/service/${process.env.RAILWAY_SERVICE_ID}/variables?environmentId=${process.env.RAILWAY_ENVIRONMENT_ID}`
+        : undefined,
     composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
     composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,
     composioWebhookSecret: process.env.COMPOSIO_WEBHOOK_SECRET?.trim() || undefined,

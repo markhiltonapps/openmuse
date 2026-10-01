@@ -152,3 +152,7 @@ Time Log — <Project Name>
   scripted server events through it (see the live-voice screenshot notes in the session docs).
 - **Timers in services:** `unref()` long timers (idle checks, retries, call caps) so tests and
   shutdown don't hang. Give the service a `stop()` and call it from `index.ts`'s shutdown.
+- **Railway variables are staged:** adding or changing a variable does nothing until someone
+  chooses Deploy on the banner Railway shows. When telling the owner to add one, always include
+  that step. After a deploy, the api's log line `Live voice on/off…` shows whether the voice key
+  arrived.

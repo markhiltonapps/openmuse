@@ -35,7 +35,9 @@ class FakeSocket implements SocketLike {
   }
 }
 
-async function setup(options: { admin?: boolean; key?: string; status?: number } = {}) {
+async function setup(
+  options: { admin?: boolean; key?: string; status?: number; setupUrl?: string } = {},
+) {
   const db = await createStore();
   const usage = new UsageMeter(db, undefined, () => new Date("2026-10-01T12:00:00Z"));
   const requests: { url: string; init: RequestInit }[] = [];
@@ -49,6 +51,7 @@ async function setup(options: { admin?: boolean; key?: string; status?: number }
     usage,
     {
       apiKey: options.key ?? "sk-test-secret",
+      setupUrl: options.setupUrl,
       fetcher: (async (url: string, init: RequestInit) => {
         requests.push({ url, init });
         if (options.status)
@@ -146,6 +149,29 @@ test("live voice is only for people it's turned on for, and says plainly when th
     return true;
   });
   await refused.db.close();
+});
+
+test("the owner is told the key is missing, others don't see live voice, and the log never shows the key", async () => {
+  const url = "https://railway.com/project/p/service/s/variables?environmentId=e";
+  const noKey = await setup({ key: "", setupUrl: url });
+  // The owner gets a link straight to where the key goes.
+  assert.deepEqual(await noKey.voice.status("owner"), {
+    available: false,
+    needsKey: true,
+    setupUrl: url,
+  });
+  assert.equal(
+    noKey.voice.describe(),
+    "Live voice off: OPENAI_VOICE_API_KEY isn't set on this service (add it under Variables, then Deploy)",
+  );
+  await noKey.db.close();
+  const member = await setup({ key: "", admin: false, setupUrl: url });
+  assert.deepEqual(await member.voice.status("member"), { available: false, needsKey: false });
+  await member.db.close();
+  const on = await setup({ setupUrl: url });
+  assert.deepEqual(await on.voice.status("owner"), { available: true, needsKey: false });
+  assert.equal(on.voice.describe(), "Live voice on (gpt-live-1, voice marin)");
+  await on.db.close();
 });
 
 test("a conversation whose minutes never arrive is counted by the clock", async () => {

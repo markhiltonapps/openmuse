@@ -1,35 +1,46 @@
-import { Mic, MicOff, PhoneOff } from "lucide-react-native";
+import { Copy, ExternalLink, Mic, MicOff, PhoneOff } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Linking, Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
+import type { MuseApi } from "./api";
 import { AgentAvatar } from "./avatar";
 import { HIDDEN } from "./job-working-ui";
 import { type LiveCall, type LiveState, liveVoiceSupported, startLive } from "./live-voice";
 import { Button, colors, ErrorNotice, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
+/** On; meant for this person but the server has no key yet (they're shown how to add it); off. */
+export type LiveStatus = "on" | "setup" | "off";
 // Per signed-in session (each has its own api), so the next person doesn't inherit it.
-const cache = new WeakMap<object, boolean>();
+const cache = new WeakMap<object, LiveStatus>();
+// Where the owner adds the key (this service's Variables page in Railway), while it's missing.
+const setupLinks = new WeakMap<object, string>();
+const listeners = new Set<() => void>();
+/** Asks the server (again, after the key is added) and updates every headset. */
+export async function checkLiveVoice(api: MuseApi): Promise<LiveStatus> {
+  const result = await api.request<{ available: boolean; needsKey?: boolean; setupUrl?: string }>(
+    "/api/voice/live",
+  );
+  const status: LiveStatus = result.available ? "on" : result.needsKey ? "setup" : "off";
+  cache.set(api, status);
+  if (result.setupUrl) setupLinks.set(api, result.setupUrl);
+  for (const listener of listeners) listener();
+  return status;
+}
 /** Whether live voice is on for this person (and this browser can do it). */
-export function useLiveVoice() {
+export function useLiveVoice(): LiveStatus {
   const { api } = useWorkspace();
-  const [available, setAvailable] = useState(cache.get(api) ?? false);
+  const [status, setStatus] = useState<LiveStatus>(cache.get(api) ?? "off");
   useEffect(() => {
-    setAvailable(cache.get(api) ?? false);
-    if (!liveVoiceSupported() || cache.has(api)) return;
-    let active = true;
-    void api
-      .request<{ available: boolean }>("/api/voice/live")
-      .then((result) => {
-        cache.set(api, result.available);
-        if (active) setAvailable(result.available);
-      })
-      .catch(() => undefined);
+    const update = () => setStatus(cache.get(api) ?? "off");
+    update();
+    listeners.add(update);
+    if (liveVoiceSupported() && !cache.has(api)) void checkLiveVoice(api).catch(() => undefined);
     return () => {
-      active = false;
+      listeners.delete(update);
     };
   }, [api]);
-  return available && liveVoiceSupported();
+  return liveVoiceSupported() ? status : "off";
 }
 
 /** Why a conversation ended on its own, in plain words. */
@@ -84,7 +95,43 @@ export function LiveTalkSheet() {
   const call = useRef<LiveCall | undefined>(undefined);
   const scroller = useRef<ScrollView>(null);
   const [attempt, setAttempt] = useState(0);
+  // The owner, before the server has its key: say what to add instead of asking for the mic.
+  const [needsKey, setNeedsKey] = useState(() => cache.get(api) === "setup");
+  const [checking, setChecking] = useState(false);
+  const checkingNow = useRef(false);
+  const [checkNote, setCheckNote] = useState("");
+  // Said once as the call starts, so a screen reader hears that the check worked.
+  const [switchedOn, setSwitchedOn] = useState(false);
+  const checkAgain = async (quietly = false) => {
+    if (checkingNow.current) return;
+    checkingNow.current = true;
+    if (!quietly) setChecking(true);
+    // The last note stays (faded) until the answer replaces it, so the sheet doesn't jump.
+    try {
+      // Once the key is there, this starts the call.
+      if ((await checkLiveVoice(api)) === "on") {
+        setSwitchedOn(true);
+        setNeedsKey(false);
+      } else if (!quietly)
+        setCheckNote(
+          "Still not switched on. Make sure the variable is on the “api” card and named exactly OPENAI_VOICE_API_KEY, and that you chose “Deploy”. If it’s still deploying, wait a minute, then choose “Check again”.",
+        );
+    } catch {
+      if (!quietly)
+        setCheckNote(
+          `Couldn’t reach ${name}. Check your internet connection, or if Railway is still deploying, wait a minute. Then choose “Check again”.`,
+        );
+    } finally {
+      checkingNow.current = false;
+      setChecking(false);
+    }
+  };
+  // The key may have been added since the app last asked: look once when the sheet opens.
   useEffect(() => {
+    if (needsKey) void checkAgain(true);
+  }, []);
+  useEffect(() => {
+    if (needsKey) return;
     let cancelled = false;
     setState("connecting");
     setError("");
@@ -137,7 +184,7 @@ export function LiveTalkSheet() {
       void call.current?.end();
       call.current = undefined;
     };
-  }, [api, attempt, name]);
+  }, [api, attempt, name, needsKey]);
   const finish = () => {
     void call.current?.end();
     call.current = undefined;
@@ -161,7 +208,7 @@ export function LiveTalkSheet() {
         ?.focus();
     }, 60);
     return () => clearTimeout(timer);
-  }, [over]);
+  }, [over, needsKey]);
   const status = over
     ? ended || (error ? "Couldn’t start." : "The call ended.")
     : state === "connecting"
@@ -219,73 +266,204 @@ export function LiveTalkSheet() {
       )}
     </View>
   );
+  const setupControls = (
+    <View
+      nativeID="live-controls"
+      style={[s.row, { gap: 10, flexWrap: "wrap", justifyContent: "center" }]}
+    >
+      {/* Not disabled while checking: a disabled button would lose keyboard focus. */}
+      <Button strong style={{ minWidth: 112 }} onPress={() => void checkAgain()}>
+        {checking ? "Checking…" : "Check again"}
+      </Button>
+      <Button style={{ minWidth: 112 }} onPress={close}>
+        Close
+      </Button>
+    </View>
+  );
   return (
     <Sheet
-      title={`Talking with ${name}`}
-      subtitle={over ? undefined : "Live · just talk"}
+      title={needsKey ? `Talk live with ${name}` : `Talking with ${name}`}
+      subtitle={needsKey || over ? undefined : "Live · just talk"}
       onClose={finish}
-      footer={controls}
+      footer={needsKey ? setupControls : controls}
     >
-      <View style={{ alignItems: "center", gap: 12 }}>
-        {!short && (
-          <AgentAvatar
-            size={avatar}
-            mood={state === "connecting" ? "working" : over ? "idle" : undefined}
-          />
-        )}
-        {/* Room for two lines during a call, so a longer status never moves what's below it. */}
-        <Text
-          style={[
-            s.heading,
-            { fontSize: 18, textAlign: "center", minHeight: over ? 0 : short ? 26 : 52 },
-          ]}
-        >
-          {status}
-        </Text>
-        {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
-        <Text role="status" style={HIDDEN}>
-          {error
-            ? `${status} ${error}`
-            : over || state === "connecting" || muted
-              ? status
-              : `Live. ${name} can hear you. Just speak, and cut in any time.`}
-        </Text>
-        <ErrorNotice error={error} />
-        {/* There from the start at a fixed height, so the sheet holds still as words arrive. The
-            note about what live talk can do fills it until then, and closes it after the end. */}
-        {!over || lines.length > 0 ? (
-          <ScrollView
-            ref={scroller}
-            onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: true })}
-            style={{ alignSelf: "center", width: "100%", maxWidth: 560, height: captionHeight }}
-            contentContainerStyle={{
-              gap: 10,
-              padding: 14,
-              flexGrow: 1,
-              justifyContent: lines.length ? "flex-start" : "center",
-            }}
+      {needsKey ? (
+        <LiveSetup
+          name={name}
+          checking={checking}
+          note={checkNote}
+          link={setupLinks.get(api)}
+          height={height}
+        />
+      ) : (
+        <View style={{ alignItems: "center", gap: 12 }}>
+          {!short && (
+            <AgentAvatar
+              size={avatar}
+              mood={state === "connecting" ? "working" : over ? "idle" : undefined}
+            />
+          )}
+          {/* Room for two lines during a call, so a longer status never moves what's below it. */}
+          <Text
+            style={[
+              s.heading,
+              { fontSize: 18, textAlign: "center", minHeight: over ? 0 : short ? 26 : 52 },
+            ]}
           >
-            {lines.map((line, index) => (
-              <Text
-                // Lines only grow at the end, so their place is a stable key.
-                // biome-ignore lint/suspicious/noArrayIndexKey: see above
-                key={index}
-                style={[
-                  s.text,
-                  line.role === "user"
-                    ? { color: colors.mutedStrong, alignSelf: "flex-end", textAlign: "right" }
-                    : { color: colors.text },
-                ]}
-              >
-                {line.text.trim()}
-              </Text>
-            ))}
-            {(lines.length === 0 || over) && note}
-          </ScrollView>
-        ) : (
-          note
-        )}
-      </View>
+            {status}
+          </Text>
+          {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
+          <Text role="status" style={HIDDEN}>
+            {error
+              ? `${status} ${error}`
+              : state === "connecting" && switchedOn
+                ? `It’s switched on. ${status}`
+                : over || state === "connecting" || muted
+                  ? status
+                  : `Live. ${name} can hear you. Just speak, and cut in any time.`}
+          </Text>
+          <ErrorNotice error={error} />
+          {/* There from the start at a fixed height, so the sheet holds still as words arrive. The
+            note about what live talk can do fills it until then, and closes it after the end. */}
+          {!over || lines.length > 0 ? (
+            <ScrollView
+              ref={scroller}
+              onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: true })}
+              style={{ alignSelf: "center", width: "100%", maxWidth: 560, height: captionHeight }}
+              contentContainerStyle={{
+                gap: 10,
+                padding: 14,
+                flexGrow: 1,
+                justifyContent: lines.length ? "flex-start" : "center",
+              }}
+            >
+              {lines.map((line, index) => (
+                <Text
+                  // Lines only grow at the end, so their place is a stable key.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: see above
+                  key={index}
+                  style={[
+                    s.text,
+                    line.role === "user"
+                      ? { color: colors.mutedStrong, alignSelf: "flex-end", textAlign: "right" }
+                      : { color: colors.text },
+                  ]}
+                >
+                  {line.text.trim()}
+                </Text>
+              ))}
+              {(lines.length === 0 || over) && note}
+            </ScrollView>
+          ) : (
+            note
+          )}
+        </View>
+      )}
     </Sheet>
+  );
+}
+
+const mono = Platform.OS === "ios" ? "Menlo" : "monospace";
+const KEY_NAME = "OPENAI_VOICE_API_KEY";
+const SETUP_STEPS = [
+  "In Railway, open the “api” card (not “web”), then its Variables tab.",
+  `Choose “New Variable”. Name it ${KEY_NAME}, paste your OpenAI key as the value, then choose “Add”.`,
+  "Choose “Deploy” to apply the change. Wait a few minutes for it to finish, then choose “Check again”.",
+];
+
+/** For the owner while the server has no OpenAI key: what to add (Check again is in the footer). */
+function LiveSetup({
+  name,
+  checking,
+  note,
+  link,
+  height,
+}: {
+  name: string;
+  checking: boolean;
+  note: string;
+  /** This service's Variables page in Railway. */
+  link?: string;
+  height: number;
+}) {
+  const heading = "Live talk isn’t switched on yet";
+  const [copied, setCopied] = useState(false);
+  const canCopy =
+    Platform.OS === "web" && typeof navigator !== "undefined" && !!navigator.clipboard;
+  const copyName = async () => {
+    try {
+      await navigator.clipboard.writeText(KEY_NAME);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Selecting the name still works.
+    }
+  };
+  // A phone on its side: the steps matter more than the avatar.
+  const avatar = height < 450 ? 0 : height < 520 ? 56 : 88;
+  return (
+    <View style={{ gap: 14, alignSelf: "center", width: "100%", maxWidth: 480 }}>
+      <View style={{ alignItems: "center", gap: 12 }}>
+        {avatar > 0 && <AgentAvatar size={avatar} mood="idle" />}
+        <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{heading}</Text>
+        <Text style={[s.text, { textAlign: "center", color: colors.mutedStrong }]}>
+          {`It needs your OpenAI key, added in Railway. Then you can talk with ${name} here. Only you see this.`}
+        </Text>
+      </View>
+      {/* Mounted all the time; the visible note below isn't a live region, so it's read once. */}
+      <Text role="status" style={HIDDEN}>
+        {checking ? "Checking…" : copied ? "Copied the name." : note || heading}
+      </Text>
+      <View style={{ gap: 12 }}>
+        {SETUP_STEPS.map((step, index) => (
+          <View key={step} style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
+            <Text style={[s.text, { width: 18, fontWeight: "700", color: colors.blueText }]}>
+              {index + 1}
+            </Text>
+            <View style={{ flex: 1, gap: 8, alignItems: "flex-start" }}>
+              <Text style={s.text}>
+                {step.split(KEY_NAME).map((part, at) =>
+                  at === 0 ? (
+                    part
+                  ) : (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: the parts never move
+                    <Text key={at}>
+                      <Text
+                        selectable
+                        style={{
+                          fontFamily: mono,
+                          fontSize: 14,
+                          backgroundColor: colors.subtle,
+                          borderRadius: 6,
+                          paddingHorizontal: 4,
+                        }}
+                      >
+                        {KEY_NAME}
+                      </Text>
+                      {part}
+                    </Text>
+                  ),
+                )}
+              </Text>
+              {index === 0 && link && (
+                <Button icon={ExternalLink} onPress={() => void Linking.openURL(link)}>
+                  Open in Railway
+                </Button>
+              )}
+              {index === 1 && canCopy && (
+                <Button icon={Copy} onPress={() => void copyName()}>
+                  {copied ? "Copied" : "Copy name"}
+                </Button>
+              )}
+            </View>
+          </View>
+        ))}
+      </View>
+      {note ? (
+        <View style={[s.error, { opacity: checking ? 0.5 : 1 }]}>
+          <Text style={[s.text, { color: colors.danger }]}>{note}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
