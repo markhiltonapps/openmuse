@@ -156,3 +156,7 @@ Time Log — <Project Name>
   chooses Deploy on the banner Railway shows. When telling the owner to add one, always include
   that step. After a deploy, the api's log line `Live voice on/off…` shows whether the voice key
   arrived.
+- **New provider APIs:** check each request field's *type* against the SDK's `.d.ts`, not just
+  its name (OpenAI Live wants `allowed_server_events` as `{ type }` objects; bare names were
+  refused with a 400 on every call). Always log the provider's own error reason on the server
+  (status, type, code, message, never the key), so a failure on Railway can be read from its logs.

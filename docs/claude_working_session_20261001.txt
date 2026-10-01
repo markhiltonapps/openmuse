@@ -198,10 +198,21 @@ normal chat and are slow. They asked for both fixes below.
 Reviewed by the Design division (visual, usability, copy). Tests: 440 pass, including the new
 status test (owner only, link only while missing, the log line).
 
+Then:
+- The owner added the key, chose Deploy, and the log said "Live voice on (gpt-live-1, voice
+  marin)" (02:34 UTC).
+- The first real calls failed with 502 straight away. The server didn't log why, so it now logs
+  OpenAI's reason: status, type, code and message, never the key.
+- The next attempt showed it: "allowed_server_events[0]: expected an object, but got a string".
+  OpenAI wants event selectors as { type } objects. Fixed in 304fa45, with a test for the shape.
+  The other request fields and the answer shape were re-checked against the SDK and match.
+  Live at 02:50 UTC.
+- Setup view polish after round 2 (all three reviewers signed off): the check note sits in the
+  pinned footer, "Name copied." isn't re-read, and DEPLOY.md wording is tidied.
+
 PENDING
 -------
-- The owner checks the variable in Railway: on the api service, named OPENAI_VOICE_API_KEY, then
-  Deploy. Then the first real call.
+- The owner's first real call on the fixed version.
 - Live voice slices 1–5:
   - "hold on, let me check" handed to Claude;
   - calls saved into the chat;
