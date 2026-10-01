@@ -203,6 +203,10 @@ Time Log — <Project Name>
   up on Railway); Gmail and Outlook under Apps go through Composio (`find_app_actions`, `use_app`).
   A tool that says "disconnected" must say which connection, or the agent sends a Connect card for an
   app that's already connected, over and over. Each chat turn is told which mailbox is on ("Mail").
+  Background jobs (engine/model.ts) have their own copies of the built-in tools (read_workspace,
+  read_mail_thread, prepare_email, prepare_event) and their own prompt: a fix to the chat's tools
+  or prompt must go into jobs too (engine/mailboxes.ts holds the shared wording). A job once said
+  it couldn't reach Gmail because read_workspace quietly returned an empty built-in inbox.
 - **The call is its own layer:** the live call lives in `LiveCallProvider` (live-call.tsx); its
   screen opens over whatever sheet is open (`expand`/`shrink`), never as a `detail`, or opening it
   throws that sheet away. Most of the app reads `useCallControls()` (changes only with the phase);

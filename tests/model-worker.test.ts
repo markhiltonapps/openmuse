@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createApp } from "../apps/server/src/app.ts";
+import type { AppConnector } from "../apps/server/src/apps.ts";
 import { createStore } from "../apps/server/src/db.ts";
 import { createDemoModel, demoModel } from "../apps/server/src/demo/model.ts";
 import type { ActionProposal } from "../packages/domain/src/index.ts";
@@ -64,7 +65,9 @@ test("CopilotKit model worker executes server tools and persists the confirmed o
     assert.equal(result.task.result, "Saved your weekend plan with two steps.");
     assert.ok(result.artifacts.some((a) => a.title === "Weekend plan"));
     assert.ok(
-      result.events.some((event) => event.title === "Read the authorized workspace sources"),
+      result.events.some(
+        (event) => event.title === "Read the built-in Google mailbox and calendar, and files",
+      ),
     );
     assert.ok(requests.length >= 4 && requests.length <= 6);
     assert.ok(requests.every((request) => request.path === "/v1/responses"));
@@ -111,6 +114,88 @@ test("CopilotKit model worker executes server tools and persists the confirmed o
         .length,
       1,
     );
+  } finally {
+    await server.agent.stop();
+    await db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("with Gmail connected under Apps, a job reads email there, not from the built-in mailbox", async (t) => {
+  // The owner's job "move my newsletters into a folder" said it couldn't reach Gmail: it read the
+  // built-in mailbox (not set up on Railway), found it empty, and never tried their Gmail app.
+  const directory = await mkdtemp(join(tmpdir(), "openmuse-model-mail-"));
+  const db = await createStore();
+  const calls: { name: string; arguments: object }[] = [
+    { name: "read_workspace", arguments: { section: "mail" } },
+    { name: "read_mail_thread", arguments: { threadId: "trip-thread" } },
+    {
+      name: "prepare_email",
+      arguments: { to: ["sam@example.com"], subject: "Hi", body: "Hello" },
+    },
+    { name: "finish_task", arguments: { summary: "Read it with the Gmail app." } },
+  ];
+  const { requests } = await modelFixture(t, (index) => calls[index]);
+  const apps: AppConnector = {
+    search: async () => ({ tools: [], apps: [], guidance: [] }),
+    tool: async () => {
+      throw new Error("not used");
+    },
+    execute: async () => ({}),
+    connect: async () => ({ connected: true }),
+    connections: async () => [{ app: "gmail", name: "Gmail", connected: true }],
+    directory: async () => [],
+    disconnect: async () => {},
+  };
+  const server = await createApp(
+    db,
+    {
+      mode: "sample",
+      port: 8787,
+      host: "127.0.0.1",
+      publicUrl: "http://localhost:8787",
+      dataDir: directory,
+      agentBackend: "model",
+      intelligenceApiKey: "test-project-key-never-sent",
+      model: "openai/fixture",
+      googleRedirectUri: "http://localhost:8787/api/google/callback",
+      allowedOrigins: [],
+    },
+    { apps },
+  );
+  try {
+    await db.put("mail-owner", "settings", { id: "google", enabled: false });
+    const task = await server.agent.createTask("mail-owner", {
+      prompt: "Move my newsletters in Gmail into a Newsletters folder",
+    });
+    await server.agent.worker.tick();
+    const saved = await server.agent.getTask("mail-owner", task.id);
+    assert.equal(saved.status, "succeeded", saved.error ?? saved.question);
+    // Told up front where their email is.
+    assert.ok(
+      requests[0].body.includes(
+        "The built-in Google mailbox and calendar aren't connected, so read_workspace has no email",
+      ),
+    );
+    // Each built-in tool says the same, instead of an empty inbox or "Google is disconnected".
+    const results = requests.map((request) => request.body).join("\n");
+    assert.match(
+      results,
+      /read and change their email and calendar with find_app_actions and use_app/,
+    );
+    assert.match(results, /read their email with find_app_actions and use_app/);
+    assert.ok(!/"mail":\[\]/.test(results), "no empty inbox shown as their email");
+    assert.equal((await db.list<ActionProposal>("mail-owner", "actions")).length, 0);
+    // Turned on, it says so instead.
+    await db.put("mail-owner", "settings", { id: "google", enabled: true });
+    requests.length = 0;
+    calls.splice(0, calls.length, {
+      name: "finish_task",
+      arguments: { summary: "Done." },
+    });
+    await server.agent.createTask("mail-owner", { prompt: "Check my email" });
+    await server.agent.worker.tick();
+    assert.ok(requests[0].body.includes("The built-in Google mailbox and calendar are connected"));
   } finally {
     await server.agent.stop();
     await db.close();

@@ -512,6 +512,22 @@ PENDING
   - Not in this slice (later): editing Home address by hand doesn't change Where you live (copy
     suggests a hint "For local news and weather" under Where you live); Undo after removing a
     weigh-in; goal weight; kilograms display.
+- Owner: a background job ("look at my Gmail and move any newsletters into a newsletter folder")
+  said it had no access to Gmail, while the same request in the chat worked. Cause: jobs
+  (engine/model.ts) have their own built-in mailbox tools (read_workspace, read_mail_thread,
+  prepare_email, prepare_event) and their own prompt, and the chat-only fix from 5c71f39 never
+  reached them. read_workspace returned an empty built-in inbox (that Google sign-in isn't set up on
+  Railway) with no error, and nothing told the job its Gmail was under Apps. Fixed: the shared
+  wording moved to engine/mailboxes.ts; a job is told which mailbox and calendar are on; when the
+  built-in one is off, read_workspace (mail/calendar), read_mail_thread, import_pdf, prepare_email
+  and prepare_event say to use their Gmail, Outlook or Google Calendar app (find_app_actions,
+  use_app) instead. New test in model-worker.test.ts; task-web tests' fake service gained
+  workspace. 465 tests pass. Owner's choice: mail fix now; giving jobs everything the chat can do
+  (reminders, plans, people, About you, own apps, calendar card…) is next (#149), then the help
+  guide resumes.
+- Owner asked for a separate agent to propose a better layout for the ☰ menu and the side chats
+  (impeccable + the Design division looping to sign-off). Running in the background; proposals
+  only, no project files.
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk

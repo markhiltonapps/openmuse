@@ -49,6 +49,7 @@ import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-br
 import type { VoiceSession } from "../voice-live.ts";
 import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
+import { builtInMailOff, mailContext } from "./mailboxes.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
 
@@ -72,22 +73,6 @@ export function localNow(timeZone: string, now = Date.now()) {
   });
   return `${text} (${timeZone})`;
 }
-
-/**
- * search_mail reads the app's own Google sign-in, which is separate from a Gmail app connected under
- * Apps. Without this the agent took "Google is disconnected" to mean their Gmail was, and kept
- * sending a Connect card for a Gmail that was already connected.
- */
-export const builtInMailOff = (apps: boolean) =>
-  apps
-    ? "The app's built-in Google mailbox isn't connected. It's separate from the person's mail apps: read their email with find_app_actions and use_app (their Gmail or Outlook app). Don't say their email is disconnected, and don't call connect_app, unless no mail app is connected."
-    : "Google is disconnected, so there's no mailbox to read.";
-export const mailContext = (builtInMail: boolean, apps: boolean) =>
-  builtInMail
-    ? "The built-in Google mailbox is connected: search_mail and read_mail_thread read it."
-    : apps
-      ? "The built-in Google mailbox isn't connected, so don't use search_mail. Read their email with their mail app (Gmail or Outlook): find_app_actions, then use_app."
-      : "No mailbox is connected.";
 
 export class ConversationAgent extends AbstractAgent {
   constructor(
