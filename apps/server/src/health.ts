@@ -57,6 +57,30 @@ export const mealChangeSchema = z.object({
   carbs: amount(1000).nullable(),
   fat: amount(1000).nullable(),
 });
+/** A weigh-in: pounds or kilograms (kept in pounds), for today or a day they name. */
+export const weightSchema = z
+  .object({
+    pounds: z.number().min(20).max(1500).optional(),
+    kilograms: z.number().min(9).max(700).optional(),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe("YYYY-MM-DD in their time zone; leave out for today"),
+  })
+  .refine((value) => value.pounds !== undefined || value.kilograms !== undefined, {
+    message: "Give the weight in pounds or kilograms",
+  });
+/** One weigh-in a day: another for the same day replaces it. */
+export interface WeightEntry {
+  /** The day, YYYY-MM-DD in their time zone. */
+  id: string;
+  day: string;
+  pounds: number;
+  at: string;
+}
+const KG_TO_LB = 2.20462;
+const tenth = (value: number) => Math.round(value * 10) / 10;
 export interface Workout extends z.infer<typeof workoutSchema> {
   id: string;
   minutes: number;
@@ -250,6 +274,45 @@ export class HealthService {
       days: Array.from({ length: 7 }, (_, index) => dayOf(addDays(weekStart, index))),
       weeks: Array.from({ length: weeksBack }, (_, index) => weekOf(addDays(first, 7 * index))),
     };
+  }
+  /** Logs a weigh-in (one a day), with how it compares to the one before and to about a week ago. */
+  async logWeight(owner: string, raw: unknown) {
+    const input = weightSchema.parse(raw);
+    const zone = await this.timeZone(owner);
+    const today = localDay(this.now(), zone);
+    const day = input.date ?? today;
+    if (day > today) throw new AppError("That day hasn't happened yet", 400);
+    const pounds = tenth(input.pounds ?? (input.kilograms as number) * KG_TO_LB);
+    const entry: WeightEntry = { id: day, day, pounds, at: new Date(this.now()).toISOString() };
+    const replaced = await this.db.get<WeightEntry>(owner, "weights", day);
+    await this.db.put(owner, "weights", entry);
+    const earlier = (await this.weights(owner, 400)).entries.filter((other) => other.day < day);
+    const before = earlier.at(-1);
+    // About a week before: the latest weigh-in at least six days earlier.
+    const weekAgo = [...earlier].reverse().find((other) => other.day <= addDays(day, -6));
+    return {
+      entry,
+      unit: "lb",
+      ...(replaced ? { replaced: replaced.pounds } : {}),
+      ...(before ? { previous: before, change: tenth(pounds - before.pounds) } : {}),
+      ...(weekAgo ? { weekAgo, changeSinceWeekAgo: tenth(pounds - weekAgo.pounds) } : {}),
+    };
+  }
+  /** Weigh-ins over the last so many days, oldest first. */
+  async weights(owner: string, days = 120) {
+    const zone = await this.timeZone(owner);
+    const today = localDay(this.now(), zone);
+    const since = addDays(today, -Math.min(Math.max(days, 1), 800));
+    const entries = (await this.db.list<WeightEntry>(owner, "weights"))
+      .filter((entry) => entry.day >= since && entry.day <= today)
+      .sort((a, b) => a.day.localeCompare(b.day));
+    return { today, unit: "lb" as const, entries };
+  }
+  async removeWeight(owner: string, day: string) {
+    if (!(await this.db.get<WeightEntry>(owner, "weights", day)))
+      throw new AppError("That weigh-in was already removed.", 404);
+    await this.db.remove(owner, "weights", day);
+    return { ok: true };
   }
   /** The last week of entries, today's totals and recent workout plans. */
   async summary(owner: string) {

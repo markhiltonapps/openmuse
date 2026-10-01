@@ -130,6 +130,12 @@ export function voiceNote(tool: string, args: unknown) {
       return "Checking your food log";
     case "log_meal":
       return "Adding it to your food log";
+    case "log_weight":
+      return "Saving your weight";
+    case "get_weight_history":
+      return "Checking your weigh-ins";
+    case "remove_weight":
+      return "Removing that weigh-in";
     case "list_reminders":
       return "Checking your reminders";
     case "look_at_calendar":

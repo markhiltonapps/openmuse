@@ -6,11 +6,13 @@ import {
   Mic,
   Play,
   Utensils,
+  X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, type LayoutChangeEvent, Pressable, Text, View } from "react-native";
+import Svg, { Circle, Line, Polyline } from "react-native-svg";
 import type { HealthPlaybookPatch, HealthSpace, Space } from "../../../packages/domain/src/spaces";
-import { type Bar, BarChart, DataTable, Segmented, StatTile } from "./charts";
+import { type Bar, BarChart, DataTable, niceStep, Segmented, StatTile } from "./charts";
 import { useHealth, type Workout, WorkoutPlayer } from "./health-ui";
 import { MEAL_NAMES, MealCheckIns, type MealEntry, MealRow } from "./meal-checkins-ui";
 import { showSpace, spacesView } from "./space-view";
@@ -29,7 +31,7 @@ import {
   useSpaces,
 } from "./spaces";
 import { tipProps } from "./tips";
-import { Button, Card, colors, Empty, ErrorNotice, InfoTip, s } from "./ui";
+import { Button, Card, colors, Empty, ErrorNotice, Field, InfoTip, s } from "./ui";
 import { primeSpeech } from "./voice";
 import { useWorkspace } from "./workspace";
 
@@ -212,6 +214,328 @@ function WeekPicker({
   );
 }
 
+/** A weigh-in: one a day, in pounds. */
+interface WeighIn {
+  day: string;
+  pounds: number;
+  at: string;
+}
+interface Weights {
+  today: string;
+  unit: "lb";
+  entries: WeighIn[];
+}
+/** A weight with its tenth ("175.0 lb") so a list lines up; a change drops a zero tenth ("2 lb"). */
+const lb = (value: number, exact = true) =>
+  `${value.toLocaleString(undefined, { minimumFractionDigits: exact ? 1 : 0, maximumFractionDigits: 1 })} lb`;
+const daysBetween = (from: string, to: string) =>
+  Math.round((dateOf(to).getTime() - dateOf(from).getTime()) / 86_400_000);
+
+function useWeights() {
+  const { api } = useWorkspace();
+  const [data, setData] = useState<Weights>();
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      setData(await api.request<Weights>("/api/weights?days=120"));
+      setError("");
+    } catch (e) {
+      setError(message(e));
+    }
+  }, [api]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  return { data, error, load };
+}
+
+/** "Down 2 lb since Sep 24": against about a week before the latest weigh-in, or the one before. */
+function weightChange(entries: WeighIn[], today: string) {
+  const latest = entries.at(-1);
+  if (!latest) return "";
+  const earlier = entries.slice(0, -1);
+  const base =
+    [...earlier].reverse().find((entry) => entry.day <= shift(latest.day, -6)) ?? earlier.at(-1);
+  if (!base) return "Your first weigh-in. Add another to see how it changes";
+  const change = Math.round((latest.pounds - base.pounds) * 10) / 10;
+  const when = base.day === shift(today, -1) ? "yesterday" : monthDay(base.day);
+  return change === 0
+    ? `The same as ${when}`
+    : `${change < 0 ? "Down" : "Up"} ${lb(Math.abs(change), false)} since ${when}`;
+}
+
+const CHART_HEIGHT = 112;
+const CHART_LEFT = 48;
+/** Weigh-ins over the last three months as a line, with a tip on each one. */
+function WeightChart({ entries, today }: { entries: WeighIn[]; today: string }) {
+  const [width, setWidth] = useState(0);
+  const points = entries.filter((entry) => entry.day >= shift(today, -89));
+  if (points.length < 2) return null;
+  const first = points[0]?.day ?? today;
+  const span = Math.max(daysBetween(first, today), 1);
+  const values = points.map((point) => point.pounds);
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  // Whole pounds only on the scale (1, 2, 5, 10…), never 2.5.
+  const raw = niceStep(Math.max(high - low, 2) / 2);
+  const step = raw < 1 ? 1 : raw === 2.5 ? 2 : raw;
+  const bottom = Math.floor((low - step / 4) / step) * step;
+  const top = Math.max(Math.ceil((high + step / 4) / step) * step, bottom + step);
+  const plot = Math.max(width - CHART_LEFT - 10, 0);
+  const x = (day: string) => CHART_LEFT + (daysBetween(first, day) / span) * plot;
+  const y = (value: number) => 6 + (1 - (value - bottom) / (top - bottom)) * CHART_HEIGHT;
+  const grid = Array.from(
+    { length: Math.round((top - bottom) / step) + 1 },
+    (_, i) => bottom + i * step,
+  );
+  const latest = points.at(-1) as WeighIn;
+  // Heard, never seen: "pounds", since some screen readers say "lb" as letters.
+  const pounds = (value: number) => lb(value).replace(/ lb$/, " pounds");
+  const spoken = `Weight over the last ${points.length} weigh-ins: from ${pounds(points[0]?.pounds ?? 0)} on ${longDay(first)} to ${pounds(latest.pounds)} on ${longDay(latest.day)}.`;
+  return (
+    <View
+      role="img"
+      aria-label={spoken}
+      onLayout={(event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width)}
+    >
+      <View style={{ height: CHART_HEIGHT + 12 }}>
+        {width > 0 && (
+          <Svg width={width} height={CHART_HEIGHT + 12}>
+            {grid.map((value) => (
+              <Line
+                key={value}
+                x1={CHART_LEFT}
+                x2={width}
+                y1={y(value)}
+                y2={y(value)}
+                stroke={colors.line}
+                strokeWidth={1}
+              />
+            ))}
+            <Polyline
+              points={points.map((point) => `${x(point.day)},${y(point.pounds)}`).join(" ")}
+              fill="none"
+              stroke={colors.blueDark}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            {points.map((point) => (
+              <Circle
+                key={point.day}
+                cx={x(point.day)}
+                cy={y(point.pounds)}
+                r={point === latest ? 5 : 4}
+                fill={colors.blueDark}
+                stroke={colors.card}
+                strokeWidth={2}
+              />
+            ))}
+          </Svg>
+        )}
+        {/* The scale, in the app's own type (SVG text would fall back to a serif font). */}
+        {grid.map((value) => (
+          <Text
+            key={value}
+            numberOfLines={1}
+            style={[
+              s.small,
+              {
+                position: "absolute",
+                left: 0,
+                width: CHART_LEFT - 8,
+                top: y(value) - 9,
+                textAlign: "right",
+                color: colors.mutedStrong,
+                fontVariant: ["tabular-nums"],
+              },
+            ]}
+          >
+            {value.toLocaleString()}
+          </Text>
+        ))}
+        {/* A tip on each weigh-in: hover, or tap on a phone. Not a keyboard stop (the chart is one
+            image, and the list below has every number). */}
+        {width > 0 &&
+          points.map((point) => (
+            <Pressable
+              key={point.day}
+              focusable={false}
+              tabIndex={-1}
+              {...tipProps(`${longDay(point.day)}: ${lb(point.pounds)}`)}
+              style={{
+                position: "absolute",
+                left: x(point.day) - 14,
+                top: y(point.pounds) - 14,
+                width: 28,
+                height: 28,
+              }}
+            />
+          ))}
+      </View>
+      <View style={[s.between, { marginLeft: CHART_LEFT }]}>
+        <Text style={[s.small, { color: colors.mutedStrong }]}>{monthDay(first)}</Text>
+        <Text style={[s.small, { color: colors.mutedStrong }]}>Today</Text>
+      </View>
+    </View>
+  );
+}
+
+/** Their weight: the latest, how it's changed, the trend, and a box to add today's. */
+function WeightCard({ agentName }: { agentName: string }) {
+  const { api } = useWorkspace();
+  const { data, error, load } = useWeights();
+  const [typed, setTyped] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [said, setSaid] = useState("");
+  const [problem, setProblem] = useState("");
+  const entries = data?.entries ?? [];
+  const latest = entries.at(-1);
+  const save = async () => {
+    const value = Number(typed.trim().replace(",", "."));
+    if (!typed.trim() || !Number.isFinite(value) || value < 20 || value > 1500) {
+      setProblem("Type your weight in pounds, like 173 or 172.5.");
+      return;
+    }
+    setSaving(true);
+    setProblem("");
+    try {
+      const saved = await api.request<{ entry: WeighIn; replaced?: number }>("/api/weights", {
+        pounds: value,
+      });
+      setTyped("");
+      setSaid(
+        saved.replaced === undefined
+          ? `Saved ${lb(saved.entry.pounds)} for today.`
+          : `Changed today’s weight to ${lb(saved.entry.pounds)}.`,
+      );
+      await load();
+    } catch (e) {
+      setProblem(message(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async (day: string) => {
+    setProblem("");
+    try {
+      await api.request(`/api/weights/${encodeURIComponent(day)}/delete`, {});
+      setSaid(`Removed the weigh-in for ${longDay(day)}.`);
+      await load();
+    } catch (e) {
+      // Already gone (a second tap): say so and show the list as it is now.
+      setProblem(message(e));
+      await load();
+    }
+  };
+  return (
+    <Card style={{ gap: 12 }}>
+      <Text {...heading(3)} style={s.heading}>
+        Weight
+      </Text>
+      {!data ? (
+        <LoadProblem
+          error={error}
+          retry={() => {
+            void load();
+          }}
+        />
+      ) : latest ? (
+        <View style={{ gap: 2 }}>
+          <View style={[s.row, { gap: 8, alignItems: "baseline", flexWrap: "wrap" }]}>
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: 28,
+                fontWeight: "800",
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {lb(latest.pounds)}
+            </Text>
+            <Text style={[s.small, { color: colors.mutedStrong }]}>
+              {latest.day === data.today
+                ? "Today"
+                : latest.day === shift(data.today, -1)
+                  ? "Yesterday"
+                  : longDay(latest.day)}
+            </Text>
+          </View>
+          <Text style={[s.text, { color: colors.mutedStrong }]}>
+            {weightChange(entries, data.today)}
+          </Text>
+        </View>
+      ) : (
+        <Text style={[s.text, { color: colors.mutedStrong }]}>No weigh-ins yet.</Text>
+      )}
+      {data && <WeightChart entries={entries} today={data.today} />}
+      <View style={[s.row, { gap: 8, alignItems: "flex-end", flexWrap: "wrap" }]}>
+        <View style={{ flexGrow: 1, flexBasis: 160, marginBottom: -16 }}>
+          <Field
+            label="Today’s weight (lb)"
+            value={typed}
+            onChangeText={(text) => {
+              setTyped(text);
+              setProblem("");
+            }}
+            placeholder="173"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            returnKeyType="done"
+            onSubmitEditing={() => void save()}
+          />
+        </View>
+        <Button primary disabled={saving} onPress={() => void save()}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </View>
+      <Text style={[s.small, { color: colors.mutedStrong }]}>
+        {`Or tell ${agentName}: “I weighed 173 this morning.”`}
+      </Text>
+      {/* Mounted all the time, so what happened is read out. */}
+      <Text
+        role="status"
+        style={[s.small, { color: problem ? colors.danger : colors.mutedStrong, minHeight: 18 }]}
+      >
+        {problem || said}
+      </Text>
+      {entries.length > 0 && (
+        <View style={{ gap: 6 }}>
+          <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>Recent weigh-ins</Text>
+          {[...entries]
+            .reverse()
+            .slice(0, 3)
+            .map((entry) => (
+              <View key={entry.day} style={[s.between, { gap: 8, minHeight: 44 }]}>
+                <Text style={[s.text, { flex: 1 }]}>{longDay(entry.day)}</Text>
+                <Text style={[s.text, { fontWeight: "700", fontVariant: ["tabular-nums"] }]}>
+                  {lb(entry.pounds)}
+                </Text>
+                <Pressable
+                  role="button"
+                  aria-label={`Remove the weigh-in for ${longDay(entry.day)}`}
+                  {...tipProps("Remove")}
+                  onPress={() => void remove(entry.day)}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    marginRight: -10,
+                    borderRadius: 22,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: pressed ? colors.subtle : "transparent",
+                  })}
+                >
+                  <X size={16} color={colors.mutedStrong} />
+                </Pressable>
+              </View>
+            ))}
+        </View>
+      )}
+    </Card>
+  );
+}
+
 type Measure = "calories" | "protein" | "workouts";
 
 export function HealthOverview({
@@ -344,6 +668,8 @@ export function HealthOverview({
           </Button>
         </View>
       </View>
+
+      <WeightCard agentName={agentName} />
 
       <Card style={{ gap: 14 }}>
         <View style={[s.between, { gap: 8, flexWrap: "wrap" }]}>

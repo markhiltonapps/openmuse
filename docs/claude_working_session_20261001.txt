@@ -474,6 +474,41 @@ PENDING
   first) fixed and passing its own scripts (x-expired, x-approve, x-headset); the reviewer was
   stopped by the owner before confirming. 462 tests pass.
   Later: the new call's voice doesn't know about a carried approval ("what's under See it?").
+  Committed locally as 28e9518 (not pushed; waiting for "push it").
+- Address and weight (owner: Neddy kept only the city, state and ZIP of their address; asked to
+  record 173 lb it said "sure", then "I can't log your weight directly" and offered a note).
+  Owner's answers: the full address on About you; use it when it's needed; proper weight
+  tracking; pounds.
+  - About you: "Home address" (household.address) in Home and family, right under Where you live.
+    Told a street address, Neddy saves all of it there and also sets the town as the home area
+    (news, weather, nearby). It uses the address for deliveries, orders, directions and forms;
+    anything sent or bought still waits for their OK.
+  - Weight: weigh-ins in "weights" (one a day, id = the day; saving again replaces it), kg turned
+    into lb, no future days. Tools log_weight (returns the change since the last one and since about
+    a week ago), get_weight_history, remove_weight; routes GET/POST /api/weights and
+    POST /api/weights/:day/delete. On a call: "Logging your weight".
+  - Health → Overview: a Weight card above "By day": the latest weight large, "Down 1.6 lb since
+    Sep 22", a 90-day line chart (tips on each point, one spoken summary), "Today’s weight (lb)" +
+    Save, "Or tell Neddy: “I weighed 173 this morning.”" right under the box, an always-mounted
+    status line, and the last 3 weigh-ins with Remove.
+  - Live voice: it no longer says "sure, I can do that" before checking; it says a short "One sec,
+    let me check" and then only what the answer says was done.
+  - Tests: weigh-ins (kg, same-day replace, change vs a week ago, future refused, removal) and the
+    address instructions. Lint, typechecks, worker tsc and 464 tests pass. Browser checks
+    (w-weight, w-about) at 416 light, 360 light and 390 dark: no page errors.
+  - Design division: visual SIGNED OFF (NICEs taken: whole-pound chart steps, a round × with a
+    pressed fill, the voice hint under the box, 3 recent rows). Copy: its one MUST fixed (a second
+    tap on × now says "That weigh-in was already removed." and reloads the list), which was its
+    sign-off condition; NICEs taken: "Changed today’s weight to 172.8 lb." when a day's weigh-in is
+    replaced (log_weight returns replaced), "Yesterday" by the big number, the first weigh-in line,
+    "pounds" in the spoken chart summary, the tool and voice wording ("Saving your weight",
+    "Checking your weigh-ins", "Removing that weigh-in", “One sec”), and address use narrowed to
+    "when something they asked for needs it; never share it otherwise", with how to forget it.
+    The usability reviewer wasn't run (the owner stopped that agent earlier; no new agent unless
+    asked).
+  - Not in this slice (later): editing Home address by hand doesn't change Where you live (copy
+    suggests a hint "For local news and weather" under Where you live); Undo after removing a
+    weigh-in; goal weight; kilograms display.
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk

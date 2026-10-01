@@ -213,3 +213,7 @@ Time Log — <Project Name>
   Escape again if the dialog is still there. `role="dialog"` is only on the topmost modal.
 - **Check for a live call right before pushing,** not minutes before: a push restarts the api
   within about a minute and ends any call.
+- **"Remember this" needs a real home:** when people ask the agent to keep something (their
+  address, their weight), it should land in a place they can see and change (an About you fact, a
+  tracker), not a free-text note. And the voice never says "sure, I can do that" before the answer
+  comes back: it doesn't know yet what can be done.

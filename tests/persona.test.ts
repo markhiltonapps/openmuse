@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createStore } from "../apps/server/src/db.ts";
-import { Persona, personaToolSpecs } from "../apps/server/src/persona.ts";
+import { Persona, personaInstructions, personaToolSpecs } from "../apps/server/src/persona.ts";
 import { personaSourceLabel } from "../packages/domain/src/persona.ts";
 
 test("facts the person says are saved by key, in the page's order, and read back", async () => {
@@ -119,4 +119,17 @@ test("Undo puts a forgotten fact back as it was; the agent can forget facts too"
   await assert.rejects(
     persona.restore("owner", "household.home", { ...saved, confidence: "certain" }),
   );
+});
+
+test("their full home address is kept on About you, and the agent is told to use it", async () => {
+  const db = await createStore();
+  const persona = new Persona(db);
+  await persona.save("owner", {
+    facts: [{ key: "household.address", value: "123 Oak St, Houston, TX 77002" }],
+  });
+  assert.match(await persona.context("owner"), /Their home address: 123 Oak St, Houston, TX 77002/);
+  // The whole address goes on the page; the town still sets the home area.
+  assert.match(personaInstructions, /save the whole address as household\.address/);
+  assert.match(personaInstructions, /also call set_home_area with its town or ZIP/);
+  await db.close();
 });

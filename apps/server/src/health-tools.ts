@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { type HealthService, mealSchema, workoutSchema } from "./health.ts";
+import { type HealthService, mealSchema, weightSchema, workoutSchema } from "./health.ts";
 import type { Spaces } from "./spaces.ts";
 
 export const healthToolInstructions =
-  " To log a meal, identify the food (with look_at_image when there is a photo), estimate the portions, calories, protein, carbs and fat, then call log_meal and say the numbers are estimates. For a workout, ask about time, level and equipment only if unknown, then design a safe plan with create_workout (warm-up first, cool-down last, clear cues) and tell the person to press Start on the card. Suggest checking with a doctor if they mention an injury or medical condition. For what they've eaten, their workouts or how a week went, read get_food_log; never guess from memory. Everything logged is shown in Spaces › Health: Overview has today and the week in charts, Food log lists every meal, and Food plan puts the family's planned dinners next to what was eaten.";
+  " To log a meal, identify the food (with look_at_image when there is a photo), estimate the portions, calories, protein, carbs and fat, then call log_meal and say the numbers are estimates. For a workout, ask about time, level and equipment only if unknown, then design a safe plan with create_workout (warm-up first, cool-down last, clear cues) and tell the person to press Start on the card. Suggest checking with a doctor if they mention an injury or medical condition. For what they've eaten, their workouts or how a week went, read get_food_log; never guess from memory. Everything logged is shown in Spaces › Health: Overview has today and the week in charts, Food log lists every meal, and Food plan puts the family's planned dinners next to what was eaten. When they tell you their weight, call log_weight straight away (pounds; or kilograms if they say kilos, which the tool converts; and the date only if it wasn't today), then say it's saved and, in a few words, how it compares with last time or a week ago. One weigh-in a day: a second for the same day replaces the first (the result's replaced says what it was). For how their weight is going, read get_weight_history; never guess. It's in Spaces › Health, on Overview under Weight.";
 
 /** The person's daily targets, from their health space's playbook, when set. */
 export type HealthTargets = () => Promise<
@@ -72,6 +72,27 @@ export function healthToolSpecs(health: HealthService, owner: string, targets?: 
         "Log a meal or snack in the person's food log, with estimated calories, protein, carbs and fat. Returns today's totals so far.",
       parameters: mealSchema,
       execute: async (args: unknown) => health.logMeal(owner, args),
+    },
+    {
+      name: "log_weight",
+      description:
+        "Log the person's weight for today (or a date they name), in pounds or kilograms (kept in pounds). One weigh-in a day: another for the same day replaces it. Returns the change since the previous weigh-in and since about a week ago, and the weight it replaced if that day already had one.",
+      parameters: weightSchema,
+      execute: async (args: unknown) => health.logWeight(owner, args),
+    },
+    {
+      name: "get_weight_history",
+      description:
+        "Read the person's weigh-ins (in pounds, oldest first) over the last so many days (default 120).",
+      parameters: z.object({ days: z.number().int().min(1).max(800).optional() }),
+      execute: async ({ days }: { days?: number }) => health.weights(owner, days ?? 120),
+    },
+    {
+      name: "remove_weight",
+      description:
+        "Remove the weigh-in for a day (YYYY-MM-DD) when the person says it was wrong or asks to remove it.",
+      parameters: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+      execute: async ({ date }: { date: string }) => health.removeWeight(owner, date),
     },
     {
       name: "create_workout",

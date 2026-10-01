@@ -889,6 +889,17 @@ export async function createApp(
       .parse(await c.req.json().catch(() => ({})));
     return c.json(await reminders.snooze(c.get("owner"), c.req.param("id"), minutes));
   });
+  // Weigh-ins, one a day, in pounds.
+  app.get("/api/weights", async (c) => {
+    const days = z.coerce.number().int().min(1).max(800).catch(120).parse(c.req.query("days"));
+    return c.json(await health.weights(c.get("owner"), days));
+  });
+  app.post("/api/weights", async (c) =>
+    c.json(await health.logWeight(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/weights/:day/delete", async (c) =>
+    c.json(await health.removeWeight(c.get("owner"), c.req.param("day"))),
+  );
   app.post("/api/health-log/:id/delete", async (c) =>
     c.json(await health.remove(c.get("owner"), c.req.param("id"))),
   );

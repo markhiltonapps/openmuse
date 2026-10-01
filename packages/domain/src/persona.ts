@@ -4,7 +4,8 @@ import { z } from "zod";
  * What the agent knows about the person, as named facts they can see, change and forget on
  * About you. This list is an allowlist: anything outside it stays an ordinary memory. It never
  * holds health conditions, religion, politics, immigration status, account numbers or logins.
- * Where the person lives stays in the home area (Areas) and people stay on People pages.
+ * Their town stays in the home area (Areas, for local news and weather); their full street
+ * address is a fact here. People stay on People pages.
  */
 export const PERSONA_GROUPS = [
   "You",
@@ -35,6 +36,11 @@ export const PERSONA_FACTS = {
     label: "Who’s at home",
     group: "Home and family",
     hint: "Partner Jess; kids Maya 9 and Leo 6; dog Biscuit",
+  },
+  "household.address": {
+    label: "Home address",
+    group: "Home and family",
+    hint: "123 Oak St, Houston, TX 77002",
   },
   "household.home": {
     label: "Own or rent",

@@ -137,3 +137,66 @@ test("the food log reads a week at a time, Monday to Sunday in the person's own 
   const last = (await read?.execute({ week: "2026-09-27" })) as { weekStart: string };
   assert.equal(last.weekStart, "2026-09-21");
 });
+
+test("weigh-ins: one a day in pounds, kilograms converted, and how it compares", async () => {
+  let now = Date.parse("2026-09-24T13:00:00Z"); // 8 am in Chicago
+  const health = new HealthService(
+    db,
+    async () => "America/Chicago",
+    () => now,
+  );
+  const owner = "weigher";
+  const tools = healthToolSpecs(health, owner);
+  const log = toolNamed(tools, "log_weight");
+  const history = toolNamed(tools, "get_weight_history");
+  const remove = toolNamed(tools, "remove_weight");
+  const first = (await log?.execute({ pounds: 175 })) as {
+    entry: { day: string };
+    change?: number;
+  };
+  assert.equal(first.entry.day, "2026-09-24");
+  assert.equal(first.change, undefined);
+  now = Date.parse("2026-09-30T13:00:00Z");
+  await log?.execute({ kilograms: 79.5 }); // 175.3 lb
+  now = Date.parse("2026-10-01T13:00:00Z");
+  // "I weighed 173 this morning": compared with yesterday and about a week ago.
+  const today = (await log?.execute({ pounds: 173 })) as {
+    entry: { day: string; pounds: number };
+    unit: string;
+    change: number;
+    changeSinceWeekAgo: number;
+    weekAgo: { day: string };
+  };
+  assert.equal(today.unit, "lb");
+  assert.equal(today.entry.pounds, 173);
+  assert.equal(today.change, -2.3);
+  assert.equal(today.weekAgo.day, "2026-09-24");
+  assert.equal(today.changeSinceWeekAgo, -2);
+  assert.equal((today as { replaced?: number }).replaced, undefined);
+  // A second weigh-in the same day replaces the first, and says what it replaced.
+  const again = (await log?.execute({ pounds: 172.6 })) as { replaced?: number };
+  assert.equal(again.replaced, 173);
+  const listed = (await history?.execute({})) as
+    | { entries: { day: string; pounds: number }[] }
+    | undefined;
+  const days = listed?.entries ?? [];
+  assert.deepEqual(
+    days.map((entry) => [entry.day, entry.pounds]),
+    [
+      ["2026-09-24", 175],
+      ["2026-09-30", 175.3],
+      ["2026-10-01", 172.6],
+    ],
+  );
+  // A day they name, but not one that hasn't happened.
+  await log?.execute({ pounds: 176, date: "2026-09-20" });
+  await assert.rejects(
+    log?.execute({ pounds: 170, date: "2026-10-02" }) ?? Promise.resolve(),
+    /hasn't happened/,
+  );
+  await assert.rejects(log?.execute({}) ?? Promise.resolve(), /pounds or kilograms/);
+  // A wrong one comes off.
+  await remove?.execute({ date: "2026-09-20" });
+  assert.equal((await health.weights(owner)).entries.length, 3);
+  await assert.rejects(health.removeWeight(owner, "2026-09-20"), /already removed/);
+});
