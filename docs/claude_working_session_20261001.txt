@@ -391,8 +391,52 @@ PENDING
   5. the menu ("Everything"), each place with something to say for it;
   6. talking, dark;
   7. Windows: the screen opens beside the conversation, with call controls in the header.
-  Generator: scratchpad voicefirst/gen.py. Waiting on the owner's comments before planning
-  the build.
+  Generator: scratchpad voicefirst/gen.py. Owner APPROVED the mockups ("go ahead").
+  Build plan (tasks #137–141), each through the Design division:
+  - V1: the call survives navigation (call bar);
+  - V2: talk home screen and the Everything menu;
+  - V3: one running conversation (Said/Typed);
+  - V4: voice takes you places, and a Windows side panel;
+  - V5: typing mid-call (needs research: can the server add typed text to a live session?).
+- V1 (the call survives navigation), all three reviewers SIGNED OFF after round 2:
+  - live-call.tsx holds the call for the whole app (LiveCallProvider). The call screen is its own
+    layer (`shown`, expand/shrink), drawn over whatever sheet is open; shrinking leaves that sheet
+    and anything typed in it as it was. `{ type: "live" }` is gone from Detail.
+  - CallBar on the page and at the top of every sheet (SheetTop): avatar with a green ring while
+    it can hear you, "Neddy · Listening" (Talking, Checking, You’re muted, Connecting), "0:04 · Tap
+    to go back", the newest words said (two lines kept all through the call, so the page never
+    jumps), Mute and End. Ended: "The call ended" with the reason, Talk again and "Close the call
+    bar". "New on screen · Tap to see" when details arrive while shrunk.
+  - The call screen's close is a down arrow, "Shrink the call. It keeps going."; an ended call's
+    screen is titled "Call with Neddy"; the headset says "Go back to the call with Neddy" during
+    a call.
+  - Screen readers: one hidden status line (on the page, or inside the open sheet) says shrink,
+    mute, end, why it ended, couldn't start, and new on screen; cleared after 5 s.
+  - Focus: a sheet opened during a call starts on its own Close; after a call ends on its own,
+    focus goes to the bar's main button; after shrinking, back to the bar; End from a bar in a
+    sheet goes to the sheet's title.
+  - During a call: reload/pull-to-refresh/closing the tab asks first (beforeunload,
+    overscroll-behavior none); the new-version pill waits; no auto-reload until it's dismissed.
+  - Speed: split context (useCallControls vs useLiveCall). A word update re-renders ~41
+    components (was 264 on Chat, 425 on Activity); at 4x CPU throttle no long tasks while talking
+    (was 10–12, up to 125 ms).
+  Tests: lint, both typechecks, worker tsc, 461 tests pass. Playwright (fake WebRTC) at 416, 360,
+  390 dark and 1100: shrink, tabs, sheets, typing in New job and Compose, Talk again, End, ending
+  on its own, mic denied, reload, new version, setup state.
+  Deferred: Android back gesture (V4), tab title during a call, dictation during a call, the
+  sign-out-during-a-call message, hover states, tips placed by code eating the first Escape, bar
+  corners inside sheets, a placeholder in the empty quote slot, announce close_requested only
+  after its real reason arrives.
+- Gmail "disconnected" loop (owner hit it on a call): asking for the last email ran search_mail,
+  which reads the app's built-in Google sign-in (not set up on Railway, so "Google is
+  disconnected"). The agent took that to mean Gmail, sent a Connect card; connect_app said Gmail
+  was already connected; next question, search_mail again. Fixed in 5c71f39: the built-in mail
+  tools say they're separate from Gmail/Outlook under Apps and, when off, to use find_app_actions
+  and use_app; each chat turn is told which mailbox is on; connect_app on a connected app says to
+  use it now. New test fails on the old code. Pushed at 18:52 UTC (call at 18:45 had ended at
+  18:49); api deployed SUCCESS 18:53. Also: my 17:45 push restarted the api at 17:46:35 during the
+  owner's call (my live-call check was 25 s too early). Open question for the owner: keep the
+  built-in Google sign-in at all? (/api/google/connect returned 503: not configured.)
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk

@@ -1,4 +1,13 @@
-import { Check, Copy, ExternalLink, Headset, Mic, MicOff, PhoneOff } from "lucide-react-native";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Headset,
+  Mic,
+  MicOff,
+  PhoneOff,
+} from "lucide-react-native";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   Linking,
@@ -18,8 +27,9 @@ import { AgentAvatar } from "./avatar";
 import { CallDetails } from "./call-details";
 import { Segmented } from "./charts";
 import { HIDDEN } from "./job-working-ui";
-import { type LiveCall, type LiveState, liveVoiceSupported, startLive } from "./live-voice";
-import { Button, colors, ErrorNotice, Sheet, s } from "./ui";
+import { callStatus, useLiveCall } from "./live-call";
+import { liveVoiceSupported } from "./live-voice";
+import { Button, colors, ErrorNotice, Sheet, SheetTop, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /**
@@ -81,88 +91,26 @@ export function useLiveVoice(): LiveStatus {
   return liveVoiceSupported() ? status : "off";
 }
 
-const savedListeners = new Set<() => void>();
-/** Hears when a call has been saved, so the chat can add it. */
-export function onCallSaved(listener: () => void) {
-  savedListeners.add(listener);
-  return () => {
-    savedListeners.delete(listener);
-  };
-}
-/**
- * After a call: the server saves it within a moment of the end; anything asked at the very end
- * follows within two minutes, so it's checked again a few times.
- */
-function callSaved(first = 0) {
-  for (const after of [first, 15_000, 45_000, 125_000])
-    setTimeout(() => {
-      for (const listener of savedListeners) listener();
-    }, after);
-}
-
-/** Why a conversation ended on its own, in plain words. */
-const ENDED = (name: string): Record<string, string> => ({
-  remote_hangup: "The call ended.",
-  close_requested: "The call ended. Talk again to carry on.",
-  connection_lost: "The connection dropped. Talk again when you’re ready.",
-  expired: "That’s as long as one call can last. Talk again to carry on.",
-  time_limit: "Calls stop after an hour. Talk again to carry on.",
-  content: "A safety check stopped the call. Talk again to start a new one.",
-  idle: `It went quiet, so ${name} hung up. Talk again when you’re ready.`,
-  replaced: `You started talking with ${name} somewhere else, so this call ended.`,
-  server_restart: `${name} had to restart, so the call ended. Talk again to carry on.`,
-});
-/** A browser's reason a call couldn't start, as what to do about it. */
-function startFailure(error: unknown, name: string) {
-  const kind = error instanceof Error ? error.name : "";
-  if (kind === "NotAllowedError" || kind === "SecurityError")
-    return `${name} can’t hear you. Select the icon beside the web address, allow the microphone, then choose “Talk again”.`;
-  if (kind === "NotFoundError")
-    return "No microphone was found. Plug one in, then choose “Talk again”.";
-  if (kind === "OverconstrainedError")
-    return "The microphone chosen in Apps › Voice isn’t connected. Plug it in or choose another there, then choose “Talk again”.";
-  if (kind === "NotReadableError")
-    return "Another app is using the microphone. Close it, then choose “Talk again”.";
-  // No answer, or a page that isn't ours (a proxy's error page during an update).
-  if (kind === "TypeError" || kind === "SyntaxError")
-    return `Couldn’t reach ${name}. Check your internet connection, then choose “Talk again”.`;
-  const message = error instanceof Error ? error.message.trim() : "";
-  return message || "Something went wrong. Choose “Talk again” to try once more.";
-}
-
-interface Line {
-  role: "user" | "assistant";
-  text: string;
-}
+export { onCallSaved } from "./live-call";
 
 /**
  * Talking with the agent live: it listens while it talks, so the person can just speak, and cut
  * in. The words show as they're said; Mute and End are the only controls.
  */
 export function LiveTalkSheet() {
-  const { api, close } = useWorkspace();
+  const { api } = useWorkspace();
   const { data } = useAgentWorkspace();
   const { width, height } = useWindowDimensions();
   const name = data?.identity.name || "Neddy";
-  const [state, setState] = useState<LiveState>("connecting");
-  const [muted, setMuted] = useState(false);
-  const [lines, setLines] = useState<Line[]>([]);
-  const [error, setError] = useState("");
-  const [ended, setEnded] = useState("");
-  // "Let me check": the agent is looking something up.
-  const [lookingUp, setLookingUp] = useState(false);
-  // What the agent put on screen instead of reading it out, and whether it's what's showing.
-  const [details, setDetails] = useState<CallDetail[]>([]);
-  const [view, setView] = useState<"talk" | "details">("talk");
-  const detailCount = useRef(0);
+  // The call itself lives with the app, so it carries on when this screen closes.
+  const call = useLiveCall();
+  const { state, muted, lines, error, lookingUp, details, view, setView } = call;
   const detailsScroller = useRef<ScrollView>(null);
   // A new answer goes on top: show it, wherever they'd scrolled to.
   useEffect(() => {
     if (details.length) detailsScroller.current?.scrollTo({ y: 0, animated: false });
   }, [details.length]);
-  const call = useRef<LiveCall | undefined>(undefined);
   const scroller = useRef<ScrollView>(null);
-  const [attempt, setAttempt] = useState(0);
   // The owner, before the server has its key: say what to add instead of asking for the mic.
   const [needsKey, setNeedsKey] = useState(() => cache.get(api) === "setup");
   const [checking, setChecking] = useState(false);
@@ -206,132 +154,39 @@ export function LiveTalkSheet() {
   useEffect(() => {
     if (needsKey) void checkAgain(true);
   }, []);
+  // Opening the call screen starts a call, unless one is already going (or just ended: then it
+  // shows what happened, with Talk again).
+  const { phase, start } = call;
   useEffect(() => {
-    if (needsKey) return;
-    let cancelled = false;
-    setState("connecting");
-    setError("");
-    setEnded("");
-    setLines([]);
-    setMuted(false);
-    setLookingUp(false);
-    setDetails([]);
-    setView("talk");
-    detailCount.current = 0;
-    // Words arrive a few at a time, many times a second: they're gathered and shown about five
-    // times a second, so the screen isn't redrawn for each one (slow phones stutter).
-    let pending: Line[] = [];
-    let flush: ReturnType<typeof setTimeout> | undefined;
-    const show = () => {
-      flush = undefined;
-      const arrived = pending;
-      pending = [];
-      if (cancelled || !arrived.length) return;
-      setLines((current) => {
-        const next = [...current];
-        for (const line of arrived) {
-          const last = next.at(-1);
-          if (last?.role === line.role)
-            next[next.length - 1] = { role: line.role, text: last.text + line.text };
-          else next.push(line);
-        }
-        return next.slice(-8);
-      });
-    };
-    startLive(api, {
-      onState: (next) => !cancelled && setState(next),
-      onChecking: (on) => !cancelled && setLookingUp(on),
-      onDetails: (next) => {
-        // A late reply to an earlier look can't take anything away.
-        if (cancelled || next.length < detailCount.current) return;
-        // Something new: the voice is saying it's on the screen, so that's what shows.
-        if (next.length > detailCount.current) setView("details");
-        detailCount.current = next.length;
-        setDetails(next);
-      },
-      onWords: (role, words) => {
-        if (cancelled) return;
-        const last = pending.at(-1);
-        if (last?.role === role) last.text += words;
-        else pending.push({ role, text: words });
-        flush ??= setTimeout(show, 200);
-      },
-      onEnded: (reason) => {
-        // OpenAI ended it; the server saves the call as soon as it hears.
-        callSaved(2500);
-        if (cancelled) return;
-        const endings = ENDED(name);
-        setEnded(endings[reason ?? ""] ?? "The call ended.");
-        // When the server ended it (quiet, the hour, another call), ask it why once it has
-        // saved this call.
-        if (reason === "close_requested")
-          setTimeout(() => {
-            void api
-              .request<{ sessions: { reason?: string; endedAt: string }[] }>(
-                "/api/voice/live/recent",
-              )
-              .then(({ sessions }) => {
-                const last = sessions[0];
-                const fresh = last && Date.now() - Date.parse(last.endedAt) < 10_000;
-                if (!cancelled && fresh && last.reason && endings[last.reason])
-                  setEnded(endings[last.reason] as string);
-              })
-              .catch(() => undefined);
-          }, 1500);
-      },
-    })
-      .then((started) => {
-        if (cancelled) void started.end();
-        else call.current = started;
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setState("ended");
-        setError(startFailure(e, name));
-      });
-    return () => {
-      cancelled = true;
-      clearTimeout(flush);
-      void call.current?.end().then(() => callSaved());
-      call.current = undefined;
-    };
-  }, [api, attempt, name, needsKey]);
-  const finish = () => {
-    // The server has saved the call once it answers.
-    void call.current?.end().then(() => callSaved());
-    call.current = undefined;
-    close();
-  };
-  const toggleMute = () => {
-    const next = !muted;
-    call.current?.setMuted(next);
-    setMuted(next);
-  };
-  const over = state === "ended";
+    if (!needsKey && phase === "idle") start();
+  }, [needsKey]);
+  /** End: the call stops and this screen closes. */
+  const finish = call.end;
+  /**
+   * Closing the screen during a call keeps the call going, in the bar at the top, with whatever was
+   * open underneath still there.
+   */
+  const hide = call.shrink;
+  const toggleMute = call.toggleMute;
+  const over = call.phase === "over";
   // When the buttons swap (the call ends, or starts again), keep focus on the new ones.
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const timer = setTimeout(() => {
       const active = document.activeElement;
       if (active && active !== document.body && active.isConnected) return;
-      // The first control that can be used (Mute waits while the call connects).
-      document
-        .querySelector<HTMLElement>('#live-controls [role=button]:not([aria-disabled="true"])')
-        ?.focus();
+      // While it connects Mute waits, and End would be next: a second Enter mustn't end the call
+      // that's just starting, so focus goes to Shrink instead.
+      (state === "connecting" && !over && !needsKey
+        ? document.querySelector<HTMLElement>(`[aria-label="${SHRINK}"]`)
+        : document.querySelector<HTMLElement>(
+            '#live-controls [role=button]:not([aria-disabled="true"])',
+          )
+      )?.focus();
     }, 60);
     return () => clearTimeout(timer);
   }, [over, needsKey]);
-  const status = over
-    ? ended || (error ? "Couldn’t start." : "The call ended.")
-    : state === "connecting"
-      ? "Connecting…"
-      : muted
-        ? `Muted. ${name} can’t hear you.`
-        : state === "speaking"
-          ? `${name} is talking. Just speak to cut in.`
-          : lookingUp
-            ? `${name} is checking…`
-            : "Listening…";
+  const status = callStatus(call, name);
   // Short screens (a phone on its side in a car mount) get a smaller avatar and caption box.
   const tall = height >= 700;
   // On a very short screen the avatar gives its room to the words.
@@ -358,10 +213,10 @@ export function LiveTalkSheet() {
     >
       {over ? (
         <>
-          <Button strong style={{ minWidth: 112 }} onPress={() => setAttempt((n) => n + 1)}>
+          <Button strong style={{ minWidth: 112 }} onPress={start}>
             Talk again
           </Button>
-          <Button style={{ minWidth: 112 }} onPress={close}>
+          <Button style={{ minWidth: 112 }} onPress={hide}>
             Close
           </Button>
         </>
@@ -406,136 +261,147 @@ export function LiveTalkSheet() {
         <Button strong style={{ minWidth: 112 }} onPress={() => void checkAgain()}>
           {checking ? "Checking…" : "Check again"}
         </Button>
-        <Button style={{ minWidth: 112 }} onPress={close}>
+        <Button style={{ minWidth: 112 }} onPress={hide}>
           Close
         </Button>
       </View>
     </View>
   );
   return (
-    <Sheet
-      title={needsKey ? `Talk live with ${name}` : `Talking with ${name}`}
-      subtitle={needsKey || over ? undefined : "Live · just talk"}
-      onClose={finish}
-      footer={needsKey ? setupControls : controls}
-    >
-      {needsKey ? (
-        <LiveSetup name={name} link={setupLinks.get(api)} height={height} onSay={setSaid} />
-      ) : (
-        <View style={{ alignItems: "center", gap: 12 }}>
-          {/* First, so it stays put when the view below it changes. */}
-          {details.length > 0 && (
-            <View style={{ alignSelf: "center", width: "100%", maxWidth: 560 }}>
-              <Segmented
-                label="What to show"
-                align="center"
-                value={view}
-                onChange={setView}
-                options={[
-                  { id: "talk", label: "Conversation" },
-                  {
-                    id: "details",
-                    label: details.length > 1 ? `Details · ${details.length}` : "Details",
-                  },
-                ]}
-              />
-            </View>
-          )}
-          {!short && !showingDetails && (
-            <AgentAvatar
-              onCall
-              size={avatar}
-              mood={
-                state === "connecting" || (lookingUp && state !== "speaking")
-                  ? "working"
-                  : over
-                    ? "idle"
-                    : undefined
-              }
-            />
-          )}
-          {/* Room for two lines during a call, so a longer status never moves what's below it. */}
-          <View style={{ minHeight: over ? 0 : short ? 26 : 52, justifyContent: "center" }}>
-            <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{status}</Text>
-          </View>
-          {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
-          <Text role="status" style={HIDDEN}>
-            {error
-              ? `${status} ${error}`
-              : state === "connecting" && switchedOn
-                ? `Live talk is on. ${status}`
-                : over || state === "connecting" || muted
-                  ? status
-                  : `Live. ${name} can hear you. Just speak, and cut in any time.`}
-          </Text>
-          <ErrorNotice error={error} />
-          {showingDetails ? (
-            // The sheet's whole width, so three product cards fit on a computer.
-            <View style={{ alignSelf: "stretch", height: detailsHeight }}>
-              <ScrollView
-                ref={detailsScroller}
-                style={{ flex: 1 }}
-                contentContainerStyle={{ padding: 4, paddingBottom: 24 }}
-              >
-                <CallDetails details={details} onCall over={over} />
-              </ScrollView>
-              {/* A fade at the bottom says there's more below. */}
-              <View
-                pointerEvents="none"
-                style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 24 }}
-              >
-                <Svg width="100%" height={24}>
-                  <Defs>
-                    <LinearGradient id="details-fade" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={0} />
-                      <Stop offset="1" stopColor={colors.canvas} stopOpacity={1} />
-                    </LinearGradient>
-                  </Defs>
-                  <Rect width="100%" height={24} fill="url(#details-fade)" />
-                </Svg>
-              </View>
-            </View>
-          ) : /* There from the start at a fixed height, so the sheet holds still as words arrive. The
-            note about what live talk can do fills it until then, and closes it after the end. */
-          !over || lines.length > 0 ? (
-            <ScrollView
-              ref={scroller}
-              // Straight to the end: a smooth scroll for every few words is costly on a phone.
-              onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
-              style={{ alignSelf: "center", width: "100%", maxWidth: 560, height: captionHeight }}
-              contentContainerStyle={{
-                gap: 10,
-                padding: 14,
-                flexGrow: 1,
-                justifyContent: lines.length ? "flex-start" : "center",
-              }}
-            >
-              {lines.map((line, index) => (
-                <Text
-                  // Lines only grow at the end, so their place is a stable key.
-                  // biome-ignore lint/suspicious/noArrayIndexKey: see above
-                  key={index}
-                  style={[
-                    s.text,
-                    line.role === "user"
-                      ? { color: colors.mutedStrong, alignSelf: "flex-end", textAlign: "right" }
-                      : { color: colors.text },
+    // The call screen is the call: no bar for it at its own top.
+    <SheetTop.Provider value={null}>
+      <Sheet
+        title={
+          needsKey ? `Talk live with ${name}` : over ? `Call with ${name}` : `Talking with ${name}`
+        }
+        subtitle={needsKey || over ? undefined : "Live · just talk"}
+        onClose={hide}
+        // During a call, closing shrinks it to the bar at the top; End is what ends it.
+        {...(call.phase === "on" && !needsKey
+          ? { closeIcon: ChevronDown, closeLabel: SHRINK }
+          : {})}
+        footer={needsKey ? setupControls : controls}
+      >
+        {needsKey ? (
+          <LiveSetup name={name} link={setupLinks.get(api)} height={height} onSay={setSaid} />
+        ) : (
+          <View style={{ alignItems: "center", gap: 12 }}>
+            {/* First, so it stays put when the view below it changes. */}
+            {details.length > 0 && (
+              <View style={{ alignSelf: "center", width: "100%", maxWidth: 560 }}>
+                <Segmented
+                  label="What to show"
+                  align="center"
+                  value={view}
+                  onChange={setView}
+                  options={[
+                    { id: "talk", label: "Conversation" },
+                    {
+                      id: "details",
+                      label: details.length > 1 ? `Details · ${details.length}` : "Details",
+                    },
                   ]}
+                />
+              </View>
+            )}
+            {!short && !showingDetails && (
+              <AgentAvatar
+                onCall
+                size={avatar}
+                mood={
+                  state === "connecting" || (lookingUp && state !== "speaking")
+                    ? "working"
+                    : over
+                      ? "idle"
+                      : undefined
+                }
+              />
+            )}
+            {/* Room for two lines during a call, so a longer status never moves what's below it. */}
+            <View style={{ minHeight: over ? 0 : short ? 26 : 52, justifyContent: "center" }}>
+              <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{status}</Text>
+            </View>
+            {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
+            <Text role="status" style={HIDDEN}>
+              {error
+                ? `${status} ${error}`
+                : state === "connecting" && switchedOn
+                  ? `Live talk is on. ${status}`
+                  : over || state === "connecting" || muted
+                    ? status
+                    : `Live. ${name} can hear you. Just speak, and cut in any time.`}
+            </Text>
+            <ErrorNotice error={error} />
+            {showingDetails ? (
+              // The sheet's whole width, so three product cards fit on a computer.
+              <View style={{ alignSelf: "stretch", height: detailsHeight }}>
+                <ScrollView
+                  ref={detailsScroller}
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ padding: 4, paddingBottom: 24 }}
                 >
-                  {line.text.trim()}
-                </Text>
-              ))}
-              {(lines.length === 0 || over) && note}
-            </ScrollView>
-          ) : (
-            note
-          )}
-        </View>
-      )}
-    </Sheet>
+                  <CallDetails details={details} onCall over={over} />
+                </ScrollView>
+                {/* A fade at the bottom says there's more below. */}
+                <View
+                  pointerEvents="none"
+                  style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 24 }}
+                >
+                  <Svg width="100%" height={24}>
+                    <Defs>
+                      <LinearGradient id="details-fade" x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0" stopColor={colors.canvas} stopOpacity={0} />
+                        <Stop offset="1" stopColor={colors.canvas} stopOpacity={1} />
+                      </LinearGradient>
+                    </Defs>
+                    <Rect width="100%" height={24} fill="url(#details-fade)" />
+                  </Svg>
+                </View>
+              </View>
+            ) : /* There from the start at a fixed height, so the sheet holds still as words arrive. The
+            note about what live talk can do fills it until then, and closes it after the end. */
+            !over || lines.length > 0 ? (
+              <ScrollView
+                ref={scroller}
+                // Straight to the end: a smooth scroll for every few words is costly on a phone.
+                onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
+                style={{ alignSelf: "center", width: "100%", maxWidth: 560, height: captionHeight }}
+                contentContainerStyle={{
+                  gap: 10,
+                  padding: 14,
+                  flexGrow: 1,
+                  justifyContent: lines.length ? "flex-start" : "center",
+                }}
+              >
+                {lines.map((line, index) => (
+                  <Text
+                    // Lines only grow at the end, so their place is a stable key.
+                    // biome-ignore lint/suspicious/noArrayIndexKey: see above
+                    key={index}
+                    style={[
+                      s.text,
+                      line.role === "user"
+                        ? { color: colors.mutedStrong, alignSelf: "flex-end", textAlign: "right" }
+                        : { color: colors.text },
+                    ]}
+                  >
+                    {line.text.trim()}
+                  </Text>
+                ))}
+                {(lines.length === 0 || over) && note}
+              </ScrollView>
+            ) : (
+              note
+            )}
+          </View>
+        )}
+      </Sheet>
+    </SheetTop.Provider>
   );
 }
 
+/** The call screen's close during a call: it shrinks to the bar and carries on. */
+const SHRINK = "Shrink the call. It keeps going.";
 const mono = Platform.OS === "ios" ? "Menlo" : "monospace";
 const KEY_NAME = "OPENAI_VOICE_API_KEY";
 const SETUP_HEADING = "Live talk isn’t switched on yet";

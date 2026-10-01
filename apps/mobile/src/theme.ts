@@ -60,6 +60,8 @@ const light = {
   /** Toasts and checked boxes: the opposite of the page. */
   inverse: "#11191C",
   onInverse: "#FFFFFF",
+  /** "Live" on the inverse (a call's ring on its bar): the other theme's green. */
+  liveOnInverse: "#2BD46E",
   shade: "rgba(35,48,44,0.25)",
 };
 const night: typeof light = {
@@ -87,6 +89,7 @@ const night: typeof light = {
   errorBg: "#3A1D1B",
   inverse: "#F3F3F5",
   onInverse: "#000000",
+  liveOnInverse: "#189A58",
   shade: "rgba(0,0,0,0.6)",
 };
 export const palette = dark ? night : light;

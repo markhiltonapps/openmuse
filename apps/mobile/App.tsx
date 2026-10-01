@@ -16,7 +16,15 @@ import {
   UsersRound,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -57,6 +65,8 @@ import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { FeedScreen } from "./src/feed";
+import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
+import { LiveTalkSheet } from "./src/live-talk-ui";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import {
   clearSession,
@@ -72,7 +82,7 @@ import TipLayer from "./src/TipLayer";
 import { dark } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { tipProps } from "./src/tips";
-import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
+import { Button, colors, ErrorNotice, IconButton, SheetStatus, SheetTop, s } from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
 import {
   listenForCheckIns,
@@ -334,17 +344,38 @@ function WorkspaceApp({ token }: { token: string }) {
       <AgentWorkspaceProvider>
         <ComputerDraftProvider key={token}>
           <ThreadsProvider>
-            <WorkspaceShell
-              detail={detail}
-              toast={toast}
-              clearToast={() => setToast("")}
-              error={error}
-              prompt={prompt}
-            />
+            {/* The live call carries on across screens and sheets, its bar on top of them. */}
+            <LiveCallProvider>
+              <CallBarSlot>
+                <WorkspaceShell
+                  detail={detail}
+                  toast={toast}
+                  clearToast={() => setToast("")}
+                  error={error}
+                  prompt={prompt}
+                />
+              </CallBarSlot>
+            </LiveCallProvider>
           </ThreadsProvider>
         </ComputerDraftProvider>
       </AgentWorkspaceProvider>
     </WorkspaceContext.Provider>
+  );
+}
+/**
+ * The call's bar, for the page and for every sheet, while there's a call; and what just happened to
+ * it, read out from inside a sheet.
+ */
+function CallBarSlot({ children }: { children: ReactNode }) {
+  const { phase } = useCallControls();
+  const news = useCallNews();
+  // The same element while the call goes on, so sheets aren't redrawn as words arrive. It stays
+  // under the call screen too, so focus can go back to it when the call shrinks.
+  const bar = useMemo(() => (phase !== "idle" ? <CallBar /> : null), [phase]);
+  return (
+    <SheetTop.Provider value={bar}>
+      <SheetStatus.Provider value={news}>{children}</SheetStatus.Provider>
+    </SheetTop.Provider>
   );
 }
 function WorkspaceShell({
@@ -373,6 +404,8 @@ function WorkspaceShell({
   } = useMuseThread();
   const [threadsOpen, setThreadsOpen] = useState(false);
   const { width } = useWindowDimensions();
+  const callBar = useContext(SheetTop);
+  const call = useCallControls();
   const desktop = width >= 900;
   const pending =
     (data?.notifications.filter((n) => !n.read).length || 0) +
@@ -454,6 +487,12 @@ function WorkspaceShell({
     <>
       <WorkspaceTools />
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
+        {/* A sheet over the page shows the bar itself (the page's would be under its shade). */}
+        {callBar && !detail && !threadsOpen && (
+          <View style={{ width: "100%", maxWidth: 760, alignSelf: "center", zIndex: 9 }}>
+            {callBar}
+          </View>
+        )}
         <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
           <View
             pointerEvents="box-none"
@@ -768,9 +807,11 @@ function WorkspaceShell({
             </View>
           </View>
           {/* Background updates pop up under the bell; they wait while a sheet covers the page. */}
-          <UpdateToasts hold={!!chatNow || !!detail || threadsOpen} />
+          <UpdateToasts hold={!!chatNow || !!detail || threadsOpen || call.shown} />
           <NewVersion
-            canReload={() => !detail && !threadsOpen && !chatNow}
+            // Never in a call (a reload would hang it up), nor while its bar says how it ended.
+            canReload={() => !detail && !threadsOpen && !chatNow && call.phase === "idle"}
+            onCall={call.phase === "on"}
             desktop={desktop}
             chat={chat}
           />
@@ -810,6 +851,8 @@ function WorkspaceShell({
             </View>
           )}
         </View>
+        {/* What happened to a shrunk call; a sheet says it itself while one is open. */}
+        <CallNews quiet={!!detail || threadsOpen || call.shown} />
         {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
         {detail && (
           <Details
@@ -833,6 +876,8 @@ function WorkspaceShell({
             detail={detail}
           />
         )}
+        {/* The call screen is its own layer, over whatever sheet is open, which stays as it was. */}
+        {call.shown && <LiveTalkSheet />}
       </SafeAreaView>
     </>
   );
@@ -880,10 +925,13 @@ function NewJobButton({ round }: { round: boolean }) {
 /** A tab left open when a new version comes out offers to load it (web only). */
 function NewVersion({
   canReload,
+  onCall,
   desktop,
   chat,
 }: {
   canReload: () => boolean;
+  /** It waits until the call is over: Reload would hang it up. */
+  onCall: boolean;
   desktop: boolean;
   chat: boolean;
 }) {
@@ -906,7 +954,7 @@ function NewVersion({
       ),
     [],
   );
-  const shown = !!ready && !later;
+  const shown = !!ready && !later && !onCall;
   return (
     // Always there, so a screen reader hears it when it appears.
     <View

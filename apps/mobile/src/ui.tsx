@@ -1,8 +1,9 @@
 import { ArrowUpRight, Check, ChevronRight, Info, type LucideIcon, X } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useId } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -286,6 +287,20 @@ export function ErrorNotice({ error }: { error?: string }) {
     </View>
   ) : null;
 }
+/**
+ * Shown at the top of every sheet: the live call's bar while a call is on, so a sheet opened during
+ * a call doesn't hide it (sheets are a layer above the app).
+ */
+export const SheetTop = createContext<ReactNode>(null);
+/** What just happened to a call shrunk to its bar, read out from inside whatever sheet is open. */
+export const SheetStatus = createContext("");
+const unseen = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  margin: -1,
+  overflow: "hidden",
+} as const;
 export function Sheet({
   title,
   subtitle,
@@ -294,6 +309,8 @@ export function Sheet({
   wide,
   titleLines,
   footer,
+  closeIcon = X,
+  closeLabel = "Close",
 }: {
   title: string;
   subtitle?: string;
@@ -304,10 +321,40 @@ export function Sheet({
   titleLines?: number;
   /** Controls that stay in view below the scrolling content, such as a call's End. */
   footer?: ReactNode;
+  /** When closing does something else, such as shrinking a call to its bar. */
+  closeIcon?: LucideIcon;
+  closeLabel?: string;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 600;
+  const top = useContext(SheetTop);
+  const status = useContext(SheetStatus);
+  const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  // A sheet opened during a call starts at its own close button, not on the call's bar above it.
+  // The focus trap puts focus on the sheet's first button once it has slid in: if that's the
+  // bar's, it moves on.
+  const hasTop = !!top;
+  useEffect(() => {
+    if (!hasTop || Platform.OS !== "web") return;
+    const inTop = (node: unknown) =>
+      !!document.getElementById(`${id}-top`)?.contains(node as Node | null);
+    const moveOn = () =>
+      document.getElementById(`${id}-head`)?.querySelector<HTMLElement>('[role="button"]')?.focus();
+    const first = (event: FocusEvent) => {
+      stop();
+      // After the trap has finished: it's still looking, and would carry on past a move now.
+      if (inTop(event.target)) setTimeout(moveOn, 0);
+    };
+    const timer = setTimeout(() => stop(), 1500);
+    function stop() {
+      document.removeEventListener("focusin", first);
+      clearTimeout(timer);
+    }
+    document.addEventListener("focusin", first);
+    if (inTop(document.activeElement)) moveOn();
+    return stop;
+  }, []);
   return (
     <Modal transparent animationType={compact ? "slide" : "fade"} visible onRequestClose={onClose}>
       <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
@@ -324,7 +371,12 @@ export function Sheet({
             },
           ]}
         >
-          {compact && (
+          {top ? <View nativeID={`${id}-top`}>{top}</View> : null}
+          {/* Mounted all the time, so it's read out when it changes. */}
+          <Text role="status" style={unseen}>
+            {status}
+          </Text>
+          {compact && !top && (
             <View
               style={{
                 alignSelf: "center",
@@ -337,6 +389,7 @@ export function Sheet({
             />
           )}
           <View
+            nativeID={`${id}-head`}
             style={[
               s.between,
               { padding: compact ? 20 : 24, borderBottomWidth: 1, borderBottomColor: colors.line },
@@ -348,7 +401,7 @@ export function Sheet({
               </Text>
               {!!subtitle && <Text style={s.muted}>{subtitle}</Text>}
             </View>
-            <IconButton icon={X} label="Close" onPress={onClose} />
+            <IconButton icon={closeIcon} label={closeLabel} onPress={onClose} />
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"

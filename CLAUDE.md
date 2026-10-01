@@ -203,3 +203,13 @@ Time Log — <Project Name>
   up on Railway); Gmail and Outlook under Apps go through Composio (`find_app_actions`, `use_app`).
   A tool that says "disconnected" must say which connection, or the agent sends a Connect card for an
   app that's already connected, over and over. Each chat turn is told which mailbox is on ("Mail").
+- **The call is its own layer:** the live call lives in `LiveCallProvider` (live-call.tsx); its
+  screen opens over whatever sheet is open (`expand`/`shrink`), never as a `detail`, or opening it
+  throws that sheet away. Most of the app reads `useCallControls()` (changes only with the phase);
+  only the bar and call screen read `useLiveCall()` (words), so talking doesn't redraw every screen.
+- **Focus traps and tooltips:** RN-web's modal focus trap walks a sheet's buttons in order, so a
+  focus move made while it runs is carried past; move focus after it (`setTimeout(…, 0)`). Focusing
+  a button with a tooltip shows the tip, and the first Escape only hides it; in Playwright, press
+  Escape again if the dialog is still there. `role="dialog"` is only on the topmost modal.
+- **Check for a live call right before pushing,** not minutes before: a push restarts the api
+  within about a minute and ends any call.

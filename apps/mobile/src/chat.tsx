@@ -58,6 +58,7 @@ import { plainText } from "./copy-text";
 import { ToolAppResult } from "./email-cards";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
+import { useCallControls } from "./live-call";
 import { onCallSaved, SpokenCall, useLiveVoice } from "./live-talk-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
@@ -423,12 +424,16 @@ export function ChatScreen({
   thread?: Selection;
   active?: boolean;
 }) {
-  const { api, workspace: w, refresh, navigate, section, open } = useWorkspace();
+  const { api, workspace: w, refresh, navigate, section } = useWorkspace();
   // Live voice (real-time talk), for the people it's turned on for.
   const live = useLiveVoice();
+  const call = useCallControls();
   const { width: windowWidth } = useWindowDimensions();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
   const agentName = agentWorkspace?.identity.name || "your agent";
+  // During a call the headset goes back to it.
+  const headsetLabel =
+    call.phase === "on" ? `Go back to the call with ${agentName}` : `Talk live with ${agentName}`;
   const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
   const selection = thread || { id: "local", existing: false };
   // A space's chat starts with its saved questions instead of the general ones.
@@ -1744,10 +1749,15 @@ export function ChatScreen({
               !voiceMode &&
               !replying && (
                 <Pressable
+                  nativeID="call-headset"
                   accessibilityRole="button"
-                  accessibilityLabel={`Talk live with ${agentName}`}
-                  {...tipProps(`Talk live with ${agentName}`)}
-                  onPress={() => open({ type: "live" })}
+                  accessibilityLabel={headsetLabel}
+                  {...tipProps(headsetLabel)}
+                  onPress={() => {
+                    // A call that just ended: talk again (the call screen starts one when idle).
+                    if (call.phase === "over") call.dismiss();
+                    call.expand();
+                  }}
                   // Voice first: talking is the main thing to do here, so it's the filled button.
                   style={({ pressed }) => ({
                     width: 44,
