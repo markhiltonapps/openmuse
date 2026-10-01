@@ -120,9 +120,9 @@ export const APP_PLACES = {
     about: "the agent's browser, terminal and files, to watch or take control",
   },
   delegate: {
-    name: "Delegate a task",
-    where: "Menu, top left",
-    about: "hand the agent a longer job",
+    name: "New job",
+    where: "The + at the top, next to the bell",
+    about: "hand the agent a job to work on in the background",
   },
   apps: {
     name: "Apps",

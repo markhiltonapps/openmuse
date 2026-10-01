@@ -194,7 +194,7 @@ export function WorkspaceTools() {
     description: "Display delegated work",
     parameters: displayParameters,
     render: ({ result, status }) => (
-      <ServerToolCard name="Task" result={result} loading={status !== "complete"} />
+      <ServerToolCard name="Job" result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({

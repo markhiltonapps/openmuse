@@ -542,7 +542,7 @@ export function FeedScreen() {
           <Pressable onPress={() => navigate("activity")}>
             <DayRow emoji="⏳">
               <Text style={[s.text, { textDecorationLine: "underline" }]}>
-                {working} {working === 1 ? "task" : "tasks"} in progress
+                {working} {working === 1 ? "job" : "jobs"} in progress
               </Text>
             </DayRow>
           </Pressable>

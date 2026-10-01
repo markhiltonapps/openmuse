@@ -29,7 +29,7 @@ interface PeopleUsage {
 }
 const KINDS: Record<string, string> = {
   chat: "Chat",
-  background: "Background tasks and routines",
+  background: "Background jobs and routines",
   search: "Web searches",
   feed: "Feed",
   pictures: "Looking at pictures",

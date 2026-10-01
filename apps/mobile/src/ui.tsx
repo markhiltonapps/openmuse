@@ -292,12 +292,15 @@ export function Sheet({
   children,
   onClose,
   wide,
+  titleLines,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** Clips a long title to this many lines (it's still read out whole). */
+  titleLines?: number;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -337,7 +340,7 @@ export function Sheet({
             ]}
           >
             <View style={{ flex: 1, gap: 4 }}>
-              <Text role="heading" aria-level={2} style={s.title}>
+              <Text role="heading" aria-level={2} numberOfLines={titleLines} style={s.title}>
                 {title}
               </Text>
               {!!subtitle && <Text style={s.muted}>{subtitle}</Text>}

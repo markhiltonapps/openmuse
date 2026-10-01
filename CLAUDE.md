@@ -132,5 +132,12 @@ Time Log — <Project Name>
   wait, save `git diff` and new files to the scratchpad so nothing depends on one container.
 - **Job emails and notify():** `notify()` returns whether the update is new; send anything extra
   (email) only then, because maintenance re-publishes every job's outcome each minute.
+- **How a job's run ends:** the model may stop without finish_task. Only its text after the last
+  tool call is its answer or question (earlier text is commentary); `readLastWords` in
+  `engine/job-words.ts` decides which. Never show the whole run's text to the person.
+- **Avatar clips in local screenshots:** they come from a CDN the sandbox can't reach. Route
+  `/api/avatar-media/` in Playwright to `apps/mobile/public/home/neddy-wave-porthole.webp`.
+- **Testing timers in Playwright:** `page.clock.install()` before `goto`, then `clock.runFor(…)`,
+  to fire a 15-minute check without waiting (used for the new-version pill).
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
   `apps/worker` changes; other pushes show it as SKIPPED.

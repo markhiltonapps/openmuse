@@ -413,6 +413,61 @@ export function listenForTaskLinks(onOpen: (taskId: string) => void) {
   return () => navigator.serviceWorker?.removeEventListener("message", message);
 }
 
+/** The app's own script, which is renamed with each new version ("index-<hash>.js"). */
+const BUNDLE = /\/_expo\/static\/js\/web\/[^"'\s]+\.js/;
+function runningBundle() {
+  for (const script of Array.from(document.scripts)) {
+    const match = BUNDLE.exec(script.src);
+    if (match) return match[0];
+  }
+  return "";
+}
+async function latestBundle() {
+  const response = await fetch(`/?version=${Date.now()}`, { cache: "no-store" });
+  return response.ok ? (BUNDLE.exec(await response.text())?.[0] ?? "") : "";
+}
+/** Something typed that a reload would lose. */
+export function typing() {
+  return Array.from(document.querySelectorAll<HTMLInputElement>("textarea, input")).some(
+    (field) => !["hidden", "checkbox", "radio"].includes(field.type) && !!field.value.trim(),
+  );
+}
+/**
+ * A tab left open keeps running the version it loaded, so a new version goes unseen. Checks when
+ * the person comes back to the tab, and every 15 minutes. Coming back to a new version reloads
+ * straight away when nothing would be lost: nothing typed, and `canReload` (no page or sheet
+ * open that they'd lose their place in). Otherwise `onReady` lets the page offer a reload.
+ */
+export function watchForUpdates(onReady: (typed: boolean) => void, canReload: () => boolean) {
+  if (!web()) return () => undefined;
+  const running = runningBundle();
+  if (!running) return () => undefined;
+  let hiddenAt = 0;
+  let told = false;
+  const check = async (returning: boolean) => {
+    const latest = await latestBundle().catch(() => "");
+    if (!latest || latest === running) return;
+    const typed = typing();
+    if (returning && !typed && canReload()) window.location.reload();
+    else if (!told) {
+      told = true;
+      onReady(typed);
+    }
+  };
+  const visibility = () => {
+    if (document.visibilityState === "hidden") hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt > 30_000) void check(true);
+  };
+  document.addEventListener("visibilitychange", visibility);
+  const timer = setInterval(() => {
+    if (document.visibilityState === "visible") void check(false);
+  }, 15 * 60_000);
+  return () => {
+    document.removeEventListener("visibilitychange", visibility);
+    clearInterval(timer);
+  };
+}
+
 /** Lets the person choose a picture; returns it as a small square JPEG data URL. */
 export function pickImage(size = 256): Promise<string | undefined> {
   if (!web()) return Promise.resolve(undefined);

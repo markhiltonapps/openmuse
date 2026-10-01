@@ -3,7 +3,8 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { TestContext } from "node:test";
 
-type ModelCall = { name: string; arguments: object };
+/** A tool call, words from the model, or words and then a tool call. */
+export type ModelCall = { name: string; arguments: object; text?: string } | { text: string };
 
 // Serve the provider protocol, leaving tool execution and AG-UI event emission to the real SDK.
 export async function modelFixture(
@@ -110,22 +111,48 @@ export async function modelFixture(
       response.write(`data: ${JSON.stringify({ type, ...value })}\n\n`);
     const base = { id: `response-${index}`, created_at: 1000, model: "fixture" };
     emit("response.created", { response: { ...base, status: "in_progress" } });
-    const item = call && {
-      id: `item-${index}`,
-      type: "function_call",
-      call_id: `call-${index}`,
-      name: call.name,
-      arguments: JSON.stringify(call.arguments),
-    };
-    if (item) {
-      emit("response.output_item.added", { output_index: 0, item: { ...item, arguments: "" } });
-      emit("response.function_call_arguments.delta", {
-        item_id: item.id,
+    const message = call?.text
+      ? {
+          id: `msg-${index}`,
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: call.text, annotations: [] }],
+        }
+      : undefined;
+    if (message) {
+      emit("response.output_item.added", {
         output_index: 0,
-        delta: item.arguments,
+        item: { ...message, status: "in_progress", content: [] },
+      });
+      emit("response.output_text.delta", {
+        item_id: message.id,
+        output_index: 0,
+        content_index: 0,
+        delta: call?.text,
       });
       emit("response.output_item.done", {
         output_index: 0,
+        item: { ...message, status: "completed" },
+      });
+    }
+    const item = call &&
+      "name" in call && {
+        id: `item-${index}`,
+        type: "function_call",
+        call_id: `call-${index}`,
+        name: call.name,
+        arguments: JSON.stringify(call.arguments),
+      };
+    const at = message ? 1 : 0;
+    if (item) {
+      emit("response.output_item.added", { output_index: at, item: { ...item, arguments: "" } });
+      emit("response.function_call_arguments.delta", {
+        item_id: item.id,
+        output_index: at,
+        delta: item.arguments,
+      });
+      emit("response.output_item.done", {
+        output_index: at,
         item: { ...item, status: "completed" },
       });
     }
@@ -133,7 +160,10 @@ export async function modelFixture(
       response: {
         ...base,
         status: "completed",
-        output: item ? [{ ...item, status: "completed" }] : [],
+        output: [
+          ...(message ? [{ ...message, status: "completed" }] : []),
+          ...(item ? [{ ...item, status: "completed" }] : []),
+        ],
         usage: {
           input_tokens: 10,
           output_tokens: 5,

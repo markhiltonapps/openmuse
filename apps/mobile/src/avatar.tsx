@@ -43,7 +43,7 @@ export function useChatActivity() {
   );
 }
 
-function useReducedMotion() {
+export function useReducedMotion() {
   const [reduce, setReduce] = useState(false);
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled()

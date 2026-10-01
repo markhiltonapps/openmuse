@@ -1,0 +1,86 @@
+Claude working session — 2026-10-01 (continues the 2026-09-30 evening session past midnight)
+==========================================================================================
+
+WHY
+---
+The owner ran two real jobs ("compare robot vacuums…", "least expensive AI glasses with a
+waveguide") and found the job page confusing: a "Plan" of four steps that never changed, the
+agent's running commentary shown as a question ("Needs your answer"), a PDF report with raw table
+pipes, raw links and "?" for stars, and New job buried in the menu with unexplained job types.
+Owner's words: if what you show while it works isn't visually pleasing, show nothing; tell me it's
+running, and when it's done put a button in my face. Also asked for an animation (gears or Neddy)
+that keeps showing work is happening, on any screen.
+
+Owner's decisions (asked with a picker): Neddy busy at work as the animation; one tidy "now doing"
+line from a fixed list; New job as BOTH a + in the top bar and a floating button; remove the job
+types and keep one box, with the guided ones behind More options.
+
+WHAT CHANGED
+------------
+1. Jobs end cleanly (server, apps/server/src/engine/model.ts + new engine/job-words.ts).
+   - The agent's text is tracked per message; only its words after the last tool call count.
+   - A run that stops without finish_task/ask_user: an answer is taken as the result (job Done,
+     final report saved), a question asks only that question, and a stop part-way ("Let me check
+     the price:") asks "I stopped before finishing. Tell me what to do next…". An offer after a
+     full answer ("Would you like a PDF?") is dropped. This fixes the glasses job's screen.
+   - "Now doing" line: each tool call sets task.state.now / nowKind from a fixed list
+     ("Searching the web", "Looking at amazon.com", "Using amazon.com", "Making your PDF",
+     "Checking your calendar"…). Never the model's own words.
+2. PDF and Word documents (packages/integrations/src/compose.ts).
+   - Markdown tables become real tables (shaded header, row lines, wrapped cells, header repeated
+     on a new page; short columns keep their width; number columns right-aligned).
+   - [text](url) and bare https:// links are blue, underlined and clickable (one link area each).
+   - ★ is drawn as a shape; ⭐ ✅ ❌ map to symbols; symbol fonts cover → ≈ ✓ etc.
+   - Accent rule under the title, page numbers "1 of 3" on longer documents.
+   - create_document's description tells the agent tables and links work.
+3. Job page (apps/mobile/src/agent-ui.tsx TaskDetail, new apps/mobile/src/job-working-ui.tsx).
+   - Running/queued: one card. Neddy (the looping clip) with an activity prop inside a turning
+     ring, "Working on it" / "Getting started", the now-doing line, "Started 4 min ago", "You can
+     leave this page…", and Stop (asks "Stop this job? [Stop it] [Keep going]").
+   - Hidden while running: the filler plan (a real plan the agent made shows in Details), browser
+     previews (shown only when the job needs the person), half-made files, Where I looked.
+   - Paused card (Resume / Stop job), Stopped card, question card says "I’ll carry on once you
+     answer." with "Type your answer…" / "Send answer". AI cost moved into Details.
+   - Screen readers hear each change (Done, Stopped, Paused…) and focus moves to the new card's
+     heading when the pressed button has gone. Long titles clip to 3 lines.
+   - Job cards in Activity/Chat/Goals no longer show "0/4 steps"; a running card shows its
+     now-doing line.
+4. New job everywhere (apps/mobile/App.tsx).
+   - + button next to the bell on every screen; floating "+ New job" above the bottom bar on every
+     screen but Chat (a round + under 360px; hidden while Back to chat or voice mode shows).
+   - New job sheet: one box "What would you like done?", "Say it instead", More options (Anything /
+     Fill in a PDF from an email / Sum up spending from a bank file (CSV)), "Start job".
+   - Menu entry, app guide and take-me-there catalogue renamed to New job; task → job wording on
+     these screens and in the server's job errors.
+   - Header: Neddy's status line says what the job is doing, in blue; "Needs your answer" /
+     "Ready to review" in dark text; a queued job shows "Getting started…". Tapping Neddy opens
+     the job.
+5. Open tabs pick up new versions (apps/mobile/src/web-app.ts watchForUpdates + App NewVersion).
+   The cause of the owner seeing the old job page: an already-open tab keeps running the old
+   bundle. Now, coming back to the tab after 30s reloads when nothing is typed and nothing is open;
+   otherwise (and every 15 minutes) a pill offers "Reload", warning if typed text would be lost.
+
+DESIGN REVIEW
+-------------
+Visual (UI Designer), usability (UX Researcher) and copy reviewers, two rounds plus a copy
+confirm; all three signed off. Reviews: scratchpad/newjob/review-visual.md, review-ux.md,
+review-copy.md.
+
+TESTS
+-----
+lint, typecheck (root + mobile), worker tsc, 434 tests pass. New: tests/job-ending.test.ts (last
+words → answer/question/stop; now-doing phrases; a scripted run that narrates, uses a tool and
+answers without finish_task), a document test (tables, single link areas, stars). The model test
+fixture can now send text before a tool call.
+
+KNOWN ISSUES / NOTES
+--------------------
+- Neddy's clips come from a CDN the sandbox can't reach; local screenshots use a still picture.
+- The header line says "Needs your answer" without the job's name (tap Neddy to open it).
+
+PENDING
+-------
+- Real-time voice conversations (phone, car via Android Auto, computer): a planning agent is
+  researching speech-to-speech options; its plan and questions for the owner come next.
+- Time-log hours for 2026-09-29 evening, 2026-09-30 and 2026-10-01 (asked, not answered yet).
+- Phase 1 slices 2–6.

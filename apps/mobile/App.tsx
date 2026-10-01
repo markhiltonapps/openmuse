@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Newspaper,
   PanelsTopLeft,
+  Plus,
   Shapes,
   SquareCheck,
   UsersRound,
@@ -78,6 +79,8 @@ import {
   listenForTaskLinks,
   registerServiceWorker,
   takeDelegateDraft,
+  typing,
+  watchForUpdates,
 } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
@@ -353,11 +356,18 @@ function WorkspaceShell({
   const activeTask =
     data?.tasks.find(
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
-    ) || data?.tasks.find((task) => task.status === "running");
+    ) ||
+    data?.tasks.find((task) => task.status === "running") ||
+    data?.tasks.find((task) => task.status === "queued");
   const agentName = data?.identity.name || "Neddy";
   const chatNow = useChatActivity();
   const activity =
-    chatNow ?? (activeTask?.status === "running" ? taskActivity(activeTask) : undefined);
+    chatNow ??
+    (activeTask?.status === "running"
+      ? taskActivity(activeTask)
+      : activeTask?.status === "queued"
+        ? ({ kind: "thinking", label: "Getting started…" } as const)
+        : undefined);
   // A task that newly succeeds gets a short celebration.
   const [celebrating, setCelebrating] = useState(false);
   const succeeded = useRef<Set<string>>(undefined);
@@ -375,7 +385,7 @@ function WorkspaceShell({
   useEffect(() => () => clearTimeout(celebration.current), []);
   const mood: Mood = celebrating
     ? "celebrate"
-    : activeTask && activeTask.status !== "running" && !chatNow
+    : activeTask && !["running", "queued"].includes(activeTask.status) && !chatNow
       ? "attention"
       : activity
         ? "working"
@@ -384,12 +394,12 @@ function WorkspaceShell({
     ? chatNow.label
     : activeTask
       ? activeTask.status === "waiting_approval"
-        ? `Ready to review · ${activeTask.title}`
+        ? "Ready to review"
         : activeTask.status === "waiting_input"
-          ? `Needs your answer · ${activeTask.title}`
+          ? "Needs your answer"
           : (activity?.label ?? activeTask.title)
       : data?.tasks.some((task) => task.status === "queued")
-        ? "Picking up your next task…"
+        ? "Starting your next job…"
         : "Here when you need me";
   const title = titles[section] || titles.apps;
   const Screen =
@@ -467,16 +477,24 @@ function WorkspaceShell({
             <View style={{ alignItems: "center", gap: 1 }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${agentName} activity and approvals`}
-                onPress={() => navigate("activity")}
+                accessibilityLabel={
+                  activeTask
+                    ? `${agentName}: ${status.replace(/…$/, "")}. Open this job`
+                    : `Open ${agentName} activity and approvals`
+                }
+                onPress={() =>
+                  activeTask ? open({ type: "task", taskId: activeTask.id }) : navigate("activity")
+                }
                 style={({ pressed }) => ({
                   alignItems: "center",
-                  maxWidth: "70%",
+                  // The status line sits below the buttons, so it can use the header's width;
+                  // the buttons are above it and keep their taps.
+                  maxWidth: Math.min(width, 760) - 40,
                   opacity: pressed ? 0.65 : 1,
                 })}
               >
                 <AgentAvatar
-                  size={chat ? (desktop ? 66 : 58) : desktop ? 88 : 76}
+                  size={chat ? (desktop ? 66 : 58) : desktop ? 88 : width < 360 ? 64 : 76}
                   mood={mood}
                   activity={mood === "working" ? activity?.kind : undefined}
                 />
@@ -505,33 +523,61 @@ function WorkspaceShell({
                 </View>
                 <Text
                   numberOfLines={1}
-                  style={{ fontSize: 11, color: colors.muted, marginTop: 4, marginBottom: 6 }}
+                  style={{
+                    // Busy or waiting on you, it says so clearly; idle, it's quiet.
+                    fontSize: mood === "idle" ? 11 : 12,
+                    fontWeight: mood === "idle" ? "400" : "600",
+                    color:
+                      mood === "working"
+                        ? colors.blueText
+                        : mood === "attention"
+                          ? colors.text
+                          : colors.muted,
+                    marginTop: 4,
+                    marginBottom: 6,
+                  }}
                 >
                   {mood === "idle" ? " " : status}
                 </Text>
               </Pressable>
               {section === "chat" && <ComputerEntry />}
             </View>
-            <View style={{ position: "absolute", right: chat ? 0 : 20, top: 16, zIndex: 2 }}>
+            <View
+              style={{
+                position: "absolute",
+                right: chat ? 0 : 20,
+                top: 16,
+                zIndex: 2,
+                flexDirection: "row",
+                gap: 4,
+              }}
+            >
               <IconButton
-                icon={Bell}
-                label={pending ? `Updates, ${pending} new` : "Updates"}
-                onPress={() => open({ type: "notifications" })}
+                icon={Plus}
+                label={`New job for ${agentName}`}
+                onPress={() => open({ type: "delegate" })}
               />
-              {pending > 0 && (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 4,
-                    position: "absolute",
-                    top: 7,
-                    right: 9,
-                    backgroundColor: colors.blueDark,
-                  }}
+              <View>
+                <IconButton
+                  icon={Bell}
+                  label={pending ? `Updates, ${pending} new` : "Updates"}
+                  onPress={() => open({ type: "notifications" })}
                 />
-              )}
+                {pending > 0 && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 4,
+                      position: "absolute",
+                      top: 7,
+                      right: 9,
+                      backgroundColor: colors.blueDark,
+                    }}
+                  />
+                )}
+              </View>
             </View>
           </View>
           <View style={{ flex: 1, minHeight: 0 }}>
@@ -543,7 +589,7 @@ function WorkspaceShell({
                   paddingHorizontal: desktop ? 42 : 22,
                   paddingTop: headerHeight,
                   // Room for "Back to chat" (and voice mode) at the end, over the last controls.
-                  paddingBottom: 28 + pillsRoom,
+                  paddingBottom: 28 + pillsRoom + (pillsRoom ? 0 : 64),
                 }}
                 keyboardShouldPersistTaps="handled"
               >
@@ -614,6 +660,8 @@ function WorkspaceShell({
             </View>
             {/* After a button in the chat brought them here. */}
             <BackToChat section={section} onBack={() => navigate("chat")} />
+            {/* A new job, from any screen but the chat (where you can just ask). */}
+            {section !== "chat" && !pillsRoom && <NewJobButton round={width < 360} />}
           </View>
           <View
             style={{
@@ -697,6 +745,11 @@ function WorkspaceShell({
           </View>
           {/* Background updates pop up under the bell; they wait while a sheet covers the page. */}
           <UpdateToasts hold={!!chatNow || !!detail || threadsOpen} />
+          <NewVersion
+            canReload={() => !detail && !threadsOpen && !chatNow}
+            desktop={desktop}
+            chat={chat}
+          />
           {/* The tip for the control under the mouse or finger. */}
           <TipLayer />
         </View>
@@ -758,5 +811,152 @@ function WorkspaceShell({
         )}
       </SafeAreaView>
     </>
+  );
+}
+
+/** "New job", floating above the bottom bar: hands the agent a job from any screen. */
+function NewJobButton({ round }: { round: boolean }) {
+  const { open } = useWorkspace();
+  return (
+    <Pressable
+      role="button"
+      aria-label="New job"
+      {...(round ? tipProps("New job") : {})}
+      onPress={() => open({ type: "delegate" })}
+      style={({ pressed }) => ({
+        position: "absolute",
+        right: 20,
+        bottom: 16,
+        zIndex: 4,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        height: 52,
+        // On a narrow phone, just the +.
+        ...(round ? { width: 52 } : { paddingLeft: 18, paddingRight: 22 }),
+        borderRadius: 26,
+        backgroundColor: colors.inverse,
+        shadowColor: "#132631",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 14,
+        elevation: 5,
+        transform: [{ scale: pressed ? 0.97 : 1 }],
+      })}
+    >
+      <Plus size={20} strokeWidth={2.4} color={colors.onInverse} />
+      {!round && (
+        <Text style={{ color: colors.onInverse, fontSize: 16, fontWeight: "700" }}>New job</Text>
+      )}
+    </Pressable>
+  );
+}
+
+/** A tab left open when a new version comes out offers to load it (web only). */
+function NewVersion({
+  canReload,
+  desktop,
+  chat,
+}: {
+  canReload: () => boolean;
+  desktop: boolean;
+  chat: boolean;
+}) {
+  // Whether something was typed when it came out; a reload would lose it.
+  const [ready, setReady] = useState<{ typed: boolean }>();
+  const [later, setLater] = useState(false);
+  // Reload asks once more when something has been typed since the pill appeared.
+  const [warned, setWarned] = useState(false);
+  const reload = () => {
+    if (typing() && !ready?.typed && !warned) setWarned(true);
+    else window.location.reload();
+  };
+  const latest = useRef(canReload);
+  latest.current = canReload;
+  useEffect(
+    () =>
+      watchForUpdates(
+        (typed) => setReady({ typed }),
+        () => latest.current(),
+      ),
+    [],
+  );
+  const shown = !!ready && !later;
+  return (
+    // Always there, so a screen reader hears it when it appears.
+    <View
+      role="status"
+      pointerEvents="box-none"
+      // Below the menu, New job and the bell, over the agent's name.
+      style={{
+        position: "absolute",
+        // Clear of the name under the agent's picture on Chat, where the header is shorter.
+        top: chat ? (desktop ? 58 : 50) : desktop ? 92 : 70,
+        left: 0,
+        right: 0,
+        alignItems: "center",
+        zIndex: 8,
+      }}
+    >
+      {shown && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            maxWidth: "92%",
+            paddingLeft: 18,
+            paddingRight: 4,
+            paddingVertical: 4,
+            borderRadius: 28,
+            backgroundColor: colors.inverse,
+            shadowColor: "#132631",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.18,
+            shadowRadius: 14,
+          }}
+        >
+          <Text style={{ flexShrink: 1, color: colors.onInverse, fontSize: 15, fontWeight: "600" }}>
+            {ready?.typed || warned
+              ? "New version ready. Reloading clears what you typed."
+              : "A new version is ready"}
+          </Text>
+          <Pressable
+            role="button"
+            onPress={reload}
+            style={{
+              minHeight: 44,
+              paddingHorizontal: 16,
+              borderRadius: 22,
+              justifyContent: "center",
+              backgroundColor: colors.surface,
+            }}
+          >
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>
+              {warned ? "Reload anyway" : "Reload"}
+            </Text>
+          </Pressable>
+          <Pressable
+            role="button"
+            aria-label="Not now"
+            onPress={() => {
+              setLater(true);
+              // The button that had focus has gone; the menu is the nearest place to go on from.
+              setTimeout(
+                () =>
+                  document
+                    .querySelector<HTMLElement>('[aria-label="Open conversations and menu"]')
+                    ?.focus(),
+                60,
+              );
+            }}
+            style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+          >
+            <X size={18} color={colors.onInverse} />
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }

@@ -97,7 +97,7 @@ export function BackgroundUpdates() {
             icon={ArrowRight}
             onPress={() => update.taskId && open({ type: "task", taskId: update.taskId })}
           >
-            View task
+            Open job
           </Button>
         )}
         {others > 0 && (

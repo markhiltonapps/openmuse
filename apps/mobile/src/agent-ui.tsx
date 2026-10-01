@@ -24,7 +24,6 @@ import {
   Target,
   UserRound,
   Users,
-  X,
 } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, View } from "react-native";
@@ -44,6 +43,7 @@ import type {
 } from "../../../packages/domain/src/agent";
 import { AboutYou } from "./about-you-ui";
 import { AccountCard, PeopleCard } from "./account-ui";
+import { taskActivity } from "./activity";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AppAlertsCard } from "./app-alerts-ui";
 import { PlaceAnchor } from "./app-places-ui";
@@ -58,6 +58,15 @@ import { ChatgptImport, YourDataCard } from "./data-ui";
 import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
 import { HelpCard } from "./help-ui";
+import {
+  ConfirmStop,
+  HIDDEN,
+  JOB_HEADING,
+  jobHeading,
+  realPlan,
+  STATUS_NEWS,
+  WorkingCard,
+} from "./job-working-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
 import { OwnAppsCard } from "./own-apps";
 import { PeopleNotesCard } from "./people-ui";
@@ -94,7 +103,7 @@ export function statusLabel(value: string) {
 }
 /** A task's status in everyday words. */
 const TASK_STATUS: Record<string, string> = {
-  queued: "Waiting to start",
+  queued: "Getting started",
   scheduled: "Scheduled",
   running: "Working on it",
   waiting_input: "Needs your answer",
@@ -102,7 +111,7 @@ const TASK_STATUS: Record<string, string> = {
   paused: "Paused",
   succeeded: "Done",
   failed: "Couldn’t finish",
-  cancelled: "Cancelled",
+  cancelled: "Stopped",
 };
 const taskStatus = (value: string) => TASK_STATUS[value] ?? statusLabel(value);
 /** A plan step's status in everyday words. */
@@ -172,13 +181,20 @@ export function TaskCard({
   onOpen?: () => void;
 }) {
   const { open } = useWorkspace();
-  const done = task.plan.filter((step) => step.status === "succeeded").length;
-  const next = task.plan.find((step) => ["running", "waiting"].includes(step.status));
+  // Steps only when the agent made a real plan; the default four never move until the end.
+  const steps = realPlan(task) ? task.plan : [];
+  const done = steps.filter((step) => step.status === "succeeded").length;
+  const next = steps.find((step) => ["running", "waiting"].includes(step.status));
   const waiting = ["waiting_input", "waiting_approval"].includes(task.status);
+  // A running job says what it's doing now ("Looking at amazon.com…").
+  const doing =
+    task.status === "running" && typeof task.state.now === "string" && task.state.now
+      ? taskActivity(task).label
+      : "";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open task: ${task.title}`}
+      accessibilityLabel={`Open job: ${task.title}`}
       onPress={() => {
         onOpen?.();
         open({ type: "task", taskId: task.id });
@@ -205,26 +221,26 @@ export function TaskCard({
             <Text style={s.heading}>{task.title}</Text>
             <Text style={s.small}>
               {taskStatus(task.status)}
-              {task.plan.length ? ` · ${done}/${task.plan.length} steps` : ""}
+              {steps.length ? ` · ${done}/${steps.length} steps` : ""}
             </Text>
           </View>
           <ChevronRight size={17} color={colors.muted} />
         </View>
-        {!!task.plan.length && (
+        {!!steps.length && (
           <View style={{ height: 4, backgroundColor: colors.line, borderRadius: 4 }}>
             <View
               style={{
                 height: 4,
-                width: `${Math.round((done / task.plan.length) * 100)}%`,
+                width: `${Math.round((done / steps.length) * 100)}%`,
                 backgroundColor: "#6AAEE0",
                 borderRadius: 4,
               }}
             />
           </View>
         )}
-        {(task.question || task.result || task.error || next?.title) && (
+        {(doing || task.question || task.result || task.error || next?.title) && (
           <Text numberOfLines={compact ? 2 : 4} style={s.muted}>
-            {plainPreview(task.question || task.error || task.result || next?.title || "")}
+            {doing || plainPreview(task.question || task.error || task.result || next?.title || "")}
           </Text>
         )}
         {waiting && (
@@ -277,7 +293,7 @@ export function AgentActivityScreen() {
         <Empty
           icon={ListChecks}
           title="A place for the work"
-          detail="Delegate a task in Chat. Its plan, progress and results stay here."
+          detail="Tap New job, or ask in Chat. Each job and its result stays here."
         />
       )}
       <PlaceAnchor id="reviews" label="Reviews & receipts">
@@ -472,7 +488,7 @@ function DoneCard({
     <Card style={{ gap: 12, backgroundColor: colors.green }}>
       <View style={[s.row, { gap: 10 }]}>
         <CircleCheck size={22} color={colors.greenText} />
-        <Text role="heading" aria-level={3} style={[s.heading, { fontSize: 17 }]}>
+        <Text {...jobHeading} style={[s.heading, { fontSize: 17 }]}>
           Done
         </Text>
       </View>
@@ -521,7 +537,7 @@ function StoppedCard({
     <Card style={{ gap: 12, backgroundColor: colors.errorBg }}>
       <View style={[s.row, { gap: 10 }]}>
         <CircleAlert size={22} color={colors.danger} />
-        <Text role="heading" aria-level={3} style={[s.heading, { fontSize: 17 }]}>
+        <Text {...jobHeading} style={[s.heading, { fontSize: 17 }]}>
           Couldn’t finish
         </Text>
       </View>
@@ -625,11 +641,11 @@ function SourceLinks({ items }: { items: Evidence[] }) {
  * What a task's AI has cost so far, from the server's estimate: " · AI cost about $0.08". Its
  * spaces don't break, so a wrapped subtitle keeps the phrase whole.
  */
+/** "about $0.10" or "under 1¢": what the AI cost for this job so far. */
 function taskCost(task: AgentTask) {
   const cost = task.state.cost as { dollars?: number } | undefined;
   if (!cost?.dollars) return "";
-  const amount = cost.dollars < 0.01 ? "under\u00a01¢" : `about\u00a0$${cost.dollars.toFixed(2)}`;
-  return ` · AI\u00a0cost\u00a0${amount}`;
+  return cost.dollars < 0.01 ? "under\u00a01¢" : `about\u00a0$${cost.dollars.toFixed(2)}`;
 }
 export function TaskDetail({ taskId }: { taskId: string }) {
   const { api, workspace, close, open, refresh: refreshWorkspace } = useWorkspace();
@@ -746,14 +762,65 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   const canCancel = !!task && activeTask(task);
   const files = detail?.files ?? [];
   const handedOff = task?.input.handedOff === true;
-  // After "Try again" the card goes; focus moves to the line that says it's under way.
-  const [retried, setRetried] = useState(false);
-  const workingLine = useRef<Text>(null);
+  // When the job moves on (done, stopped, back to work), say so, and if the button that was
+  // pressed has gone, move focus to the new card's heading.
+  const [news, setNews] = useState("");
+  const lastStatus = useRef<string>(undefined);
   useEffect(() => {
-    if (!retried || task?.status === "failed" || Platform.OS !== "web") return;
-    setRetried(false);
-    setTimeout(() => (workingLine.current as unknown as HTMLElement | null)?.focus(), 60);
-  }, [retried, task?.status]);
+    const status = task?.status;
+    if (!status) return;
+    const before = lastStatus.current;
+    lastStatus.current = status;
+    if (!before || before === status) return;
+    setNews(STATUS_NEWS[status] ?? "");
+    if (Platform.OS !== "web") return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      document.getElementById(JOB_HEADING)?.focus();
+    }, 60);
+  }, [task?.status]);
+  const underWay = !!task && (task.status === "queued" || task.status === "running");
+  // The agent's browser shows on the page only when the person may need to step in.
+  const needsPerson =
+    !!task && ["waiting_input", "waiting_approval", "paused"].includes(task.status);
+  const browserCards = task
+    ? detail?.browsers?.map((browser) => (
+        <Card key={browser.id} style={{ gap: 10 }}>
+          <Text style={s.heading}>{browser.title || "Agent browser"}</Text>
+          <Text style={s.small}>{browser.url}</Text>
+          {browser.status === "active" && browser.previewUrl && (
+            <Image
+              accessibilityLabel="Agent browser preview"
+              source={{ uri: api.url(browser.previewUrl) }}
+              style={{ width: "100%", aspectRatio: 1.6, borderRadius: 12 }}
+            />
+          )}
+          <Button
+            small
+            busy={busy}
+            onPress={() => {
+              setBusy(true);
+              void (async () => {
+                try {
+                  if (["running", "scheduled", "queued"].includes(task.status))
+                    await mutate(`/tasks/${taskId}/control`, { action: "pause" });
+                  open({ type: "browser", browser });
+                } catch (error) {
+                  setError(errorText(error));
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            {["running", "scheduled", "queued"].includes(task.status)
+              ? "Pause and open browser"
+              : "Open browser"}
+          </Button>
+        </Card>
+      ))
+    : null;
   // Opening a job answers its updates, so its pop-up and the bell don't ask about it again.
   const unread = !!data?.notifications.some((n) => n.taskId === taskId && !n.read);
   useEffect(() => {
@@ -761,22 +828,33 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   }, [unread, taskId, mutate]);
   return (
     <Sheet
-      title={task?.title || "Task"}
+      title={task?.title || "Job"}
+      // A long request is clipped here; Details has it in full.
+      titleLines={3}
       subtitle={
-        task
-          ? `${taskStatus(task.status)} · ${stamp(task.updatedAt).replace(/ ([AP]M)$/i, "\u00a0$1")}${taskCost(task)}`
-          : "Loading saved progress…"
+        // While it's under way the card says it all.
+        !task
+          ? "Loading saved progress…"
+          : underWay
+            ? undefined
+            : `${taskStatus(task.status)} · ${stamp(task.updatedAt).replace(/ ([AP]M)$/i, "\u00a0$1")}`
       }
       onClose={close}
     >
       <ErrorNotice error={error} />
+      {/* Always mounted, so a screen reader hears when the job moves on. */}
+      <Text role="status" style={HIDDEN}>
+        {news}
+      </Text>
       {!task ? (
         <ActivityIndicator color={colors.blueDark} />
       ) : (
         <View style={{ gap: 20 }}>
           {task.status === "waiting_approval" && (
             <Card style={{ backgroundColor: colors.lavender, gap: 12 }}>
-              <Text style={s.heading}>Ready for your review</Text>
+              <Text {...jobHeading} style={s.heading}>
+                Ready for your review
+              </Text>
               <Text style={[s.muted, { color: colors.mutedStrong }]}>
                 Check exactly what it will do, and from which account, before it goes ahead.
               </Text>
@@ -790,14 +868,19 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               {task.question && (task.question.length > 120 || task.question.includes("\n")) ? (
                 <>
                   {/* A longer message is the agent's own words, shown as it wrote them. */}
-                  <Text style={s.heading}>
+                  <Text {...jobHeading} style={s.heading}>
                     {`${data?.identity.name || "Your agent"} needs your answer`}
                   </Text>
                   <AssistantResponse content={task.question} />
                 </>
               ) : (
-                <Text style={s.heading}>{task.question || "A detail from you will help"}</Text>
+                <Text {...jobHeading} style={s.heading}>
+                  {task.question || "A detail from you will help"}
+                </Text>
               )}
+              <Text style={[s.muted, { color: colors.mutedStrong }]}>
+                I’ll carry on once you answer.
+              </Text>
               {fieldNames.map((name) =>
                 missing.some(
                   (f) => typeof f === "object" && f && f.name === name && f.type === "checkbox",
@@ -826,7 +909,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                     value={answer}
                     onChangeText={setAnswer}
                     multiline
-                    placeholder="Add the missing details…"
+                    placeholder="Type your answer…"
                   />
                   <DictateButton
                     label="Say your answer"
@@ -861,7 +944,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 disabled={!answer.trim() && !Object.keys(fields).length && !fieldJson.trim()}
                 onPress={() => void submitInput()}
               >
-                Continue task
+                Send answer
               </Button>
             </Card>
           )}
@@ -877,118 +960,92 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             <StoppedCard
               task={task}
               busy={busy}
-              onRetry={() =>
-                void act("control", { action: "retry" }).then((ok) => ok && setRetried(true))
-              }
+              onRetry={() => void act("control", { action: "retry" })}
             />
+          )}
+          {task.status === "cancelled" && (
+            <Card style={{ gap: 8 }}>
+              <Text {...jobHeading} style={[s.heading, { fontSize: 17 }]}>
+                Stopped
+              </Text>
+              <Text style={s.muted}>I stopped this job before it was done.</Text>
+            </Card>
           )}
           {/* The answer, once, formatted the way the agent wrote it. */}
-          {!!task.result && <AssistantResponse content={resultSummary(task.result)} />}
-          {!task.result && ["queued", "running", "scheduled"].includes(task.status) && (
-            <Text
-              ref={workingLine}
-              {...({ tabIndex: -1 } as object)}
-              style={[s.text, { color: colors.mutedStrong }]}
-            >
-              {task.status === "running"
-                ? "Working on it."
-                : task.status === "scheduled" && task.nextRunAt
-                  ? `Scheduled for ${stamp(task.nextRunAt)}.`
-                  : "Waiting to start."}{" "}
-              {task.input.handedOff === true
-                ? "You can leave this page. I’ll let you know when it’s done."
-                : "The result will show here when it’s done."}
+          {!!task.result && task.status !== "paused" && task.status !== "cancelled" && (
+            <AssistantResponse content={resultSummary(task.result)} />
+          )}
+          {/* Under way: the agent at work and one line of what it's doing; nothing else yet. */}
+          {!task.result && (task.status === "queued" || task.status === "running") && (
+            <WorkingCard
+              task={task}
+              handedOff={handedOff}
+              busy={busy}
+              onStop={() => void act("control", { action: "cancel" })}
+            />
+          )}
+          {!task.result && task.status === "scheduled" && (
+            <Text style={[s.text, { color: colors.mutedStrong }]}>
+              {task.nextRunAt ? `Scheduled for ${stamp(task.nextRunAt)}.` : "Waiting to start."} The
+              result will show here when it’s done.
             </Text>
           )}
-          {task.input.handedOff === true &&
-            ["queued", "running", "scheduled"].includes(task.status) && <DoneAlertsOffer />}
-          {!task.result && !!task.plan.length && (
-            <Card style={{ gap: 15 }}>
-              <Text style={s.heading}>Plan</Text>
-              {task.plan.map((step, index) => (
-                <View key={step.id} style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
-                  <Text
-                    style={[
-                      s.text,
-                      { color: step.status === "succeeded" ? colors.blueDark : colors.muted },
-                    ]}
-                  >
-                    {step.status === "succeeded" ? "✓" : `${index + 1}.`}
-                  </Text>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={s.text}>{step.title}</Text>
-                    <Text style={s.small}>
-                      {stepStatus(step.status, task.status)}
-                      {step.detail ? ` · ${step.detail}` : ""}
-                    </Text>
-                  </View>
-                </View>
-              ))}
+          {task.status === "paused" && (
+            <Card style={{ gap: 12 }}>
+              <Text {...jobHeading} style={[s.heading, { fontSize: 17 }]}>
+                Paused
+              </Text>
+              <Text style={s.muted}>I’ll pick up where I left off when you resume.</Text>
+              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                <Button
+                  strong
+                  icon={Play}
+                  busy={busy}
+                  onPress={() => void act("control", { action: "resume" })}
+                >
+                  Resume
+                </Button>
+                <ConfirmStop
+                  label="Stop job"
+                  busy={busy}
+                  onConfirm={() => void act("control", { action: "cancel" })}
+                />
+              </View>
             </Card>
           )}
+          {handedOff && ["queued", "running", "scheduled"].includes(task.status) && (
+            <DoneAlertsOffer />
+          )}
           {task.status !== "failed" && <ErrorNotice error={task.error ?? undefined} />}
-          {detail?.browsers?.map((browser) => (
-            <Card key={browser.id} style={{ gap: 10 }}>
-              <Text style={s.heading}>{browser.title || "Agent browser"}</Text>
-              <Text style={s.small}>{browser.url}</Text>
-              {browser.status === "active" && browser.previewUrl && (
-                <Image
-                  accessibilityLabel="Agent browser preview"
-                  source={{ uri: api.url(browser.previewUrl) }}
-                  style={{ width: "100%", aspectRatio: 1.6, borderRadius: 12 }}
-                />
-              )}
-              <Button
-                small
-                busy={busy}
-                onPress={() => {
-                  setBusy(true);
-                  void (async () => {
-                    try {
-                      if (["running", "scheduled", "queued"].includes(task.status))
-                        await mutate(`/tasks/${taskId}/control`, { action: "pause" });
-                      open({ type: "browser", browser });
-                    } catch (error) {
-                      setError(errorText(error));
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              >
-                {["running", "scheduled", "queued"].includes(task.status)
-                  ? "Pause and open browser"
-                  : "Open browser"}
-              </Button>
-            </Card>
-          ))}
-          {(task.status === "succeeded" && (handedOff || files.length > 0)
-            ? files.slice(1)
-            : files
-          ).map((file) => (
-            <LinkRow
-              key={file.id}
-              title={file.name}
-              detail={fileLine(file)}
-              icon={FileText}
-              onPress={() => open({ type: "file", file })}
-            />
-          ))}
-          {(
-            data?.artifacts.filter((artifact) => artifact.taskId === taskId) ||
-            detail?.artifacts ||
-            []
-          )
-            // The finished job's summary is saved as a report too; it's already shown above.
-            .filter(
-              (artifact) =>
-                !artifact.final &&
-                !(artifact.kind === "report" && artifact.summary === task.result),
-            )
-            .map((artifact) => (
-              <ArtifactCard key={artifact.id} artifact={artifact} />
+          {needsPerson && browserCards}
+          {/* What it made and where it looked, once it's no longer under way. */}
+          {!underWay &&
+            (task.status === "succeeded" && (handedOff || files.length > 0)
+              ? files.slice(1)
+              : files
+            ).map((file) => (
+              <LinkRow
+                key={file.id}
+                title={file.name}
+                detail={fileLine(file)}
+                icon={FileText}
+                onPress={() => open({ type: "file", file })}
+              />
             ))}
-          {!!task.evidence.length && (
+          {!underWay &&
+            (
+              data?.artifacts.filter((artifact) => artifact.taskId === taskId) ||
+              detail?.artifacts ||
+              []
+            )
+              // The finished job's summary is saved as a report too; it's already shown above.
+              .filter(
+                (artifact) =>
+                  !artifact.final &&
+                  !(artifact.kind === "report" && artifact.summary === task.result),
+              )
+              .map((artifact) => <ArtifactCard key={artifact.id} artifact={artifact} />)}
+          {!underWay && !!task.evidence.length && (
             <View style={{ gap: 10 }}>
               <Pressable
                 role="button"
@@ -1011,42 +1068,6 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               {showSources && <SourceLinks items={task.evidence} />}
             </View>
           )}
-          {(canPause || task.status === "paused" || canCancel) && (
-            <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-              {canPause && (
-                <Button
-                  small
-                  icon={Pause}
-                  busy={busy}
-                  onPress={() => void act("control", { action: "pause" })}
-                >
-                  Pause
-                </Button>
-              )}
-              {task.status === "paused" && (
-                <Button
-                  small
-                  icon={Play}
-                  busy={busy}
-                  onPress={() => void act("control", { action: "resume" })}
-                >
-                  Resume
-                </Button>
-              )}
-
-              {canCancel && (
-                <Button
-                  small
-                  danger
-                  icon={X}
-                  busy={busy}
-                  onPress={() => void act("control", { action: "cancel" })}
-                >
-                  Cancel task
-                </Button>
-              )}
-            </View>
-          )}
           {/* What the agent was asked and each step it took, for anyone who wants to look. */}
           <Pressable
             role="button"
@@ -1064,12 +1085,44 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           {showDetails && (
             <View style={{ gap: 16 }}>
               <View style={{ gap: 6 }}>
-                <Text style={s.label}>What it was asked</Text>
+                <Text style={s.label}>What you asked</Text>
                 <Text selectable style={s.muted}>
                   {askedFor(task.prompt)}
                 </Text>
               </View>
-              {!!task.result && !!task.plan.length && (
+              {!!taskCost(task) && (
+                <View style={{ gap: 6 }}>
+                  <Text style={s.label}>AI cost</Text>
+                  <Text style={s.muted}>
+                    {activeTask(task) ? `${taskCost(task)} so far` : taskCost(task)}
+                  </Text>
+                </View>
+              )}
+              {/* Pause, or cancel a job that's waiting on you (Stop is on the working card). */}
+              {((canPause && task.status !== "queued") || (canCancel && !underWay)) &&
+                task.status !== "paused" && (
+                  <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                    {canPause && (
+                      <Button
+                        small
+                        icon={Pause}
+                        busy={busy}
+                        onPress={() => void act("control", { action: "pause" })}
+                      >
+                        Pause
+                      </Button>
+                    )}
+                    {canCancel && !underWay && (
+                      <ConfirmStop
+                        label="Stop job"
+                        busy={busy}
+                        onConfirm={() => void act("control", { action: "cancel" })}
+                      />
+                    )}
+                  </View>
+                )}
+              {!needsPerson && browserCards}
+              {realPlan(task) && (
                 <View style={{ gap: 10 }}>
                   <Text style={s.label}>Plan</Text>
                   {task.plan.map((step, index) => (
@@ -1093,7 +1146,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   ))}
                 </View>
               )}
-              <Text style={s.label}>What it did</Text>
+              <Text style={s.label}>What I did</Text>
               {detail?.events.map((event) => (
                 <View
                   key={event.id}
@@ -1385,10 +1438,54 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
     </Card>
   );
 }
+/** One choice of several: a round button and its words, a 44px row. */
+function RadioRow({
+  label,
+  checked,
+  onPress,
+}: {
+  label: string;
+  checked: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      role="radio"
+      aria-checked={checked}
+      onPress={onPress}
+      style={[s.row, { gap: 10, minHeight: 44 }]}
+    >
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          borderWidth: checked ? 6 : 1.5,
+          borderColor: checked ? colors.text : colors.mutedStrong,
+          backgroundColor: colors.surface,
+        }}
+      />
+      <Text style={[s.text, { flex: 1 }]}>{label}</Text>
+    </Pressable>
+  );
+}
+/** What the guided jobs do when nothing is written; shown greyed out in the box. */
+const GUIDED_PROMPTS: Partial<Record<AgentTask["kind"], string>> = {
+  document: "Fill in the form and write a reply for me to check",
+  finance: "Sum up my spending and suggest ways to save",
+};
+/** The other kinds of job, behind More options; most jobs are just written in the box. */
+const OTHER_JOBS = [
+  { kind: "agent", label: "Anything" },
+  { kind: "document", label: "Fill in a PDF from an email" },
+  { kind: "finance", label: "Sum up spending from a bank file (CSV)" },
+] as const;
 export function DelegateSheet({ prompt: filled }: { prompt?: string } = {}) {
   const { workspace, close, open } = useWorkspace();
-  const { delegate } = useAgentWorkspace();
-  const [kind, setKind] = useState<AgentTask["kind"]>(filled ? "agent" : "plan");
+  const { data, delegate } = useAgentWorkspace();
+  const name = data?.identity.name || "Neddy";
+  const [kind, setKind] = useState<AgentTask["kind"]>("agent");
+  const [more, setMore] = useState(false);
   const [prompt, setPrompt] = useState(filled ?? "");
   const [messageId, setMessageId] = useState("");
   const [csv, setCsv] = useState("");
@@ -1398,8 +1495,10 @@ export function DelegateSheet({ prompt: filled }: { prompt?: string } = {}) {
     setBusy(true);
     setError("");
     try {
+      // The guided jobs say what they're for when nothing is written.
+      const written = prompt.trim() || GUIDED_PROMPTS[kind] || "";
       const task = await delegate({
-        prompt: prompt.trim(),
+        prompt: written,
         kind,
         input: kind === "finance" ? { csv } : kind === "document" ? { messageId } : {},
       });
@@ -1412,54 +1511,76 @@ export function DelegateSheet({ prompt: filled }: { prompt?: string } = {}) {
   }
   return (
     <Sheet
-      title="Hand over an outcome"
-      subtitle="Your agent saves a plan and keeps working on the server."
+      title="New job"
+      subtitle={`${name} works on it in the background and tells you when it’s done.`}
       onClose={close}
     >
-      <View style={[s.row, { flexWrap: "wrap", gap: 8, marginBottom: 20 }]}>
-        {(["plan", "document", "finance", "agent"] as const).map((item) => (
-          <Button
-            small
-            primary={kind === item}
-            selected={kind === item}
-            key={item}
-            onPress={() => setKind(item)}
-          >
-            {item === "agent" ? "General task" : statusLabel(item)}
-          </Button>
-        ))}
-      </View>
       {filled && (
         <Text style={[s.muted, { marginBottom: 12 }]}>
-          This job is filled in from your link. Check it, then tap Delegate task.
+          This job is filled in from your link. Check it, then tap Start job.
         </Text>
       )}
       <Field
         label="What would you like done?"
         value={prompt}
         onChangeText={setPrompt}
+        autoFocus={Platform.OS === "web" && !filled}
         multiline
         placeholder={
-          kind === "document"
-            ? "Fill the attached form and prepare a reply for my review"
-            : kind === "finance"
-              ? "Summarize my spending and suggest a savings plan"
-              : "Make a practical plan for my week"
+          GUIDED_PROMPTS[kind] ?? "Compare the three best-reviewed robot vacuums on Amazon"
         }
       />
+      <View style={{ marginTop: -6, marginBottom: 14 }}>
+        <DictateButton
+          label="Say it instead"
+          onText={(text) =>
+            setPrompt((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text))
+          }
+        />
+      </View>
+      {/* Two guided jobs for special cases; everything else is just written in the box. */}
+      <Pressable
+        role="button"
+        aria-expanded={more}
+        onPress={() => setMore((value) => !value)}
+        style={[s.row, { gap: 6, minHeight: 44, alignSelf: "flex-start", marginBottom: 6 }]}
+      >
+        <Text style={[s.muted, { fontWeight: "600", color: colors.mutedStrong }]}>
+          More options
+        </Text>
+        {more ? (
+          <ChevronUp size={15} color={colors.mutedStrong} />
+        ) : (
+          <ChevronDown size={15} color={colors.mutedStrong} />
+        )}
+      </Pressable>
+      {more && (
+        <View role="radiogroup" aria-label="Kind of job" style={{ gap: 2, marginBottom: 14 }}>
+          {OTHER_JOBS.map((job) => (
+            <RadioRow
+              key={job.kind}
+              label={job.label}
+              checked={kind === job.kind}
+              onPress={() => setKind(job.kind)}
+            />
+          ))}
+        </View>
+      )}
       {kind === "document" && (
         <View style={{ gap: 8, marginBottom: 18 }}>
           <Text style={s.heading}>Choose the email with the PDF</Text>
-          {workspace.mail
-            .filter((mail) => mail.attachments.length)
-            .map((mail) => (
-              <CheckRow
-                key={mail.id}
-                checked={mail.id === messageId}
-                label={`${mail.subject} · ${mail.sender}`}
-                onPress={() => setMessageId(mail.id)}
-              />
-            ))}
+          <View role="radiogroup" aria-label="Email with the PDF">
+            {workspace.mail
+              .filter((mail) => mail.attachments.length)
+              .map((mail) => (
+                <RadioRow
+                  key={mail.id}
+                  checked={mail.id === messageId}
+                  label={`${mail.subject} · ${mail.sender}`}
+                  onPress={() => setMessageId(mail.id)}
+                />
+              ))}
+          </View>
           {!workspace.mail.some((mail) => mail.attachments.length) && (
             <Text style={s.muted}>
               Connect mail in Apps and select a message with a PDF attachment.
@@ -1496,8 +1617,8 @@ export function DelegateSheet({ prompt: filled }: { prompt?: string } = {}) {
       )}
       {kind === "agent" && !workspace.runtime.configured && (
         <Text style={[s.muted, { marginBottom: 16 }]}>
-          General tasks and plans require a configured model. Document jobs, page watches and
-          spending summaries have guided workflows.
+          Jobs need an AI model set up on the server. You can still fill in a PDF or sum up spending
+          without one.
         </Text>
       )}
       <ErrorNotice error={error} />
@@ -1505,13 +1626,13 @@ export function DelegateSheet({ prompt: filled }: { prompt?: string } = {}) {
         primary
         busy={busy}
         disabled={
-          !prompt.trim() ||
+          (kind === "agent" && !prompt.trim()) ||
           (kind === "document" && !messageId) ||
           (kind === "finance" && !csv.trim())
         }
         onPress={() => void submit()}
       >
-        Delegate task
+        Start job
       </Button>
     </Sheet>
   );
@@ -1536,7 +1657,7 @@ export function IdeasScreen() {
     <View style={{ gap: 20 }}>
       <AgentStatus />
       <View style={s.between}>
-        <Text style={[s.small, { flex: 1 }]}>From your goals, tasks, apps and interests</Text>
+        <Text style={[s.small, { flex: 1 }]}>From your goals, jobs, apps and interests</Text>
         <Button small icon={RefreshCw} busy={busy} onPress={() => void refreshIdeas()}>
           Find ideas
         </Button>
@@ -1575,7 +1696,7 @@ function TaskLink({ taskId, onOpen }: { taskId: string; onOpen?: () => void }) {
         open({ type: "task", taskId });
       }}
     >
-      View task
+      Open job
     </Button>
   );
 }
@@ -2690,7 +2811,7 @@ export function NotificationsSheet() {
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
             <Button small onPress={() => void read(item.id, item.taskId, item.checkInId)}>
               {item.taskId
-                ? "View task"
+                ? "Open job"
                 : item.checkInId
                   ? "Answer in chat"
                   : item.read

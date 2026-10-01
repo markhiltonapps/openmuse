@@ -214,6 +214,38 @@ ${"A long paragraph that keeps going to test wrapping across the page width. ".r
   assert.match(docText, /good.*food/);
 });
 
+test("documents show tables as tables, links as links and stars as stars", async () => {
+  const owner = "tables";
+  const create = (
+    fileToolSpecs(server.files, owner) as unknown as {
+      name: string;
+      execute: (args: unknown) => Promise<{ id: string; name: string; pages?: number }>;
+    }[]
+  ).find((s) => s.name === "create_document");
+  assert.ok(create);
+  const content = `| Model | Rating | Link |
+|---|---|---|
+| **Roborock Q5** | 4.4★ | [View on Amazon](https://www.amazon.com/dp/B0) |
+| Shark AI Ultra | 4.2⭐ | [View on Amazon](https://www.amazon.com/dp/B1) |
+
+More at https://www.amazon.com/s?k=robot.`;
+  const pdf = await create.execute({ title: "Robot vacuums", content });
+  assert.equal(pdf.pages, 1);
+  const bytes = (await server.files.bytes(owner, pdf.id)) as Uint8Array;
+  const doc = await PDFDocument.load(bytes);
+  // Each link is one clickable area, not one per word.
+  const links = doc.getPages()[0]?.node.Annots()?.size() ?? 0;
+  assert.equal(links, 3);
+  const text = (await server.files.read(owner, pdf.id)).text;
+  assert.doesNotMatch(text, /\||\[View on Amazon\]|4\.[24][?#]/);
+  assert.match(text, /Roborock Q5/);
+  assert.match(text, /4\.4/);
+  const docx = await create.execute({ title: "Robot vacuums", content, format: "docx" });
+  const docText = (await server.files.read(owner, docx.id)).text;
+  assert.match(docText, /Shark AI Ultra/);
+  assert.doesNotMatch(docText, /\|---/);
+});
+
 test("documents from Google Drive, OneDrive or Dropbox are saved to Files to read", async () => {
   const owner = "drive";
   const pdf = await brochure(["Q3 plan: grow Frontline to 400 customers."]);

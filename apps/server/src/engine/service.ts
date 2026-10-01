@@ -365,11 +365,11 @@ export class AgentService {
     // Stopping or retrying a task answers the updates about it.
     if (action === "cancel" || action === "retry") await this.readTaskNotifications(owner, id);
     if (action === "cancel" && task.status === "succeeded")
-      throw new AppError("This task is already complete", 409);
+      throw new AppError("This job is already done.", 409);
     if (action === "retry" && task.status !== "failed")
-      throw new AppError("Only failed tasks can be retried", 409);
+      throw new AppError("Only a job that couldn’t finish can be tried again.", 409);
     if (action === "resume" && task.status !== "paused")
-      throw new AppError("Only paused tasks can be resumed", 409);
+      throw new AppError("This job isn’t paused.", 409);
     if (action === "pause" && (terminal.has(task.status) || task.status === "paused")) return task;
     const status =
       action === "cancel"
@@ -383,7 +383,7 @@ export class AgentService {
       const a = await this.db.get<ActionProposal>(owner, "actions", task.actionId);
       if (a && a.status !== "succeeded")
         throw new AppError(
-          "Check the reviewed action before retrying; its outcome may be uncertain. Start a new task when reconciled.",
+          "Check the reviewed action before retrying; its outcome may be uncertain. Start a new job when that’s sorted out.",
           409,
         );
     }
@@ -402,14 +402,14 @@ export class AgentService {
           action === "cancel"
             ? "Stopped by you."
             : action === "pause"
-              ? "Paused. Resume when you're ready."
+              ? "Paused. Resume when you’re ready."
               : "",
         ...(task.kind === "monitor" && action === "resume"
           ? { state: { ...task.state, failures: 0, notice: null, resumingMonitor: false } }
           : {}),
       },
     );
-    if (!updated) throw new AppError("Task changed; refresh and try again", 409);
+    if (!updated) throw new AppError("This job just changed. Try again.", 409);
     this.worker.abort(id);
     if (task.kind === "monitor")
       await this.db.compareAndSwap(
@@ -1245,7 +1245,7 @@ export class AgentService {
       const connection = await this.workspace.connection(owner);
       if (connection?.id !== task.state.connectionId)
         throw new AppError(
-          "Google connection changed during this task. Start a new task using the current account.",
+          "Your Google connection changed during this job. Start a new job to use the current account.",
           409,
         );
     }

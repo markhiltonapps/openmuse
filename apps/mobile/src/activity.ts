@@ -101,7 +101,7 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "apps", label: app ? `Working in ${app}…` : "Working in your apps…" };
     }
     case "delegate_task":
-      return { kind: "plan", label: "Setting up a task…" };
+      return { kind: "plan", label: "Starting a job…" };
     case "set_reminder":
     case "change_reminder":
       return { kind: "plan", label: "Setting a reminder…" };
@@ -119,11 +119,11 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
     case "suggest_memory":
       return { kind: "writing", label: "Making a note…" };
     case "agent_status":
-      return { kind: "plan", label: "Checking on your tasks…" };
+      return { kind: "plan", label: "Checking on your jobs…" };
     case "look_at_page":
       return { kind: "browse", label: "Looking at the page…" };
     case "use_page":
-      return { kind: "browse", label: "Working on the page…" };
+      return { kind: "browse", label: "Using the page…" };
     case "sign_in_with_saved_login":
       return { kind: "browse", label: "Signing in…" };
     case "enter_sign_in_code":
@@ -165,11 +165,32 @@ export function chatActivity(messages: ChatMessage[], replying: boolean): Activi
 }
 
 /** A background task's current step, shown when the chat is idle. */
+const KINDS = new Set<string>([
+  "thinking",
+  "writing",
+  "search",
+  "browse",
+  "read",
+  "mail",
+  "apps",
+  "plan",
+  "computer",
+]);
 export function taskActivity(task: {
   kind: string;
   title: string;
   plan: { title: string; status: string }[];
+  state?: Record<string, unknown>;
 }): Activity {
+  // What the job says it's doing right now ("Searching the web"), from the tool it's using.
+  const now = task.state?.now;
+  if (typeof now === "string" && now)
+    return {
+      kind: KINDS.has(String(task.state?.nowKind))
+        ? (task.state?.nowKind as ActivityKind)
+        : "thinking",
+      label: `${now}…`,
+    };
   const step = task.plan.find((s) => s.status === "running")?.title ?? task.title;
   const kind: ActivityKind =
     task.kind === "monitor"

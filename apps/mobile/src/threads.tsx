@@ -439,8 +439,8 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         <View style={s.divider} />
         <LinkRow
           icon={Plus}
-          title="Delegate task"
-          detail="A plan, document, or spending summary"
+          title="New job"
+          detail="Something for your agent to work on in the background"
           onPress={() => {
             onClose();
             open({ type: "delegate" });

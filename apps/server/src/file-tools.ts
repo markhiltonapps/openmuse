@@ -140,7 +140,7 @@ export function fileToolSpecs(
   specs.push({
     name: "create_document",
     description:
-      "Write a document for the person and save it to Files as a PDF (default) or Word file they can open, download, email or print. Write the content in simple Markdown: # headings, paragraphs, - bullets, 1. numbered items and **bold**.",
+      "Write a document for the person and save it to Files as a PDF (default) or Word file they can open, download, email or print. Write the content in simple Markdown: # headings, paragraphs, - bullets, 1. numbered items, **bold**, [link text](https://…) links and tables (a | header | row |, a |---| divider, then one | row | per line). Links and tables come out as real, clickable links and tables.",
     parameters: z.object({
       title: z.string().trim().min(1).max(120),
       content: z.string().min(1).max(60000),

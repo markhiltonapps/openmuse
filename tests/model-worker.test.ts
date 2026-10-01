@@ -118,7 +118,7 @@ test("CopilotKit model worker executes server tools and persists the confirmed o
   }
 });
 
-test("the model worker keeps the text a model replies with when it calls no tool", async (t) => {
+test("the model worker takes a reply without tools as the job's answer", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "openmuse-model-text-"));
   const db = await createStore();
   const mock = createDemoModel({ latency: 0, firstByteDelay: 0 });
@@ -150,8 +150,8 @@ test("the model worker keeps the text a model replies with when it calls no tool
     const task = await server.agent.createTask("owner", { prompt: "Plan my week" });
     await server.agent.worker.tick();
     const result = await server.agent.detail("owner", task.id);
-    assert.equal(result.task.status, "waiting_input");
-    assert.match(String(result.task.state.lastUpdate), /Find cool stuff on Hacker News/);
+    assert.equal(result.task.status, "succeeded", result.task.error ?? result.task.question);
+    assert.match(result.task.result ?? "", /Find cool stuff on Hacker News/);
     assert.ok(
       result.events.some(
         (event) =>
