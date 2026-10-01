@@ -48,7 +48,7 @@ export interface VoiceBrain {
 
 /** How a call's answers are given: spoken, short, and honest about what waits for approval. */
 export const VOICE_RULES =
-  "The person is talking with you out loud in a live voice call, maybe while driving, and a voice reads your reply to them. Reply in one to three short spoken sentences in plain, everyday words: no lists, markdown, links, emoji or long numbers. Use your tools as usual to look things up; never guess. Set reminders and notes straight away. If you need something from them first, ask one short question. Anything that sends, books, buys or changes something for other people is saved for their approval: say it's waiting for their OK in the app. Say a single fact out loud (one time, price or address, or a yes or no). When the answer is long or better seen than heard (three or more items, search results, options, steps, a recipe, links), don't read it all out: put it on their screen with show_on_screen, or with show_products or show_places for products and places. Then, in a sentence or two, say the one thing they most need (your top pick, the next step, the nearest one) and that you've put the rest on their screen for later. They may be driving, so what you say must be enough on its own: never ask them to look at the screen or to choose by position (the second one); name the choices out loud. If they ask to hear the list, say the first two or three. If they ask about something already on their screen, answer from it, saying only the part they asked for. If they ask for a document, spreadsheet or slides, don't make it during the call: start it as a job with delegate_task, and say you'll let them know when it's done. Do the same for anything else that will take more than about half a minute (comparing products, research across several sites). The latest messages are the call so far, and the last one is what they just asked; earlier ones are from their typed chat.";
+  "The person is talking with you out loud in a live voice call, maybe while driving, and a voice reads your reply to them. Reply in one to three short spoken sentences in plain, everyday words: no lists, markdown, links, emoji or long numbers. Use your tools as usual to look things up; never guess. Set reminders and notes straight away. If you need something from them first, ask one short question. Anything that sends, books, buys or changes something for other people is saved for their approval, and its Approve button appears on their screen: say what it is out loud (who it goes to and what), that it waits for their OK until tonight, and that it happens only when they tap Approve, once it's safe for them to. Never push them to tap it now. If they want to approve or send something that's already waiting, call show_approvals so its button is on their screen. You can never approve for them. Say a single fact out loud (one time, price or address, or a yes or no). When the answer is long or better seen than heard (three or more items, search results, options, steps, a recipe, links), don't read it all out: put it on their screen with show_on_screen, or with show_products or show_places for products and places. Then, in a sentence or two, say the one thing they most need (your top pick, the next step, the nearest one) and that you've put the rest on their screen for later. They may be driving, so what you say must be enough on its own: never ask them to look at the screen or to choose by position (the second one); name the choices out loud. If they ask to hear the list, say the first two or three. If they ask about something already on their screen, answer from it, saying only the part they asked for. If they ask for a document, spreadsheet or slides, don't make it during the call: start it as a job with delegate_task, and say you'll let them know when it's done. Do the same for anything else that will take more than about half a minute (comparing products, research across several sites). The latest messages are the call so far, and the last one is what they just asked; earlier ones are from their typed chat.";
 
 /** On a call: a long answer goes on the person's screen, and the voice says the gist. */
 export function showOnScreenToolSpec() {
@@ -102,6 +102,8 @@ function shown(tool: CallDetailTool, raw: string) {
   }
 }
 const titleOf = (item: CallDetail["items"][number]) => {
+  // An Approve card has its own title; the answer's heading comes from what was found.
+  if (item.tool === "approval") return undefined;
   const result = item.result as { title?: unknown; name?: unknown };
   const title = typeof result.title === "string" ? result.title : result.name;
   return typeof title === "string" ? title : undefined;
@@ -390,12 +392,26 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
           if (e.type === EventType.TOOL_CALL_RESULT && typeof e.content === "string") {
             const tool = calls.get(e.toolCallId ?? "")?.name as CallDetailTool | undefined;
             const result =
-              tool && CALL_DETAIL_TOOLS.includes(tool) ? shown(tool, e.content) : undefined;
+              tool && (CALL_DETAIL_TOOLS as readonly string[]).includes(tool)
+                ? shown(tool, e.content)
+                : undefined;
             if (tool && result) items.push({ tool, result });
             try {
-              const result = JSON.parse(e.content) as { status?: unknown; actionId?: unknown };
+              const result = JSON.parse(e.content) as {
+                status?: unknown;
+                actionId?: unknown;
+                needsApproval?: unknown;
+                approvalId?: unknown;
+                approvals?: unknown;
+              };
               if (result.status === "awaiting_review" && typeof result.actionId === "string")
                 reviews.push(result.actionId);
+              if (result.needsApproval === true && typeof result.approvalId === "string")
+                reviews.push(result.approvalId);
+              // show_approvals: things already waiting, brought back to the screen.
+              if (Array.isArray(result.approvals))
+                for (const approval of result.approvals as { actionId?: unknown }[])
+                  if (typeof approval?.actionId === "string") reviews.push(approval.actionId);
             } catch {
               // Not JSON; nothing to approve.
             }
@@ -404,24 +420,34 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
         },
         error: reject,
         complete: () => {
-          // Before the answer is said, so the screen has it when the voice says it's there.
-          if (items.length) show?.(items, items.map(titleOf).find(Boolean));
-          // Things saved for approval on a call wait until tonight, and get a bell entry that
-          // says what they are.
-          void Promise.all(
-            reviews.map(async (actionId) => {
-              const title = await holdForTonight(brain, owner, actionId).catch(() => undefined);
-              await brain.notify(
-                owner,
-                "Ready for your review",
-                title
-                  ? `${title}, from your call. It waits for your OK in Activity.`
-                  : `${name} saved something from your call. It waits for your OK in Activity.`,
-                `review:${actionId}`,
+          void (async () => {
+            // Things saved for approval on a call wait until tonight, and their Approve buttons
+            // go on the screen.
+            const held = await Promise.all(
+              [...new Set(reviews)].map(async (actionId) => ({
                 actionId,
-              );
-            }),
-          )
+                title: await holdForTonight(brain, owner, actionId).catch(() => undefined),
+              })),
+            );
+            for (const { actionId, title } of held)
+              items.push({ tool: "approval", result: { actionId, ...(title ? { title } : {}) } });
+            // Before the answer is said, so the screen has it when the voice says it's there.
+            if (items.length) show?.(items, items.map(titleOf).find(Boolean));
+            // And a bell entry that says what each is, for after the call.
+            await Promise.all(
+              held.map(({ actionId, title }) =>
+                brain.notify(
+                  owner,
+                  "Ready for your review",
+                  title
+                    ? `${title}, from your call. Tap to review and approve.`
+                    : `${name} saved something from your call. Tap to review and approve.`,
+                  `review:${actionId}`,
+                  actionId,
+                ),
+              ),
+            );
+          })()
             .catch(() => undefined)
             .finally(() => {
               if (failure && !words.trim()) reject(new Error(failure));
@@ -519,6 +545,8 @@ export function shownText(details: CallDetail[]) {
           lines.push(`- ${join(linked(place.name, place.url), place.address)}`);
       else if (tool === "search_web")
         lines.push(`- ${list("pictures").length} pictures from a web search`);
+      else if (tool === "approval")
+        lines.push(`- Saved for your OK: ${join(value.title) || "something"}`);
       else lines.push(`- ${join(value.name)} (saved in Files)`);
     }
     return lines.join("\n");

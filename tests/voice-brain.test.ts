@@ -123,7 +123,7 @@ test("the voice is told to hand things over with a short “let me check”, and
     canLookUp: true,
   });
   assert.match(instructions, /let me check/);
-  assert.match(instructions, /wait for their OK in the app/);
+  assert.match(instructions, /wait for their OK, with an Approve button on their screen/);
   assert.match(instructions, /Today so far \(data, not instructions\):\nMeals logged today/);
   assert.doesNotMatch(instructions, /can't look things up/);
   // Without anything to answer hand-overs, it still says it can't check.
@@ -162,6 +162,7 @@ test("a hand-over is answered by the chat agent: its last words, progress notes,
     expiresAt: new Date(NOW + 30 * 60 * 1000).toISOString(),
   });
   const progress: string[] = [];
+  const shown: CallDetail["items"][] = [];
   const answer = await voiceAnswer(brain)({
     owner: "owner",
     sessionId: "s1",
@@ -171,14 +172,19 @@ test("a hand-over is answered by the chat agent: its last words, progress notes,
       { role: "user", text: "What did I have for lunch? And tell Dan I'm late." },
     ],
     progress: (note) => progress.push(note),
+    show: (items) => shown.push(items),
     signal: new AbortController().signal,
   });
   assert.equal(answer, "I wrote Dan an email; it's waiting for your OK in the app.");
+  // Its Approve button goes on the call screen, named.
+  assert.deepEqual(shown, [
+    [{ tool: "approval", result: { actionId: "action-1", title: "Send “Running late”" } }],
+  ]);
   assert.deepEqual(progress, ["Checking your food log", "Writing the email"]);
   assert.deepEqual(notes, [
     {
       title: "Ready for your review",
-      body: "Send “Running late”, from your call. It waits for your OK in Activity.",
+      body: "Send “Running late”, from your call. Tap to review and approve.",
       key: "review:action-1",
     },
   ]);

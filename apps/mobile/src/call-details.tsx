@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
 import type { Artifact } from "../../../packages/domain/src";
 import type { CallDetail } from "../../../packages/domain/src/voice";
+import { ApprovalCard } from "./approval-card";
 import { AssistantResponse } from "./assistant-response";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { colors, s } from "./ui";
@@ -22,35 +23,39 @@ const meta = { fontSize: 12, lineHeight: 17, color: colors.mutedStrong };
  */
 export function CallDetails({
   details,
-  newestFirst = false,
+  onCall = false,
   lineColor = colors.line,
-  filesInApp = false,
 }: {
   details: CallDetail[];
-  newestFirst?: boolean;
+  /**
+   * On the call screen: newest first, and nothing opens another sheet (it would end the call), so
+   * files open in a new tab and an approval's details open in place.
+   */
+  onCall?: boolean;
   /** The line between answers: inside a chat bubble it needs to be darker than usual. */
   lineColor?: string;
-  /** Open files in the app (in the chat), not in a new tab (on the call screen, which they'd end). */
-  filesInApp?: boolean;
 }) {
   return (
     <View style={{ gap: 22 }}>
-      {(newestFirst ? [...details].reverse() : details).map((detail, index) => (
+      {(onCall ? [...details].reverse() : details).map((detail, index) => (
         <View key={`${detail.id}-${detail.at}`} style={{ gap: 10 }}>
-          <View style={{ gap: 2 }}>
-            <Text
-              role="heading"
-              aria-level={3}
-              style={[s.heading, { fontSize: 19, lineHeight: 25, fontWeight: "700" }]}
-            >
-              {detail.title}
-            </Text>
-            {detail.question && detail.question !== detail.title ? (
-              <Text numberOfLines={2} style={[s.small, meta]}>
-                {`You asked: “${detail.question}”`}
+          {/* Just an Approve card: it has its own title, so no heading above it. */}
+          {!detail.items.every((item) => item.tool === "approval") && (
+            <View style={{ gap: 2 }}>
+              <Text
+                role="heading"
+                aria-level={3}
+                style={[s.heading, { fontSize: 19, lineHeight: 25, fontWeight: "700" }]}
+              >
+                {detail.title}
               </Text>
-            ) : null}
-          </View>
+              {detail.question && detail.question !== detail.title ? (
+                <Text numberOfLines={2} style={[s.small, meta]}>
+                  {`You asked: “${detail.question}”`}
+                </Text>
+              ) : null}
+            </View>
+          )}
           {detail.items.map((item, at) => {
             // The heading already says it; a card's own title would repeat it.
             const result = untitled(item.result, detail.title);
@@ -77,14 +82,15 @@ export function CallDetails({
                 return <PlacesCard key={key} result={result} loading={false} />;
               case "search_web":
                 return <SearchPicturesCard key={key} result={result} loading={false} />;
+              case "approval": {
+                const { actionId } = result as { actionId?: unknown };
+                return typeof actionId === "string" ? (
+                  <ApprovalCard key={key} actionId={actionId} onCall={onCall} wide />
+                ) : null;
+              }
               default:
                 return (
-                  <FileRow
-                    key={key}
-                    kind={FILE_KINDS[item.tool]}
-                    result={result}
-                    inApp={filesInApp}
-                  />
+                  <FileRow key={key} kind={FILE_KINDS[item.tool]} result={result} inApp={!onCall} />
                 );
             }
           })}

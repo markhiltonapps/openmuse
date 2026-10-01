@@ -43,6 +43,7 @@ import { chatActivity } from "./activity";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { PlaceButtons, setVoiceAway, usePlace } from "./app-places-ui";
+import { ToolApprovals } from "./approval-card";
 import { AssistantResponse } from "./assistant-response";
 import { setChatActivity } from "./avatar";
 import { BackgroundUpdates } from "./background-updates";
@@ -168,6 +169,55 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ toolCallId, result, status }) => (
       <PlaceButtons toolCallId={toolCallId} result={result} status={status} />
+    ),
+  });
+  // What's saved for approval gets its Approve card right here in the chat.
+  useRenderTool({
+    name: "use_app",
+    description: "Show a connected-app action waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolApprovals result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "email_from_agent",
+    description: "Show an email waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolApprovals result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "use_page",
+    description: "Show a website step waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolApprovals result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "sign_in_with_saved_login",
+    description: "Show a sign-in waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolApprovals result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "enter_sign_in_code",
+    description: "Show a sign-in code step waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolApprovals result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "show_approvals",
+    description: "Show what's waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolApprovals result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({

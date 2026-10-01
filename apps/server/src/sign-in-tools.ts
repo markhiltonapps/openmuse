@@ -227,7 +227,7 @@ export function signInToolSpecs(
           return {
             needsApproval: true,
             approvalId: proposal.id,
-            next: "Signing in is waiting for the person's OK in the app. Tell them; don't say you're signed in yet.",
+            next: "Signing in waits for the person's OK. Tell them; don't say you're signed in yet.",
           };
         }
         return {
@@ -283,8 +283,8 @@ export function signInToolSpecs(
           needsApproval: true,
           approvalId: proposal.id,
           next: saved
-            ? "The code comes from their saved authenticator key once they approve in the app. Tell them it's waiting for their OK."
-            : "Tell the person to open the approval in the app and type the code the site sent them there, not in chat.",
+            ? "Once they tap Approve, the code comes from their saved authenticator key. Tell them it's waiting for their OK; don't say you're signed in yet."
+            : "Tell the person to tap Review on its card and type the code the site sent them there, not in chat.",
         };
       },
     },

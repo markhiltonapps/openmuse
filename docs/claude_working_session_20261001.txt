@@ -313,11 +313,49 @@ SHOW LONG RESULTS INSTEAD OF READING THEM (owner's picks: call screen + chat, Ne
 - Checks: lint, both typechecks, worker tsc, 451 tests pass (3 new: collecting shown results and
   the summary, details kept and saved per call, the after-hang-up bell).
 
+DOCUMENTS ON A CALL RUN AS A JOB (owner's choice)
+- A document, spreadsheet or slides asked for on a call starts as a background job. The usual
+  job-done alert (pop-up, push, email) says when it's ready. Committed as cd26e49 (not pushed yet).
+
+APPROVALS IN THE CONVERSATION (owner: "it told me to go to the Activity tab… so many steps")
+- Owner's picks: an Approve button on a card (one tap, "See details" for the full review over
+  the chat), always a tap (no spoken yes), approvals first and then a full least-clicks audit.
+- Approve card (approval-card.tsx), shown:
+  - in the chat for use_app, email_from_agent, use_page and both sign-in tools;
+  - on a call's Details view;
+  - at the top of Activity ("Needs your OK · N").
+- What the card shows:
+  - its title and a line of facts built from the stored action (e.g. "Gmail · Send draft ·
+    draft id r-5821"), never the agent's own wording;
+  - an Approve button with the same words as the full review.
+- After a tap it shows the outcome: Done (green), working, couldn't confirm, declined, failed or
+  expired. An expired card has "Set it up again"; a stopped job has "Open job".
+- On a call, "See details" opens inside the card, because another sheet would end the call.
+- New tool show_approvals:
+  - brings back what's already waiting as cards, ranked by the person's words;
+  - returns details of what expired, so it can be set up again;
+  - says it's already done when it was done since (matched by what it does, not its wording),
+    so nothing is sent twice.
+- The chat agent and the voice are told the card is right where they are, never to send people
+  to Activity. Tool messages shared with background jobs stay neutral.
+- The bell after a call says "Tap to review and approve."
+- Design division:
+  - visual: 3 MUSTs, then 1 spacing regression;
+  - usability: 6 MUSTs, then 2 more on double sends;
+  - copy: 2 MUSTs, then 2 more.
+  All were fixed, and all three signed off in round 3.
+- Checks: lint, both typechecks, worker tsc, 452 tests pass (new: approval-tools, approvals on a
+  call, the bell wording).
+
 PENDING
 -------
 - The owner tries "what did I have for lunch?" and a reminder on a real call, and says whether
   calls feel smoother on the phone.
-- The owner tries a call that shows results (e.g. "find me a robot vacuum under $300").
+- The owner tries a call that shows results (e.g. "find me a robot vacuum under $300"), and
+  "send my draft to Dan" in the chat and on a call (one tap on the card).
+- Push cd26e49 and the approvals commit when the owner says "push it".
+- Next: the least-clicks audit (every kind of request and every place; shortest path from the
+  chat), sent to the owner as a list before building.
 - Owner's choice (answered): a document, spreadsheet or slides asked for on a call runs as a
   background job, and the usual job-done alert (pop-up, push, email) says when it's ready.
   VOICE_RULES now says so; tested.

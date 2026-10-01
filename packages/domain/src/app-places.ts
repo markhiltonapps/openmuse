@@ -94,7 +94,8 @@ export const APP_PLACES = {
   reviews: {
     name: "Reviews & receipts",
     where: "Activity",
-    about: "actions waiting for their OK, and receipts of what was done",
+    about:
+      "receipts of what was done, with everything waiting for their OK at the top (to approve something, use show_approvals instead: its Approve card appears right where they are, in the chat or on a call's screen)",
   },
   ideas: { name: "Ideas", where: "Bottom bar", about: "suggestions to act on" },
   goals: {

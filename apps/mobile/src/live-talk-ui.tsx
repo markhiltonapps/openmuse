@@ -452,7 +452,7 @@ export function LiveTalkSheet() {
                 style={{ flex: 1 }}
                 contentContainerStyle={{ padding: 4, paddingBottom: 24 }}
               >
-                <CallDetails details={details} newestFirst />
+                <CallDetails details={details} onCall />
               </ScrollView>
               {/* A fade at the bottom says there's more below. */}
               <View
@@ -712,7 +712,7 @@ export function SpokenCall({ text, id }: { text: string; id: string }) {
           <Text style={[s.label, { color: colors.mutedStrong }]}>Details from the call</Text>
           {/* The words until the real thing arrives (or if it can't be had). */}
           {onScreen && onScreen !== "failed" ? (
-            <CallDetails details={onScreen} lineColor={colors.bubbleLine} filesInApp />
+            <CallDetails details={onScreen} lineColor={colors.bubbleLine} />
           ) : (
             <AssistantResponse content={shownWords} />
           )}

@@ -149,6 +149,16 @@ Time Log — <Project Name>
   from the call sheet (it replaces the sheet and ends the call); open links in a new tab there.
 - **Signed file links expire (15 min):** anything shown later (a saved call, a card) should fetch a
   fresh link (`GET /api/files/:id`) when tapped, not keep the one it was given.
+- **Approvals where people are:** anything saved for approval shows its Approve card (approval-
+  card.tsx) in the chat, on a call and in Activity; the agent must never send people to Activity.
+  Tool messages are shared with background jobs (engine/model.ts), so keep them neutral; say where
+  the card appears only in the chat prompt and VOICE_RULES.
+- **Matching actions:** compare what an action does (app + tool + arguments, recipients + subject),
+  never its title, summary or hash: the agent rewords those each time it sets something up again.
+- **Always-mounted status lines inside a `gap` layout:** take the empty line out of the flow with
+  `position: "absolute"` (1×1, opacity 0), or its slot adds a gap.
+- **Biome on a broken file:** if an edit leaves a parse error, `biome check --write` can apply odd
+  fixes (it turned a reassigned `let` into `const`). Check `git diff` after fixing the break.
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
   `apps/worker` changes; other pushes show it as SKIPPED.
 - **Live voice (OpenAI gpt-live-1):** the key never reaches the browser. The server creates the

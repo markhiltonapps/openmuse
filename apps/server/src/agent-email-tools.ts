@@ -29,7 +29,7 @@ export function agentEmailToolSpecs(
           status: "awaiting_review",
           actionId: action.id,
           from,
-          message: "Prepared. It waits for the person's approval in the app before it is sent.",
+          message: "Prepared. It is sent only when the person taps Approve.",
         };
       },
     },

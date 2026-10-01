@@ -150,7 +150,7 @@ export function browserToolSpecs(
           return {
             needsApproval: true,
             approvalId: proposal.id,
-            next: "This step commits to something, so it's waiting for the person's approval in the app. Tell them what you set up and that it runs when they approve; don't say it's done.",
+            next: "This step commits to something, so it waits for the person's OK. Tell them what you set up and that it runs when they tap Approve; don't say it's done.",
           };
         }
         await browser.act(owner, id, {

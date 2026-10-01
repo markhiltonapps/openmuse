@@ -8,7 +8,8 @@ export const CALL_DETAIL_TOOLS = [
   "create_spreadsheet",
   "create_presentation",
 ] as const;
-export type CallDetailTool = (typeof CALL_DETAIL_TOOLS)[number];
+/** "approval": something saved for their OK, shown as its Approve card. */
+export type CallDetailTool = (typeof CALL_DETAIL_TOOLS)[number] | "approval";
 
 /**
  * What the agent put on screen for one question during a live call: a long answer, products,

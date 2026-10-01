@@ -19,7 +19,16 @@ import {
   X,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, Platform, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 import {
   type ActionProposal,
   type Artifact,
@@ -641,11 +650,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
     }
   }
   const agentMail = action.kind === "agent_email.send";
-  const email = action.kind === "email.send" || agentMail;
   const app = action.kind === "app.action";
   const step = action.kind === "browser.step";
   const signin = action.kind === "browser.signin";
-  const stepBrowser = step || signin ? w.browsers.find((b) => b.id === d.sessionId) : undefined;
   return (
     <Sheet
       title={pending ? "One last look" : action.title}
@@ -672,167 +679,12 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           {action.status.replace(/_/g, " ")}
         </Chip>
       </View>
-      <Card style={{ gap: 13 }}>
-        {agentMail ? (
-          <ReviewLine label="From" value={`${String(d.from || "")} (your agent)`} />
-        ) : (
-          !app &&
-          !step &&
-          !signin && <ReviewLine label="Account" value={action.account || w.profile.email} />
-        )}
-        {step ? (
-          <>
-            <ReviewLine label="Website" value={String(d.site || "")} />
-            <ReviewLine label="Page" value={String(d.pageTitle || d.url || "")} />
-            <ReviewLine
-              label="Your agent will"
-              value={
-                d.action === "press"
-                  ? "Press Enter to send the form"
-                  : `Click “${String(d.element || "")}”`
-              }
-            />
-            {stepBrowser?.status === "active" && stepBrowser.previewUrl && (
-              <Image
-                source={{ uri: api.url(stepBrowser.previewUrl) }}
-                resizeMode="contain"
-                accessibilityLabel={`The page on ${String(d.site || "the site")} right now`}
-                style={{
-                  width: "100%",
-                  height: 220,
-                  borderRadius: 10,
-                  backgroundColor: colors.subtle,
-                }}
-              />
-            )}
-            <Text style={s.small}>
-              Your agent does this only if the page still shows “{String(d.element || "")}” on{" "}
-              {String(d.site || "the site")}.
-              {stepBrowser?.status === "active"
-                ? " To check or change anything first, take control of the browser."
-                : ""}
-            </Text>
-            {stepBrowser?.status === "active" && (
-              <Button
-                small
-                icon={Globe2}
-                style={{ alignSelf: "flex-start" }}
-                onPress={() => open({ type: "browser", browser: stepBrowser })}
-              >
-                Take control
-              </Button>
-            )}
-          </>
-        ) : signin ? (
-          <SignInReview
-            data={d}
-            previewUrl={
-              stepBrowser?.status === "active" && stepBrowser.previewUrl
-                ? api.url(stepBrowser.previewUrl)
-                : undefined
-            }
-            code={pending ? code : ""}
-            onCode={pending ? setCode : undefined}
-            onSubmit={() => !busy && void decide("approve")}
-          />
-        ) : app ? (
-          <>
-            <ReviewLine label="App" value={String(d.app || "")} />
-            <ReviewLine label="Action" value={String(d.tool || "")} />
-            <ReviewLine label="What will happen" value={String(d.summary || "")} />
-            {typeof d.amountUsd === "number" && (
-              <ReviewLine label="Amount" value={`$${d.amountUsd.toFixed(2)} (USD)`} />
-            )}
-            <View style={s.divider} />
-            <Text style={s.label}>Exact details sent</Text>
-            <Text
-              selectable
-              style={[
-                s.text,
-                {
-                  fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-                  fontSize: 12,
-                  lineHeight: 19,
-                },
-              ]}
-            >
-              {JSON.stringify(d.arguments ?? {}, null, 2)}
-            </Text>
-            <Text style={s.small}>
-              Only these details are sent. Depending on the action, the app may notify other people.
-            </Text>
-          </>
-        ) : email ? (
-          <>
-            <ReviewLine label="To" value={arrayText(d.to)} />
-            {!agentMail && (
-              <>
-                <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
-                <ReviewLine label="Bcc" value={arrayText(d.bcc) || "None"} />
-              </>
-            )}
-            <ReviewLine label="Subject" value={String(d.subject || "")} />
-            {agentMail && !!d.inReplyTo && (
-              <ReviewLine label="Sent as" value="A reply in the same thread" />
-            )}
-            <View style={s.divider} />
-            <Text selectable style={[s.text, { lineHeight: 25 }]}>
-              {String(d.body || "")}
-            </Text>
-            <View style={s.divider} />
-            <Text style={s.label}>Attachments</Text>
-            {agentMail ? (
-              <Text style={s.muted}>No attachments</Text>
-            ) : Array.isArray(d.attachmentIds) && d.attachmentIds.length ? (
-              d.attachmentIds.map((id) => {
-                const file = w.files.find((f) => f.id === id);
-                return (
-                  <Text key={String(id)} style={s.text}>
-                    {file?.name || String(id)} · version {String(id).slice(-8)}
-                  </Text>
-                );
-              })
-            ) : (
-              <Text style={s.muted}>No attachments</Text>
-            )}
-          </>
-        ) : (
-          <>
-            <ReviewLine label="Event" value={String(d.title || "")} />
-            {action.kind !== "calendar.delete" && (
-              <>
-                <ReviewLine
-                  label="Starts"
-                  value={
-                    d.allDay
-                      ? String(d.start || "")
-                      : `${dateLabel(String(d.start || ""), { year: "numeric", month: "short", day: "numeric", timeZone: String(d.timeZone || "UTC") })} · ${timeLabel(String(d.start || ""), String(d.timeZone || "UTC"))}`
-                  }
-                />
-                <ReviewLine
-                  label="Ends"
-                  value={
-                    d.allDay
-                      ? `${String(d.end || "")} (exclusive)`
-                      : `${dateLabel(String(d.end || ""), { year: "numeric", month: "short", day: "numeric", timeZone: String(d.timeZone || "UTC") })} · ${timeLabel(String(d.end || ""), String(d.timeZone || "UTC"))}`
-                  }
-                />
-                <ReviewLine label="Time zone" value={String(d.timeZone || "")} />
-                <ReviewLine label="All day" value={d.allDay ? "Yes" : "No"} />
-                <ReviewLine label="Location" value={String(d.location || "None")} />
-                <ReviewLine label="Attendees" value={arrayText(d.attendees) || "Just you"} />
-                <ReviewLine label="Notes" value={String(d.description || "None")} />
-              </>
-            )}
-            <ReviewLine label="Calendar" value={String(d.calendarId || "primary")} />
-            <Text style={s.small}>
-              {action.kind === "calendar.delete"
-                ? "This removes the event and may notify its attendees."
-                : "Attendees may receive an invitation or update from your connected calendar."}
-            </Text>
-          </>
-        )}
-      </Card>
+      <ReviewBody
+        action={action}
+        code={pending ? code : ""}
+        onCode={pending ? setCode : undefined}
+        onSubmit={() => !busy && void decide("approve")}
+      />
       <ErrorNotice error={error || action.error} />
       {!!action.result && (
         <Card style={{ marginTop: 16, backgroundColor: colors.green, padding: 18 }}>
@@ -885,21 +737,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
               disabled={needsCode && !codeReady(code)}
               onPress={() => void decide("approve")}
             >
-              {app && typeof d.amountUsd === "number"
-                ? `Approve purchase · $${d.amountUsd.toFixed(2)}`
-                : signin
-                  ? d.step === "code"
-                    ? "Approve · enter the code"
-                    : `Approve · sign in as ${String(d.username || "you")}`
-                  : step
-                    ? `Approve · ${d.action === "press" ? "send the form" : `click “${String(d.element || "")}”`}`
-                    : app
-                      ? "Approve & run"
-                      : w.mode === "sample"
-                        ? "Approve locally"
-                        : email
-                          ? "Approve & send"
-                          : "Approve change"}
+              {approveLabel(action, w.mode === "sample")}
             </Button>
             {action.kind !== "calendar.delete" && !app && !step && !signin && !agentMail && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
@@ -918,6 +756,222 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       )}
     </Sheet>
   );
+}
+/** What an action will do, exactly: shared by the review sheet and the Approve card on a call. */
+export function ReviewBody({
+  action,
+  code,
+  onCode,
+  onSubmit,
+  onCall = false,
+  style,
+}: {
+  action: ActionProposal;
+  code: string;
+  onCode?: (code: string) => void;
+  onSubmit: () => void;
+  /** On a live call: nothing here may open another sheet (it would end the call). */
+  onCall?: boolean;
+  /** Inside another card: no box of its own. */
+  style?: ViewStyle;
+}) {
+  const { workspace: w, api, open } = useWorkspace();
+  const d = action.data;
+  const agentMail = action.kind === "agent_email.send";
+  const email = action.kind === "email.send" || agentMail;
+  const app = action.kind === "app.action";
+  const step = action.kind === "browser.step";
+  const signin = action.kind === "browser.signin";
+  const stepBrowser = step || signin ? w.browsers.find((b) => b.id === d.sessionId) : undefined;
+  return (
+    <Card style={{ gap: 13, ...style }}>
+      {agentMail ? (
+        <ReviewLine label="From" value={`${String(d.from || "")} (your agent)`} />
+      ) : (
+        !app &&
+        !step &&
+        !signin && <ReviewLine label="Account" value={action.account || w.profile.email} />
+      )}
+      {step ? (
+        <>
+          <ReviewLine label="Website" value={String(d.site || "")} />
+          <ReviewLine label="Page" value={String(d.pageTitle || d.url || "")} />
+          <ReviewLine
+            label="Your agent will"
+            value={
+              d.action === "press"
+                ? "Press Enter to send the form"
+                : `Click “${String(d.element || "")}”`
+            }
+          />
+          {stepBrowser?.status === "active" && stepBrowser.previewUrl && (
+            <Image
+              source={{ uri: api.url(stepBrowser.previewUrl) }}
+              resizeMode="contain"
+              accessibilityLabel={`The page on ${String(d.site || "the site")} right now`}
+              style={{
+                width: "100%",
+                height: 220,
+                borderRadius: 10,
+                backgroundColor: colors.subtle,
+              }}
+            />
+          )}
+          <Text style={s.small}>
+            Your agent does this only if the page still shows “{String(d.element || "")}” on{" "}
+            {String(d.site || "the site")}.
+            {stepBrowser?.status === "active"
+              ? onCall
+                ? " To check or change anything first, take control of the browser after the call."
+                : " To check or change anything first, take control of the browser."
+              : ""}
+          </Text>
+          {stepBrowser?.status === "active" && !onCall && (
+            <Button
+              small
+              icon={Globe2}
+              style={{ alignSelf: "flex-start" }}
+              onPress={() => open({ type: "browser", browser: stepBrowser })}
+            >
+              Take control
+            </Button>
+          )}
+        </>
+      ) : signin ? (
+        <SignInReview
+          data={d}
+          previewUrl={
+            stepBrowser?.status === "active" && stepBrowser.previewUrl
+              ? api.url(stepBrowser.previewUrl)
+              : undefined
+          }
+          code={code}
+          onCode={onCode}
+          onSubmit={onSubmit}
+        />
+      ) : app ? (
+        <>
+          <ReviewLine label="App" value={String(d.app || "")} />
+          <ReviewLine label="Action" value={String(d.tool || "")} />
+          <ReviewLine label="What will happen" value={String(d.summary || "")} />
+          {typeof d.amountUsd === "number" && (
+            <ReviewLine label="Amount" value={`$${d.amountUsd.toFixed(2)} (USD)`} />
+          )}
+          <View style={s.divider} />
+          <Text style={s.label}>Exact details sent</Text>
+          <Text
+            selectable
+            style={[
+              s.text,
+              {
+                fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                fontSize: 12,
+                lineHeight: 19,
+              },
+            ]}
+          >
+            {JSON.stringify(d.arguments ?? {}, null, 2)}
+          </Text>
+          <Text style={s.small}>
+            Only these details are sent. Depending on the action, the app may notify other people.
+          </Text>
+        </>
+      ) : email ? (
+        <>
+          <ReviewLine label="To" value={arrayText(d.to)} />
+          {!agentMail && (
+            <>
+              <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
+              <ReviewLine label="Bcc" value={arrayText(d.bcc) || "None"} />
+            </>
+          )}
+          <ReviewLine label="Subject" value={String(d.subject || "")} />
+          {agentMail && !!d.inReplyTo && (
+            <ReviewLine label="Sent as" value="A reply in the same thread" />
+          )}
+          <View style={s.divider} />
+          <Text selectable style={[s.text, { lineHeight: 25 }]}>
+            {String(d.body || "")}
+          </Text>
+          <View style={s.divider} />
+          <Text style={s.label}>Attachments</Text>
+          {agentMail ? (
+            <Text style={s.muted}>No attachments</Text>
+          ) : Array.isArray(d.attachmentIds) && d.attachmentIds.length ? (
+            d.attachmentIds.map((id) => {
+              const file = w.files.find((f) => f.id === id);
+              return (
+                <Text key={String(id)} style={s.text}>
+                  {file?.name || String(id)} · version {String(id).slice(-8)}
+                </Text>
+              );
+            })
+          ) : (
+            <Text style={s.muted}>No attachments</Text>
+          )}
+        </>
+      ) : (
+        <>
+          <ReviewLine label="Event" value={String(d.title || "")} />
+          {action.kind !== "calendar.delete" && (
+            <>
+              <ReviewLine
+                label="Starts"
+                value={
+                  d.allDay
+                    ? String(d.start || "")
+                    : `${dateLabel(String(d.start || ""), { year: "numeric", month: "short", day: "numeric", timeZone: String(d.timeZone || "UTC") })} · ${timeLabel(String(d.start || ""), String(d.timeZone || "UTC"))}`
+                }
+              />
+              <ReviewLine
+                label="Ends"
+                value={
+                  d.allDay
+                    ? `${String(d.end || "")} (exclusive)`
+                    : `${dateLabel(String(d.end || ""), { year: "numeric", month: "short", day: "numeric", timeZone: String(d.timeZone || "UTC") })} · ${timeLabel(String(d.end || ""), String(d.timeZone || "UTC"))}`
+                }
+              />
+              <ReviewLine label="Time zone" value={String(d.timeZone || "")} />
+              <ReviewLine label="All day" value={d.allDay ? "Yes" : "No"} />
+              <ReviewLine label="Location" value={String(d.location || "None")} />
+              <ReviewLine label="Attendees" value={arrayText(d.attendees) || "Just you"} />
+              <ReviewLine label="Notes" value={String(d.description || "None")} />
+            </>
+          )}
+          <ReviewLine label="Calendar" value={String(d.calendarId || "primary")} />
+          <Text style={s.small}>
+            {action.kind === "calendar.delete"
+              ? "This removes the event and may notify its attendees."
+              : "Attendees may receive an invitation or update from your connected calendar."}
+          </Text>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** The Approve button's words: what approving does. */
+export function approveLabel(action: ActionProposal, sample = false) {
+  const d = action.data;
+  const app = action.kind === "app.action";
+  const step = action.kind === "browser.step";
+  const signin = action.kind === "browser.signin";
+  const email = action.kind === "email.send" || action.kind === "agent_email.send";
+  return app && typeof d.amountUsd === "number"
+    ? `Approve purchase · $${d.amountUsd.toFixed(2)}`
+    : signin
+      ? d.step === "code"
+        ? "Approve · enter the code"
+        : `Approve · sign in as ${String(d.username || "you")}`
+      : step
+        ? `Approve · ${d.action === "press" ? "send the form" : `click “${String(d.element || "")}”`}`
+        : app
+          ? "Approve & run"
+          : sample
+            ? "Approve locally"
+            : email
+              ? "Approve & send"
+              : "Approve change";
 }
 const appLabel = (app: string) =>
   app.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "this app";

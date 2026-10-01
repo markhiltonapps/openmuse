@@ -48,6 +48,7 @@ import { useAgentWorkspace } from "./agent-workspace";
 import { AppAlertsCard } from "./app-alerts-ui";
 import { PlaceAnchor } from "./app-places-ui";
 import { AppearanceCard } from "./appearance-ui";
+import { ApprovalCard } from "./approval-card";
 import { AlwaysAllowedCard, AppPermissionsCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
 import { AssistantResponse } from "./assistant-response";
@@ -269,7 +270,18 @@ export function ChatWork() {
 }
 export function AgentActivityScreen() {
   const { data } = useAgentWorkspace();
+  const { workspace } = useWorkspace();
   const [filter, setFilter] = useState("All");
+  // What's waiting for their OK comes first, with its Approve button, above all the jobs. A card
+  // stays (showing what happened) for the rest of this visit after it's decided.
+  const waiting = workspace.actions
+    .filter((action) => action.status === "awaiting_review")
+    .filter((action) => Date.parse(action.expiresAt) > Date.now());
+  const seen = useRef(new Set<string>());
+  for (const action of waiting) seen.current.add(action.id);
+  const cards = workspace.actions
+    .filter((action) => seen.current.has(action.id))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const tasks = [...(data?.tasks || [])]
     .filter(
       (task) =>
@@ -279,6 +291,20 @@ export function AgentActivityScreen() {
   return (
     <View style={{ gap: 20 }}>
       <AgentStatus />
+      {cards.length > 0 && (
+        <View>
+          <PlaceAnchor id="reviews" label="Needs your OK">
+            <SectionHeading
+              title={waiting.length ? `Needs your OK · ${waiting.length}` : "Just decided"}
+            />
+          </PlaceAnchor>
+          <View style={{ gap: 10 }}>
+            {cards.map((action) => (
+              <ApprovalCard key={action.id} actionId={action.id} wide eyebrow={false} />
+            ))}
+          </View>
+        </View>
+      )}
       <View style={[s.row, { gap: 8 }]}>
         {["All", "In progress", "Finished"].map((item) => (
           <Button key={item} small primary={filter === item} onPress={() => setFilter(item)}>
@@ -296,7 +322,7 @@ export function AgentActivityScreen() {
           detail="Tap New job, or ask in Chat. Each job and its result stays here."
         />
       )}
-      <PlaceAnchor id="reviews" label="Reviews & receipts">
+      <PlaceAnchor id={cards.length ? "receipts" : "reviews"} label="Reviews & receipts">
         <SectionHeading title="Reviews & receipts" />
       </PlaceAnchor>
       <ActivityScreen />
