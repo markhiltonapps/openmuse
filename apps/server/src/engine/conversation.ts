@@ -49,30 +49,18 @@ import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-br
 import type { VoiceSession } from "../voice-live.ts";
 import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
+import { localNow } from "./clock.ts";
 import { builtInMailOff, mailContext } from "./mailboxes.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
 
-/** "Sunday, September 27, 2026 at 8:45 PM (America/Chicago)", so the agent can place "tomorrow at 3". */
+export { localNow };
 /**
  * Tool steps one chat reply may take. Ordinary requests now take several: finding an app action
  * and running it, or opening a page, looking at it and clicking through a site. Each step after
  * the first rereads the conversation from the prompt cache, so a long reply costs little more.
  */
 export const CHAT_STEPS = 20;
-
-export function localNow(timeZone: string, now = Date.now()) {
-  const text = new Date(now).toLocaleString("en-US", {
-    timeZone,
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${text} (${timeZone})`;
-}
 
 export class ConversationAgent extends AbstractAgent {
   constructor(

@@ -203,6 +203,72 @@ test("with Gmail connected under Apps, a job reads email there, not from the bui
   }
 });
 
+test("a job can do what the chat does: reminders, plans, people, About you, the calendar", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "openmuse-model-chat-tools-"));
+  const db = await createStore();
+  const reminder = { text: "Call the dentist", inMinutes: 60 };
+  const calls: { name: string; arguments: object }[] = [
+    { name: "set_reminder", arguments: reminder },
+    // Run again (as after an approval), it's still one reminder.
+    { name: "set_reminder", arguments: reminder },
+    { name: "look_at_calendar", arguments: {} },
+    { name: "finish_task", arguments: { summary: "I'll remind you in an hour." } },
+  ];
+  const { requests } = await modelFixture(t, (index) => calls[index]);
+  const server = await createApp(db, {
+    mode: "sample",
+    port: 8787,
+    host: "127.0.0.1",
+    publicUrl: "http://localhost:8787",
+    dataDir: directory,
+    agentBackend: "model",
+    intelligenceApiKey: "test-project-key-never-sent",
+    model: "openai/fixture",
+    googleRedirectUri: "http://localhost:8787/api/google/callback",
+    allowedOrigins: [],
+  });
+  try {
+    const task = await server.agent.createTask("tools-owner", {
+      prompt: "Remind me in an hour to call the dentist, and check what's on today",
+    });
+    await server.agent.worker.tick();
+    const saved = await server.agent.getTask("tools-owner", task.id);
+    assert.equal(saved.status, "succeeded", saved.error ?? saved.question);
+    const offered = requests[0].body;
+    for (const name of [
+      "set_reminder",
+      "list_reminders",
+      "track_commitment",
+      "look_up_person",
+      "note_person",
+      "save_about_person",
+      "look_at_calendar",
+      "set_home_area",
+      "share_file",
+      "make_mini_app",
+    ])
+      assert.ok(offered.includes(`"name":"${name}"`), `${name} is offered`);
+    // Setting up something recurring stays in the chat.
+    for (const name of ["create_routine", "watch_page", "create_email_rule", "delegate_task"])
+      assert.ok(!offered.includes(`"name":"${name}"`), `${name} isn't offered`);
+    // It knows today's date and time, for "in an hour" and "last week".
+    assert.match(offered, /It's [A-Z][a-z]+day, [A-Z][a-z]+ \d{1,2}, \d{4} at \d{1,2}:\d{2}/);
+    const reminders = await db.list<{ text: string }>("tools-owner", "reminders");
+    assert.deepEqual(
+      reminders.map((item) => item.text),
+      ["Call the dentist"],
+    );
+    // No card in a job, so the calendar doesn't claim one.
+    assert.ok(
+      !requests.some((request) => request.body.includes("on the person's screen as a card")),
+    );
+  } finally {
+    await server.agent.stop();
+    await db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the model worker takes a reply without tools as the job's answer", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "openmuse-model-text-"));
   const db = await createStore();

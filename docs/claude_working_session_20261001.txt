@@ -525,6 +525,17 @@ PENDING
   workspace. 465 tests pass. Owner's choice: mail fix now; giving jobs everything the chat can do
   (reminders, plans, people, About you, own apps, calendar card…) is next (#149), then the help
   guide resumes.
+- Jobs can do what the chat does (#149): set, list, change and cancel reminders (keyed to the job,
+  so a job that runs again after an approval doesn't add a second one), plans & bookings, people
+  notes, About you, look_at_calendar (a job variant that claims no card and asks with ask_user),
+  set_home_area, share links and mini apps (kept in Files). The job's prompt now has today's date
+  and time in their time zone (it had none, so "in an hour" or "last week" was a guess), the
+  people list and what's coming up. Left in the chat on purpose: setting up anything recurring
+  (routines, page watches, email rules, app alerts) and starting another job, so a routine's job
+  can't set up more of itself each run; also the chat-only cards (show_approvals, show_in_app,
+  maps and products, find_table; a job works OpenTable with its own browser). localNow moved to
+  engine/clock.ts. Tests: model-worker (tools offered and not, date line, one reminder after a
+  repeat), day-tools (background calendar). 467 tests pass.
 - Owner asked for a separate agent to propose a better layout for the ☰ menu and the side chats
   (impeccable + the Design division looping to sign-off). Running in the background; proposals
   only, no project files.

@@ -181,6 +181,9 @@ export class MiniApps {
 
 export const miniAppInstructions =
   " When a small interactive tool or a visual summary would help more than text (a trip planner, a packing checklist, a tip or loan calculator, a budget or habit dashboard, a comparison table), build a mini app with make_mini_app: one self-contained HTML page. It appears in chat for the person to open, and they can share it by link. To change one, call make_mini_app again with its id.";
+/** For a background job, whose mini apps are found in Files rather than in a chat. */
+export const miniAppJobInstructions =
+  " When the job asks for a small interactive tool or a visual summary (a trip planner, a checklist, a calculator, a budget or habit dashboard), build it with make_mini_app: one self-contained HTML page. It's kept in Files & media for the person to open, and they can share it by link. To change one, call make_mini_app again with its id.";
 
 export function miniAppToolSpecs(apps: MiniApps, owner: string) {
   return [

@@ -60,6 +60,37 @@ test("look_at_calendar reads the person's own days, in their time zone, with rem
   assert.match(empty.note ?? "", /No calendar app is connected/);
 });
 
+test("in a background job, look_at_calendar claims no card and asks with ask_user", async () => {
+  const job = calendarToolSpec(
+    {
+      between: async () => ({
+        events: [
+          {
+            id: "e1",
+            title: "Dentist",
+            start: "2026-10-01T21:00:00Z",
+            end: "2026-10-01T22:00:00Z",
+            allDay: false,
+            app: "outlook",
+          },
+        ],
+        checked: ["outlook"],
+        failed: ["googlecalendar"],
+      }),
+      timeZone: async () => "America/Chicago",
+      now: () => NOW,
+    },
+    "owner",
+    { background: true },
+  );
+  assert.doesNotMatch(job.description, /shown|card/);
+  const day = await job.execute({});
+  assert.equal(day.events.length, 1);
+  assert.equal(day.shown, undefined);
+  assert.match(day.next ?? "", /ask_user/);
+  assert.doesNotMatch(day.next ?? "", /Connect card/);
+});
+
 test("the app's own calendar joins the calendar apps, each meeting once, all-day first", () => {
   const apps: TodayCalendar = {
     events: [

@@ -59,11 +59,15 @@ export function calendarToolSpec(
     now?: () => number;
   },
   owner: string,
+  /** A background job: nothing is on the person's screen, and it asks them with ask_user. */
+  options: { background?: boolean } = {},
 ) {
+  const background = Boolean(options.background);
   return {
     name: "look_at_calendar",
-    description:
-      "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week. Use it for 'what's on today / tomorrow / this week' and 'what does my day look like'. When the result has `shown`, they can see it as a card: answer in a sentence or two and don't list every event.",
+    description: background
+      ? "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week."
+      : "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week. Use it for 'what's on today / tomorrow / this week' and 'what does my day look like'. When the result has `shown`, they can see it as a card: answer in a sentence or two and don't list every event.",
     parameters: z.object({
       date: z
         .string()
@@ -94,16 +98,21 @@ export function calendarToolSpec(
         ...(calendar.failed.length
           ? {
               couldNotRead: calendar.failed,
-              next: "Some calendars couldn't be read. If list_connected_apps shows one needs reconnecting, call connect_app so its Connect card appears. Otherwise, tell them it couldn't be read just now.",
+              next: background
+                ? "Some calendars couldn't be read. If list_connected_apps shows one needs reconnecting, call connect_app and give them its link with ask_user. Otherwise, say it couldn't be read just now."
+                : "Some calendars couldn't be read. If list_connected_apps shows one needs reconnecting, call connect_app so its Connect card appears. Otherwise, tell them it couldn't be read just now.",
             }
           : {}),
         ...(calendar.checked.length
           ? {}
           : {
-              note: "No calendar app is connected, so this has only their reminders. Offer to connect one with connect_app.",
+              note: background
+                ? "No calendar app is connected, so this has only their reminders."
+                : "No calendar app is connected, so this has only their reminders. Offer to connect one with connect_app.",
             }),
-        // Only when there's something to show (a call shows no card for an empty day).
-        ...(calendar.events.length || due.length
+        // Only when there's something to show (a call shows no card for an empty day); a job
+        // shows nothing.
+        ...(!background && (calendar.events.length || due.length)
           ? {
               shown:
                 "This is on the person's screen as a card; don't list every event in your reply.",

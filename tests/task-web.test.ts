@@ -145,6 +145,8 @@ test("a background job works a website: reads it, downloads, and stops before pa
     files: {},
     browser,
     workspace: { connected: async () => false },
+    people: { index: async () => "" },
+    timeZone: async () => "America/Chicago",
     db: { get: async () => null, list: async () => [] },
     usage: {
       sink: () => () => undefined,
@@ -209,6 +211,8 @@ test("a job that doesn't name the site asks which one, in the agent's own words"
     files: {},
     browser: {},
     workspace: { connected: async () => false },
+    people: { index: async () => "" },
+    timeZone: async () => "America/Chicago",
     db: { get: async () => null, list: async () => [] },
     usage: { sink: () => () => undefined, cost: () => 0.001 },
   } as unknown as AgentService;
