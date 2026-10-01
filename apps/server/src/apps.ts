@@ -772,7 +772,7 @@ export function appToolSpecs(
             own: true,
             ...(result.url ? { url: result.url } : {}),
             instructions:
-              "This is the person's own app: they connect it on its Connect card (checking its address, then signing in on its page or adding its access key). Never ask for a key or password.",
+              "This is the person's own app: they connect it themselves, checking its address and then signing in on its page or adding its access key. Never ask for a key or password.",
           };
         return {
           app,

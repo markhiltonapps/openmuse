@@ -94,7 +94,7 @@ export function calendarToolSpec(
         ...(calendar.failed.length
           ? {
               couldNotRead: calendar.failed,
-              next: "Some calendars couldn't be read. If list_connected_apps shows one needs reconnecting, call connect_app so its Connect card appears.",
+              next: "Some calendars couldn't be read. If list_connected_apps shows one needs reconnecting, call connect_app so its Connect card appears. Otherwise, tell them it couldn't be read just now.",
             }
           : {}),
         ...(calendar.checked.length

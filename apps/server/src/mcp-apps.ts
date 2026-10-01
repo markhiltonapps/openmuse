@@ -697,7 +697,7 @@ export class McpApps {
     const { app, tool } = await this.find(owner, slug);
     if (app.status !== "connected")
       throw new AppError(
-        `${app.name} isn't connected right now. Call connect_app so the person can connect it again on its card, then try again.`,
+        `${app.name} isn't connected right now. Call connect_app so the person can connect it again, then try again.`,
         409,
       );
     const provider = app.key ? undefined : new StoredProvider(this, owner, app);
@@ -718,7 +718,7 @@ export class McpApps {
         }));
         throw new AppError(
           app.key
-            ? `${app.name} didn't accept its access key. Call connect_app so the person can add a new one on its card, then try again.`
+            ? `${app.name} didn't accept its access key. Call connect_app so the person can add a new one, then try again.`
             : `The sign-in to ${app.name} has expired. Call connect_app so the person can sign in again, then try again.`,
           409,
         );
@@ -896,7 +896,7 @@ export function ownAppToolSpecs(apps: AppConnector | undefined, owner: string) {
         const { app } = await apps.mine.add(owner, input, "agent");
         return {
           saved: { id: app.id, name: app.name, address: app.host, status: app.status },
-          next: "Its Connect card is on their screen now. Say its address so they can check it, and that it stays off until they tap Connect on the card.",
+          next: "Its Connect card is on their screen now. Say the address in saved.address (the site's name, not the full link) so they can check it, and that it stays off until they tap Connect on the card.",
         };
       },
     },

@@ -426,7 +426,7 @@ test("on a call, a Connect button, an own app, emails and the calendar go on scr
     },
   ]);
   assert.match(VOICE_RULES, /a Connect button for it appears on their screen/);
-  assert.match(VOICE_RULES, /they can say “done” once they've signed in/);
+  assert.match(VOICE_RULES, /they can say “done” once they've connected it/);
   assert.match(VOICE_RULES, /Never read a link out/);
   // After the call, the chat agent knows what was shown, without the sign-in link.
   const text = shownText([

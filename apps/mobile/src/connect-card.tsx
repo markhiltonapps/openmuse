@@ -57,7 +57,7 @@ export function ownAppRequest(result: unknown): { id: string; name: string } | u
 /** Once connected: on a call they say so (only if they just connected it here), in the chat it's sent. */
 const connectedLine = (agent: string, onCall: boolean, tapped: boolean, over: boolean) =>
   onCall && tapped && over
-    ? `Choose “Talk again” and ${agent} will carry on.`
+    ? `Choose “Talk again” and say you’ve connected it.`
     : onCall && tapped
       ? `Say “done” and ${agent} will carry on.`
       : !onCall && tapped
@@ -313,7 +313,7 @@ export function ConnectCard({
       : phase === "checking"
         ? "Checking…"
         : phase === "notYet"
-          ? `Not connected yet. If you’ve finished signing in to ${name}, choose “I’ve signed in”.`
+          ? `Not connected yet. Finish signing in to ${name}, or open the sign-in page again if it closed.`
           : phase === "away"
             ? `Finish signing in to ${name} in the new tab, then come back here.`
             : info?.needsReconnect
@@ -347,7 +347,11 @@ export function ConnectCard({
               primary={phase !== "away"}
               icon={Plug}
               busy={phase === "opening" || phase === "checking"}
-              accessibilityLabel={`${again ? "Open the sign-in page again" : `Connect ${name}`} (opens the sign-in page for ${name} in a new tab)`}
+              accessibilityLabel={
+                again
+                  ? `Open the sign-in page again for ${name} (new tab)`
+                  : `Connect ${name} (new tab)`
+              }
               onPress={() => void connect()}
             >
               {again ? "Open the sign-in page again" : `Connect ${name}`}
@@ -443,7 +447,7 @@ export function OwnAppCard({
       : phase === "checking"
         ? "Checking…"
         : phase === "notYet"
-          ? `Not connected yet. If you’ve finished signing in to ${name}, choose “I’ve signed in”.`
+          ? `Not connected yet. Finish signing in to ${name}, or open the sign-in page again if it closed.`
           : phase === "away"
             ? `Finish signing in to ${name} in the new tab, then come back here.`
             : status === "needs_key"
@@ -511,7 +515,7 @@ export function OwnAppCard({
               busy={phase === "opening" || phase === "checking"}
               accessibilityLabel={
                 phase === "notYet" || phase === "away"
-                  ? `Open the sign-in page again for ${name}`
+                  ? `Open the sign-in page again for ${name} (new tab)`
                   : status === "needs_sign_in"
                     ? `Sign in to ${name}`
                     : status === "error"

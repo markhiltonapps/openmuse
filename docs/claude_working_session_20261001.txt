@@ -417,6 +417,17 @@ PENDING
   - 459 tests pass. Owner said "push it" while round 2 sign-off was still running; pushed with
     cd26e49 and 66aaa78 (no live call in the last 80 minutes). Any round 2 finding comes as a
     follow-up commit.
+  - Pushed c98526d (with cd26e49 and 66aaa78): api and web deployed SUCCESS at 16:29 UTC; the api
+    log says "Live voice on (gpt-live-1, voice marin)". The worker was SKIPPED (unchanged).
+  - Copy round 2 (after the push), fixed locally:
+    - the not-yet line points at the way out;
+    - an ended call's card says "Choose “Talk again” and say you’ve connected it.";
+    - tool messages shared with jobs no longer mention a card (jobs get "under Apps → Your own
+      apps" for their own app);
+    - add_own_app says the site's name, not the full link;
+    - VOICE_RULES also covers add_own_app;
+    - "(new tab)" labels;
+    - an empty calendar that couldn't be read says just that.
   - Not tested live (sandbox): OpenAI's own silence limit during a long sign-in; the Composio
     sign-in tab on Android; Gmail emails' real shape from GMAIL_FETCH_EMAILS (emailsIn reads
     messageId/subject/sender/messageText, as mail alerts do).

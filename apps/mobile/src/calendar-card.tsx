@@ -131,7 +131,10 @@ export function CalendarCard({
       {/* What's missing goes first, so the list below isn't taken as everything. */}
       {noCalendar || either ? (
         <Text style={[s.small, { fontSize: 13, lineHeight: 18, color: colors.mutedStrong }]}>
-          {noCalendar || `Couldn’t read ${either} just now, so this may not be everything.`}
+          {noCalendar ||
+            (empty
+              ? `Couldn’t read ${either} just now.`
+              : `Couldn’t read ${either} just now, so this may not be everything.`)}
         </Text>
       ) : null}
       {empty ? (
