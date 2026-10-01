@@ -379,6 +379,20 @@ PENDING
      type in the middle of a call.
   4. One tap to talk; it hangs up after a quiet spell (no always-on mic, no paid minutes on open).
   Next: Design division mockups for the owner before building, then slices.
+  Mockups (owner said go ahead): Design canvas "Voice-first Neddy",
+  https://claude.ai/artifact/BtBBZ1putcaikhewiz8g58 (private to the owner), seven screens:
+  1. opens here (avatar, greeting, today in one line, the conversation, a big "Tap to talk"
+     with Type and Add beside it, and suggested things to say);
+  2. talking (avatar small with a listening ring and timer, one running conversation with
+     cards inline, "Said"/"Typed" under the person's turns, the live caption as a dashed
+     bubble, then Mute / End / Type);
+  3. "show my Activity": the call shrinks to a dark bar on top with the latest line said;
+  4. typing an address mid-call;
+  5. the menu ("Everything"), each place with something to say for it;
+  6. talking, dark;
+  7. Windows: the screen opens beside the conversation, with call controls in the header.
+  Generator: scratchpad voicefirst/gen.py. Waiting on the owner's comments before planning
+  the build.
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk
