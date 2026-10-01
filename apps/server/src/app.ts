@@ -1244,6 +1244,11 @@ export async function createApp(
       201,
     );
   });
+  // One file, with a fresh signed link (links from earlier expire).
+  app.get("/api/files/:id", async (c) => {
+    const owner = c.get("owner");
+    return c.json(files.signed(owner, await files.get(owner, c.req.param("id"))));
+  });
   app.get("/api/files/:id/content", async (c) => {
     const file = await files.get(c.get("owner"), c.req.param("id"));
     // PDFs and pictures open in the browser; Office, CSV and text files download.
@@ -1317,6 +1322,10 @@ export async function createApp(
   });
   app.get("/api/voice/live/recent", async (c) =>
     c.json({ sessions: await liveVoice.recent(c.get("owner")) }),
+  );
+  // What a call showed on screen instead of reading it out (during the call and after).
+  app.get("/api/voice/live/:id/details", async (c) =>
+    c.json({ details: await liveVoice.details(c.get("owner"), c.req.param("id")) }),
   );
   app.get("/api/persona", async (c) => c.json({ facts: await agent.persona.list(c.get("owner")) }));
   app.post("/api/persona/:key", async (c) =>

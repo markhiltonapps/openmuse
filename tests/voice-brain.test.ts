@@ -8,12 +8,14 @@ import { createStore } from "../apps/server/src/db.ts";
 import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
 import type { HealthEntry } from "../apps/server/src/health.ts";
 import {
+  spokenCallText,
   VOICE_RULES,
   type VoiceBrain,
   voiceAnswer,
   voiceToday,
 } from "../apps/server/src/voice-brain.ts";
 import { liveInstructions, type VoiceSession } from "../apps/server/src/voice-live.ts";
+import type { CallDetail } from "../packages/domain/src/voice.ts";
 
 // 2 pm in Chicago on 1 October.
 const NOW = Date.parse("2026-10-01T19:00:00Z");
@@ -244,4 +246,106 @@ test("a finished call is added to the chat as one message, once", async () => {
   const again = await add();
   assert.ok(!again.some((e) => e.type === EventType.TEXT_MESSAGE_START));
   await db.close();
+});
+
+test("a long answer goes on screen: shown results are collected for the call, failures and plain searches aren't", async () => {
+  const tool = (id: string, name: string, result: unknown) => [
+    { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,
+    { type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent,
+    {
+      type: EventType.TOOL_CALL_RESULT,
+      toolCallId: id,
+      messageId: randomUUID(),
+      content: JSON.stringify(result),
+    } as BaseEvent,
+  ];
+  const product = {
+    title: "Roomba j7",
+    price: "$299",
+    store: "Target",
+    url: "https://target.com/j7",
+  };
+  const { brain, runs } = await brainFixture([
+    ...tool("t1", "search_web", { results: [{ title: "Best vacuums", url: "https://a.com" }] }),
+    ...tool("t2", "show_products", { title: "Robot vacuums", products: [product] }),
+    ...tool("t3", "show_places", { error: "The place lookup didn't answer" }),
+    ...tool("t4", "show_on_screen", {
+      title: "How they compare",
+      text: "- **j7**: best",
+      next: "x",
+    }),
+    ...tool("t5", "create_document", { id: "f1", name: "Vacuums.pdf", pages: 2, message: "x" }),
+    {
+      type: EventType.TEXT_MESSAGE_CHUNK,
+      messageId: "r",
+      delta: "Three good ones are on your screen.",
+    } as BaseEvent,
+  ]);
+  const shown: { items: CallDetail["items"]; title?: string }[] = [];
+  const answer = await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d1",
+    turns: [{ role: "user", text: "Find me a robot vacuum" }],
+    progress: () => {},
+    show: (items, title) => shown.push({ items, title }),
+    signal: new AbortController().signal,
+  });
+  assert.equal(answer, "Three good ones are on your screen.");
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0]?.title, "Robot vacuums");
+  assert.deepEqual(shown[0]?.items, [
+    { tool: "show_products", result: { title: "Robot vacuums", products: [product] } },
+    { tool: "show_on_screen", result: { title: "How they compare", text: "- **j7**: best" } },
+    { tool: "create_document", result: { id: "f1", name: "Vacuums.pdf", pages: 2 } },
+  ]);
+  // The voice is told to put long answers on screen.
+  assert.match(VOICE_RULES, /show_on_screen/);
+  // A later question in the call knows what's already on their screen.
+  const earlier: CallDetail = {
+    id: "d1",
+    at: "2026-10-01T19:40:30Z",
+    question: "Find me a robot vacuum",
+    title: "Robot vacuums",
+    items: shown[0]?.items ?? [],
+  };
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d2",
+    turns: [{ role: "user", text: "What's the Roomba's price?" }],
+    progress: () => {},
+    shown: [earlier],
+    signal: new AbortController().signal,
+  });
+  assert.match(runs[1]?.context[1]?.description ?? "", /Shown on their screen earlier/);
+  assert.match(
+    runs[1]?.context[1]?.value ?? "",
+    /Roomba j7\]\(https:\/\/target\.com\/j7\) · \$299/,
+  );
+  // In the saved call, what was shown is written out for the chat agent.
+  const text = spokenCallText(
+    {
+      id: "live_9",
+      startedAt: "2026-10-01T19:40:00Z",
+      endedAt: "2026-10-01T19:41:00Z",
+      seconds: 60,
+      turns: [{ role: "user", text: "Find me a robot vacuum" }],
+      details: [
+        {
+          id: "d1",
+          at: "2026-10-01T19:40:30Z",
+          question: "Find me a robot vacuum",
+          title: "Robot vacuums",
+          items: shown[0]?.items ?? [],
+        },
+      ],
+    },
+    "Neddy",
+    "America/Chicago",
+  );
+  assert.match(text, /\n\nShown on screen during the call:\n\n### Robot vacuums\n/);
+  assert.match(text, /- \[Roomba j7\]\(https:\/\/target\.com\/j7\) · \$299 · Target/);
+  assert.match(text, /- \*\*j7\*\*: best/);
+  assert.match(text, /- Vacuums\.pdf \(saved in Files\)/);
 });

@@ -1098,7 +1098,7 @@ export function ChatScreen({
                         {text}
                       </Text>
                     ) : spokenCall ? (
-                      <SpokenCall text={text} />
+                      <SpokenCall text={text} id={message.id.slice("spoken-".length)} />
                     ) : (
                       <AssistantResponse content={text} />
                     )}

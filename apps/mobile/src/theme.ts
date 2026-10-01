@@ -54,6 +54,8 @@ const light = {
   subtle: "#F1F2F3",
   /** The agent's chat bubbles and tool cards. */
   bubble: "#EEEEF0",
+  /** A dividing line inside a chat bubble (line is the bubble's own colour in light mode). */
+  bubbleLine: "#D6D8DB",
   errorBg: "#FBEFED",
   /** Toasts and checked boxes: the opposite of the page. */
   inverse: "#11191C",
@@ -81,6 +83,7 @@ const night: typeof light = {
   surface: "#1C1C1F",
   subtle: "#2A2A2E",
   bubble: "#1C1C1F",
+  bubbleLine: "#2E2E33",
   errorBg: "#3A1D1B",
   inverse: "#F3F3F5",
   onInverse: "#000000",

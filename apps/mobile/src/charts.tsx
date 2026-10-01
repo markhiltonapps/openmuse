@@ -613,12 +613,15 @@ export function Segmented<T extends string>({
   value,
   onChange,
   label,
+  align = "start",
 }: {
   options: { id: T; label: string }[];
   value: T;
   onChange: (id: T) => void;
   /** What the choice is, for a screen reader: "Time range". */
   label: string;
+  /** Where it sits when it doesn't fill the width. */
+  align?: "start" | "center";
 }) {
   const [room, setRoom] = useState(0);
   const refs = useRef<Record<string, { focus?: () => void } | null>>({});
@@ -633,7 +636,7 @@ export function Segmented<T extends string>({
         aria-label={label}
         style={{
           flexDirection: "row",
-          alignSelf: stretch ? "stretch" : "flex-start",
+          alignSelf: stretch ? "stretch" : align === "center" ? "center" : "flex-start",
           paddingHorizontal: 3,
           borderRadius: 22,
           backgroundColor: colors.subtle,

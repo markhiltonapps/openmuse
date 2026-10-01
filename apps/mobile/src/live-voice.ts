@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
+import type { CallDetail } from "../../../packages/domain/src/voice";
 import type { MuseApi } from "./api";
 import { setLiveSpeaking, voiceSettings } from "./voice";
 
@@ -17,6 +18,8 @@ export interface LiveHandlers {
   onEnded: (reason?: string) => void;
   /** The agent is looking something up ("hold on, let me check"), and when it's done. */
   onChecking?: (checking: boolean) => void;
+  /** What the agent put on screen instead of reading it out, so far (newest last). */
+  onDetails?: (details: CallDetail[]) => void;
 }
 export interface LiveCall {
   setMuted: (muted: boolean) => void;
@@ -209,10 +212,26 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
     if (now) checkingCap = setTimeout(() => checking(false), 130_000);
     handlers.onChecking?.(now);
   };
+  // An answer is in: anything too long to say is on the server by now. A failed look is tried
+  // again twice.
+  const showDetails = (retry = 0) => {
+    if (!sessionId || !handlers.onDetails || over) return;
+    void api
+      .request<{ details: CallDetail[] }>(
+        `/api/voice/live/${encodeURIComponent(sessionId)}/details`,
+      )
+      .then(({ details }) => {
+        if (details.length && !over) handlers.onDetails?.(details);
+      })
+      .catch(() => {
+        if (retry < 2) setTimeout(() => showDetails(retry + 1), retry ? 3000 : 1000);
+      });
+  };
   const answered = () => {
     answerEvents = true;
     if (open <= 1) checking(false);
     else open -= 1;
+    showDetails();
   };
   stopChecking = () => checking(false);
   channel.onmessage = (message) => {
@@ -229,8 +248,10 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
       const now = Date.now();
       // Without answer events: after "one sec, let me check" and a pause, the voice speaking
       // again is the answer.
-      if (!answerEvents && checkingSince && now - checkingSince > 1500 && now - lastSaid > 1200)
+      if (!answerEvents && checkingSince && now - checkingSince > 1500 && now - lastSaid > 1200) {
         checking(false);
+        showDetails();
+      }
       lastSaid = now;
       handlers.onWords("assistant", event.delta);
     } else if (event.type === "session.delegation.created") checking(true);

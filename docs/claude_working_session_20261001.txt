@@ -288,11 +288,41 @@ asked to lighten them anyway)
   passes (checking status, captions). A real WebRTC loopback in Chromium reports about 0.35 while
   sound plays and 0 in silence.
 
+SHOW LONG RESULTS INSTEAD OF READING THEM (owner's picks: call screen + chat, Neddy decides)
+- Neddy says single facts out loud. For three or more items, search results, steps, a recipe or
+  links, it puts the full answer on the screen and says the one thing you most need, never asking
+  you to look while driving. Choices are named, not "the second one".
+- New tool show_on_screen (only on calls): Markdown text with bold section lines and links.
+  Products, places, image-search pictures and files made on the call are shown too.
+- The server keeps each answer's results with the call, stored before the voice is told, so the
+  screen has them when the voice says so. GET /api/voice/live/:id/details returns them. Later
+  questions in the call get what's already on screen, so "what's the Roomba's price?" is answered
+  from it.
+- Call screen: a "Conversation | Details" switch at the top (it doesn't move between views).
+  Details opens by itself when something new arrives, newest on top, scrolled to the top, with a
+  fade at the bottom. On a computer, details use the sheet's whole width.
+- The saved call in the chat shows "Details from the call" under the conversation, oldest first.
+  It shows a plain-words summary until the details load, or if they can't. The chat message
+  itself carries the summary (with links), so the chat agent can use it later.
+- Files made on a call get a fresh link when tapped (new GET /api/files/:id), since signed links
+  expire after 15 minutes. In the chat they open in the app; on the call screen in a new tab.
+- An answer that arrives after the hang-up and showed something: the bell says "The details are
+  with the call in the chat."
+- Design division: visual, usability and copy reviewers signed off in round 2. Round 1 had
+  2 + 6 + 2 MUSTs, all fixed.
+- Checks: lint, both typechecks, worker tsc, 451 tests pass (3 new: collecting shown results and
+  the summary, details kept and saved per call, the after-hang-up bell).
+
 PENDING
 -------
 - The owner tries "what did I have for lunch?" and a reminder on a real call, and says whether
   calls feel smoother on the phone.
-- Next: show long results on the call screen and in the chat instead of reading them out.
+- The owner tries a call that shows results (e.g. "find me a robot vacuum under $300").
+- Owner's choice: a document asked for on a call is made at once (shows on the call screen) or
+  run as a background job.
+- Later NICEs: collapse a chat card with many answers ("Show N more"). On the call screen, open
+  a still-fresh link without fetching, so a slow network can't trip the popup blocker. Announce
+  file-row errors with a status line.
 - Not done yet:
   - telling the voice when a job it started finishes;
   - spoken yes for low-risk actions;

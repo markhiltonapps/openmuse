@@ -144,6 +144,11 @@ Time Log — <Project Name>
   `RTCRtpReceiver.getSynchronizationSources()` (`audioLevel`, fresh when `rtpTimestamp` moves)
   rather than Web Audio, and fall back when it's absent. Batch caption updates, pass state only on
   change, and pause polling and looping animations while `liveCallOn()`.
+- **Live voice details:** store what a hand-over shows (`show()`) before the voice is told the
+  answer, so the app's fetch on `session.commentary.appended` finds it. Don't open an in-app view
+  from the call sheet (it replaces the sheet and ends the call); open links in a new tab there.
+- **Signed file links expire (15 min):** anything shown later (a saved call, a card) should fetch a
+  fresh link (`GET /api/files/:id`) when tapped, not keep the one it was given.
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
   `apps/worker` changes; other pushes show it as SKIPPED.
 - **Live voice (OpenAI gpt-live-1):** the key never reaches the browser. The server creates the

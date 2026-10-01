@@ -372,6 +372,74 @@ test("something asked just before hanging up is still done, and added to the sav
   await db.close();
 });
 
+test("what a hand-over puts on screen is there before the voice says so, and is kept with the call", async () => {
+  const { voice, sockets, db } = await setup({
+    answer: async (question) => {
+      question.show?.(
+        [{ tool: "show_on_screen", result: { title: "Robot vacuums", text: "- Roomba j7: $299" } }],
+        "Robot vacuums",
+      );
+      return "I found three under $300; they're on your screen.";
+    },
+  });
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({
+    type: "session.input_transcript.delta",
+    delta: "Find me a robot vacuum under 300",
+  });
+  await wait(450);
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_v" } });
+  await wait(100);
+  // When the voice is told the answer, the details can already be fetched.
+  assert.equal(sentOf(socket, "session.commentary.append").length, 1);
+  const during = await voice.details("owner", "live_123");
+  assert.equal(during.length, 1);
+  assert.equal(during[0]?.id, "del_v");
+  assert.equal(during[0]?.title, "Robot vacuums");
+  assert.equal(during[0]?.question, "Find me a robot vacuum under 300");
+  // Nobody else can see them.
+  assert.deepEqual(await voice.details("someone-else", "live_123"), []);
+  await voice.end("owner", "live_123");
+  // Saved with the call, and still there afterwards; the recent list leaves them out.
+  assert.equal((await voice.details("owner", "live_123"))[0]?.title, "Robot vacuums");
+  assert.ok(!("details" in ((await voice.recent("owner"))[0] ?? {})));
+  await db.close();
+});
+
+test("details found after a hang-up are with the call in the chat, and the bell says so", async () => {
+  const told: string[] = [];
+  const { voice, sockets, db } = await setup({
+    answer: (question) =>
+      new Promise((resolve) =>
+        setTimeout(() => {
+          question.show?.(
+            [{ tool: "show_on_screen", result: { title: "Vacuums", text: "- j7" } }],
+            "Vacuums",
+          );
+          resolve("The Roomba j7 is the best pick.");
+        }, 300),
+      ),
+    tell: async (_owner, _title, body) => {
+      told.push(body);
+    },
+  });
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({ type: "session.input_transcript.delta", delta: "Find me a robot vacuum" });
+  await wait(450);
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_late" } });
+  await wait(50);
+  await voice.end("owner", "live_123");
+  await wait(400);
+  assert.deepEqual(told, [
+    "The Roomba j7 is the best pick. The details are with the call in the chat.",
+  ]);
+  const saved = await db.get<VoiceSession>("owner", "voice-sessions", "live_123");
+  assert.equal(saved?.details?.[0]?.title, "Vacuums");
+  await db.close();
+});
+
 test("a server restart says what it couldn't finish, in the saved call", async () => {
   const { voice, sockets, db } = await setup({ answer: () => new Promise(() => {}) });
   await voice.start("owner", "offer");

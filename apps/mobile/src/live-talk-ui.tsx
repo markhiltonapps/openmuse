@@ -9,9 +9,14 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { type CallDetail, SHOWN_HEADING } from "../../../packages/domain/src/voice";
 import { useAgentWorkspace } from "./agent-workspace";
 import type { MuseApi } from "./api";
+import { AssistantResponse } from "./assistant-response";
 import { AgentAvatar } from "./avatar";
+import { CallDetails } from "./call-details";
+import { Segmented } from "./charts";
 import { HIDDEN } from "./job-working-ui";
 import { type LiveCall, type LiveState, liveVoiceSupported, startLive } from "./live-voice";
 import { Button, colors, ErrorNotice, Sheet, s } from "./ui";
@@ -121,6 +126,15 @@ export function LiveTalkSheet() {
   const [ended, setEnded] = useState("");
   // "Let me check": the agent is looking something up.
   const [lookingUp, setLookingUp] = useState(false);
+  // What the agent put on screen instead of reading it out, and whether it's what's showing.
+  const [details, setDetails] = useState<CallDetail[]>([]);
+  const [view, setView] = useState<"talk" | "details">("talk");
+  const detailCount = useRef(0);
+  const detailsScroller = useRef<ScrollView>(null);
+  // A new answer goes on top: show it, wherever they'd scrolled to.
+  useEffect(() => {
+    if (details.length) detailsScroller.current?.scrollTo({ y: 0, animated: false });
+  }, [details.length]);
   const call = useRef<LiveCall | undefined>(undefined);
   const scroller = useRef<ScrollView>(null);
   const [attempt, setAttempt] = useState(0);
@@ -176,6 +190,9 @@ export function LiveTalkSheet() {
     setLines([]);
     setMuted(false);
     setLookingUp(false);
+    setDetails([]);
+    setView("talk");
+    detailCount.current = 0;
     // Words arrive a few at a time, many times a second: they're gathered and shown about five
     // times a second, so the screen isn't redrawn for each one (slow phones stutter).
     let pending: Line[] = [];
@@ -199,6 +216,14 @@ export function LiveTalkSheet() {
     startLive(api, {
       onState: (next) => !cancelled && setState(next),
       onChecking: (on) => !cancelled && setLookingUp(on),
+      onDetails: (next) => {
+        // A late reply to an earlier look can't take anything away.
+        if (cancelled || next.length < detailCount.current) return;
+        // Something new: the voice is saying it's on the screen, so that's what shows.
+        if (next.length > detailCount.current) setView("details");
+        detailCount.current = next.length;
+        setDetails(next);
+      },
       onWords: (role, words) => {
         if (cancelled) return;
         const last = pending.at(-1);
@@ -288,6 +313,9 @@ export function LiveTalkSheet() {
   const short = height < 450;
   const avatar = tall ? 132 : height >= 520 ? 88 : 56;
   const captionHeight = tall ? (width >= 900 ? 220 : 200) : height >= 520 ? 140 : short ? 72 : 96;
+  const showingDetails = view === "details" && details.length > 0;
+  // The details take the avatar's room as well as the words'.
+  const detailsHeight = captionHeight + (short ? 0 : avatar + 12);
   const note = (
     <Text
       style={[
@@ -370,7 +398,25 @@ export function LiveTalkSheet() {
         <LiveSetup name={name} link={setupLinks.get(api)} height={height} onSay={setSaid} />
       ) : (
         <View style={{ alignItems: "center", gap: 12 }}>
-          {!short && (
+          {/* First, so it stays put when the view below it changes. */}
+          {details.length > 0 && (
+            <View style={{ alignSelf: "center", width: "100%", maxWidth: 560 }}>
+              <Segmented
+                label="What to show"
+                align="center"
+                value={view}
+                onChange={setView}
+                options={[
+                  { id: "talk", label: "Conversation" },
+                  {
+                    id: "details",
+                    label: details.length > 1 ? `Details · ${details.length}` : "Details",
+                  },
+                ]}
+              />
+            </View>
+          )}
+          {!short && !showingDetails && (
             <AgentAvatar
               onCall
               size={avatar}
@@ -384,14 +430,9 @@ export function LiveTalkSheet() {
             />
           )}
           {/* Room for two lines during a call, so a longer status never moves what's below it. */}
-          <Text
-            style={[
-              s.heading,
-              { fontSize: 18, textAlign: "center", minHeight: over ? 0 : short ? 26 : 52 },
-            ]}
-          >
-            {status}
-          </Text>
+          <View style={{ minHeight: over ? 0 : short ? 26 : 52, justifyContent: "center" }}>
+            <Text style={[s.heading, { fontSize: 18, textAlign: "center" }]}>{status}</Text>
+          </View>
           {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
           <Text role="status" style={HIDDEN}>
             {error
@@ -403,9 +444,35 @@ export function LiveTalkSheet() {
                   : `Live. ${name} can hear you. Just speak, and cut in any time.`}
           </Text>
           <ErrorNotice error={error} />
-          {/* There from the start at a fixed height, so the sheet holds still as words arrive. The
-            note about what live talk can do fills it until then, and closes it after the end. */}
-          {!over || lines.length > 0 ? (
+          {showingDetails ? (
+            // The sheet's whole width, so three product cards fit on a computer.
+            <View style={{ alignSelf: "stretch", height: detailsHeight }}>
+              <ScrollView
+                ref={detailsScroller}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ padding: 4, paddingBottom: 24 }}
+              >
+                <CallDetails details={details} newestFirst />
+              </ScrollView>
+              {/* A fade at the bottom says there's more below. */}
+              <View
+                pointerEvents="none"
+                style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 24 }}
+              >
+                <Svg width="100%" height={24}>
+                  <Defs>
+                    <LinearGradient id="details-fade" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={0} />
+                      <Stop offset="1" stopColor={colors.canvas} stopOpacity={1} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect width="100%" height={24} fill="url(#details-fade)" />
+                </Svg>
+              </View>
+            </View>
+          ) : /* There from the start at a fixed height, so the sheet holds still as words arrive. The
+            note about what live talk can do fills it until then, and closes it after the end. */
+          !over || lines.length > 0 ? (
             <ScrollView
               ref={scroller}
               // Straight to the end: a smooth scroll for every few words is costly on a phone.
@@ -551,12 +618,17 @@ function LiveSetup({
 
 /**
  * A live voice call saved in the chat: its heading ("Spoken conversation · 6 min · …"), the first
- * lines, and the rest on request.
+ * lines, and the rest on request; then what it showed on screen, as it showed it.
  */
-export function SpokenCall({ text }: { text: string }) {
+export function SpokenCall({ text, id }: { text: string; id: string }) {
   const [open, setOpen] = useState(false);
   const linesId = `call-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const [heading = "", ...rest] = text.split("\n");
+  const split = text.indexOf(`\n\n${SHOWN_HEADING}`);
+  const said = split >= 0 ? text.slice(0, split) : text;
+  // The words are there for the chat agent; the screen shows the real thing when it can.
+  const shownWords = split >= 0 ? text.slice(split).replace(SHOWN_HEADING, "").trim() : "";
+  const onScreen = useShownDuringCall(shownWords ? id : undefined);
+  const [heading = "", ...rest] = said.split("\n");
   const [title = "Spoken conversation", ...meta] = heading.split(" · ");
   const turns = rest
     .filter((line) => line.trim())
@@ -627,6 +699,43 @@ export function SpokenCall({ text }: { text: string }) {
           </Text>
         </Pressable>
       )}
+      {shownWords ? (
+        <View
+          style={{
+            gap: 12,
+            marginTop: 6,
+            paddingTop: 14,
+            borderTopWidth: 1,
+            borderTopColor: colors.bubbleLine,
+          }}
+        >
+          <Text style={[s.label, { color: colors.mutedStrong }]}>Details from the call</Text>
+          {/* The words until the real thing arrives (or if it can't be had). */}
+          {onScreen && onScreen !== "failed" ? (
+            <CallDetails details={onScreen} lineColor={colors.bubbleLine} filesInApp />
+          ) : (
+            <AssistantResponse content={shownWords} />
+          )}
+        </View>
+      ) : null}
     </View>
   );
+}
+
+/** What a saved call showed on screen, from the server; "failed" when it can't be had. */
+function useShownDuringCall(id: string | undefined) {
+  const { api } = useWorkspace();
+  const [shown, setShown] = useState<CallDetail[] | "failed">();
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    api
+      .request<{ details: CallDetail[] }>(`/api/voice/live/${encodeURIComponent(id)}/details`)
+      .then(({ details }) => active && setShown(details.length ? details : "failed"))
+      .catch(() => active && setShown("failed"));
+    return () => {
+      active = false;
+    };
+  }, [api, id]);
+  return shown;
 }
