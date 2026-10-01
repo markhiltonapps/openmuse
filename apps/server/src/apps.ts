@@ -764,7 +764,12 @@ export function appToolSpecs(
       parameters: z.object({ app: z.string().trim().min(1).max(100) }),
       execute: async ({ app }: { app: string }) => {
         const result = await apps.connect(owner, app);
-        if (result.connected) return { app, connected: true };
+        if (result.connected)
+          return {
+            app,
+            connected: true,
+            next: "It's already connected: use it now with find_app_actions and use_app. Don't ask them to connect it again.",
+          };
         if (result.own)
           return {
             app,

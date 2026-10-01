@@ -199,3 +199,7 @@ Time Log — <Project Name>
 - **Running the chat agent without a browser:** `new ConversationAgent(config, agentService,
   owner).run(input)`. The last user message's id keys every tool's idempotency, so give each
   request a fresh one (e.g. `voice-<call>-<delegation>`). Nothing is saved to any chat.
+- **Two mailboxes:** `search_mail`/`read_mail_thread` read the app's built-in Google sign-in (not set
+  up on Railway); Gmail and Outlook under Apps go through Composio (`find_app_actions`, `use_app`).
+  A tool that says "disconnected" must say which connection, or the agent sends a Connect card for an
+  app that's already connected, over and over. Each chat turn is told which mailbox is on ("Mail").

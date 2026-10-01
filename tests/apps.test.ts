@@ -833,3 +833,16 @@ test("emails a Gmail look-up reads come back as cards to open, and connect_app n
   assert.equal(link.connected, false);
   assert.equal(link.url, "https://connect.test/outlook");
 });
+
+test("connect_app on an app that's already connected says to go ahead and use it", async () => {
+  const { apps } = fakeApps({ connect: async () => ({ connected: true }) });
+  const specs = appToolSpecs(apps, "owner", async () => ({ id: "x", title: "x" }));
+  const connect = specs.find((s) => s.name === "connect_app")?.execute as (
+    args: unknown,
+  ) => Promise<Record<string, unknown>>;
+  const result = await connect({ app: "gmail" });
+  assert.equal(result.connected, true);
+  assert.equal(result.url, undefined);
+  assert.match(String(result.next), /use it now with find_app_actions and use_app/);
+  assert.match(String(result.next), /Don't ask them to connect it again/);
+});

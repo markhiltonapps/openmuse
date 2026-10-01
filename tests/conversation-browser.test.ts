@@ -4,6 +4,7 @@ import test, { type TestContext } from "node:test";
 import { EventSchemas, EventType, type RunAgentInput } from "@ag-ui/core";
 import { lastValueFrom, toArray } from "rxjs";
 import { createApp } from "../apps/server/src/app.ts";
+import type { AppConnector } from "../apps/server/src/apps.ts";
 import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
 import { browserFixture } from "./helpers/browser.ts";
 import { modelFixture } from "./helpers/model.ts";
@@ -26,7 +27,7 @@ function runInput(): RunAgentInput {
   };
 }
 
-async function chatFixture(t: TestContext, failure?: string) {
+async function chatFixture(t: TestContext, failure?: string, apps?: AppConnector) {
   const browserCalls: string[] = [];
   const fixture = await browserFixture(t, (path, body) => {
     browserCalls.push(path);
@@ -44,7 +45,7 @@ async function chatFixture(t: TestContext, failure?: string) {
     };
   });
   const config = { ...fixture.config, agentBackend: "model", model: "openai/fixture" } as const;
-  const server = await createApp(fixture.db, config);
+  const server = await createApp(fixture.db, config, { apps });
   t.after(() => server.agent.stop());
   return {
     ...fixture,
@@ -210,4 +211,46 @@ test("chat mail tools report disconnected mail and refuse another owner's thread
   await fixture.db.put("local-user", "settings", { id: "google", enabled: true });
   call = { name: "read_mail_thread", arguments: { threadId: "trip-thread" } };
   assert.match(await toolError(), /not found/);
+});
+
+test("with Gmail connected under Apps, the agent reads it there, not from the built-in mailbox", async (t) => {
+  // The loop the owner hit: search_mail said "Google is disconnected", the agent took that to mean
+  // their Gmail and sent a Connect card for a Gmail that was already connected, again and again.
+  const { requests } = await modelFixture(t, (index) =>
+    index === 0 ? { name: "search_mail", arguments: { query: "" } } : undefined,
+  );
+  const apps: AppConnector = {
+    search: async () => ({ tools: [], apps: [], guidance: [] }),
+    tool: async () => {
+      throw new Error("not used");
+    },
+    execute: async () => ({}),
+    connect: async () => ({ connected: true }),
+    connections: async () => [{ app: "gmail", name: "Gmail", connected: true }],
+    directory: async () => [],
+    disconnect: async () => {},
+  };
+  const fixture = await chatFixture(t, undefined, apps);
+  await fixture.db.put("local-user", "settings", { id: "google", enabled: false });
+  const input = runInput();
+  input.messages = [{ id: randomUUID(), role: "user", content: "What's my last email?" }];
+  const events = (await lastValueFrom(fixture.conversation.run(input).pipe(toArray()))).map(
+    (event) => EventSchemas.parse(event),
+  );
+  const result = events.find((event) => event.type === EventType.TOOL_CALL_RESULT);
+  assert.ok(result && result.type === EventType.TOOL_CALL_RESULT);
+  const { error } = JSON.parse(result.content);
+  assert.match(error, /separate from the person's mail apps/);
+  assert.match(error, /find_app_actions and use_app/);
+  assert.match(error, /Don't say their email is disconnected/);
+  // Told up front, so it doesn't try the built-in mailbox at all.
+  assert.ok(
+    requests[0].body.includes(
+      "The built-in Google mailbox isn't connected, so don't use search_mail",
+    ),
+  );
+  // Turned on, it says so instead.
+  await fixture.db.put("local-user", "settings", { id: "google", enabled: true });
+  await lastValueFrom(fixture.conversation.run(runInput()).pipe(toArray()));
+  assert.ok(requests.at(-1)?.body.includes("The built-in Google mailbox is connected"));
 });
