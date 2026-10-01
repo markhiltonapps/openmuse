@@ -155,6 +155,7 @@ export class LiveVoice {
                   "session.input_audio.unmute",
                   "session.close",
                 ],
+                // Selectors are objects ({ type }), not bare names.
                 allowed_server_events: [
                   "session.started",
                   "session.closed",
@@ -163,7 +164,7 @@ export class LiveVoice {
                   "session.input_audio.muted",
                   "session.input_audio.unmuted",
                   "error",
-                ],
+                ].map((type) => ({ type })),
               },
             },
           },

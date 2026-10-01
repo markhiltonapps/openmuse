@@ -93,6 +93,18 @@ test("live voice starts a gpt-live-1 session with the agent's instructions and k
   assert.ok(
     !body.session.client.data_channel.allowed_client_events.includes("session.commentary.append"),
   );
+  // OpenAI wants each server event as a selector object, not a bare name.
+  assert.ok(
+    body.session.client.data_channel.allowed_server_events.every(
+      (selector: unknown) =>
+        typeof selector === "object" && typeof (selector as { type?: unknown }).type === "string",
+    ),
+  );
+  assert.ok(
+    body.session.client.data_channel.allowed_server_events.some(
+      (selector: { type: string }) => selector.type === "session.output_transcript.delta",
+    ),
+  );
   // The sideband attaches to the same session with the key in a header.
   assert.equal(sockets[0]?.url, "wss://api.openai.com/v1/live/sessions/live_123/attach");
   assert.equal(sockets[0]?.headers.Authorization, "Bearer sk-test-secret");
