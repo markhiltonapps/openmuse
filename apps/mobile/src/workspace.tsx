@@ -12,11 +12,13 @@ import type {
 } from "../../../packages/domain/src";
 import type { AgentArtifact } from "../../../packages/domain/src/agent";
 import type { MuseApi } from "./api";
+import type { EmailItem } from "./email-cards";
 export type Detail =
   | { type: "mail"; mail: Mail }
   | { type: "email"; draft?: Partial<EmailDraft> & { id?: string } }
   | { type: "event"; event?: CalendarEvent; draft?: EventDraft; neighbors?: CalendarEvent[] }
   | { type: "file"; file: Artifact }
+  | { type: "appEmail"; email: EmailItem }
   | { type: "browser"; browser: BrowserSession }
   | { type: "review"; action: ActionProposal }
   | { type: "task"; taskId: string }

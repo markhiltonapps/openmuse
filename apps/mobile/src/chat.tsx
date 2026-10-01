@@ -48,10 +48,14 @@ import { AssistantResponse } from "./assistant-response";
 import { setChatActivity } from "./avatar";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
+import { ToolCalendar } from "./calendar-card";
+import { ToolFile } from "./call-details";
 import { BrowserThreadCard } from "./computer";
+import { ToolConnect, ToolOwnApp } from "./connect-card";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { replyFailure, runConversationTurn } from "./conversation-run";
 import { plainText } from "./copy-text";
+import { ToolAppResult } from "./email-cards";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { onCallSaved, SpokenCall, useLiveVoice } from "./live-talk-ui";
@@ -174,10 +178,10 @@ export function WorkspaceTools() {
   // What's saved for approval gets its Approve card right here in the chat.
   useRenderTool({
     name: "use_app",
-    description: "Show a connected-app action waiting for approval",
+    description: "Show emails read from an app, or an app action waiting for approval",
     parameters: displayParameters,
     render: ({ result, status }) => (
-      <ToolApprovals result={result} loading={status !== "complete"} />
+      <ToolAppResult result={result} loading={status !== "complete"} />
     ),
   });
   useRenderTool({
@@ -219,6 +223,77 @@ export function WorkspaceTools() {
     render: ({ result, status }) => (
       <ToolApprovals result={result} loading={status !== "complete"} />
     ),
+  });
+  // Files made, saved or read: open them from the chat, not from Files.
+  useRenderTool({
+    name: "create_document",
+    description: "Show the document the agent made",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolFile kind="Document" result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "create_spreadsheet",
+    description: "Show the spreadsheet the agent made",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolFile kind="Spreadsheet" result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "create_presentation",
+    description: "Show the slides the agent made",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolFile kind="Slides" result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "save_to_files",
+    description: "Show the file the agent saved",
+    parameters: displayParameters,
+    render: ({ result, status }) => <ToolFile result={result} loading={status !== "complete"} />,
+  });
+  useRenderTool({
+    name: "download_to_files",
+    description: "Show the file the agent saved",
+    parameters: displayParameters,
+    render: ({ result, status }) => <ToolFile result={result} loading={status !== "complete"} />,
+  });
+  useRenderTool({
+    name: "read_file",
+    description: "Show the file the agent read",
+    parameters: displayParameters,
+    // A long file is read in parts: its row shows once, with the first.
+    render: ({ args, result, status }) => (
+      <ToolFile
+        result={result}
+        loading={status !== "complete"}
+        skip={Number((args as { fromPage?: unknown }).fromPage ?? 1) > 1}
+      />
+    ),
+  });
+  useRenderTool({
+    name: "look_at_calendar",
+    description: "Show what's on the calendar",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolCalendar result={result} loading={status !== "complete"} />
+    ),
+  });
+  // A Connect button for an app right where they asked, not a link to find in Apps.
+  useRenderTool({
+    name: "connect_app",
+    description: "Show a button that connects an app",
+    parameters: displayParameters,
+    render: ({ result, status }) => <ToolConnect result={result} loading={status !== "complete"} />,
+  });
+  useRenderTool({
+    name: "add_own_app",
+    description: "Show a button that connects the person's own app",
+    parameters: displayParameters,
+    render: ({ result, status }) => <ToolOwnApp result={result} loading={status !== "complete"} />,
   });
   useRenderTool({
     name: "show_products",
@@ -1673,23 +1748,27 @@ export function ChatScreen({
                   accessibilityLabel={`Talk live with ${agentName}`}
                   {...tipProps(`Talk live with ${agentName}`)}
                   onPress={() => open({ type: "live" })}
+                  // Voice first: talking is the main thing to do here, so it's the filled button.
                   style={({ pressed }) => ({
                     width: 44,
                     height: 44,
                     borderRadius: 24,
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor: pressed ? colors.sky : "transparent",
+                    backgroundColor:
+                      live === "on" ? colors.blue : pressed ? colors.sky : "transparent",
+                    transform: [{ scale: pressed && live === "on" ? 0.94 : 1 }],
                   })}
                 >
-                  <Headset size={22} color={colors.blueText} />
+                  <Headset size={22} color={live === "on" ? colors.text : colors.blueText} />
                 </Pressable>
               )}
-            {/* On a very narrow phone with live voice, the headset alone leaves room for Send. */}
+            {/* Where live talk works, the headset is the one way to talk (owner's choice); the
+                older talk and mic buttons stay only where it can't run. */}
             {dictationAvailable() &&
               speechAvailable() &&
               !draft.trim() &&
-              !(live === "on" && windowWidth < 360 && !voiceMode) && (
+              (live === "off" || live === "setup" || voiceMode) && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={
@@ -1718,39 +1797,42 @@ export function ChatScreen({
                   <AudioLines size={22} color={voiceMode ? colors.text : colors.muted} />
                 </Pressable>
               )}
-            {dictationAvailable() && !replying && !voiceMode && (
-              // The mic and its microphone choice sit together, like one control.
-              <View
-                style={{ flexDirection: "row", borderRadius: 22, backgroundColor: colors.subtle }}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
-                  {...tipProps(
-                    listening ? "Stop voice input" : "Speak a message",
-                    {},
-                    { hold: false },
-                  )}
-                  accessibilityState={{ selected: listening }}
-                  onPress={toggleDictation}
-                  style={({ pressed }) => ({
-                    width: 44,
-                    height: 44,
-                    borderRadius: 24,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: listening
-                      ? colors.lavender
-                      : pressed
-                        ? colors.sky
-                        : "transparent",
-                  })}
+            {dictationAvailable() &&
+              !replying &&
+              !voiceMode &&
+              (live === "off" || live === "setup") && (
+                // The mic and its microphone choice sit together, like one control.
+                <View
+                  style={{ flexDirection: "row", borderRadius: 22, backgroundColor: colors.subtle }}
                 >
-                  <Mic size={22} color={listening ? colors.text : colors.muted} />
-                </Pressable>
-                <MicChooserButton />
-              </View>
-            )}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
+                    {...tipProps(
+                      listening ? "Stop voice input" : "Speak a message",
+                      {},
+                      { hold: false },
+                    )}
+                    accessibilityState={{ selected: listening }}
+                    onPress={toggleDictation}
+                    style={({ pressed }) => ({
+                      width: 44,
+                      height: 44,
+                      borderRadius: 24,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: listening
+                        ? colors.lavender
+                        : pressed
+                          ? colors.sky
+                          : "transparent",
+                    })}
+                  >
+                    <Mic size={22} color={listening ? colors.text : colors.muted} />
+                  </Pressable>
+                  <MicChooserButton />
+                </View>
+              )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}

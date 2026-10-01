@@ -5,6 +5,10 @@ import type { Artifact } from "../../../packages/domain/src";
 import type { CallDetail } from "../../../packages/domain/src/voice";
 import { ApprovalCard } from "./approval-card";
 import { AssistantResponse } from "./assistant-response";
+import { CalendarCard } from "./calendar-card";
+import { ConnectCard, OwnAppCard } from "./connect-card";
+import { EmailCards, emailItems } from "./email-cards";
+import { fileLabel } from "./file-kinds";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { colors, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -15,6 +19,13 @@ const FILE_KINDS: Record<string, string> = {
   create_presentation: "Slides",
 };
 const meta = { fontSize: 12, lineHeight: 17, color: colors.mutedStrong };
+/** Cards with their own heading: no heading above them when they're all an answer shows. */
+const OWN_TITLES = new Set<CallDetail["items"][number]["tool"]>([
+  "approval",
+  "connect",
+  "emails",
+  "look_at_calendar",
+]);
 
 /**
  * What a live call put on screen instead of reading it out: long answers, products, places,
@@ -24,9 +35,12 @@ const meta = { fontSize: 12, lineHeight: 17, color: colors.mutedStrong };
 export function CallDetails({
   details,
   onCall = false,
+  over = false,
   lineColor = colors.line,
 }: {
   details: CallDetail[];
+  /** On the call screen after it ended: a Connect card says to talk again, not "say done". */
+  over?: boolean;
   /**
    * On the call screen: newest first, and nothing opens another sheet (it would end the call), so
    * files open in a new tab and an approval's details open in place.
@@ -39,8 +53,8 @@ export function CallDetails({
     <View style={{ gap: 22 }}>
       {(onCall ? [...details].reverse() : details).map((detail, index) => (
         <View key={`${detail.id}-${detail.at}`} style={{ gap: 10 }}>
-          {/* Just an Approve card: it has its own title, so no heading above it. */}
-          {!detail.items.every((item) => item.tool === "approval") && (
+          {/* Just cards with their own titles (Approve, Connect, emails, calendar): no heading. */}
+          {!detail.items.every((item) => OWN_TITLES.has(item.tool)) && (
             <View style={{ gap: 2 }}>
               <Text
                 role="heading"
@@ -88,6 +102,27 @@ export function CallDetails({
                   <ApprovalCard key={key} actionId={actionId} onCall={onCall} wide />
                 ) : null;
               }
+              case "emails":
+                return <EmailCards key={key} emails={emailItems(result)} onCall={onCall} wide />;
+              case "look_at_calendar":
+                return <CalendarCard key={key} result={result} onCall={onCall} wide />;
+              case "connect": {
+                const { app, own } = result as { app?: unknown; own?: unknown };
+                if (typeof own === "string")
+                  return (
+                    <OwnAppCard
+                      key={key}
+                      id={own}
+                      name={typeof app === "string" ? app : ""}
+                      onCall={onCall}
+                      over={over}
+                      wide
+                    />
+                  );
+                return typeof app === "string" ? (
+                  <ConnectCard key={key} app={app} onCall={onCall} over={over} wide />
+                ) : null;
+              }
               default:
                 return (
                   <FileRow key={key} kind={FILE_KINDS[item.tool]} result={result} inApp={!onCall} />
@@ -113,8 +148,8 @@ function untitled(result: unknown, heading: string) {
  * A file made during the call. Its link is fetched fresh when it's opened (signed links expire):
  * in the app from the chat, in a new tab from the call screen.
  */
-function FileRow({
-  kind = "File",
+export function FileRow({
+  kind: given,
   result,
   inApp,
 }: {
@@ -125,10 +160,20 @@ function FileRow({
   const { api, open } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
-  const file = result as { id?: unknown; name?: unknown; pages?: unknown };
+  const file = result as {
+    id?: unknown;
+    name?: unknown;
+    pages?: unknown;
+    pageCount?: unknown;
+    mimeType?: unknown;
+  };
   if (typeof file.id !== "string" || typeof file.name !== "string") return null;
+  // "PDF", "Excel"… from its type when the tool says it; "File" when nothing does.
+  const kind =
+    given ?? (typeof file.mimeType === "string" ? fileLabel({ mimeType: file.mimeType }) : "File");
   const { id, name } = file;
-  const pages = typeof file.pages === "number" ? file.pages : undefined;
+  const count = file.pages ?? file.pageCount;
+  const pages = typeof count === "number" && count > 0 ? count : undefined;
   const show = async () => {
     setBusy(true);
     setProblem("");
@@ -161,7 +206,7 @@ function FileRow({
           gap: 12,
           minHeight: 56,
           padding: 12,
-          borderRadius: 14,
+          borderRadius: 18,
           borderWidth: 1,
           borderColor: colors.line,
           backgroundColor: colors.card,
@@ -191,5 +236,33 @@ function FileRow({
         <ExternalLink size={16} color={colors.blueDark} />
       )}
     </Pressable>
+  );
+}
+
+/** In the chat: the file a tool made, saved or read, one tap from opening it over the chat. */
+export function ToolFile({
+  kind,
+  result,
+  loading,
+  skip = false,
+}: {
+  kind?: string;
+  result: unknown;
+  loading: boolean;
+  /** A later part of a file already shown (read_file from a later page). */
+  skip?: boolean;
+}) {
+  if (loading || skip) return null;
+  let value = result;
+  if (typeof value === "string")
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  return (
+    <View style={{ width: "100%", maxWidth: 520 }}>
+      <FileRow kind={kind} result={value} inApp />
+    </View>
   );
 }

@@ -92,6 +92,10 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "apps", label: "Finding the right app…" };
     case "list_connected_apps":
       return { kind: "apps", label: "Checking your connected apps…" };
+    case "look_at_calendar":
+      return { kind: "apps", label: "Checking your calendar…" };
+    case "add_own_app":
+      return { kind: "apps", label: "Adding your app…" };
     case "connect_app": {
       const app = appName(args.app);
       return { kind: "apps", label: app ? `Connecting ${app}…` : "Connecting an app…" };

@@ -48,7 +48,7 @@ export interface VoiceBrain {
 
 /** How a call's answers are given: spoken, short, and honest about what waits for approval. */
 export const VOICE_RULES =
-  "The person is talking with you out loud in a live voice call, maybe while driving, and a voice reads your reply to them. Reply in one to three short spoken sentences in plain, everyday words: no lists, markdown, links, emoji or long numbers. Use your tools as usual to look things up; never guess. Set reminders and notes straight away. If you need something from them first, ask one short question. Anything that sends, books, buys or changes something for other people is saved for their approval, and its Approve button appears on their screen: say what it is out loud (who it goes to and what), that it waits for their OK until tonight, and that it happens only when they tap Approve, once it's safe for them to. Never push them to tap it now. If they want to approve or send something that's already waiting, call show_approvals so its button is on their screen. You can never approve for them. Say a single fact out loud (one time, price or address, or a yes or no). When the answer is long or better seen than heard (three or more items, search results, options, steps, a recipe, links), don't read it all out: put it on their screen with show_on_screen, or with show_products or show_places for products and places. Then, in a sentence or two, say the one thing they most need (your top pick, the next step, the nearest one) and that you've put the rest on their screen for later. They may be driving, so what you say must be enough on its own: never ask them to look at the screen or to choose by position (the second one); name the choices out loud. If they ask to hear the list, say the first two or three. If they ask about something already on their screen, answer from it, saying only the part they asked for. If they ask for a document, spreadsheet or slides, don't make it during the call: start it as a job with delegate_task, and say you'll let them know when it's done. Do the same for anything else that will take more than about half a minute (comparing products, research across several sites). The latest messages are the call so far, and the last one is what they just asked; earlier ones are from their typed chat.";
+  "The person is talking with you out loud in a live voice call, maybe while driving, and a voice reads your reply to them. Reply in one to three short spoken sentences in plain, everyday words: no lists, markdown, links, emoji or long numbers. Use your tools as usual to look things up; never guess. Set reminders and notes straight away. If you need something from them first, ask one short question. Anything that sends, books, buys or changes something for other people is saved for their approval, and its Approve button appears on their screen: say what it is out loud (who it goes to and what), that it waits for their OK until tonight, and that it happens only when they tap Approve, once it's safe for them to. Never push them to tap it now. If they want to approve or send something that's already waiting, call show_approvals so its button is on their screen. You can never approve for them. To connect an app, call connect_app. When it returns a link (or says it's their own app), a Connect button for it appears on their screen and stays with the call in the chat: say so, that it's there for when it's safe to tap, and that they can say “done” once they've signed in. Never read a link out. When they say it's done, carry on with what they asked. Say a single fact out loud (one time, price or address, or a yes or no). When the answer is long or better seen than heard (three or more items, search results, options, steps, a recipe, links), don't read it all out: put it on their screen with show_on_screen, or with show_products or show_places for products and places. Then, in a sentence or two, say the one thing they most need (your top pick, the next step, the nearest one) and that you've put the rest on their screen for later. They may be driving, so what you say must be enough on its own: never ask them to look at the screen or to choose by position (the second one); name the choices out loud. If they ask to hear the list, say the first two or three. If they ask about something already on their screen, answer from it, saying only the part they asked for. If they ask for a document, spreadsheet or slides, don't make it during the call: start it as a job with delegate_task, and say you'll let them know when it's done. Do the same for anything else that will take more than about half a minute (comparing products, research across several sites). The latest messages are the call so far, and the last one is what they just asked; earlier ones are from their typed chat.";
 
 /** On a call: a long answer goes on the person's screen, and the voice says the gist. */
 export function showOnScreenToolSpec() {
@@ -95,6 +95,10 @@ function shown(tool: CallDetailTool, raw: string) {
     case "search_web":
       // Only an image search's pictures; plain results are summed up in words.
       return some("pictures") ? { pictures: result.pictures } : undefined;
+    case "look_at_calendar": {
+      const { shown: _, ...calendar } = result;
+      return some("events") || some("reminders") || some("couldNotRead") ? calendar : undefined;
+    }
     default:
       return typeof result.id === "string" && typeof result.name === "string"
         ? { id: result.id, name: result.name, pages: result.pages }
@@ -128,6 +132,10 @@ export function voiceNote(tool: string, args: unknown) {
       return "Adding it to your food log";
     case "list_reminders":
       return "Checking your reminders";
+    case "look_at_calendar":
+      return "Checking your calendar";
+    case "add_own_app":
+      return "Adding your app";
     case "set_reminder":
     case "change_reminder":
     case "cancel_reminder":
@@ -390,7 +398,8 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
             }
           }
           if (e.type === EventType.TOOL_CALL_RESULT && typeof e.content === "string") {
-            const tool = calls.get(e.toolCallId ?? "")?.name as CallDetailTool | undefined;
+            const called = calls.get(e.toolCallId ?? "")?.name;
+            const tool = called as CallDetailTool | undefined;
             const result =
               tool && (CALL_DETAIL_TOOLS as readonly string[]).includes(tool)
                 ? shown(tool, e.content)
@@ -408,6 +417,29 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
                 reviews.push(result.actionId);
               if (result.needsApproval === true && typeof result.approvalId === "string")
                 reviews.push(result.approvalId);
+              // connect_app: a button that connects the app, on their screen (and kept with the call).
+              if (
+                called === "connect_app" &&
+                (result as { connected?: unknown }).connected === false
+              ) {
+                const link = result as { app?: unknown; url?: unknown; own?: unknown };
+                // Their own app: its card checks the address and asks for a sign-in or key.
+                if (link.own === true && typeof link.app === "string")
+                  items.push({ tool: "connect", result: { own: link.app, app: link.app } });
+                else if (typeof link.url === "string" && typeof link.app === "string")
+                  items.push({ tool: "connect", result: { app: link.app, url: link.url } });
+              }
+              // Their own app (an MCP server), added switched off: its Connect card, to check and connect.
+              const saved = (result as { saved?: { id?: unknown; name?: unknown } }).saved;
+              if (called === "add_own_app" && typeof saved?.id === "string")
+                items.push({
+                  tool: "connect",
+                  result: { own: saved.id, app: typeof saved.name === "string" ? saved.name : "" },
+                });
+              // Emails read from Gmail or Outlook: cards that open each one in full.
+              const emails = (result as { emails?: unknown }).emails;
+              if (called === "use_app" && Array.isArray(emails) && emails.length)
+                items.push({ tool: "emails", result: { emails } });
               // show_approvals: things already waiting, brought back to the screen.
               if (Array.isArray(result.approvals))
                 for (const approval of result.approvals as { actionId?: unknown }[])
@@ -545,6 +577,40 @@ export function shownText(details: CallDetail[]) {
           lines.push(`- ${join(linked(place.name, place.url), place.address)}`);
       else if (tool === "search_web")
         lines.push(`- ${list("pictures").length} pictures from a web search`);
+      else if (tool === "look_at_calendar") {
+        const zone = typeof value.timeZone === "string" ? value.timeZone : undefined;
+        // One way of writing a day and time: "Fri Oct 2, 9:00 AM", "Fri Oct 2, all day".
+        const day = (iso: string, allDay: boolean) =>
+          new Date(allDay ? `${iso.slice(0, 10)}T12:00:00Z` : iso)
+            .toLocaleDateString("en-US", {
+              timeZone: allDay ? "UTC" : zone,
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })
+            .replace(",", "");
+        const time = (iso: string) =>
+          new Date(iso).toLocaleTimeString("en-US", {
+            timeZone: zone,
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        for (const event of list("events").slice(0, 20)) {
+          const start = String(event.start ?? "");
+          const when = event.allDay
+            ? `${day(start, true)}, all day`
+            : `${day(start, false)}, ${time(start)}`;
+          lines.push(`- ${join(when, event.title, event.location)}`);
+        }
+        for (const reminder of list("reminders").slice(0, 10)) {
+          const due = String(reminder.dueAt ?? "");
+          lines.push(`- ${join(`${day(due, false)}, ${time(due)}`, `Reminder: ${reminder.text}`)}`);
+        }
+      } else if (tool === "emails")
+        for (const email of list("emails").slice(0, 10))
+          lines.push(`- ${join(email.from, email.subject)}`);
+      else if (tool === "connect")
+        lines.push(`- A button to connect ${join(value.app) || "an app"}`);
       else if (tool === "approval")
         lines.push(`- Saved for your OK: ${join(value.title) || "something"}`);
       else lines.push(`- ${join(value.name)} (saved in Files)`);

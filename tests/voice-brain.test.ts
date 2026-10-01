@@ -8,6 +8,7 @@ import { createStore } from "../apps/server/src/db.ts";
 import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
 import type { HealthEntry } from "../apps/server/src/health.ts";
 import {
+  shownText,
   spokenCallText,
   VOICE_RULES,
   type VoiceBrain,
@@ -359,4 +360,81 @@ test("a long answer goes on screen: shown results are collected for the call, fa
   assert.match(text, /- \[Roomba j7\]\(https:\/\/target\.com\/j7\) · \$299 · Target/);
   assert.match(text, /- \*\*j7\*\*: best/);
   assert.match(text, /- Vacuums\.pdf \(saved in Files\)/);
+});
+
+test("on a call, a Connect button, an own app, emails and the calendar go on screen, never a link read out", async () => {
+  const tool = (id: string, name: string, result: unknown) => [
+    { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,
+    { type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent,
+    {
+      type: EventType.TOOL_CALL_RESULT,
+      toolCallId: id,
+      messageId: randomUUID(),
+      content: JSON.stringify(result),
+    } as BaseEvent,
+  ];
+  const email = { id: "m1", app: "gmail", from: "Dan <dan@x.com>", subject: "Q3", preview: "Hi" };
+  const event = {
+    id: "e1",
+    title: "Dentist",
+    start: "2026-10-02T14:00:00Z",
+    end: "2026-10-02T15:00:00Z",
+    allDay: false,
+    app: "outlook",
+  };
+  const { brain } = await brainFixture([
+    ...tool("t1", "connect_app", { app: "gmail", connected: false, url: "https://c.io/x" }),
+    // Already connected: nothing to show.
+    ...tool("t2", "connect_app", { app: "outlook", connected: true }),
+    ...tool("t3", "add_own_app", { saved: { id: "my_notes", name: "My Notes" }, next: "x" }),
+    ...tool("t4", "use_app", { result: {}, emails: [email], shown: "x" }),
+    ...tool("t5", "look_at_calendar", {
+      from: "2026-10-02",
+      days: 1,
+      timeZone: "America/Chicago",
+      events: [event],
+      reminders: [],
+      shown: "x",
+    }),
+    // An empty day shows nothing (and the tool doesn't claim it's on screen).
+    ...tool("t6", "look_at_calendar", { from: "2026-10-03", days: 1, events: [], reminders: [] }),
+    { type: EventType.TEXT_MESSAGE_CHUNK, messageId: "r", delta: "Done." } as BaseEvent,
+  ]);
+  const shown: CallDetail["items"][] = [];
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d1",
+    turns: [{ role: "user", text: "Connect my Gmail" }],
+    progress: () => {},
+    show: (items) => shown.push(items),
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(shown[0], [
+    { tool: "connect", result: { app: "gmail", url: "https://c.io/x" } },
+    { tool: "connect", result: { own: "my_notes", app: "My Notes" } },
+    { tool: "emails", result: { emails: [email] } },
+    {
+      tool: "look_at_calendar",
+      result: {
+        from: "2026-10-02",
+        days: 1,
+        timeZone: "America/Chicago",
+        events: [event],
+        reminders: [],
+      },
+    },
+  ]);
+  assert.match(VOICE_RULES, /a Connect button for it appears on their screen/);
+  assert.match(VOICE_RULES, /they can say “done” once they've signed in/);
+  assert.match(VOICE_RULES, /Never read a link out/);
+  // After the call, the chat agent knows what was shown, without the sign-in link.
+  const text = shownText([
+    { id: "d1", at: "2026-10-01T19:40:30Z", question: "q", title: "Gmail", items: shown[0] ?? [] },
+  ]);
+  assert.match(text, /- A button to connect gmail/);
+  assert.match(text, /- A button to connect My Notes/);
+  assert.match(text, /- Dan <dan@x\.com> · Q3/);
+  assert.match(text, /- Fri Oct 2, 9:00 AM · Dentist/);
+  assert.doesNotMatch(text, /c\.io/);
 });

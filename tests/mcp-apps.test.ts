@@ -198,7 +198,7 @@ test("an app with an access key connects, lists its actions and keeps the key se
   assert.match(without.app.error ?? "", /access key/);
   const wrong = await mcp.setKey("kay", "my_todd_crm", { key: "nope" });
   assert.equal(wrong.app.status, "needs_key");
-  assert.match(wrong.app.error ?? "", /didn't accept/);
+  assert.match(wrong.app.error ?? "", /didn’t accept/);
   const right = await mcp.setKey("kay", "my_todd_crm", { key: "todd-key-123" });
   assert.equal(right.connected, true);
   assert.deepEqual(
@@ -377,11 +377,17 @@ test("an app the agent adds stays off until the person connects it", async () =>
   const [add] = ownAppToolSpecs(apps, "max");
   assert.ok(add);
   const saved = (await add.execute({ name: "Todd CRM", url: crm.url })) as {
-    saved: { status: string };
+    saved: { id: string; status: string };
+    next: string;
   };
   assert.equal(saved.saved.status, "needs_confirm");
+  // Its Connect card shows where they are (it needs the id), not a trip to Apps.
+  assert.equal(saved.saved.id, "my_todd_crm");
+  assert.match(saved.next, /Connect card is on their screen now/);
   assert.deepEqual(crm.seen, [], "nothing is sent to the app before the person connects it");
-  await assert.rejects(apps.connect("max", "my_todd_crm"), /waiting for the person/);
+  // connect_app doesn't connect it either: the person does, on its card.
+  assert.deepEqual(await apps.connect("max", "my_todd_crm"), { connected: false, own: true });
+  assert.deepEqual(crm.seen, []);
   const connected = await mcp.connect("max", "my_todd_crm");
   assert.equal(connected.connected, true);
   assert.deepEqual(await apps.connect("max", "my_todd_crm"), { connected: true });

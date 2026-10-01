@@ -35,6 +35,7 @@ import type { AppConnector } from "../apps.ts";
 import { type Areas, searchPlace } from "../area.ts";
 import type { Backups } from "../backups.ts";
 import type { BrowserService } from "../browser.ts";
+import type { TodayCalendar } from "../calendar-today.ts";
 import { ChatSummaries, summarySystemPrompt } from "../chat-summary.ts";
 import type { CodeSandbox } from "../code-sandbox.ts";
 import {
@@ -47,6 +48,7 @@ import {
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
+import type { EmailViews } from "../email-views.ts";
 import { AppError } from "../errors.ts";
 import { FileShares } from "../file-shares.ts";
 import type { LookAtImage } from "../file-tools.ts";
@@ -959,6 +961,10 @@ export class AgentService {
   approvals?: ApprovalRules;
   /** Finds places on the map for show_places; set when the server can reach a geocoder. */
   geocode: Geocoder = async () => undefined;
+  /** Every connected calendar app's events in a stretch of time (as the Feed reads them). */
+  calendarRange?: (owner: string, from: string, to: string) => Promise<TodayCalendar>;
+  /** Emails read from Gmail or Outlook, kept a week so the chat's card can open one in full. */
+  emailViews?: EmailViews;
   /** Passwords saved for websites, typed into the agent's browser by the server. */
   logins?: Logins;
   /** Looks at pictures in Files; set when a vision model is configured. */

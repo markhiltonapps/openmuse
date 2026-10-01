@@ -22,8 +22,21 @@ import { type LiveCall, type LiveState, liveVoiceSupported, startLive } from "./
 import { Button, colors, ErrorNotice, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-/** On; meant for this person but the server has no key yet (they're shown how to add it); off. */
-export type LiveStatus = "on" | "setup" | "off";
+/**
+ * On; meant for this person but the server has no key yet (they're shown how to add it); off; or
+ * not known yet (nothing shows, so the composer's buttons don't swap under a thumb).
+ */
+export type LiveStatus = "on" | "setup" | "off" | "unknown";
+const REMEMBERED = "neato.liveVoice";
+/** What this browser last heard, so the composer shows the right buttons from the start. */
+function remembered(): LiveStatus | undefined {
+  try {
+    const value = globalThis.localStorage?.getItem(REMEMBERED);
+    return value === "on" || value === "setup" || value === "off" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
 // Per signed-in session (each has its own api), so the next person doesn't inherit it.
 const cache = new WeakMap<object, LiveStatus>();
 // Where the owner adds the key (this service's Variables page in Railway), while it's missing.
@@ -36,6 +49,11 @@ export async function checkLiveVoice(api: MuseApi): Promise<LiveStatus> {
   );
   const status: LiveStatus = result.available ? "on" : result.needsKey ? "setup" : "off";
   cache.set(api, status);
+  try {
+    globalThis.localStorage?.setItem(REMEMBERED, status);
+  } catch {
+    // Private mode: it's asked again next time.
+  }
   if (result.setupUrl) setupLinks.set(api, result.setupUrl);
   for (const listener of listeners) listener();
   return status;
@@ -43,12 +61,18 @@ export async function checkLiveVoice(api: MuseApi): Promise<LiveStatus> {
 /** Whether live voice is on for this person (and this browser can do it). */
 export function useLiveVoice(): LiveStatus {
   const { api } = useWorkspace();
-  const [status, setStatus] = useState<LiveStatus>(cache.get(api) ?? "off");
+  const [status, setStatus] = useState<LiveStatus>(cache.get(api) ?? remembered() ?? "unknown");
   useEffect(() => {
-    const update = () => setStatus(cache.get(api) ?? "off");
+    const update = () => setStatus(cache.get(api) ?? remembered() ?? "unknown");
     update();
     listeners.add(update);
-    if (liveVoiceSupported() && !cache.has(api)) void checkLiveVoice(api).catch(() => undefined);
+    if (liveVoiceSupported() && !cache.has(api))
+      void checkLiveVoice(api).catch(() => {
+        // Couldn't ask: as if it's off (the older buttons), never stuck on nothing.
+        if (cache.has(api)) return;
+        cache.set(api, "off");
+        for (const listener of listeners) listener();
+      });
     return () => {
       listeners.delete(update);
     };
@@ -452,7 +476,7 @@ export function LiveTalkSheet() {
                 style={{ flex: 1 }}
                 contentContainerStyle={{ padding: 4, paddingBottom: 24 }}
               >
-                <CallDetails details={details} onCall />
+                <CallDetails details={details} onCall over={over} />
               </ScrollView>
               {/* A fade at the bottom says there's more below. */}
               <View

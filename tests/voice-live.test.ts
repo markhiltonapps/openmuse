@@ -196,6 +196,33 @@ test("the owner is told the key is missing, others don't see live voice, and the
   assert.deepEqual(await on.voice.status("owner"), { available: true, needsKey: false });
   assert.equal(on.voice.describe(), "Live voice on (gpt-live-1, voice marin)");
   await on.db.close();
+  // Open to everyone, as the app runs it: only the owner hears that the key is missing.
+  const open = async (key: string) => {
+    const db = await createStore();
+    const voice = new LiveVoice(
+      db,
+      async () => ({ instructions: "hi" }),
+      async () => true,
+      undefined,
+      {
+        apiKey: key,
+        setupUrl: url,
+        canSetUp: async (owner) => owner === "owner",
+      },
+    );
+    return { db, voice };
+  };
+  const everyone = await open("key");
+  assert.deepEqual(await everyone.voice.status("member"), { available: true, needsKey: false });
+  await everyone.db.close();
+  const missing = await open("");
+  assert.deepEqual(await missing.voice.status("member"), { available: false, needsKey: false });
+  assert.deepEqual(await missing.voice.status("owner"), {
+    available: false,
+    needsKey: true,
+    setupUrl: url,
+  });
+  await missing.db.close();
 });
 
 test("a conversation whose minutes never arrive is counted by the clock", async () => {
@@ -456,5 +483,48 @@ test("a server restart says what it couldn't finish, in the saved call", async (
     role: "assistant",
     text: "The call ended before I could finish this. Ask me again here: “Find me a flight”",
   });
+  await db.close();
+});
+
+test("a call isn't hung up for quiet while they sign in to an app from its Connect card", async () => {
+  const db = await createStore();
+  let now = Date.parse("2026-10-01T12:00:00Z");
+  const sockets: FakeSocket[] = [];
+  const voice = new LiveVoice(
+    db,
+    async () => ({ instructions: "hi" }),
+    async () => true,
+    undefined,
+    {
+      apiKey: "key",
+      now: () => now,
+      idleSeconds: 0.09,
+      answer: async (question) => {
+        question.show?.([{ tool: "connect", result: { app: "gmail", url: "https://c.io/x" } }]);
+        return "The Connect button is on your screen.";
+      },
+      fetcher: (async () =>
+        Response.json({ session: { id: "live_c" }, transport: { sdp: "answer" } })) as typeof fetch,
+      socket: (url, headers) => {
+        const socket = new FakeSocket(url, headers);
+        sockets.push(socket);
+        return socket;
+      },
+    },
+  );
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({ type: "session.input_transcript.delta", delta: "Connect my Gmail" });
+  await wait(450);
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_c" } });
+  await wait(100);
+  // Two quiet minutes later (signing in), the call is still on.
+  now += 2 * 60_000;
+  await wait(100);
+  assert.equal(sentOf(socket, "session.close").length, 0);
+  // Past five minutes of quiet, it's hung up as usual.
+  now += 4 * 60_000;
+  await wait(100);
+  assert.equal(sentOf(socket, "session.close").length, 1);
   await db.close();
 });

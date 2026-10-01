@@ -29,7 +29,9 @@ import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
 import { assertApiDeploymentConfig, type Config } from "./config.ts";
 import { DataControls, type ThreadStore } from "./data-controls.ts";
+import { withOwnCalendar } from "./day-tools.ts";
 import type { Store } from "./db.ts";
+import { EmailViews } from "./email-views.ts";
 import { emojiPicture } from "./emoji.ts";
 import { ConversationAgent, localNow } from "./engine/conversation.ts";
 import { agentRoutes } from "./engine/routes.ts";
@@ -251,8 +253,22 @@ export async function createApp(
     );
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   const calendarToday = new CalendarToday(apps, (owner) => agent.timeZone(owner));
+  // The chat reads the calendar the same way (look_at_calendar), and keeps emails it read.
+  agent.calendarRange = async (owner, from, to) => {
+    const [inApps, own] = await Promise.all([
+      calendarToday.between(owner, from, to),
+      agent.workspace
+        .connection(owner)
+        .then((connection) =>
+          connection ? agent.workspace.events(owner, { timeMin: from, timeMax: to }) : undefined,
+        )
+        .catch(() => "failed" as const),
+    ]);
+    return withOwnCalendar(inApps, own);
+  };
+  const emailViews = new EmailViews(db);
+  agent.emailViews = emailViews;
   agent.persona.accountName = async (owner) => (await accounts.get(owner))?.name;
-  // Live voice: the admin only, while it's being tried out.
   // Live voice's brain: the same chat agent and tools answer what the voice hands over.
   const canLookUp = config.agentBackend !== "agui";
   const voiceBrain: VoiceBrain = {
@@ -301,10 +317,12 @@ export async function createApp(
         }),
       };
     },
-    (owner) => accounts.isAdmin(owner),
+    // Everyone can talk live (owner's choice, 2026-10-01); only the owner is shown a missing key.
+    async () => true,
     usage,
     {
       apiKey: config.voiceApiKey,
+      canSetUp: (owner) => accounts.isAdmin(owner),
       model: config.voiceModel,
       voice: config.voiceName,
       idleSeconds: config.voiceIdleSeconds,
@@ -1323,6 +1341,16 @@ export async function createApp(
   app.get("/api/voice/live/recent", async (c) =>
     c.json({ sessions: await liveVoice.recent(c.get("owner")) }),
   );
+  // An email Neddy read from Gmail or Outlook, opened in full from its card in the chat.
+  app.get("/api/email-views/:id", async (c) => {
+    const view = await emailViews.get(c.get("owner"), c.req.param("id"));
+    if (!view)
+      throw new AppError(
+        "Emails are kept here for a week, so this one is gone. Open it in your mail app, or ask for it again.",
+        404,
+      );
+    return c.json(view);
+  });
   // What a call showed on screen instead of reading it out (during the call and after).
   app.get("/api/voice/live/:id/details", async (c) =>
     c.json({ details: await liveVoice.details(c.get("owner"), c.req.param("id")) }),

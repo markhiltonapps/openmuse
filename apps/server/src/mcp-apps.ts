@@ -517,23 +517,16 @@ export class McpApps {
     );
   }
   /**
-   * Connecting on the agent's behalf: a sign-in page to pass on, or what the person has to do.
-   * An app the agent added stays off until the person connects it themselves.
+   * Connecting on the agent's behalf. An app the agent added stays off until the person checks its
+   * address and connects it; that, a sign-in page or an access key all happen on its Connect card.
    */
   async reconnect(owner: string, id: string) {
     const app = await this.get(owner, id);
-    if (app.status === "needs_confirm")
-      throw new AppError(
-        `${app.name} is waiting for the person to check its address and connect it under Apps → Your own apps.`,
-        409,
-      );
     if (app.status === "connected") return { connected: true };
+    if (app.status === "needs_confirm") return { connected: false, own: true };
     const result = await this.connect(owner, id);
-    if (result.connected || result.url) return { connected: result.connected, url: result.url };
-    throw new AppError(
-      `${app.name} can't connect yet${result.app.error ? ` (${result.app.error})` : ""}. The person can fix it under Apps → Your own apps; never ask for a key or password in chat.`,
-      409,
-    );
+    if (result.connected) return { connected: true };
+    return { connected: false, own: true, ...(result.url ? { url: result.url } : {}) };
   }
   /** A new access key, or none to sign in on the app's own page instead. */
   async setKey(owner: string, id: string, raw: unknown) {
@@ -589,8 +582,8 @@ export class McpApps {
           app: await settle({
             status: "needs_key",
             error: app.key
-              ? "The app didn't accept that access key."
-              : "This app didn't offer a sign-in page. Add the access key it gave you.",
+              ? "The app didn’t accept that access key."
+              : "This app didn’t offer a sign-in page. Add the access key it gave you.",
           }),
         };
       return {
@@ -704,7 +697,7 @@ export class McpApps {
     const { app, tool } = await this.find(owner, slug);
     if (app.status !== "connected")
       throw new AppError(
-        `${app.name} isn't connected right now. The person can fix it under Apps → Your own apps (or try connect_app), then try again.`,
+        `${app.name} isn't connected right now. Call connect_app so the person can connect it again on its card, then try again.`,
         409,
       );
     const provider = app.key ? undefined : new StoredProvider(this, owner, app);
@@ -725,8 +718,8 @@ export class McpApps {
         }));
         throw new AppError(
           app.key
-            ? `${app.name} didn't accept its access key. The person can add a new one under Apps → Your own apps, then try again.`
-            : `The sign-in to ${app.name} has expired. Sign in again under Apps → Your own apps (or with connect_app), then try again.`,
+            ? `${app.name} didn't accept its access key. Call connect_app so the person can add a new one on its card, then try again.`
+            : `The sign-in to ${app.name} has expired. Call connect_app so the person can sign in again, then try again.`,
           409,
         );
       }
@@ -894,7 +887,7 @@ export function ownAppToolSpecs(apps: AppConnector | undefined, owner: string) {
     {
       name: "add_own_app",
       description:
-        "Add the person's own app that offers an MCP server, by a short name and its web address (https://…), when they ask you to connect it. It is saved switched off: the person checks the address and taps Connect under Apps → Your own apps, where they sign in on the app's page or add its access key. Never ask for keys, tokens or passwords in chat. Once connected, its actions show up in find_app_actions like any connected app.",
+        "Add the person's own app that offers an MCP server, by a short name and its web address (https://…), when they ask you to connect it. It is saved switched off until the person checks the address and taps Connect on the Connect card that appears right where they are (in the chat or on a call); there they sign in on the app's page or add its access key. Never ask for keys, tokens or passwords in chat. Once connected, its actions show up in find_app_actions like any connected app.",
       parameters: z.object({
         name: z.string().trim().min(1).max(60),
         url: z.string().trim().min(1).max(2000),
@@ -902,8 +895,8 @@ export function ownAppToolSpecs(apps: AppConnector | undefined, owner: string) {
       execute: async (input: { name: string; url: string }) => {
         const { app } = await apps.mine.add(owner, input, "agent");
         return {
-          saved: { name: app.name, address: app.host, status: app.status },
-          next: "Tell the person to open Apps → Your own apps, check the address and tap Connect. It stays off until they do.",
+          saved: { id: app.id, name: app.name, address: app.host, status: app.status },
+          next: "Its Connect card is on their screen now. Say its address so they can check it, and that it stays off until they tap Connect on the card.",
         };
       },
     },

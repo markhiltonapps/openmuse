@@ -65,6 +65,19 @@ Time Log — <Project Name>
 
 ## Lessons learned
 
+- **Voice first (owner, 2026-10-01):** anything a person can tap or look up must also be doable
+  by saying it, on a call or in the chat; typing is a distant second. When the agent says
+  something is "on your screen", a card for it must actually appear there (on the call screen
+  and in the conversation). Fewest taps wins.
+- **"It's on your screen" must be true:** a tool result tells the agent a card is on screen
+  (`shown`) only when the app will really draw one; an empty answer gets no card and no claim.
+- **Sign-in tabs from a card:** open the tab during the tap (`blankTab()` in own-apps.tsx), then
+  point it at the link once the server answers (`openPage`); a `window.open` after an `await` is
+  often blocked. Offer an "Open the sign-in page" button if it still is.
+- **Signing in during a call:** a Connect card on a call holds off the quiet hang-up for 5 minutes
+  (`quietUntil` in voice-live.ts); signing in is silent and slow.
+- **No buttons swapping on load:** anything that depends on a server check (live talk on/off) is
+  remembered in localStorage and shows nothing while unknown, so controls don't move under a thumb.
 - **Deploys:** a push to `claude/deploy-openmuse-repo-oza7s9` deploys to Railway straight away.
   Commit locally and hold pushes until the user says "push it".
 - **New UI goes through the Design division** before it's committed: visual (UI Designer),

@@ -351,7 +351,7 @@ export function ApprovalCard({
   );
 }
 
-function Shell({
+export function Shell({
   children,
   done = false,
   wide = false,

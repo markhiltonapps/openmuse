@@ -250,7 +250,7 @@ test("too many requests are tried again after a pause; expired sign-ins say to r
   assert.equal(executes, 2);
   await assert.rejects(
     connector.execute("busy", "OUTLOOK_LIST_MESSAGES", {}),
-    /sign-in to outlook has expired. Reconnect it in Apps/,
+    /sign-in to outlook has expired. Call connect_app so the person can sign in again/,
   );
   // Always busy: gives up after three tries.
   const { fetcher: busy } = fakeComposio({
@@ -777,4 +777,59 @@ test("a read-only app never changes anything, and an hour's grant runs out", asy
   now += 61 * 60_000;
   assert.equal(await rules.allows(owner, send), undefined, "the hour is up");
   assert.deepEqual(await rules.list(owner), []);
+});
+
+test("emails a Gmail look-up reads come back as cards to open, and connect_app names its app", async () => {
+  const { apps } = fakeApps({
+    tool: async (_owner, slug) => ({
+      slug,
+      name: slug,
+      description: "",
+      app: "gmail",
+      readOnly: true,
+    }),
+    execute: async () => ({
+      data: {
+        messages: [
+          { messageId: "m1", sender: "Dan", subject: "Q3", messageText: "Numbers attached." },
+        ],
+      },
+    }),
+  });
+  const saved: unknown[] = [];
+  const specs = appToolSpecs(
+    apps,
+    "owner",
+    async () => ({ id: "x", title: "x" }),
+    undefined,
+    undefined,
+    {
+      save: async (_owner, emails) => {
+        saved.push(...emails);
+        return emails.map((email, index) => ({
+          id: `v${index}`,
+          app: email.app,
+          from: email.from,
+          subject: email.subject,
+          preview: email.body,
+        }));
+      },
+    },
+  );
+  const run = specs.find((s) => s.name === "use_app")?.execute as (
+    args: unknown,
+  ) => Promise<Record<string, unknown>>;
+  const read = await run({ tool: "GMAIL_FETCH_EMAILS", arguments: {}, summary: "Read Gmail" });
+  assert.deepEqual(read.emails, [
+    { id: "v0", app: "gmail", from: "Dan", subject: "Q3", preview: "Numbers attached." },
+  ]);
+  assert.match(String(read.shown), /on the person's screen as cards/);
+  assert.equal(saved.length, 1);
+  const connect = specs.find((s) => s.name === "connect_app")?.execute as (
+    args: unknown,
+  ) => Promise<Record<string, unknown>>;
+  const link = await connect({ app: "gmail" });
+  assert.equal(link.app, "gmail");
+  assert.equal(link.connected, false);
+  assert.equal(link.url, "https://connect.test/outlook");
 });

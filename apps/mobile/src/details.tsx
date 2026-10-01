@@ -49,6 +49,7 @@ import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
+import { AppEmailSheet } from "./email-cards";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import { LiveTalkSheet } from "./live-talk-ui";
 import { FoodLogSheet } from "./meal-checkins-ui";
@@ -91,6 +92,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "event")
     return <EventEditor event={detail.event} draft={detail.draft} neighbors={detail.neighbors} />;
   if (detail.type === "file") return <FileDetail file={detail.file} />;
+  if (detail.type === "appEmail") return <AppEmailSheet email={detail.email} />;
   if (detail.type === "review") return <ReviewDetail initial={detail.action} />;
   if (detail.type === "browser") return <BrowserDetail initial={detail.browser} />;
   return (

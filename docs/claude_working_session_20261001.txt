@@ -354,8 +354,72 @@ PENDING
 - The owner tries a call that shows results (e.g. "find me a robot vacuum under $300"), and
   "send my draft to Dan" in the chat and on a call (one tap on the card).
 - Push cd26e49 and the approvals commit when the owner says "push it".
-- Next: the least-clicks audit (every kind of request and every place; shortest path from the
-  chat), sent to the owner as a list before building.
+- Least-clicks audit done (scratchpad audit/least-clicks.md, sent to the owner): 30 kinds of
+  request; only 8 of the 35 take-me-there places open over the chat. Owner's picks: build all
+  of the top 8, and move Family and Social up (both used most weeks). Emails open in full over
+  the chat (Open in Gmail as a link). "Stop the job" / "pause my brief" happen straight away,
+  with Undo.
+  Slices, each through the Design division:
+  1. files, Today/calendar and email cards;
+  2. fixing meals by saying so, and memory suggestions;
+  3. jobs and routines;
+  4. take-me-there on calls;
+  5. Family and Social cards.
+- Gmail connect link on a call never showed (the voice said "it's on your screen"): being
+  fixed in slice 1 with a Connect card in the chat, on the call screen and in the saved call. It
+  fetches a fresh sign-in link when tapped and says "Connected" when the person comes back.
+- VOICE FIRST (owner, 2026-10-01): voice is now the centrepiece. Anything that can be tapped or
+  looked up must be doable by saying it; typing is a distant second. Owner's layout answers:
+  1. The app opens on a talk screen: the avatar, with the running conversation underneath.
+     Saying "show my Activity" opens that screen and the call shrinks to a call bar at the top
+     (like a phone call while using other apps). Tabs move into a menu.
+  2. The transcript is a running conversation with cards inline (approvals, emails, calendar,
+     Connect buttons, files), the avatar small at the top.
+  3. Spoken and typed turns are one conversation: a call isn't a separate thing, and you can
+     type in the middle of a call.
+  4. One tap to talk; it hangs up after a quiet spell (no always-on mic, no paid minutes on open).
+  Next: Design division mockups for the owner before building, then slices.
+- Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
+  (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
+  Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk
+  can't run (no WebRTC, or no voice key); and a Connect card for their own MCP apps right in the
+  conversation. Done (uncommitted, in design review):
+  - LiveVoice is allowed for everyone; `canSetUp` (the admin) alone sees "the key is missing".
+  - chat.tsx: the waveform and mic show only when live talk isn't "on". The mic choice is still
+    in Neddy's settings → Voice (VoiceCard).
+- Owner asked if the app accepts MCP URLs (for their own note-taking app): yes, it already does
+  (Apps → Your own apps → Add: name, https address, optional access key, or sign in on the app's
+  page). It must be reachable on the public internet over https; private/home addresses are
+  refused. Now "connect my notes app at https://…" brings a Connect card (OwnAppCard) into the
+  chat or call: check the address, Connect, sign in on its page or add the key on the card.
+- Slice 1 (#130), built, in design review:
+  - Connect card (connect_app): logo, "Connect Gmail" (a fresh link opened in a tab made during
+    the tap), "Connected" when they come back, and in the chat "Gmail is connected. Carry on."
+    is sent for them (only if they tapped it here). On calls it's in Details and the saved call.
+  - look_at_calendar (day-tools.ts) + CalendarCard: every calendar app plus the app's own
+    calendar and reminders, a day or up to 7, in their time zone; on calls too. It says the card
+    is on screen only when there's something to show.
+  - Email cards: Gmail/Outlook look-ups keep emails a week (email-views.ts), show rows with
+    Show more, open in full over the chat (Reply hands back to Neddy; Open in Gmail), inline on
+    calls.
+  - File row in the chat for documents made, saved or read.
+  - Tests: day-tools, email-views (new); apps, voice-brain, voice-live extended. All checks pass.
+  - Design division round 1: visual 1 MUST, usability 4 MUSTs, copy 7 MUSTs; all fixed, plus most
+    NICEs (scratchpad slice1/round2.md):
+    - a call stays open 5 min while they sign in from a Connect card (quietUntil);
+    - email cards keep their mailbox link after the 7 days;
+    - live talk status is remembered, so the composer doesn't swap buttons;
+    - reminders are named for screen readers;
+    - connect_app on an own app returns {own:true}, so the OwnAppCard shows;
+    - neutral job wording ("give the person connect_app's link with ask_user");
+    - the headset is the filled main button;
+    - the email sheet has "Draft a reply" pinned at the bottom.
+  - 459 tests pass. Owner said "push it" while round 2 sign-off was still running; pushed with
+    cd26e49 and 66aaa78 (no live call in the last 80 minutes). Any round 2 finding comes as a
+    follow-up commit.
+  - Not tested live (sandbox): OpenAI's own silence limit during a long sign-in; the Composio
+    sign-in tab on Android; Gmail emails' real shape from GMAIL_FETCH_EMAILS (emailsIn reads
+    messageId/subject/sender/messageText, as mail alerts do).
 - Owner's choice (answered): a document, spreadsheet or slides asked for on a call runs as a
   background job, and the usual job-done alert (pop-up, push, email) says when it's ready.
   VOICE_RULES now says so; tested.

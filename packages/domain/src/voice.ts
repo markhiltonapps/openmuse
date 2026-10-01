@@ -7,9 +7,14 @@ export const CALL_DETAIL_TOOLS = [
   "create_document",
   "create_spreadsheet",
   "create_presentation",
+  "look_at_calendar",
 ] as const;
-/** "approval": something saved for their OK, shown as its Approve card. */
-export type CallDetailTool = (typeof CALL_DETAIL_TOOLS)[number] | "approval";
+/**
+ * "approval": something saved for their OK, shown as its Approve card. "connect": a button that
+ * connects an app (the sign-in link connect_app made). "emails": emails read from Gmail or
+ * Outlook, as cards that open in full.
+ */
+export type CallDetailTool = (typeof CALL_DETAIL_TOOLS)[number] | "approval" | "connect" | "emails";
 
 /**
  * What the agent put on screen for one question during a live call: a long answer, products,

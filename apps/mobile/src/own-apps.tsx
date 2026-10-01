@@ -52,7 +52,7 @@ function statusLine(app: OwnApp, agent: string) {
  * On the web, a tab opened during the tap itself, so the browser doesn't block the sign-in page
  * that arrives a moment later. It can't reach back into this page.
  */
-function blankTab() {
+export function blankTab() {
   if (Platform.OS !== "web" || typeof window === "undefined") return null;
   const tab = window.open("", "_blank");
   if (tab) {
@@ -63,7 +63,7 @@ function blankTab() {
   return tab;
 }
 /** Opens the app's sign-in page; false when the browser blocked it. */
-function openPage(url: string, tab?: Window | null) {
+export function openPage(url: string, tab?: Window | null) {
   if (Platform.OS !== "web") {
     void Linking.openURL(url);
     return true;
