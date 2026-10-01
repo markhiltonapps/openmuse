@@ -54,6 +54,8 @@ export interface LiveQuestion {
   show?: (items: CallDetail["items"], title?: string) => void;
   /** What's already on their screen from earlier in the call. */
   shown?: CallDetail[];
+  /** The call is shrunk to its bar in the app, so what's shown waits behind its See it button. */
+  shrunk?: boolean;
   signal: AbortSignal;
 }
 /** The agent's answer, to be said in one to three short sentences. */
@@ -103,6 +105,8 @@ interface Live {
   lastWords: number;
   /** Not hung up for quiet until then: they're signing in to an app on its own page. */
   quietUntil?: number;
+  /** The app has the call shrunk to its bar (the person is elsewhere in the app). */
+  shrunk?: boolean;
   lastHeard: number;
   /** Hand-overs are answered one at a time, in order; all stop when the call ends. */
   queue: Promise<void>;
@@ -315,6 +319,11 @@ export class LiveVoice {
       await new Promise((resolve) => setTimeout(resolve, 100));
     await this.finish(live);
   }
+  /** Where the call is in the app: full screen, or shrunk to its bar (said by the app). */
+  view(owner: string, id: string, shrunk: boolean) {
+    const live = this.sessions.get(id);
+    if (live && live.owner === owner) live.shrunk = shrunk;
+  }
   /** The person's last conversations, newest first (without what was shown on screen). */
   async recent(owner: string, limit = 10) {
     return (await this.db.list<VoiceSession>(owner, "voice-sessions"))
@@ -484,6 +493,7 @@ export class LiveVoice {
           turns: turns.slice(-24),
           progress,
           shown: [...live.details],
+          shrunk: live.shrunk === true,
           show: (items, title) => {
             if (!items.length || live.stopAnswers.signal.aborted) return;
             // A Connect button: signing in on the app's page is mostly quiet and can take a few

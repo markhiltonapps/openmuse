@@ -24,7 +24,7 @@ import { useAgentWorkspace } from "./agent-workspace";
 import { API_URL, type MuseApi } from "./api";
 import { AssistantResponse } from "./assistant-response";
 import { AgentAvatar } from "./avatar";
-import { CallDetails } from "./call-details";
+import { CallDetails, detailNode } from "./call-details";
 import { Segmented } from "./charts";
 import { HIDDEN } from "./job-working-ui";
 import { callStatus, useLiveCall } from "./live-call";
@@ -104,12 +104,44 @@ export function LiveTalkSheet() {
   const name = data?.identity.name || "Neddy";
   // The call itself lives with the app, so it carries on when this screen closes.
   const call = useLiveCall();
-  const { state, muted, lines, error, lookingUp, details, view, setView } = call;
+  const { state, muted, lines, error, lookingUp, details, view, setView, target, clearTarget } =
+    call;
   const detailsScroller = useRef<ScrollView>(null);
-  // A new answer goes on top: show it, wherever they'd scrolled to.
+  // Where each answer starts in the details, so See it can go straight to the one it named.
+  const places = useRef(new Map<string, number>());
+  // A new answer goes on top: show it, wherever they'd scrolled to (unless See it named another).
   useEffect(() => {
-    if (details.length) detailsScroller.current?.scrollTo({ y: 0, animated: false });
+    if (details.length && !target) detailsScroller.current?.scrollTo({ y: 0, animated: false });
   }, [details.length]);
+  // Opened from See it: that answer (its Approve card first) is in view, and focus is on its title,
+  // never on Approve itself. Taps wait a moment, so a second tap on See it can't approve.
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!target) return;
+    setSettling(true);
+    // The screen may still be laying out as it opens: look again for a moment.
+    let tries = 0;
+    let go: ReturnType<typeof setTimeout>;
+    const find = () => {
+      const y = places.current.get(target);
+      if (y !== undefined) detailsScroller.current?.scrollTo({ y, animated: false });
+      if (y === undefined && ++tries < 6) go = setTimeout(find, 80);
+    };
+    go = setTimeout(find, 80);
+    const focus = setTimeout(() => {
+      if (Platform.OS === "web") document.getElementById(detailNode(target))?.focus();
+    }, 400);
+    // Last, as clearing it ends this effect (and its timers).
+    const ready = setTimeout(() => {
+      setSettling(false);
+      clearTarget();
+    }, 600);
+    return () => {
+      clearTimeout(go);
+      clearTimeout(focus);
+      clearTimeout(ready);
+    };
+  }, [target]);
   const scroller = useRef<ScrollView>(null);
   // The owner, before the server has its key: say what to add instead of asking for the mic.
   const [needsKey, setNeedsKey] = useState(() => cache.get(api) === "setup");
@@ -334,13 +366,21 @@ export function LiveTalkSheet() {
             <ErrorNotice error={error} />
             {showingDetails ? (
               // The sheet's whole width, so three product cards fit on a computer.
-              <View style={{ alignSelf: "stretch", height: detailsHeight }}>
+              <View
+                pointerEvents={settling ? "none" : "auto"}
+                style={{ alignSelf: "stretch", height: detailsHeight }}
+              >
                 <ScrollView
                   ref={detailsScroller}
                   style={{ flex: 1 }}
                   contentContainerStyle={{ padding: 4, paddingBottom: 24 }}
                 >
-                  <CallDetails details={details} onCall over={over} />
+                  <CallDetails
+                    details={details}
+                    onCall
+                    over={over}
+                    onPlace={(id, y) => places.current.set(id, y)}
+                  />
                 </ScrollView>
                 {/* A fade at the bottom says there's more below. */}
                 <View

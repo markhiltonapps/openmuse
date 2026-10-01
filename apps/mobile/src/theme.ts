@@ -62,6 +62,8 @@ const light = {
   onInverse: "#FFFFFF",
   /** "Live" on the inverse (a call's ring on its bar): the other theme's green. */
   liveOnInverse: "#2BD46E",
+  /** A quiet fill on the inverse (the call bar's Mute and its See it row). */
+  onInverseSubtle: "rgba(128,128,128,0.27)",
   shade: "rgba(35,48,44,0.25)",
 };
 const night: typeof light = {
@@ -90,6 +92,7 @@ const night: typeof light = {
   inverse: "#F3F3F5",
   onInverse: "#000000",
   liveOnInverse: "#189A58",
+  onInverseSubtle: "rgba(128,128,128,0.27)",
   shade: "rgba(0,0,0,0.6)",
 };
 export const palette = dark ? night : light;

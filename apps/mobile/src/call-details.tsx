@@ -1,6 +1,13 @@
 import { ChevronRight, ExternalLink, FileText } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  type LayoutChangeEvent,
+  Linking,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import type { Artifact } from "../../../packages/domain/src";
 import type { CallDetail } from "../../../packages/domain/src/voice";
 import { ApprovalCard } from "./approval-card";
@@ -20,6 +27,10 @@ const FILE_KINDS: Record<string, string> = {
 };
 const meta = { fontSize: 12, lineHeight: 17, color: colors.mutedStrong };
 /** Cards with their own heading: no heading above them when they're all an answer shows. */
+/** The element id of one answer on the call screen, for See it to scroll and move focus to. */
+export const detailNode = (id: string) => `call-detail-${id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+/** Cards that need the person (Approve, Connect) come before the rest of an answer. */
+const ACTS_FIRST = (tool: string) => (tool === "approval" || tool === "connect" ? 0 : 1);
 const OWN_TITLES = new Set<CallDetail["items"][number]["tool"]>([
   "approval",
   "connect",
@@ -37,8 +48,11 @@ export function CallDetails({
   onCall = false,
   over = false,
   lineColor = colors.line,
+  onPlace,
 }: {
   details: CallDetail[];
+  /** Where each answer starts (on the call screen), so See it can go straight to one. */
+  onPlace?: (id: string, y: number) => void;
   /** On the call screen after it ended: a Connect card says to talk again, not "say done". */
   over?: boolean;
   /**
@@ -52,7 +66,21 @@ export function CallDetails({
   return (
     <View style={{ gap: 22 }}>
       {(onCall ? [...details].reverse() : details).map((detail, index) => (
-        <View key={`${detail.id}-${detail.at}`} style={{ gap: 10 }}>
+        <View
+          key={`${detail.id}-${detail.at}`}
+          // On the call screen See it brings focus here, so its title is read before its buttons.
+          {...(onPlace
+            ? {
+                nativeID: detailNode(detail.id),
+                role: "group" as const,
+                "aria-label": detail.title,
+                tabIndex: -1 as const,
+                onLayout: (event: LayoutChangeEvent) =>
+                  onPlace(detail.id, event.nativeEvent.layout.y),
+              }
+            : {})}
+          style={{ gap: 10 }}
+        >
           {/* Just cards with their own titles (Approve, Connect, emails, calendar): no heading. */}
           {!detail.items.every((item) => OWN_TITLES.has(item.tool)) && (
             <View style={{ gap: 2 }}>
@@ -70,65 +98,75 @@ export function CallDetails({
               ) : null}
             </View>
           )}
-          {detail.items.map((item, at) => {
-            // The heading already says it; a card's own title would repeat it.
-            const result = untitled(item.result, detail.title);
-            const key = `${item.tool}-${at}`;
-            switch (item.tool) {
-              case "show_on_screen": {
-                const { title, text } = result as { title?: unknown; text?: unknown };
-                const titled = typeof title === "string" && title;
-                // Text lines stay readable on a computer (cards can use the whole width).
-                return (
-                  <View key={key} style={{ gap: 4, maxWidth: 640, marginTop: titled ? 6 : 0 }}>
-                    {titled ? (
-                      <Text role="heading" aria-level={4} style={s.heading}>
-                        {title}
-                      </Text>
-                    ) : null}
-                    <AssistantResponse content={String(text ?? "")} />
-                  </View>
-                );
-              }
-              case "show_products":
-                return <ProductsCard key={key} result={result} loading={false} />;
-              case "show_places":
-                return <PlacesCard key={key} result={result} loading={false} />;
-              case "search_web":
-                return <SearchPicturesCard key={key} result={result} loading={false} />;
-              case "approval": {
-                const { actionId } = result as { actionId?: unknown };
-                return typeof actionId === "string" ? (
-                  <ApprovalCard key={key} actionId={actionId} onCall={onCall} wide />
-                ) : null;
-              }
-              case "emails":
-                return <EmailCards key={key} emails={emailItems(result)} onCall={onCall} wide />;
-              case "look_at_calendar":
-                return <CalendarCard key={key} result={result} onCall={onCall} wide />;
-              case "connect": {
-                const { app, own } = result as { app?: unknown; own?: unknown };
-                if (typeof own === "string")
+          {/* What needs them (Approve, Connect) first: a long list above it would push it out of
+              sight, and that's what the call bar's See it promised. */}
+          {[...detail.items]
+            .map((item, at) => ({ item, at }))
+            .sort((a, b) => ACTS_FIRST(a.item.tool) - ACTS_FIRST(b.item.tool) || a.at - b.at)
+            .map(({ item, at }) => {
+              // The heading already says it; a card's own title would repeat it.
+              const result = untitled(item.result, detail.title);
+              const key = `${item.tool}-${at}`;
+              switch (item.tool) {
+                case "show_on_screen": {
+                  const { title, text } = result as { title?: unknown; text?: unknown };
+                  const titled = typeof title === "string" && title;
+                  // Text lines stay readable on a computer (cards can use the whole width).
                   return (
-                    <OwnAppCard
+                    <View key={key} style={{ gap: 4, maxWidth: 640, marginTop: titled ? 6 : 0 }}>
+                      {titled ? (
+                        <Text role="heading" aria-level={4} style={s.heading}>
+                          {title}
+                        </Text>
+                      ) : null}
+                      <AssistantResponse content={String(text ?? "")} />
+                    </View>
+                  );
+                }
+                case "show_products":
+                  return <ProductsCard key={key} result={result} loading={false} />;
+                case "show_places":
+                  return <PlacesCard key={key} result={result} loading={false} />;
+                case "search_web":
+                  return <SearchPicturesCard key={key} result={result} loading={false} />;
+                case "approval": {
+                  const { actionId } = result as { actionId?: unknown };
+                  return typeof actionId === "string" ? (
+                    <ApprovalCard key={key} actionId={actionId} onCall={onCall} wide />
+                  ) : null;
+                }
+                case "emails":
+                  return <EmailCards key={key} emails={emailItems(result)} onCall={onCall} wide />;
+                case "look_at_calendar":
+                  return <CalendarCard key={key} result={result} onCall={onCall} wide />;
+                case "connect": {
+                  const { app, own } = result as { app?: unknown; own?: unknown };
+                  if (typeof own === "string")
+                    return (
+                      <OwnAppCard
+                        key={key}
+                        id={own}
+                        name={typeof app === "string" ? app : ""}
+                        onCall={onCall}
+                        over={over}
+                        wide
+                      />
+                    );
+                  return typeof app === "string" ? (
+                    <ConnectCard key={key} app={app} onCall={onCall} over={over} wide />
+                  ) : null;
+                }
+                default:
+                  return (
+                    <FileRow
                       key={key}
-                      id={own}
-                      name={typeof app === "string" ? app : ""}
-                      onCall={onCall}
-                      over={over}
-                      wide
+                      kind={FILE_KINDS[item.tool]}
+                      result={result}
+                      inApp={!onCall}
                     />
                   );
-                return typeof app === "string" ? (
-                  <ConnectCard key={key} app={app} onCall={onCall} over={over} wide />
-                ) : null;
               }
-              default:
-                return (
-                  <FileRow key={key} kind={FILE_KINDS[item.tool]} result={result} inApp={!onCall} />
-                );
-            }
-          })}
+            })}
           {index < details.length - 1 && (
             <View style={{ height: 1, backgroundColor: lineColor, marginTop: 8 }} />
           )}

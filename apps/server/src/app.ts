@@ -1338,6 +1338,12 @@ export async function createApp(
     await liveVoice.end(c.get("owner"), c.req.param("id"));
     return c.json({ ok: true });
   });
+  // Where the call is in the app (its screen, or shrunk to the bar), so the voice says where to look.
+  app.post("/api/voice/live/:id/view", async (c) => {
+    const { shrunk } = z.object({ shrunk: z.boolean() }).parse(await c.req.json());
+    liveVoice.view(c.get("owner"), c.req.param("id"), shrunk);
+    return c.json({ ok: true });
+  });
   app.get("/api/voice/live/recent", async (c) =>
     c.json({ sessions: await liveVoice.recent(c.get("owner")) }),
   );

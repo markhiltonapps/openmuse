@@ -23,6 +23,8 @@ export interface LiveHandlers {
 }
 export interface LiveCall {
   setMuted: (muted: boolean) => void;
+  /** Tells the server the call is shrunk to its bar, so the voice says where to look. */
+  setShrunk: (shrunk: boolean) => void;
   end: () => Promise<void>;
 }
 
@@ -280,6 +282,12 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
   return {
     setMuted: (muted) => {
       for (const track of stream.getAudioTracks()) track.enabled = !muted;
+    },
+    setShrunk: (shrunk) => {
+      if (over || !sessionId) return;
+      void api
+        .request(`/api/voice/live/${encodeURIComponent(sessionId)}/view`, { shrunk })
+        .catch(() => undefined);
     },
     end: () => stop(),
   };

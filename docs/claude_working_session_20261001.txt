@@ -437,6 +437,29 @@ PENDING
   18:49); api deployed SUCCESS 18:53. Also: my 17:45 push restarted the api at 17:46:35 during the
   owner's call (my live-call check was 25 s too early). Open question for the owner: keep the
   built-in Google sign-in at all? (/api/google/connect returned 503: not configured.)
+- V1 pushed (e52bb50) at 19:18 UTC after checking no call was live (the 19:11 call had ended at
+  19:14); api and web deployed SUCCESS 19:19.
+- See it on the call bar (owner, on a real call at 19:22–19:31): with the call shrunk, Neddy found
+  junk email and saved "move these to the trash" for approval, saying it was on screen. The only
+  sign was the bar's small line "New on screen · Tap to see"; the owner dug through Activity.
+  Owner's choices: a big button on the bar that says what it is; Neddy says where it is, for when
+  it's safe to look; Approve stays behind See it (never on the bar).
+  - The bar's See it row: shield/link/list icon, "Needs your OK" / "Ready to connect" / "New from
+    Neddy" (· and N more), the item's title, a white See it pill; 8px clear of End. It also stays on
+    the ended bar while something is unseen, and the end announcement says what still needs an OK.
+  - See it (or the bar's main button) opens the call screen scrolled to that answer, focus on its
+    title (never on Approve), taps held for 600 ms. Approve and Connect cards come first in an answer.
+  - The app tells the server when the call is shrunk (POST /api/voice/live/:id/view); each
+    hand-over is told where what it shows appears (whereShown): "behind the See it button in the bar
+    at the top, for when it's safe to look".
+  - Design division: copy SIGNED OFF; visual and usability round 1 MUSTs fixed and checked with their
+    own scripts (Approve in view at 416/1100, focus on the answer, no approve on a double tap, See
+    it kept on the ended bar). Owner said "push it" while their round 2 confirmation was running;
+    any finding comes as a follow-up commit.
+  - Tests: lint, typechecks, worker tsc, 462 tests pass (new: voice-live view/shrunk, whereShown).
+  - Later: the voice's "shrunk" is fixed when a hand-over starts (if they open or shrink it during
+    the check it can name the wrong place); a quieter "Needs your OK" reminder after See it while the
+    approval is still undecided; don't hang up for quiet while an Approve card is unseen.
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk

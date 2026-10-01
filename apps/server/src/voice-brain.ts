@@ -304,6 +304,15 @@ export async function voiceToday(brain: VoiceBrain, owner: string) {
   return clip(parts.join("\n\n"), 5000);
 }
 
+/**
+ * Where what's put on screen appears, so the voice says it truly: on the open call screen, or
+ * behind a See it button on the call's bar (the person is elsewhere in the app).
+ */
+export const whereShown = (shrunk: boolean) =>
+  shrunk
+    ? "Their call is shrunk to a bar at the top of the app while they use the rest of it. Anything you put on their screen (a list, emails, an Approve or Connect button) waits behind a See it button on that bar. Whenever you put something there, say it's behind the See it button in the bar at the top, for when it's safe to look, instead of just saying it's on their screen."
+    : "Their call screen is open, so anything you put on their screen shows on it straight away.";
+
 /** Answers a hand-over with the chat agent, sending progress notes as it uses its tools. */
 export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
   return async ({
@@ -314,6 +323,7 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
     progress,
     show,
     shown: onScreen,
+    shrunk = false,
     signal,
   }) => {
     const [chat, name] = await Promise.all([
@@ -347,6 +357,7 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
               },
             ]
           : []),
+        { description: "Where what you put on screen appears", value: whereShown(shrunk) },
       ],
       state: {},
       forwardedProps: {},

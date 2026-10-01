@@ -14,6 +14,7 @@ import {
   type VoiceBrain,
   voiceAnswer,
   voiceToday,
+  whereShown,
 } from "../apps/server/src/voice-brain.ts";
 import { liveInstructions, type VoiceSession } from "../apps/server/src/voice-live.ts";
 import type { CallDetail } from "../packages/domain/src/voice.ts";
@@ -331,6 +332,24 @@ test("a long answer goes on screen: shown results are collected for the call, fa
     signal: new AbortController().signal,
   });
   assert.match(runs[1]?.context[1]?.description ?? "", /Shown on their screen earlier/);
+  // Where it appears: the open call screen by default.
+  assert.equal(runs[1]?.context.at(-1)?.value, whereShown(false));
+  assert.match(whereShown(false), /call screen is open/);
+  // Shrunk to the bar (the person is elsewhere in the app), the voice says where to look.
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d3",
+    turns: [{ role: "user", text: "Any junk email this week?" }],
+    progress: () => {},
+    shrunk: true,
+    signal: new AbortController().signal,
+  });
+  assert.equal(runs[2]?.context.at(-1)?.value, whereShown(true));
+  assert.match(
+    whereShown(true),
+    /behind the See it button in the bar at the top, for when it's safe to look/,
+  );
   assert.match(
     runs[1]?.context[1]?.value ?? "",
     /Roomba j7\]\(https:\/\/target\.com\/j7\) · \$299/,

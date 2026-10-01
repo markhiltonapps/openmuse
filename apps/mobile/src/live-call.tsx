@@ -1,4 +1,4 @@
-import { Mic, MicOff, PhoneOff, X } from "lucide-react-native";
+import { LayoutList, Link2, Mic, MicOff, PhoneOff, ShieldCheck, X } from "lucide-react-native";
 import {
   createContext,
   Fragment,
@@ -94,6 +94,9 @@ export interface CallControls {
   shrink: () => void;
 }
 export interface LiveCallValue extends CallControls {
+  /** The answer See it named, for the call screen to go straight to (then cleared). */
+  target?: string;
+  clearTarget: () => void;
   state: LiveState;
   muted: boolean;
   /** The last few things said, newest last. */
@@ -169,6 +172,11 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   const [details, setDetails] = useState<CallDetail[]>([]);
   // How many details the person has had the call screen open for.
   const [seen, setSeen] = useState(0);
+  const seenNow = useRef(0);
+  seenNow.current = seen;
+  const detailsNow = useRef<CallDetail[]>([]);
+  detailsNow.current = details;
+  const [target, setTarget] = useState<string>();
   const [view, setView] = useState<"talk" | "details">("talk");
   const [lookingUp, setLookingUp] = useState(false);
   const [error, setError] = useState("");
@@ -243,7 +251,9 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         // Something new: the voice is saying it's on the screen, so that's what shows.
         if (next.length > detailCount) {
           setView("details");
-          say(`${nameNow.current} put something new on screen. Go back to the call to see it.`);
+          // The same thing the bar's See it button shows.
+          const row = newsRow(next.slice(seenNow.current), nameNow.current);
+          if (row) say(`${rowWords(row)}. Choose “See it” in the bar at the top.`);
         }
         detailCount = next.length;
         setDetails(next);
@@ -280,8 +290,10 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       },
     })
       .then((started) => {
-        if (live()) call.current = started;
-        else void started.end();
+        if (!live()) return void started.end();
+        call.current = started;
+        // Shrunk while it was connecting: the server starts out thinking the screen is open.
+        if (!shownNow.current) started.setShrunk(true);
       })
       .catch((e: unknown) => {
         if (!live()) return;
@@ -300,10 +312,20 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (shown) setSeen(details.length);
   }, [shown, details.length]);
+  // The voice says where things it shows appear: on the call screen, or under See it on the bar.
+  useEffect(() => {
+    if (phase === "on") call.current?.setShrunk(!shown);
+  }, [phase, shown]);
   // A call that ends on its own while shrunk says so (and why).
   useEffect(() => {
-    if (phase === "over")
-      say(error ? `The call couldn’t start. ${error}` : ended || "The call ended.");
+    if (phase !== "over") return;
+    // Something still waiting for their OK stays behind See it on the ended bar: say so.
+    const row = newsRow(detailsNow.current.slice(seenNow.current), nameNow.current);
+    const waiting =
+      row?.kind === "ok"
+        ? ` ${row.title} still needs your OK. Choose “See it” in the bar at the top.`
+        : "";
+    say(`${error ? `The call couldn’t start. ${error}` : ended || "The call ended."}${waiting}`);
   }, [phase, ended, error, say]);
   // During a call, leaving the page (a refresh, pull to refresh, closing the tab) asks first.
   useEffect(() => {
@@ -354,10 +376,15 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     setNews("");
   }, []);
   const expand = useCallback(() => {
+    // Straight to what the bar's See it named (a waiting Approve card first).
+    const row = newsRow(detailsNow.current.slice(seenNow.current), nameNow.current);
+    setTarget(row?.id);
+    if (row) setView("details");
     shownNow.current = true;
     setShown(true);
     setNews("");
   }, []);
+  const clearTarget = useCallback(() => setTarget(undefined), []);
   const shrink = useCallback(() => {
     shownNow.current = false;
     setShown(false);
@@ -393,8 +420,24 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       error,
       ended,
       startedAt,
+      target,
+      clearTarget,
     }),
-    [controls, state, muted, lines, details, seen, view, lookingUp, error, ended, startedAt],
+    [
+      controls,
+      state,
+      muted,
+      lines,
+      details,
+      seen,
+      view,
+      lookingUp,
+      error,
+      ended,
+      startedAt,
+      target,
+      clearTarget,
+    ],
   );
   return (
     <ControlsContext.Provider value={controls}>
@@ -404,6 +447,57 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     </ControlsContext.Provider>
   );
 }
+
+/** Something put on screen that waits for their OK (an Approve card). */
+const needsOk = (detail: CallDetail) => detail.items.some((item) => item.tool === "approval");
+/** A Connect button for an app (connect_app's link, or their own app to check and connect). */
+const connectOf = (detail: CallDetail) => detail.items.find((item) => item.tool === "connect");
+/** What a detail is, in a few words: an Approve card's own title, else the answer's heading. */
+function detailTitle(detail: CallDetail) {
+  for (const item of detail.items) {
+    const title = (item.result as { title?: unknown } | undefined)?.title;
+    if (item.tool === "approval" && typeof title === "string" && title.trim()) return title.trim();
+  }
+  const app = (connectOf(detail)?.result as { app?: unknown } | undefined)?.app;
+  if (typeof app === "string" && app.trim())
+    return `Connect ${app.trim().charAt(0).toUpperCase()}${app.trim().slice(1)}`;
+  return detail.title?.trim() || "Something new";
+}
+/**
+ * What the bar's See it button says about what's new on screen: something waiting for their OK
+ * first, then a Connect button, else the newest; and how many more there are.
+ */
+interface NewsRow {
+  /** The answer it names. */
+  id: string;
+  kind: "ok" | "connect" | "new";
+  label: string;
+  title: string;
+  more: number;
+}
+function newsRow(unseen: CallDetail[], name: string): NewsRow | undefined {
+  const newest = [...unseen].reverse();
+  const waiting = newest.find(needsOk);
+  const connect = waiting ? undefined : newest.find((detail) => !!connectOf(detail));
+  const pick = waiting ?? connect ?? newest[0];
+  if (!pick) return undefined;
+  const kind = waiting ? "ok" : connect ? "connect" : "new";
+  return {
+    id: pick.id,
+    kind,
+    label:
+      kind === "ok"
+        ? "Needs your OK"
+        : kind === "connect"
+          ? "Ready to connect"
+          : `New from ${name}`,
+    title: detailTitle(pick),
+    more: unseen.length - 1,
+  };
+}
+/** "Needs your OK: Move 9 emails to the trash, and 1 more": the row's words, in its order. */
+const rowWords = (row: NewsRow) =>
+  `${row.label}: ${row.title}${row.more ? `, and ${row.more} more` : ""}`;
 
 /** What the call is doing, in a few words. */
 export function callStatus(call: LiveCallValue, name: string) {
@@ -495,7 +589,13 @@ export function CallBar() {
         ?.text.trim() ?? "");
   // Why it ended, when there's more to say than "The call ended." (Talk again is right there).
   const why = over && !call.error && !call.ended.startsWith("The call ended.") ? call.ended : "";
-  const fresh = !over && call.unseen > 0;
+  // What's new on screen and not seen yet, for its See it button (a waiting OK first): during the
+  // call, and after it ends, so a waiting OK isn't lost because it went quiet before it was safe
+  // to look.
+  const row =
+    call.unseen > 0
+      ? newsRow(call.details.slice(call.details.length - call.unseen), name)
+      : undefined;
   const live = !over && !call.muted && call.state !== "connecting";
   // Two lines of 14px text hold about one character per 7.6px each: the newest words must fit.
   const room = quoteWidth ? Math.max(60, Math.floor(quoteWidth / 7.6) * 2 - 6) : 80;
@@ -563,7 +663,7 @@ export function CallBar() {
               ? call.error
                 ? "The call couldn’t start. See what to do"
                 : "The call ended. See what was said"
-              : `${name} · ${status}.${fresh ? " New on screen." : ""} Go back to the call`
+              : `${name} · ${status}. Go back to the call`
           }
           onPress={call.expand}
           style={({ pressed }) => ({
@@ -628,20 +728,13 @@ export function CallBar() {
             )}
             <Text
               numberOfLines={over ? 2 : 1}
-              style={[
-                { fontSize: 12, fontVariant: ["tabular-nums"] },
-                soft,
-                // Something new on the call screen: the one thing on this line worth seeing.
-                fresh && { opacity: 1, fontWeight: "700" },
-              ]}
+              style={[{ fontSize: 12, fontVariant: ["tabular-nums"] }, soft]}
             >
               {over
                 ? call.error
                   ? "Tap to see what to do"
                   : "Tap to see what was said"
-                : fresh
-                  ? "New on screen · Tap to see"
-                  : [time, "Tap to go back"].filter(Boolean).join(" · ")}
+                : [time, "Tap to go back"].filter(Boolean).join(" · ")}
             </Text>
           </View>
         </Pressable>
@@ -688,7 +781,7 @@ export function CallBar() {
                 disabled={call.state === "connecting"}
                 onPress={call.toggleMute}
                 style={({ pressed }) => [
-                  round(call.muted ? colors.surface : "rgba(128,128,128,0.28)"),
+                  round(call.muted ? colors.surface : colors.onInverseSubtle),
                   { opacity: call.state === "connecting" ? 0.5 : pressed ? 0.8 : 1 },
                 ]}
               >
@@ -712,7 +805,67 @@ export function CallBar() {
         )}
       </View>
       {/* Two lines kept for the words all through the call, so the page below never jumps. */}
-      {!over ? (
+      {why ? (
+        <Text
+          numberOfLines={2}
+          style={[{ fontSize: 14, lineHeight: 19, paddingHorizontal: 4 }, soft]}
+        >
+          {why}
+        </Text>
+      ) : null}
+      {row ? (
+        // Something put on screen while the call is shrunk: a clear button to it, in place of the
+        // words (the voice is saying it's here). An Approve card is behind it, never on the bar.
+        <Pressable
+          role="button"
+          aria-label={`${rowWords(row)}. See it`}
+          onPress={call.expand}
+          style={({ pressed }) => ({
+            // Clear of End above it: a tap aimed here that lands high mustn't end the call.
+            marginTop: 8,
+            minHeight: 48,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingLeft: 12,
+            paddingRight: 6,
+            paddingVertical: 5,
+            borderRadius: 18,
+            backgroundColor: colors.onInverseSubtle,
+            opacity: pressed ? 0.85 : 1,
+          })}
+        >
+          {row.kind === "ok" ? (
+            <ShieldCheck size={20} color={colors.onInverse} />
+          ) : row.kind === "connect" ? (
+            <Link2 size={20} color={colors.onInverse} />
+          ) : (
+            <LayoutList size={20} color={colors.onInverse} />
+          )}
+          <View style={{ flex: 1, gap: 1 }}>
+            <Text numberOfLines={1} style={[{ fontSize: 12 }, soft]}>
+              {[row.label, row.more ? `and ${row.more} more` : ""].filter(Boolean).join(" · ")}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.onInverse, fontSize: 15, fontWeight: "700" }}
+            >
+              {row.title}
+            </Text>
+          </View>
+          <View
+            style={{
+              minHeight: 36,
+              paddingHorizontal: 14,
+              borderRadius: 18,
+              justifyContent: "center",
+              backgroundColor: colors.surface,
+            }}
+          >
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: "700" }}>See it</Text>
+          </View>
+        </Pressable>
+      ) : !over ? (
         <Text
           numberOfLines={2}
           onLayout={(event) => setQuoteWidth(Math.round(event.nativeEvent.layout.width))}
@@ -726,13 +879,6 @@ export function CallBar() {
           }}
         >
           {said ? `“${newest(said, room)}”` : ""}
-        </Text>
-      ) : why ? (
-        <Text
-          numberOfLines={2}
-          style={[{ fontSize: 14, lineHeight: 19, paddingHorizontal: 4 }, soft]}
-        >
-          {why}
         </Text>
       ) : null}
     </View>

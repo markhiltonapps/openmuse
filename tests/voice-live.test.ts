@@ -341,6 +341,33 @@ test("“let me check”: a hand-over is answered by the agent, with a progress 
   await db.close();
 });
 
+test("the app says when the call is shrunk to its bar, and hand-overs are told", async () => {
+  const asked: { shrunk?: boolean }[] = [];
+  const { voice, sockets, db } = await setup({
+    answer: async (question) => {
+      asked.push(question);
+      return "It's under See it in the bar at the top.";
+    },
+  });
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  // Someone else can't change it.
+  voice.view("someone-else", "live_123", true);
+  socket.emit({ type: "session.input_transcript.delta", delta: "Any junk email this week?" });
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_open" } });
+  await wait(800);
+  voice.view("owner", "live_123", true);
+  socket.emit({ type: "session.input_transcript.delta", delta: "And from Dan?" });
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_shrunk" } });
+  await wait(800);
+  assert.deepEqual(
+    asked.map((question) => question.shrunk),
+    [false, true],
+  );
+  await voice.end("owner", "live_123");
+  await db.close();
+});
+
 test("a hand-over that takes too long, or fails, gets a plain spoken apology instead", async () => {
   const slow = await setup({ answer: () => new Promise(() => {}), answerSeconds: 0.2 });
   await slow.voice.start("owner", "offer");
