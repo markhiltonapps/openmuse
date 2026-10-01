@@ -273,9 +273,26 @@ TESTS
   (answered with a note, too slow or failing, stopped by ending the call).
 - Screenshots use a fake call and a mocked chat run.
 
+LIGHTER CALLS ON PHONES (owner said calls felt sluggish and choppy, then faster on a retry;
+asked to lighten them anyway)
+- How loud Neddy is (for the mouth and "talking/listening") is read from the call connection
+  itself where the browser reports it, instead of running the voice through Web Audio as well.
+  If the connection doesn't report it, it falls back to measuring the sound as before.
+- The status is passed to the screen only when it changes, not ten times a second.
+- Captions are gathered and shown about five times a second instead of on every few words, and
+  the caption box jumps to the end instead of a smooth scroll each time.
+- During a call the app stops checking for new Activity and computer updates (it catches up
+  after), and avatars outside the call stop their looping motion. The call screen's own avatar
+  is unchanged.
+- Checks: lint, both typechecks, worker tsc, 448 tests pass. The call-screen scenario still
+  passes (checking status, captions). A real WebRTC loopback in Chromium reports about 0.35 while
+  sound plays and 0 in silence.
+
 PENDING
 -------
-- The owner tries "what did I have for lunch?" and a reminder on a real call.
+- The owner tries "what did I have for lunch?" and a reminder on a real call, and says whether
+  calls feel smoother on the phone.
+- Next: show long results on the call screen and in the chat instead of reading them out.
 - Not done yet:
   - telling the voice when a job it started finishes;
   - spoken yes for low-risk actions;

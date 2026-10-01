@@ -13,6 +13,7 @@ import type {
   AgentWorkspace,
   CreateTaskInput,
 } from "../../../packages/domain/src/agent";
+import { liveCallOn } from "./live-voice";
 import { useWorkspace } from "./workspace";
 
 interface AgentContextValue {
@@ -53,7 +54,8 @@ export function AgentWorkspaceProvider({ children }: { children: ReactNode }) {
       (Platform.OS !== "web" || typeof document === "undefined" || !document.hidden);
     let polling = false;
     const poll = () => {
-      if (!visible() || polling) return;
+      // During a live call the phone's attention goes to the voice; this catches up after.
+      if (!visible() || polling || liveCallOn()) return;
       polling = true;
       void refresh()
         .catch(() => {})

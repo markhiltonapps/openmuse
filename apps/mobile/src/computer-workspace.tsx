@@ -20,6 +20,7 @@ import type {
   ComputerSnapshot,
 } from "../../../packages/domain/src/computer";
 import { useComputerDraft } from "./computer-drafts";
+import { liveCallOn } from "./live-voice";
 import { Button, Card, colors, Empty, ErrorNotice, Field, LinkRow, s, timeLabel } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -58,7 +59,8 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
   }, [api]);
   useEffect(() => {
     const poll = () => {
-      if (AppState.currentState !== "active") return;
+      // Not during a live call: the phone's attention goes to the voice.
+      if (AppState.currentState !== "active" || liveCallOn()) return;
       void refresh();
     };
     poll();

@@ -7,6 +7,7 @@ import { ActivityProp } from "./activity-props";
 import { useAgentWorkspace } from "./agent-workspace";
 import type { MuseApi } from "./api";
 import { ART, type CharacterId, VIDEO_CHARACTERS } from "./avatar-art";
+import { useLiveCallOn } from "./live-voice";
 import SvgArt from "./SvgArt";
 import { colors } from "./ui";
 import { useSpeaking } from "./voice";
@@ -209,6 +210,7 @@ export function Mascot({
   activity,
   animated = true,
   speaking = false,
+  quiet = false,
 }: {
   size?: number;
   variant?: AvatarColor;
@@ -220,6 +222,8 @@ export function Mascot({
   animated?: boolean;
   /** The agent is reading a reply aloud: characters made of clips switch to talking. */
   speaking?: boolean;
+  /** No looping motion (breathing, bobbing), e.g. during a live call; clips still talk. */
+  quiet?: boolean;
 }) {
   const video = character !== "custom" && VIDEO_CHARACTERS[character] === true;
   const reduce = useReducedMotion();
@@ -229,7 +233,7 @@ export function Mascot({
   useEffect(() => {
     breathe.setValue(0);
     lift.setValue(0);
-    if (!motion) return;
+    if (!motion || quiet) return;
     const move = (
       value: Animated.Value,
       toValue: number,
@@ -263,7 +267,7 @@ export function Mascot({
               : Animated.loop(Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]));
     animation?.start();
     return () => animation?.stop();
-  }, [mood, activity, motion, breathe, lift, video]);
+  }, [mood, activity, motion, breathe, lift, video, quiet]);
   const custom = character === "custom";
   const art = video ? (
     <AvatarVideo id={character} size={size} speaking={speaking} still={!motion} />
@@ -371,10 +375,13 @@ export function AgentAvatar({
   size,
   mood,
   activity,
+  onCall = false,
 }: {
   size: number;
   mood?: Mood;
   activity?: ActivityKind;
+  /** The call screen's own avatar, which keeps moving during the call. */
+  onCall?: boolean;
 }) {
   const { data } = useAgentWorkspace();
   const { api } = useWorkspace();
@@ -382,8 +389,11 @@ export function AgentAvatar({
   const custom = identity?.character === "custom";
   const image = useAvatarImage(api, custom ? identity?.avatarImageVersion : undefined);
   const speaking = useSpeaking();
+  // During a live call the phone's attention goes to the voice, and to the call screen.
+  const quiet = useLiveCallOn() && !onCall;
   return (
     <Mascot
+      quiet={quiet}
       size={size}
       variant={identity?.avatar}
       character={identity?.character ?? "neddy"}

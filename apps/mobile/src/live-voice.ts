@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import type { MuseApi } from "./api";
 import { setLiveSpeaking, voiceSettings } from "./voice";
@@ -33,6 +34,28 @@ export function liveVoiceSupported() {
 
 /** Once answer events have been seen in this tab, the "speaking again" fallback isn't needed. */
 let answerEvents = false;
+
+// Whether a call is on, so the rest of the app can stay quiet (no polling or looping animation)
+// and leave the phone's attention to the voice.
+let calls = 0;
+const callListeners = new Set<() => void>();
+function countCall(change: 1 | -1) {
+  calls = Math.max(0, calls + change);
+  for (const listener of callListeners) listener();
+}
+export const liveCallOn = () => calls > 0;
+export function useLiveCallOn() {
+  return useSyncExternalStore(
+    (listener) => {
+      callListeners.add(listener);
+      return () => {
+        callListeners.delete(listener);
+      };
+    },
+    () => calls > 0,
+    () => false,
+  );
+}
 export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<LiveCall> {
   const micId = voiceSettings().microphone;
   const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -48,6 +71,7 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
         return navigator.mediaDevices.getUserMedia({ audio });
       throw error;
     });
+  countCall(1);
   const peer = new RTCPeerConnection();
   const player = new Audio();
   player.autoplay = true;
@@ -78,6 +102,7 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
   const stop = (reason?: string, tellServer = true) => {
     if (over) return Promise.resolve();
     over = true;
+    countCall(-1);
     clearInterval(meter);
     stopChecking();
     setLiveSpeaking(false);
@@ -106,30 +131,65 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
     const [remote] = event.streams;
     if (!remote) return;
     player.srcObject = remote;
-    try {
-      context = new AudioContext();
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 512;
-      context.createMediaStreamSource(remote).connect(analyser);
-      const samples = new Uint8Array(analyser.fftSize);
-      // Starts quiet, so the screen says "Listening" until the agent first speaks.
-      let quietSince = 1;
-      meter = setInterval(() => {
-        analyser.getByteTimeDomainData(samples);
-        let sum = 0;
-        for (const sample of samples) sum += ((sample - 128) / 128) ** 2;
-        const loud = Math.sqrt(sum / samples.length) > 0.02;
-        if (loud) quietSince = 0;
-        else quietSince ||= Date.now();
-        const quiet = quietSince > 0 ? Date.now() - quietSince : 0;
-        // The mouth follows the sound closely; the words on screen wait out a pause between
-        // sentences, so they don't flicker between talking and listening.
-        setLiveSpeaking(loud || quiet < 400);
-        if (!over) handlers.onState(loud || quiet < 1500 ? "speaking" : "listening");
-      }, 100);
-    } catch {
-      // No Web Audio: the voice still plays, the avatar just doesn't move its mouth.
-    }
+    // How loud the agent is: read from the connection itself where the browser can, since
+    // running the voice through Web Audio as well can make it stutter on some phones.
+    const measureSound = (): (() => number) | undefined => {
+      try {
+        context = new AudioContext();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 512;
+        context.createMediaStreamSource(remote).connect(analyser);
+        const samples = new Uint8Array(analyser.fftSize);
+        return () => {
+          analyser.getByteTimeDomainData(samples);
+          let sum = 0;
+          for (const sample of samples) sum += ((sample - 128) / 128) ** 2;
+          return Math.sqrt(sum / samples.length);
+        };
+      } catch {
+        // No way to measure: the voice still plays, the avatar just doesn't move its mouth.
+        return undefined;
+      }
+    };
+    const receiver = event.receiver as RTCRtpReceiver & {
+      getSynchronizationSources?: () => { audioLevel?: number; rtpTimestamp: number }[];
+    };
+    let lastPacket = -1;
+    let level =
+      typeof receiver.getSynchronizationSources === "function"
+        ? () => {
+            const [latest] = receiver.getSynchronizationSources?.() ?? [];
+            if (!latest) return 0;
+            if (latest.audioLevel === undefined) {
+              // The connection doesn't carry how loud it is: measure the sound itself.
+              level = measureSound();
+              return 0;
+            }
+            // No new sound since last time (the voice may send nothing in silence): quiet.
+            const fresh = latest.rtpTimestamp !== lastPacket;
+            lastPacket = latest.rtpTimestamp;
+            return fresh ? latest.audioLevel : 0;
+          }
+        : measureSound();
+    if (!level) return;
+    // Starts quiet, so the screen says "Listening" until the agent first speaks.
+    let quietSince = 1;
+    let said: LiveState | undefined;
+    meter = setInterval(() => {
+      const loud = (level?.() ?? 0) > 0.02;
+      if (loud) quietSince = 0;
+      else quietSince ||= Date.now();
+      const quiet = quietSince > 0 ? Date.now() - quietSince : 0;
+      // The mouth follows the sound closely; the words on screen wait out a pause between
+      // sentences, so they don't flicker between talking and listening.
+      setLiveSpeaking(loud || quiet < 400);
+      const now: LiveState = loud || quiet < 1500 ? "speaking" : "listening";
+      // Only changes are passed on, so the screen isn't redrawn ten times a second.
+      if (!over && now !== said) {
+        said = now;
+        handlers.onState(now);
+      }
+    }, 120);
   };
   for (const track of stream.getAudioTracks()) peer.addTrack(track, stream);
   const channel = peer.createDataChannel("oai-events");

@@ -140,6 +140,10 @@ Time Log — <Project Name>
   `/api/avatar-media/` in Playwright to `apps/mobile/public/home/neddy-wave-porthole.webp`.
 - **Testing timers in Playwright:** `page.clock.install()` before `goto`, then `clock.runFor(…)`,
   to fire a 15-minute check without waiting (used for the new-version pill).
+- **Light calls:** in a live call, read the agent's loudness from
+  `RTCRtpReceiver.getSynchronizationSources()` (`audioLevel`, fresh when `rtpTimestamp` moves)
+  rather than Web Audio, and fall back when it's absent. Batch caption updates, pass state only on
+  change, and pause polling and looping animations while `liveCallOn()`.
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
   `apps/worker` changes; other pushes show it as SKIPPED.
 - **Live voice (OpenAI gpt-live-1):** the key never reaches the browser. The server creates the

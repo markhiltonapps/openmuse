@@ -176,17 +176,36 @@ export function LiveTalkSheet() {
     setLines([]);
     setMuted(false);
     setLookingUp(false);
+    // Words arrive a few at a time, many times a second: they're gathered and shown about five
+    // times a second, so the screen isn't redrawn for each one (slow phones stutter).
+    let pending: Line[] = [];
+    let flush: ReturnType<typeof setTimeout> | undefined;
+    const show = () => {
+      flush = undefined;
+      const arrived = pending;
+      pending = [];
+      if (cancelled || !arrived.length) return;
+      setLines((current) => {
+        const next = [...current];
+        for (const line of arrived) {
+          const last = next.at(-1);
+          if (last?.role === line.role)
+            next[next.length - 1] = { role: line.role, text: last.text + line.text };
+          else next.push(line);
+        }
+        return next.slice(-8);
+      });
+    };
     startLive(api, {
       onState: (next) => !cancelled && setState(next),
       onChecking: (on) => !cancelled && setLookingUp(on),
-      onWords: (role, words) =>
-        !cancelled &&
-        setLines((current) => {
-          const last = current.at(-1);
-          if (last?.role === role)
-            return [...current.slice(0, -1), { role, text: last.text + words }];
-          return [...current.slice(-7), { role, text: words }];
-        }),
+      onWords: (role, words) => {
+        if (cancelled) return;
+        const last = pending.at(-1);
+        if (last?.role === role) last.text += words;
+        else pending.push({ role, text: words });
+        flush ??= setTimeout(show, 200);
+      },
       onEnded: (reason) => {
         // OpenAI ended it; the server saves the call as soon as it hears.
         callSaved(2500);
@@ -222,6 +241,7 @@ export function LiveTalkSheet() {
       });
     return () => {
       cancelled = true;
+      clearTimeout(flush);
       void call.current?.end().then(() => callSaved());
       call.current = undefined;
     };
@@ -352,6 +372,7 @@ export function LiveTalkSheet() {
         <View style={{ alignItems: "center", gap: 12 }}>
           {!short && (
             <AgentAvatar
+              onCall
               size={avatar}
               mood={
                 state === "connecting" || (lookingUp && state !== "speaking")
@@ -387,7 +408,8 @@ export function LiveTalkSheet() {
           {!over || lines.length > 0 ? (
             <ScrollView
               ref={scroller}
-              onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: true })}
+              // Straight to the end: a smooth scroll for every few words is costly on a phone.
+              onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
               style={{ alignSelf: "center", width: "100%", maxWidth: 560, height: captionHeight }}
               contentContainerStyle={{
                 gap: 10,
