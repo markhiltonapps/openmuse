@@ -26,7 +26,8 @@ export type UsageKind =
   | "ideas"
   | "summary"
   | "code"
-  | "recipes";
+  | "recipes"
+  | "voice";
 
 /** Dollars per million tokens. */
 export interface Price {
@@ -50,6 +51,19 @@ export const PRICES: Record<string, Price> = {
 };
 /** Anthropic's server-side web search: $10 per 1,000 searches. */
 const SEARCH_PRICE = 0.01;
+/**
+ * Live voice, in dollars per minute of session time (silence counts), matched like PRICES.
+ * VOICE_PRICES adds or corrects them: "gpt-live-1=0.05".
+ */
+export const MINUTE_PRICES: Record<string, number> = { "gpt-live-1": 0.05 };
+export function parseMinutePrices(value = process.env.VOICE_PRICES ?? "") {
+  const prices: Record<string, number> = {};
+  for (const pair of value.split(",")) {
+    const [model, rate] = pair.split("=").map((part) => part.trim());
+    if (model && Number.isFinite(Number(rate))) prices[modelName(model)] = Number(rate);
+  }
+  return prices;
+}
 
 export function parsePrices(value = process.env.MODEL_PRICES ?? ""): Record<string, Price> {
   const prices: Record<string, Price> = {};
@@ -144,6 +158,8 @@ interface UsageLine extends Tokens {
   kind: UsageKind;
   model: string;
   calls: number;
+  /** Seconds of live voice; each call is one conversation. */
+  seconds?: number;
 }
 interface UsageMonth {
   /** The month in UTC, "2026-09". */
@@ -163,9 +179,38 @@ export class UsageMeter {
     private readonly db: Store,
     private readonly prices: Record<string, Price> = { ...PRICES, ...parsePrices() },
     private readonly now: () => Date = () => new Date(),
+    private readonly minutePrices: Record<string, number> = {
+      ...MINUTE_PRICES,
+      ...parseMinutePrices(),
+    },
   ) {}
+  /** What a line cost: live voice by the minute, models by the token. */
+  private lineCost(line: UsageLine) {
+    if (line.seconds === undefined) return costOf(line.model, line, this.prices);
+    const name = modelName(line.model);
+    const key = Object.keys(this.minutePrices).find((k) => name.startsWith(k));
+    return key ? ((this.minutePrices[key] ?? 0) * line.seconds) / 60 : undefined;
+  }
+  /** Adds a live voice conversation's seconds (a call of its own when `call` is set). */
+  recordSeconds(owner: string, model: string, seconds: number, call = true): Promise<void> {
+    return this.update(owner, "voice", model, (line) => {
+      if (call) line.calls++;
+      line.seconds = (line.seconds ?? 0) + Math.max(0, Math.round(seconds));
+    });
+  }
   /** Adds one call; calls for one person are saved one at a time so none are lost. */
   record(owner: string, kind: UsageKind, model: string, tokens: Tokens): Promise<void> {
+    return this.update(owner, kind, model, (line) => {
+      line.calls++;
+      for (const key of TOKEN_KEYS) line[key] += Math.max(0, Math.round(tokens[key] || 0));
+    });
+  }
+  private update(
+    owner: string,
+    kind: UsageKind,
+    model: string,
+    change: (line: UsageLine) => void,
+  ): Promise<void> {
     const name = modelName(model);
     const month = this.now().toISOString().slice(0, 7);
     const previous = this.queues.get(owner) ?? Promise.resolve();
@@ -189,8 +234,7 @@ export class UsageMeter {
         };
         current.lines.push(line);
       }
-      line.calls++;
-      for (const key of TOKEN_KEYS) line[key] += Math.max(0, Math.round(tokens[key] || 0));
+      change(line);
       current.updatedAt = this.now().toISOString();
       await this.db.put(owner, "usage", current);
     });
@@ -218,12 +262,14 @@ export class UsageMeter {
     const saved = await this.db.get<UsageMonth>(owner, "usage", month);
     const lines = (saved?.lines ?? []).map((line) => ({
       ...line,
-      cost: costOf(line.model, line, this.prices),
+      cost: this.lineCost(line),
     }));
     return {
       month,
       cost: lines.reduce((sum, line) => sum + (line.cost ?? 0), 0),
       calls: lines.reduce((sum, line) => sum + line.calls, 0),
+      /** Minutes of live voice this month. */
+      voiceMinutes: Math.round(lines.reduce((sum, line) => sum + (line.seconds ?? 0), 0) / 6) / 10,
       /** Models without a price, whose cost is left out. */
       unpriced: [...new Set(lines.filter((l) => l.cost === undefined).map((l) => l.model))],
       lines: lines.sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0)),

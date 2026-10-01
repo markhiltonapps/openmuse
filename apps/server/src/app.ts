@@ -31,6 +31,7 @@ import { assertApiDeploymentConfig, type Config } from "./config.ts";
 import { DataControls, type ThreadStore } from "./data-controls.ts";
 import type { Store } from "./db.ts";
 import { emojiPicture } from "./emoji.ts";
+import { localNow } from "./engine/conversation.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
@@ -67,6 +68,7 @@ import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
+import { LiveVoice, liveInstructions } from "./voice-live.ts";
 import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
@@ -249,6 +251,37 @@ export async function createApp(
   const feed = new FeedService(db, agent.search, (owner) => agent.timeZone(owner));
   const calendarToday = new CalendarToday(apps, (owner) => agent.timeZone(owner));
   agent.persona.accountName = async (owner) => (await accounts.get(owner))?.name;
+  // Live voice: the admin only, while it's being tried out.
+  const liveVoice = new LiveVoice(
+    db,
+    async (owner) => {
+      const [identity, timeZone, about, memories] = await Promise.all([
+        db
+          .get<{ name?: string; tone?: string }>(owner, "agent-settings", "identity")
+          .catch(() => null),
+        agent.timeZone(owner).catch(() => "UTC"),
+        agent.persona.context(owner).catch(() => ""),
+        agent.memoryContext(owner).catch(() => [] as string[]),
+      ]);
+      return {
+        instructions: liveInstructions({
+          name: identity?.name?.trim() || "Neddy",
+          tone: identity?.tone?.trim() || "warm",
+          now: localNow(timeZone),
+          about,
+          memories: memories.slice(0, 30),
+        }),
+      };
+    },
+    (owner) => accounts.isAdmin(owner),
+    usage,
+    {
+      apiKey: config.voiceApiKey,
+      model: config.voiceModel,
+      voice: config.voiceName,
+      idleSeconds: config.voiceIdleSeconds,
+    },
+  );
   agent.areas = new Areas(
     db,
     config.mode === "live"
@@ -635,8 +668,8 @@ export async function createApp(
       : [{ id: ADMIN_OWNER, name: "Admin", email: undefined }, ...listed];
     const rows = await Promise.all(
       people.map(async (person) => {
-        const { month: shown, cost, calls } = await usage.month(person.id, month);
-        return { ...person, month: shown, cost, calls };
+        const { month: shown, cost, calls, voiceMinutes } = await usage.month(person.id, month);
+        return { ...person, month: shown, cost, calls, voiceMinutes };
       }),
     );
     return c.json({
@@ -1235,6 +1268,25 @@ export async function createApp(
   app.post("/api/logins/:id/delete", async (c) =>
     c.json(await logins.remove(c.get("owner"), c.req.param("id"))),
   );
+  // Live voice: talk with the agent in real time (the browser connects to OpenAI over WebRTC).
+  app.get("/api/voice/live", async (c) => {
+    const owner = c.get("owner");
+    return c.json({
+      available: await liveVoice.available(owner),
+      minutesThisMonth: (await usage.month(owner)).voiceMinutes,
+    });
+  });
+  app.post("/api/voice/live", async (c) => {
+    const { sdp } = z.object({ sdp: z.string().min(10).max(100_000) }).parse(await c.req.json());
+    return c.json(await liveVoice.start(c.get("owner"), sdp));
+  });
+  app.post("/api/voice/live/:id/end", async (c) => {
+    await liveVoice.end(c.get("owner"), c.req.param("id"));
+    return c.json({ ok: true });
+  });
+  app.get("/api/voice/live/recent", async (c) =>
+    c.json({ sessions: await liveVoice.recent(c.get("owner")) }),
+  );
   app.get("/api/persona", async (c) => c.json({ facts: await agent.persona.list(c.get("owner")) }));
   app.post("/api/persona/:key", async (c) =>
     c.json(await agent.persona.edit(c.get("owner"), c.req.param("key"), await c.req.json())),
@@ -1371,5 +1423,5 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, accounts, files, actions, workspace, agent, computer };
+  return { app, auth, accounts, files, actions, workspace, agent, computer, liveVoice };
 }

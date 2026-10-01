@@ -78,9 +78,109 @@ KNOWN ISSUES / NOTES
 - Neddy's clips come from a CDN the sandbox can't reach; local screenshots use a still picture.
 - The header line says "Needs your answer" without the job's name (tap Neddy to open it).
 
+LIVE VOICE · SLICE 0 (later the same day)
+=========================================
+
+WHY
+---
+Owner: "I want to be able to have a conversation with this AI in almost real time… on my phone,
+in my car using my Android audio and also on my computer… very fast… interrupt." Plan in the
+scratchpad (voice-live/plan.md).
+
+Owner's decisions (asked with a picker, three rounds):
+- Where: phone, car and computer.
+- Engine: OpenAI's gpt-live-1 for the voice, with Claude as the brain (from slice 1).
+- Car: both a phone number to call and the app over Bluetooth. Later, a wearable microphone
+  with a wake word through an Android/iOS app, so the audio source has to be pluggable.
+- Limits: no daily limit for now, but count minutes per person.
+- Barge-in: the person can cut Neddy off by talking.
+- Spoken "yes" in the app only (never on the phone line), for reminders and notes, the owner's
+  own calendar, and emails or texts to others.
+- The full conversation is saved in the chat.
+- Key: the owner's existing OpenAI key, in the Railway variable OPENAI_VOICE_API_KEY. The owner
+  added it on Railway themselves.
+- Phone line check: the caller's number plus a spoken passphrase.
+- Order: live voice first, then the spoken interview on top of it.
+- Pushes: slice by slice.
+
+WHAT CHANGED
+------------
+1. Server (new apps/server/src/voice-live.ts; app.ts, config.ts, index.ts, usage.ts).
+   - POST /api/voice/live takes the browser's WebRTC offer, starts a gpt-live-1 session with
+     Neddy's name, tone, the time, the "about you" notes and memories, and returns only the
+     answer. The key stays on the server.
+   - The server attaches to the session's sideband socket. That gives it the transcript of both
+     sides, OpenAI's running minutes, and look-up requests. Look-ups get a polite "not yet, type
+     it in the chat" until slice 1.
+   - One call per person: a new call ends the old one.
+   - Limits and hang-ups:
+     - calls stop after 60 minutes;
+     - after 90 s with no words either way, the server hangs up (VOICE_IDLE_SECONDS);
+     - a lost sideband reattaches once;
+     - a server restart ends calls cleanly and saves them.
+   - Each call is saved (the voice-sessions store: turns, seconds, why it ended).
+     GET /api/voice/live/recent lists the latest calls.
+   - Usage meter: a new "voice" kind with seconds, priced per minute (5¢ for gpt-live-1;
+     VOICE_PRICES can override it). Usage shows "Live voice" minutes, and the People list shows
+     minutes per person.
+   - Only admins (the owner) get it for now. Other people see no headset.
+   - Settings: OPENAI_VOICE_API_KEY, VOICE_LIVE_MODEL, VOICE_LIVE_VOICE (default marin),
+     VOICE_IDLE_SECONDS.
+2. App (new apps/mobile/src/live-voice.ts and live-talk-ui.tsx; chat.tsx, ui.tsx, details.tsx,
+   workspace.tsx, usage-ui.tsx, voice.ts).
+   - The headset button in the chat composer (blue, tip "Talk live with Neddy") opens "Talking
+     with Neddy".
+   - The sheet shows Neddy's avatar, the mouth moving with the voice, and a status: Connecting… /
+     Listening… / Neddy is talking, just speak to cut in / Muted.
+   - Live captions sit in a fixed box, so nothing jumps.
+   - Mute and End are in a footer that stays on screen. After a call ends: Talk again and Close,
+     with a plain reason (connection dropped, quiet, an hour, started elsewhere, restart).
+   - Echo cancellation is on. If the chosen microphone isn't there, the default one is used. The
+     screen is kept awake during a call.
+   - Microphone errors are named in plain words: blocked, none found, in use, or no connection.
+   - Screen readers: a hidden status line is read only on real changes. Focus moves to the new
+     buttons when they swap, skipping a disabled Mute.
+   - Short screens (a phone on its side in a car mount) get a smaller avatar, or none.
+   - Below 360 px wide, the composer shows only the headset, not the old voice button.
+
+DESIGN REVIEW
+-------------
+Visual (UI Designer), usability (UX Researcher) and copy reviewers, three rounds. All three
+signed off. Reviews: scratchpad/live/review-visual.md, review-ux.md, review-copy.md.
+
+TESTS
+-----
+lint, typecheck (root + mobile), worker tsc: clean. 439 tests pass.
+New: tests/voice-live.test.ts (5 tests), all with a fake OpenAI socket:
+- session start, body and headers;
+- transcripts, minutes and the not-yet answer;
+- who it's for, a missing key, and a refused key (never leaks the key);
+- counting by the clock when the sideband drops twice;
+- the idle hang-up, with fractional seconds counted exactly.
+Screenshots use a fake microphone and WebRTC in Playwright: light, dark, 320/390/1100 wide,
+844×390 landscape, denied, muted and ended.
+
+KNOWN ISSUES / NOTES
+--------------------
+- Not tried against OpenAI yet: api.openai.com is blocked in the sandbox. The first real call
+  happens on Railway.
+- No look-ups or actions while talking yet ("hold on, let me check" comes in slice 1).
+- Calls aren't added to the chat yet; they are saved on the server.
+
 PENDING
 -------
-- Real-time voice conversations (phone, car via Android Auto, computer): a planning agent is
-  researching speech-to-speech options; its plan and questions for the owner come next.
+- Live voice slices 1–5:
+  - "hold on, let me check" handed to Claude;
+  - calls saved into the chat;
+  - spoken yes for the chosen categories;
+  - phone polish ("Still there?" before the quiet hang-up, elapsed time, reconnecting);
+  - the phone line with a passphrase;
+  - a pluggable audio source for the wearable;
+  - turning it on per person.
+- Optional reviewer notes kept for later:
+  - move focus to Mute once a call is live;
+  - match an end reason to the right call;
+  - plain words for a non-JSON server error;
+  - a caption fade.
 - Time-log hours for 2026-09-29 evening, 2026-09-30 and 2026-10-01 (asked, not answered yet).
 - Phase 1 slices 2–6.

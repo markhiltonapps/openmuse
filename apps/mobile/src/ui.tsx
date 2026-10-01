@@ -293,6 +293,7 @@ export function Sheet({
   onClose,
   wide,
   titleLines,
+  footer,
 }: {
   title: string;
   subtitle?: string;
@@ -301,6 +302,8 @@ export function Sheet({
   wide?: boolean;
   /** Clips a long title to this many lines (it's still read out whole). */
   titleLines?: number;
+  /** Controls that stay in view below the scrolling content, such as a call's End. */
+  footer?: ReactNode;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -353,6 +356,18 @@ export function Sheet({
           >
             {children}
           </ScrollView>
+          {footer && (
+            <View
+              style={{
+                paddingHorizontal: compact ? 20 : 24,
+                paddingVertical: 14,
+                borderTopWidth: 1,
+                borderTopColor: colors.line,
+              }}
+            >
+              {footer}
+            </View>
+          )}
         </View>
       </View>
     </Modal>

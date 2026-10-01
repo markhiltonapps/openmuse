@@ -18,7 +18,7 @@ await moveFromVolume(db, config.dataDir, blobs, {
   log: (line) => console.log(line),
 });
 await db.recoverInterruptedActions();
-const { app, agent } = await createApp(db, config, { blobs });
+const { app, agent, liveVoice } = await createApp(db, config, { blobs });
 if (config.taskWorkerEnabled) agent.start();
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, () =>
   console.log(`OpenMuse ${config.mode} API ready at ${config.publicUrl}`),
@@ -38,7 +38,7 @@ if (config.workerUrl)
 // finishes the requests it has (a reply being written), then exits.
 const shutdown = () => {
   const closed = new Promise<void>((resolve) => server.close(() => resolve()));
-  void Promise.all([agent.stop(), closed])
+  void Promise.all([agent.stop(), liveVoice.stop(), closed])
     .then(() => db.close())
     .then(() => process.exit(0));
 };

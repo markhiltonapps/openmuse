@@ -23,6 +23,8 @@ export type Detail =
   /** Delegate task; `prompt` arrives filled in (from a ?delegate= link), as a General task. */
   | { type: "delegate"; prompt?: string }
   | { type: "notifications" }
+  /** Talking with the agent live (real-time voice). */
+  | { type: "live" }
   | { type: "food"; log?: boolean }
   | { type: "computer" }
   /** Plans & bookings: everything being kept track of, coming up or past. */

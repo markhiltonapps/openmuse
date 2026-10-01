@@ -78,6 +78,11 @@ export interface Config {
   /** The Anthropic model that runs code in the sandbox (CODE_MODEL); Claude Sonnet 5 by default. */
   codeModel?: string;
   composioApiKey?: string;
+  /** OpenAI key for live voice (gpt-live-1); kept apart from any chat model key. */
+  voiceApiKey?: string;
+  voiceModel?: string;
+  voiceName?: string;
+  voiceIdleSeconds?: number;
   composioUserId?: string;
   composioBaseUrl?: string;
   /** Auth configs to use by app, "brex=ac_…,other=ac_…", when Composio can't sign in to it itself. */
@@ -165,6 +170,10 @@ export function readConfig(): Config {
     webSearchModel: process.env.WEB_SEARCH_MODEL?.trim() || undefined,
     codeModel: process.env.CODE_MODEL?.trim() || undefined,
     composioApiKey: process.env.COMPOSIO_API_KEY?.trim() || undefined,
+    voiceApiKey: process.env.OPENAI_VOICE_API_KEY?.trim() || undefined,
+    voiceModel: process.env.VOICE_LIVE_MODEL?.trim() || undefined,
+    voiceName: process.env.VOICE_LIVE_VOICE?.trim() || undefined,
+    voiceIdleSeconds: Number(process.env.VOICE_IDLE_SECONDS) || undefined,
     composioUserId: process.env.COMPOSIO_USER_ID?.trim() || undefined,
     composioBaseUrl: process.env.COMPOSIO_BASE_URL?.trim() || undefined,
     composioWebhookSecret: process.env.COMPOSIO_WEBHOOK_SECRET?.trim() || undefined,

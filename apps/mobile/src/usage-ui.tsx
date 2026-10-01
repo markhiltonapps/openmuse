@@ -12,6 +12,8 @@ interface UsageLine {
   cacheRead: number;
   output: number;
   searches: number;
+  /** Seconds of live voice. */
+  seconds?: number;
   cost?: number;
 }
 interface Usage {
@@ -24,7 +26,14 @@ interface Usage {
   models: { chat?: string; background?: string };
 }
 interface PeopleUsage {
-  people: { id: string; name: string; email?: string; cost: number; calls: number }[];
+  people: {
+    id: string;
+    name: string;
+    email?: string;
+    cost: number;
+    calls: number;
+    voiceMinutes?: number;
+  }[];
   cost: number;
 }
 const KINDS: Record<string, string> = {
@@ -39,6 +48,16 @@ const KINDS: Record<string, string> = {
   summary: "Summarizing long chats",
   code: "Running code",
   recipes: "Dinner recipes",
+  voice: "Live voice",
+};
+/** "under 1 min", "12 min", "1 hr", "1 hr 5 min". */
+const minutesLabel = (minutes: number) => {
+  if (minutes < 1) return "under\u00a01\u00a0min";
+  const total = Math.round(minutes);
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (!hours) return `${total}\u00a0min`;
+  return rest ? `${hours}\u00a0hr ${rest}\u00a0min` : `${hours}\u00a0hr`;
 };
 const dollars = (value: number) =>
   value > 0 && value < 0.01 ? "under $0.01" : `$${value.toFixed(2)}`;
@@ -91,11 +110,15 @@ export function UsageCard() {
       .then(setPeople, () => undefined);
   }, [api]);
   if (!usage) return null;
-  const byKind = new Map<string, { cost: number; calls: number; priced: boolean }>();
+  const byKind = new Map<
+    string,
+    { cost: number; calls: number; seconds: number; priced: boolean }
+  >();
   for (const line of usage.lines) {
-    const entry = byKind.get(line.kind) ?? { cost: 0, calls: 0, priced: true };
+    const entry = byKind.get(line.kind) ?? { cost: 0, calls: 0, seconds: 0, priced: true };
     entry.cost += line.cost ?? 0;
     entry.calls += line.calls;
+    entry.seconds += line.seconds ?? 0;
     entry.priced &&= line.cost !== undefined;
     byKind.set(line.kind, entry);
   }
@@ -118,7 +141,8 @@ export function UsageCard() {
       {[...byKind.entries()].map(([kind, entry]) => (
         <View key={kind} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
           <Text style={[s.muted, { flex: 1 }]}>
-            {KINDS[kind] ?? kind} · {entry.calls}
+            {KINDS[kind] ?? kind} ·{" "}
+            {kind === "voice" ? minutesLabel(entry.seconds / 60) : entry.calls}
           </Text>
           <Text style={s.muted}>{entry.priced ? dollars(entry.cost) : "price unknown"}</Text>
         </View>
@@ -173,7 +197,10 @@ export function UsageCard() {
                   {person.name}
                   {person.email ? ` · ${person.email}` : ""}
                 </Text>
-                <Text style={s.muted}>{dollars(person.cost)}</Text>
+                <Text style={s.muted}>
+                  {person.voiceMinutes ? `${minutesLabel(person.voiceMinutes)} live · ` : ""}
+                  {dollars(person.cost)}
+                </Text>
               </View>
             ))}
         </View>

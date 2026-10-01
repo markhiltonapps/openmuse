@@ -15,6 +15,7 @@ import {
   Check,
   Copy,
   FileText,
+  Headset,
   Image as ImageIcon,
   Mic,
   Paperclip,
@@ -34,6 +35,7 @@ import {
   Share,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { z } from "zod";
@@ -51,6 +53,7 @@ import { replyFailure, runConversationTurn } from "./conversation-run";
 import { plainText } from "./copy-text";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
+import { useLiveVoice } from "./live-talk-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
@@ -295,7 +298,10 @@ export function ChatScreen({
   thread?: Selection;
   active?: boolean;
 }) {
-  const { api, workspace: w, refresh, navigate, section } = useWorkspace();
+  const { api, workspace: w, refresh, navigate, section, open } = useWorkspace();
+  // Live voice (real-time talk), for the people it's turned on for.
+  const live = useLiveVoice();
+  const { width: windowWidth } = useWindowDimensions();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
   const agentName = agentWorkspace?.identity.name || "your agent";
   const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
@@ -1533,33 +1539,57 @@ export function ChatScreen({
             </Pressable>
             {narrow && <View style={{ flex: 1 }} />}
             {!narrow && messageBox}
-            {dictationAvailable() && speechAvailable() && !draft.trim() && (
+            {live && !draft.trim() && !voiceMode && !replying && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={voiceMode ? "End voice conversation" : `Talk with ${agentName}`}
-                {...tipProps(
-                  voiceMode ? "End voice conversation" : `Talk with ${agentName}`,
-                  {},
-                  { hold: false },
-                )}
-                accessibilityState={{ selected: voiceMode }}
-                onPress={toggleVoiceMode}
+                accessibilityLabel={`Talk live with ${agentName}`}
+                {...tipProps(`Talk live with ${agentName}`)}
+                onPress={() => open({ type: "live" })}
                 style={({ pressed }) => ({
                   width: 44,
                   height: 44,
                   borderRadius: 24,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: voiceMode
-                    ? colors.lavender
-                    : pressed
-                      ? colors.sky
-                      : "transparent",
+                  backgroundColor: pressed ? colors.sky : "transparent",
                 })}
               >
-                <AudioLines size={22} color={voiceMode ? colors.text : colors.muted} />
+                <Headset size={22} color={colors.blueText} />
               </Pressable>
             )}
+            {/* On a very narrow phone with live voice, the headset alone leaves room for Send. */}
+            {dictationAvailable() &&
+              speechAvailable() &&
+              !draft.trim() &&
+              !(live && windowWidth < 360 && !voiceMode) && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    voiceMode ? "End voice conversation" : `Talk with ${agentName}`
+                  }
+                  {...tipProps(
+                    voiceMode ? "End voice conversation" : `Talk with ${agentName}`,
+                    {},
+                    { hold: false },
+                  )}
+                  accessibilityState={{ selected: voiceMode }}
+                  onPress={toggleVoiceMode}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    borderRadius: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: voiceMode
+                      ? colors.lavender
+                      : pressed
+                        ? colors.sky
+                        : "transparent",
+                  })}
+                >
+                  <AudioLines size={22} color={voiceMode ? colors.text : colors.muted} />
+                </Pressable>
+              )}
             {dictationAvailable() && !replying && !voiceMode && (
               // The mic and its microphone choice sit together, like one control.
               <View

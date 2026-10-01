@@ -114,7 +114,8 @@ Time Log — <Project Name>
   folder, and only while the server is stopped (a running one can overwrite it).
 - **Chat in Playwright:** the app's chat runs in CopilotKit intelligence mode, which can't start
   locally. Mock `/api/copilotkit/info` (mode "sse", no intelligence) and fulfil
-  `/agent/default/run` with an AG-UI SSE stream of scripted events.
+  `/agent/default/run` with an AG-UI SSE stream of scripted events. If the chat still says it's
+  unavailable, also set `runtime.richThreads: false` in a mocked `/api/workspace`.
 - **Disabled links in Playwright:** it won't click an `aria-disabled` link; use
   `click({ force: true })` to test what happens when someone taps one anyway.
 - **pnpm in a copied tree:** with symlinked `node_modules`, `pnpm typecheck`/`pnpm test` try to
@@ -141,3 +142,13 @@ Time Log — <Project Name>
   to fire a 15-minute check without waiting (used for the new-version pill).
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
   `apps/worker` changes; other pushes show it as SKIPPED.
+- **Live voice (OpenAI gpt-live-1):** the key never reaches the browser. The server creates the
+  session (`POST /v1/live/sessions`) and returns only the SDP answer. It then attaches to
+  `wss://api.openai.com/v1/live/sessions/{id}/attach` (Node 22's `WebSocket` takes `{headers}`) for
+  transcripts, minutes and delegation. The browser's data channel can only send what
+  `allowed_client_events` lists. api.openai.com is blocked in the sandbox, so test with a fake socket.
+- **Fake WebRTC in Playwright:** replace `navigator.mediaDevices.getUserMedia` and
+  `RTCPeerConnection` in `addInitScript`. Expose the fake data channel on `window` and play
+  scripted server events through it (see the live-voice screenshot notes in the session docs).
+- **Timers in services:** `unref()` long timers (idle checks, retries, call caps) so tests and
+  shutdown don't hang. Give the service a `stop()` and call it from `index.ts`'s shutdown.

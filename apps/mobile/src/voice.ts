@@ -97,6 +97,8 @@ function setSpeaking(value: boolean) {
   speakingNow = value;
   for (const listener of speakingListeners) listener();
 }
+/** Live voice drives the avatar's mouth from the sound it plays. */
+export const setLiveSpeaking = (value: boolean) => setSpeaking(value);
 export function useSpeaking() {
   return useSyncExternalStore(
     (listener) => {
