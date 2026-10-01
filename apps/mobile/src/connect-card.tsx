@@ -210,22 +210,32 @@ function Frame({
 
 function Actions({ children }: { children: ReactNode }) {
   return (
-    <View style={[s.row, { gap: 6, flexWrap: "wrap", alignItems: "center" }]}>{children}</View>
+    <View style={[s.row, { columnGap: 16, rowGap: 6, flexWrap: "wrap", alignItems: "center" }]}>
+      {children}
+    </View>
   );
 }
-function TextButton({ label, onPress }: { label: string; onPress: () => void }) {
+/** "I’ve signed in": while it's checking (the status line says so) it waits, muted, in place. */
+function SignedIn({ checking, onPress }: { checking: boolean; onPress: () => void }) {
   return (
     <Pressable
       role="button"
-      onPress={onPress}
+      aria-disabled={checking}
+      onPress={() => !checking && onPress()}
       style={({ pressed }) => ({
         minHeight: 44,
         justifyContent: "center",
-        paddingHorizontal: 10,
-        opacity: pressed ? 0.6 : 1,
+        opacity: pressed && !checking ? 0.6 : 1,
       })}
     >
-      <Text style={[s.text, { color: colors.blueText, fontWeight: "600" }]}>{label}</Text>
+      <Text
+        style={[
+          s.text,
+          { color: checking ? colors.mutedStrong : colors.blueText, fontWeight: "600" },
+        ]}
+      >
+        I’ve signed in
+      </Text>
     </Pressable>
   );
 }
@@ -305,7 +315,8 @@ export function ConnectCard({
   };
 
   const { phase } = flow;
-  const again = phase === "away" || phase === "notYet";
+  // Back from signing in (waiting, checking or not yet), the card keeps one shape.
+  const again = phase === "away" || phase === "notYet" || phase === "checking";
   const line = flow.connected
     ? connectedLine(agent, onCall, flow.tapped.current, over)
     : flow.blocked
@@ -344,9 +355,9 @@ export function ConnectCard({
           ) : (
             <Button
               // While they sign in elsewhere, it steps back (it only opens the page again).
-              primary={phase !== "away"}
+              primary={!again || phase === "notYet"}
               icon={Plug}
-              busy={phase === "opening" || phase === "checking"}
+              busy={phase === "opening"}
               accessibilityLabel={
                 again
                   ? `Open the sign-in page again for ${name} (new tab)`
@@ -357,9 +368,7 @@ export function ConnectCard({
               {again ? "Open the sign-in page again" : `Connect ${name}`}
             </Button>
           )}
-          {(phase === "away" || phase === "notYet") && (
-            <TextButton label="I’ve signed in" onPress={() => void flow.check()} />
-          )}
+          {again && <SignedIn checking={phase === "checking"} onPress={() => void flow.check()} />}
         </Actions>
       )}
     </Frame>
@@ -439,6 +448,8 @@ export function OwnAppCard({
   if (app === null)
     return <Frame name={name} connected={false} wide={wide} line="This app was removed." />;
   const { phase } = flow;
+  // Back from signing in (waiting, checking or not yet), the card keeps one shape.
+  const again = phase === "away" || phase === "notYet" || phase === "checking";
   const status = app?.status;
   const line = flow.connected
     ? connectedLine(agent, onCall, flow.tapped.current, over)
@@ -510,11 +521,11 @@ export function OwnAppCard({
             </Button>
           ) : (
             <Button
-              primary={phase !== "away"}
+              primary={!again || phase === "notYet"}
               icon={status === "needs_sign_in" ? LogIn : Plug}
-              busy={phase === "opening" || phase === "checking"}
+              busy={phase === "opening"}
               accessibilityLabel={
-                phase === "notYet" || phase === "away"
+                again
                   ? `Open the sign-in page again for ${name} (new tab)`
                   : status === "needs_sign_in"
                     ? `Sign in to ${name}`
@@ -524,7 +535,7 @@ export function OwnAppCard({
               }
               onPress={connect}
             >
-              {phase === "notYet" || phase === "away"
+              {again
                 ? "Open the sign-in page again"
                 : status === "needs_sign_in"
                   ? "Sign in"
@@ -533,9 +544,7 @@ export function OwnAppCard({
                     : `Connect ${name}`}
             </Button>
           )}
-          {(phase === "away" || phase === "notYet") && (
-            <TextButton label="I’ve signed in" onPress={() => void flow.check()} />
-          )}
+          {again && <SignedIn checking={phase === "checking"} onPress={() => void flow.check()} />}
         </Actions>
       )}
     </Frame>

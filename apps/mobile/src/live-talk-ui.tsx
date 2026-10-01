@@ -12,7 +12,7 @@ import {
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { type CallDetail, SHOWN_HEADING } from "../../../packages/domain/src/voice";
 import { useAgentWorkspace } from "./agent-workspace";
-import type { MuseApi } from "./api";
+import { API_URL, type MuseApi } from "./api";
 import { AssistantResponse } from "./assistant-response";
 import { AgentAvatar } from "./avatar";
 import { CallDetails } from "./call-details";
@@ -27,7 +27,8 @@ import { useWorkspace } from "./workspace";
  * not known yet (nothing shows, so the composer's buttons don't swap under a thumb).
  */
 export type LiveStatus = "on" | "setup" | "off" | "unknown";
-const REMEMBERED = "neato.liveVoice";
+// Per server (builds for different servers share a browser); it's the same for everyone on one.
+const REMEMBERED = `neato.liveVoice:${API_URL}`;
 /** What this browser last heard, so the composer shows the right buttons from the start. */
 function remembered(): LiveStatus | undefined {
   try {

@@ -428,6 +428,21 @@ PENDING
     - VOICE_RULES also covers add_own_app;
     - "(new tab)" labels;
     - an empty calendar that couldn't be read says just that.
+  - Round 2: usability SIGNED OFF. Visual: one new MUST (the Connect card jumped while checking
+    after the person came back), now fixed: the card keeps one shape while waiting, checking or
+    not yet, with "I’ve signed in" turning into a disabled "Checking…". Live talk status is
+    remembered per server. Round 3: visual SIGNED OFF. All three reviewers have signed off.
+  - Deferred NICEs:
+    - restart the 5-minute grace when Connect is tapped on a call (now it starts when the card
+      appears);
+    - a "Back to Neddy" page after the Composio sign-in (Android's Back walks through Google's
+      pages);
+    - focus after connecting;
+    - telling the voice itself when the card sees the connection;
+    - Gmail authuser;
+    - time zone labels when travelling;
+    - fixing an own app's wrong address by voice;
+    - one round Talk/Send button.
   - Not tested live (sandbox): OpenAI's own silence limit during a long sign-in; the Composio
     sign-in tab on Android; Gmail emails' real shape from GMAIL_FETCH_EMAILS (emailsIn reads
     messageId/subject/sender/messageText, as mail alerts do).
