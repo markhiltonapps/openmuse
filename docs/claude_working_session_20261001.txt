@@ -612,6 +612,11 @@ PENDING
     sample data in pictures; pictures for the Fix topics; Android back gesture; Apps › Help
     scroll; emoji aria-hidden.
   - Checks: Biome clean, typecheck (root, app, worker), 474 tests pass. Committed locally.
+- Pushed at 23:53 UTC on the owner's "push it" (no live call: only app polling and one
+  webhook in the 20 minutes before): cc1b8a3 (notes), c258be3 (jobs find Gmail under Apps),
+  3e4c273 (jobs can do what the chat does), 14fce75 (Help guide). api and web SUCCESS at
+  23:54; the worker SKIPPED (no worker change). The api started cleanly: connected apps
+  ready, live voice on, agent browser reachable.
 - Owner (later): remove the composer's waveform (old hands-free "Talk with Neddy") and mic
   (dictation + mic chooser) buttons, since live talk works so well; open live talk to everyone.
   Owner's answers: no monthly minute limit for now; keep the old buttons only where live talk
