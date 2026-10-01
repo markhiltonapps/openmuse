@@ -28,7 +28,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import type { Artifact, BrowserSession } from "../../../packages/domain/src";
+import type { ActionProposal, Artifact, BrowserSession } from "../../../packages/domain/src";
 import type {
   AgentArtifact,
   AgentMemory,
@@ -2759,15 +2759,32 @@ const UPDATE_PLACES: { id: UpdatesDisplay; label: string; detail: string }[] = [
 ];
 export function NotificationsSheet() {
   const { data, mutate } = useAgentWorkspace();
-  const { close, open, navigate } = useWorkspace();
+  const { close, open, navigate, workspace, api, refresh } = useWorkspace();
   const [error, setError] = useState("");
-  async function read(id: string, taskId?: string, checkInId?: string) {
+  async function read(id: string, taskId?: string, checkInId?: string, actionId?: string) {
     try {
       await mutate(`/notifications/${id}/read`, {});
       if (taskId) open({ type: "task", taskId });
       else if (checkInId) {
         close();
         navigate("chat");
+      } else if (actionId) {
+        // Its review, or Activity when it's already been decided or has expired. Something saved
+        // during a call while the app was open may not be in what's loaded yet: look again.
+        const waiting = (list: ActionProposal[]) =>
+          list.find((item) => item.id === actionId && item.status === "awaiting_review");
+        let action = waiting(workspace.actions);
+        if (!action) {
+          action = waiting(
+            (await api.request<{ actions: ActionProposal[] }>("/api/workspace")).actions,
+          );
+          void refresh().catch(() => undefined);
+        }
+        if (action) open({ type: "review", action });
+        else {
+          close();
+          navigate("activity");
+        }
       }
     } catch (e) {
       setError(errorText(e));
@@ -2809,16 +2826,21 @@ export function NotificationsSheet() {
               {reminder ? lateNote(item.title) || "Reminder" : plainPreview(item.body)}
             </Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
-            <Button small onPress={() => void read(item.id, item.taskId, item.checkInId)}>
+            <Button
+              small
+              onPress={() => void read(item.id, item.taskId, item.checkInId, item.actionId)}
+            >
               {item.taskId
                 ? "Open job"
                 : item.checkInId
                   ? "Answer in chat"
-                  : item.read
-                    ? "Read"
-                    : item.reminderId
-                      ? "Done"
-                      : "Mark read"}
+                  : item.actionId
+                    ? "Review"
+                    : item.read
+                      ? "Read"
+                      : item.reminderId
+                        ? "Done"
+                        : "Mark read"}
             </Button>
           </Card>
         ))}

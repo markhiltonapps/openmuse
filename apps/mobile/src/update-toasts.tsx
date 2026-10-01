@@ -33,6 +33,8 @@ const SHOW_MS = 8000;
 export type UpdateKind = "reminder" | "decision" | "update";
 export function updateKind(item: AgentNotification, tasks?: AgentTask[]): UpdateKind {
   if (item.reminderId && !item.taskId) return "reminder";
+  // Something saved for approval outside a job (from a live call) waits on the person.
+  if (item.actionId && !item.taskId) return "decision";
   const task = tasks?.find((t) => t.id === item.taskId);
   return task && ["waiting_input", "waiting_approval"].includes(task.status)
     ? "decision"

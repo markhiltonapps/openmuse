@@ -53,7 +53,7 @@ import { replyFailure, runConversationTurn } from "./conversation-run";
 import { plainText } from "./copy-text";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
-import { useLiveVoice } from "./live-talk-ui";
+import { onCallSaved, SpokenCall, useLiveVoice } from "./live-talk-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
@@ -730,6 +730,75 @@ export function ChatScreen({
   sendSpoken.current = (text) => {
     if (loaded && isReady) enqueue(text);
   };
+  // Live voice calls go into the main chat once they're over, so they stay with the rest of the
+  // conversation (and the agent sees them next time). The server adds each one only once.
+  const addingCalls = useRef(false);
+  const addSpokenCalls = useCallback(async () => {
+    if (live !== "on" || (richThreads && selection.id !== mainId)) return;
+    if (addingCalls.current || !loaded || !isReady || runLock.current || agent.isRunning) return;
+    addingCalls.current = true;
+    try {
+      const { sessions } = await api.request<{
+        sessions: { id: string; turns: unknown[]; inChat?: string; pending?: boolean }[];
+      }>("/api/voice/live/recent");
+      // Oldest first, a few at a time.
+      const shown = new Set(agent.messages.map((message) => message.id));
+      const waiting = sessions
+        .filter(
+          (session) =>
+            !session.inChat &&
+            !session.pending &&
+            session.turns.length &&
+            !shown.has(`spoken-${session.id}`),
+        )
+        .reverse()
+        .slice(0, 3);
+      for (const session of waiting) {
+        if (runLock.current || agent.isRunning) break;
+        runLock.current = true;
+        setBusy(true);
+        try {
+          await runConversationTurn(
+            agentId,
+            () => copilotkit.runAgent({ agent, forwardedProps: { spokenCall: session.id } }),
+            (onError) => copilotkit.subscribe({ onError }),
+          );
+        } finally {
+          runLock.current = false;
+          setBusy(false);
+        }
+      }
+      if (waiting.length) await saveHistory();
+    } catch {
+      // Tried again the next time the chat opens or a call ends.
+    } finally {
+      addingCalls.current = false;
+    }
+  }, [
+    agent,
+    agentId,
+    api,
+    copilotkit,
+    isReady,
+    live,
+    loaded,
+    mainId,
+    richThreads,
+    saveHistory,
+    selection.id,
+  ]);
+  useEffect(() => {
+    if (loaded) void addSpokenCalls();
+    // After a call: add it to the chat, and load what it changed (approvals, reminders).
+    return onCallSaved(() => {
+      void addSpokenCalls();
+      void refresh().catch(() => undefined);
+    });
+  }, [loaded, addSpokenCalls, refresh]);
+  // A call that ended while the chat was busy goes in once the reply is done.
+  useEffect(() => {
+    if (!busy) void addSpokenCalls();
+  }, [busy, addSpokenCalls]);
   useEffect(() => {
     if (!busy && !agent.isRunning && outbox.pending.length) flush();
   }, [busy, agent.isRunning, outbox.pending.length, flush]);
@@ -994,6 +1063,8 @@ export function ChatScreen({
           visible.map((message) => {
             const user = message.role === "user";
             const text = typeof message.content === "string" ? message.content : "";
+            // A live voice call, added once it was over.
+            const spokenCall = !user && message.id.startsWith("spoken-");
             // Its cards, with the turn's take-me-there buttons moved under the last message.
             const toolCalls = [
               ...("toolCalls" in message ? message.toolCalls || [] : []).filter(
@@ -1026,6 +1097,8 @@ export function ChatScreen({
                       <Text selectable style={[s.text, { fontSize: 16, lineHeight: 24 }]}>
                         {text}
                       </Text>
+                    ) : spokenCall ? (
+                      <SpokenCall text={text} />
                     ) : (
                       <AssistantResponse content={text} />
                     )}
@@ -1042,7 +1115,7 @@ export function ChatScreen({
                       },
                     ]}
                   >
-                    {!user && speechAvailable() && (
+                    {!user && !spokenCall && speechAvailable() && (
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={

@@ -160,3 +160,10 @@ Time Log — <Project Name>
   its name (OpenAI Live wants `allowed_server_events` as `{ type }` objects; bare names were
   refused with a 400 on every call). Always log the provider's own error reason on the server
   (status, type, code, message, never the key), so a failure on Railway can be read from its logs.
+- **Adding to a chat thread from the server:** CopilotKit Intelligence has no "append message"
+  API. Have the app run the agent with `forwardedProps` (e.g. `{ spokenCall: id }`) and let
+  `ConversationAgent` emit the message itself without a model, so the runtime saves it like any
+  turn. Give it a recognisable message id (`spoken-…`) so the chat can render it as a card.
+- **Running the chat agent without a browser:** `new ConversationAgent(config, agentService,
+  owner).run(input)`. The last user message's id keys every tool's idempotency, so give each
+  request a fresh one (e.g. `voice-<call>-<delegation>`). Nothing is saved to any chat.

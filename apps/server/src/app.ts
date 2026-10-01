@@ -31,7 +31,7 @@ import { assertApiDeploymentConfig, type Config } from "./config.ts";
 import { DataControls, type ThreadStore } from "./data-controls.ts";
 import type { Store } from "./db.ts";
 import { emojiPicture } from "./emoji.ts";
-import { localNow } from "./engine/conversation.ts";
+import { ConversationAgent, localNow } from "./engine/conversation.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
@@ -68,6 +68,7 @@ import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
+import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
 import { LiveVoice, liveInstructions } from "./voice-live.ts";
 import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
@@ -252,16 +253,41 @@ export async function createApp(
   const calendarToday = new CalendarToday(apps, (owner) => agent.timeZone(owner));
   agent.persona.accountName = async (owner) => (await accounts.get(owner))?.name;
   // Live voice: the admin only, while it's being tried out.
+  // Live voice's brain: the same chat agent and tools answer what the voice hands over.
+  const canLookUp = config.agentBackend !== "agui";
+  const voiceBrain: VoiceBrain = {
+    db,
+    run: (owner, input) => new ConversationAgent(config, agent, owner).run(input),
+    timeZone: (owner) => agent.timeZone(owner),
+    name: async (owner) =>
+      (
+        await db.get<{ name?: string }>(owner, "agent-settings", "identity").catch(() => null)
+      )?.name?.trim() || "Neddy",
+    health: async (owner) => (await health.summary(owner)).entries,
+    calendar: async (owner) => (await calendarToday.today(owner)).events,
+    reminders: async (owner) => (await reminders.list(owner)).upcoming,
+    // The main chat as the app last saved it (or the older single conversation).
+    chat: async (owner) => {
+      const main = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
+      if (main?.threadId) return archive.messages(owner, main.threadId);
+      return (
+        (await db.get<{ messages?: unknown[] }>(owner, "conversations", "default"))?.messages ?? []
+      );
+    },
+    notify: (owner, title, body, key, actionId) =>
+      agent.notify(owner, title, body, undefined, key, actionId ? { actionId } : {}),
+  };
   const liveVoice = new LiveVoice(
     db,
     async (owner) => {
-      const [identity, timeZone, about, memories] = await Promise.all([
+      const [identity, timeZone, about, memories, today] = await Promise.all([
         db
           .get<{ name?: string; tone?: string }>(owner, "agent-settings", "identity")
           .catch(() => null),
         agent.timeZone(owner).catch(() => "UTC"),
         agent.persona.context(owner).catch(() => ""),
         agent.memoryContext(owner).catch(() => [] as string[]),
+        voiceToday(voiceBrain, owner).catch(() => ""),
       ]);
       return {
         instructions: liveInstructions({
@@ -270,6 +296,8 @@ export async function createApp(
           now: localNow(timeZone),
           about,
           memories: memories.slice(0, 30),
+          today,
+          canLookUp,
         }),
       };
     },
@@ -281,6 +309,8 @@ export async function createApp(
       voice: config.voiceName,
       idleSeconds: config.voiceIdleSeconds,
       setupUrl: config.railwayVariablesUrl,
+      ...(canLookUp ? { answer: voiceAnswer(voiceBrain) } : {}),
+      tell: (owner, title, body, key) => agent.notify(owner, title, body, undefined, key),
     },
   );
   agent.areas = new Areas(

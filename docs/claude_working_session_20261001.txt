@@ -210,9 +210,77 @@ Then:
 - Setup view polish after round 2 (all three reviewers signed off): the check note sits in the
   pinned footer, "Name copied." isn't re-read, and DEPLOY.md wording is tidied.
 
+LIVE VOICE · SLICE 1: "HOLD ON, LET ME CHECK"
+=============================================
+The owner's first real calls worked and were fast, but Neddy couldn't answer anything about the
+owner's own things ("what did I have for lunch today?").
+
+Owner's choices (picker):
+- Mid-call, Neddy looks things up and starts things. Anything that sends, books or buys waits
+  for their OK in the app; reminders and notes are set straight away.
+- Each call starts with a snapshot of today.
+- Calls are saved into the chat in this slice.
+
+WHAT CHANGED
+1. Hand-overs (apps/server/src/voice-live.ts, new voice-brain.ts, app.ts).
+   - The voice hands over what it can't answer. The server waits for the question to finish
+     being transcribed, then runs the same chat agent and tools as the typed chat on it. It
+     gives the agent the last 16 typed messages, the call so far, and voice rules: 1–3 short
+     spoken sentences, approvals wait in the app, long work becomes a job.
+   - The agent's last words go back to the voice as commentary for it to say. Each tool it uses
+     sends the voice a silent progress note ("Checking your food log"). After 12 s the voice
+     gets a "still checking" note.
+   - After 2 minutes, or on an error, the voice apologises plainly.
+   - Hand-overs are answered one at a time, and ending the call stops any still running.
+   - Anything saved for approval during a call gets a bell entry and a push.
+2. Snapshot at the start of each call (voiceToday):
+   - meals logged today with totals, and workouts;
+   - today's calendar (connected apps);
+   - reminders in the next day;
+   - jobs running, waiting, or finished in the last day;
+   - the last 8 typed chat messages.
+   The voice's instructions now say to answer from this snapshot, otherwise to say "One sec, let
+   me check" and hand it over.
+3. Calls saved into the chat.
+   - A finished call becomes one assistant message in the main chat: "Spoken conversation ·
+     6 min · Thu, Oct 1, 2:40 PM", then "You:" / "Neddy:" lines. The agent sees it next time.
+   - The app asks for it when the chat opens and a few seconds after a call ends.
+     ConversationAgent writes it with no model (forwardedProps.spokenCall), once per call, even
+     with several tabs open.
+   - In the chat it shows as a card: a headset, the title, the length and time, the first two
+     lines, and "Show the whole conversation".
+4. After review (round 1):
+   - Something asked just before hanging up still finishes, within 2 minutes. The saved call
+     ends "After the call: …" (or "Didn't get to finish “…”. Ask again in the chat."), and the
+     owner gets a bell entry and push. The call waits (pending) before going into the chat.
+     After a server restart, the saved call says what it couldn't finish.
+   - Things saved for approval on a call wait until midnight where the owner is (at least 2
+     hours) instead of 30 minutes. The owner chose this.
+   - The bell entry names the item, e.g. "Send “Running late”, from your call. It waits for your
+     OK in Activity." It shows "Needs you" and a Review button that opens the review. Its push
+     opens /?review=<id>.
+   - Call screen: "checking" counts open hand-overs and ends on each answer.
+   - Card: the time line has stronger contrast, "Show all N lines" has aria-controls, and your
+     lines are grey.
+5. Call screen: "Neddy is checking…" (with the working avatar) between the hand-over and the
+   answer. The note now reads "Ask about your day, your plans or anything on the web. Anything
+   Neddy sends, books or buys waits for your OK in the app."
+
+TESTS
+- 448 pass.
+- New: voice-brain.test.ts (4 tests: the snapshot, the instructions, answer collection with
+  progress notes and approvals, a call added once) and 3 hand-over tests in voice-live.test.ts
+  (answered with a note, too slow or failing, stopped by ending the call).
+- Screenshots use a fake call and a mocked chat run.
+
 PENDING
 -------
-- The owner's first real call on the fixed version.
+- The owner tries "what did I have for lunch?" and a reminder on a real call.
+- Not done yet:
+  - telling the voice when a job it started finishes;
+  - spoken yes for low-risk actions;
+  - phone polish;
+  - the phone line.
 - Live voice slices 1–5:
   - "hold on, let me check" handed to Claude;
   - calls saved into the chat;

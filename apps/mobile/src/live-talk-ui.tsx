@@ -1,6 +1,14 @@
-import { Check, Copy, ExternalLink, Mic, MicOff, PhoneOff } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
-import { Linking, Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Check, Copy, ExternalLink, Headset, Mic, MicOff, PhoneOff } from "lucide-react-native";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
 import type { MuseApi } from "./api";
 import { AgentAvatar } from "./avatar";
@@ -41,6 +49,25 @@ export function useLiveVoice(): LiveStatus {
     };
   }, [api]);
   return liveVoiceSupported() ? status : "off";
+}
+
+const savedListeners = new Set<() => void>();
+/** Hears when a call has been saved, so the chat can add it. */
+export function onCallSaved(listener: () => void) {
+  savedListeners.add(listener);
+  return () => {
+    savedListeners.delete(listener);
+  };
+}
+/**
+ * After a call: the server saves it within a moment of the end; anything asked at the very end
+ * follows within two minutes, so it's checked again a few times.
+ */
+function callSaved(first = 0) {
+  for (const after of [first, 15_000, 45_000, 125_000])
+    setTimeout(() => {
+      for (const listener of savedListeners) listener();
+    }, after);
 }
 
 /** Why a conversation ended on its own, in plain words. */
@@ -92,6 +119,8 @@ export function LiveTalkSheet() {
   const [lines, setLines] = useState<Line[]>([]);
   const [error, setError] = useState("");
   const [ended, setEnded] = useState("");
+  // "Let me check": the agent is looking something up.
+  const [lookingUp, setLookingUp] = useState(false);
   const call = useRef<LiveCall | undefined>(undefined);
   const scroller = useRef<ScrollView>(null);
   const [attempt, setAttempt] = useState(0);
@@ -146,8 +175,10 @@ export function LiveTalkSheet() {
     setEnded("");
     setLines([]);
     setMuted(false);
+    setLookingUp(false);
     startLive(api, {
       onState: (next) => !cancelled && setState(next),
+      onChecking: (on) => !cancelled && setLookingUp(on),
       onWords: (role, words) =>
         !cancelled &&
         setLines((current) => {
@@ -157,6 +188,8 @@ export function LiveTalkSheet() {
           return [...current.slice(-7), { role, text: words }];
         }),
       onEnded: (reason) => {
+        // OpenAI ended it; the server saves the call as soon as it hears.
+        callSaved(2500);
         if (cancelled) return;
         const endings = ENDED(name);
         setEnded(endings[reason ?? ""] ?? "The call ended.");
@@ -189,12 +222,13 @@ export function LiveTalkSheet() {
       });
     return () => {
       cancelled = true;
-      void call.current?.end();
+      void call.current?.end().then(() => callSaved());
       call.current = undefined;
     };
   }, [api, attempt, name, needsKey]);
   const finish = () => {
-    void call.current?.end();
+    // The server has saved the call once it answers.
+    void call.current?.end().then(() => callSaved());
     call.current = undefined;
     close();
   };
@@ -225,7 +259,9 @@ export function LiveTalkSheet() {
         ? `Muted. ${name} can’t hear you.`
         : state === "speaking"
           ? `${name} is talking. Just speak to cut in.`
-          : "Listening…";
+          : lookingUp
+            ? `${name} is checking…`
+            : "Listening…";
   // Short screens (a phone on its side in a car mount) get a smaller avatar and caption box.
   const tall = height >= 700;
   // On a very short screen the avatar gives its room to the words.
@@ -239,7 +275,7 @@ export function LiveTalkSheet() {
         { fontSize: 13, lineHeight: 19, textAlign: "center", maxWidth: 380, alignSelf: "center" },
       ]}
     >
-      {`${name} can talk with you here but can’t look things up or do things yet. For that, type in the chat.`}
+      {`Ask about your day, your plans or anything on the web. Anything ${name} sends, books or buys waits for your OK in the app.`}
     </Text>
   );
   const controls = (
@@ -317,7 +353,13 @@ export function LiveTalkSheet() {
           {!short && (
             <AgentAvatar
               size={avatar}
-              mood={state === "connecting" ? "working" : over ? "idle" : undefined}
+              mood={
+                state === "connecting" || (lookingUp && state !== "speaking")
+                  ? "working"
+                  : over
+                    ? "idle"
+                    : undefined
+              }
             />
           )}
           {/* Room for two lines during a call, so a longer status never moves what's below it. */}
@@ -481,6 +523,88 @@ function LiveSetup({
           </View>
         ))}
       </View>
+    </View>
+  );
+}
+
+/**
+ * A live voice call saved in the chat: its heading ("Spoken conversation · 6 min · …"), the first
+ * lines, and the rest on request.
+ */
+export function SpokenCall({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const linesId = `call-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const [heading = "", ...rest] = text.split("\n");
+  const [title = "Spoken conversation", ...meta] = heading.split(" · ");
+  const turns = rest
+    .filter((line) => line.trim())
+    .map((line) => {
+      const at = line.indexOf(": ");
+      return at > 0
+        ? { who: line.slice(0, at), said: line.slice(at + 2) }
+        : { who: "", said: line };
+    });
+  const shown = open ? turns : turns.slice(0, 2);
+  return (
+    <View style={{ gap: 10 }}>
+      <View style={[s.row, { gap: 10, alignItems: "center" }]}>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.canvas,
+          }}
+        >
+          <Headset size={17} color={colors.blueText} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.text, { fontWeight: "700" }]}>{title}</Text>
+          {meta.length > 0 && (
+            <Text style={[s.small, { color: colors.mutedStrong, fontSize: 12 }]}>
+              {meta.join(" · ")}
+            </Text>
+          )}
+        </View>
+      </View>
+      <View nativeID={linesId} style={{ gap: 6 }}>
+        {shown.map((turn, index) => (
+          <Text
+            // biome-ignore lint/suspicious/noArrayIndexKey: the lines never move
+            key={index}
+            selectable
+            style={[
+              s.text,
+              { fontSize: 15, lineHeight: 22 },
+              // The person's lines in grey, as on the call screen.
+              turn.who === "You" && { color: colors.mutedStrong },
+            ]}
+          >
+            {turn.who ? <Text style={{ fontWeight: "700" }}>{`${turn.who}: `}</Text> : null}
+            {turn.said}
+          </Text>
+        ))}
+      </View>
+      {turns.length > 2 && (
+        <Pressable
+          role="button"
+          aria-expanded={open}
+          aria-controls={linesId}
+          onPress={() => setOpen((value) => !value)}
+          style={{
+            alignSelf: "flex-start",
+            minHeight: 44,
+            justifyContent: "center",
+            marginBottom: -8,
+          }}
+        >
+          <Text style={[s.text, { color: colors.blueText, fontWeight: "600" }]}>
+            {open ? "Show less" : `Show all ${turns.length} lines`}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }

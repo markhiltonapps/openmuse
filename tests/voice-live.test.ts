@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createStore } from "../apps/server/src/db.ts";
 import { UsageMeter } from "../apps/server/src/usage.ts";
 import {
+  type LiveAnswer,
   LiveVoice,
   liveInstructions,
   type SocketLike,
@@ -36,7 +37,15 @@ class FakeSocket implements SocketLike {
 }
 
 async function setup(
-  options: { admin?: boolean; key?: string; status?: number; setupUrl?: string } = {},
+  options: {
+    admin?: boolean;
+    key?: string;
+    status?: number;
+    setupUrl?: string;
+    answer?: LiveAnswer;
+    answerSeconds?: number;
+    tell?: (owner: string, title: string, body: string, key: string) => Promise<unknown>;
+  } = {},
 ) {
   const db = await createStore();
   const usage = new UsageMeter(db, undefined, () => new Date("2026-10-01T12:00:00Z"));
@@ -52,6 +61,9 @@ async function setup(
     {
       apiKey: options.key ?? "sk-test-secret",
       setupUrl: options.setupUrl,
+      answer: options.answer,
+      answerSeconds: options.answerSeconds,
+      tell: options.tell,
       fetcher: (async (url: string, init: RequestInit) => {
         requests.push({ url, init });
         if (options.status)
@@ -261,5 +273,120 @@ test("a quiet call is hung up, and fractional seconds are counted exactly", asyn
   const line = (await usage.month("owner")).lines.find((l) => l.kind === "voice");
   assert.equal(line?.seconds, 6);
   await voice.stop();
+  await db.close();
+});
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sentOf = (socket: FakeSocket, type: string) =>
+  socket.sent.filter((event) => event.type === type) as {
+    delegation_id?: string;
+    content?: string;
+  }[];
+
+test("“let me check”: a hand-over is answered by the agent, with a progress note first", async () => {
+  const asked: { turns: { role: string; text: string }[]; delegationId: string }[] = [];
+  const { voice, sockets, db } = await setup({
+    answer: async (question) => {
+      asked.push(question);
+      question.progress("Checking your food log");
+      question.progress("Checking your food log");
+      return "You had a honey butter sandwich at 12:30.";
+    },
+  });
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({ type: "session.output_transcript.delta", delta: "Hi, what's up?" });
+  socket.emit({ type: "session.input_transcript.delta", delta: "What did I have " });
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_1" } });
+  // The rest of the question arrives just after the hand-over; it's waited for.
+  socket.emit({ type: "session.input_transcript.delta", delta: "for lunch?" });
+  await wait(800);
+  assert.deepEqual(asked[0]?.turns.at(-1), { role: "user", text: "What did I have for lunch?" });
+  assert.equal(asked[0]?.delegationId, "del_1");
+  const notes = sentOf(socket, "session.thinking.append");
+  assert.equal(notes.length, 1, "the same note isn't sent twice");
+  assert.equal(notes[0]?.delegation_id, "del_1");
+  assert.match(String(notes[0]?.content), /Checking your food log/);
+  const [said] = sentOf(socket, "session.commentary.append");
+  assert.equal(said?.delegation_id, "del_1");
+  assert.match(String(said?.content), /honey butter sandwich at 12:30/);
+  await voice.end("owner", "live_123");
+  await db.close();
+});
+
+test("a hand-over that takes too long, or fails, gets a plain spoken apology instead", async () => {
+  const slow = await setup({ answer: () => new Promise(() => {}), answerSeconds: 0.2 });
+  await slow.voice.start("owner", "offer");
+  const socket = slow.sockets[0] as FakeSocket;
+  socket.emit({ type: "session.input_transcript.delta", delta: "Compare every vacuum" });
+  await wait(450);
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_slow" } });
+  await wait(500);
+  assert.match(String(sentOf(socket, "session.commentary.append")[0]?.content), /too long/);
+  await slow.voice.end("owner", "live_123");
+  await slow.db.close();
+  const broken = await setup({
+    answer: async () => {
+      throw new Error("model down");
+    },
+  });
+  await broken.voice.start("owner", "offer");
+  const other = broken.sockets[0] as FakeSocket;
+  other.emit({ type: "session.input_transcript.delta", delta: "What's on today?" });
+  await wait(450);
+  other.emit({ type: "session.delegation.created", delegation: { id: "del_x" } });
+  await wait(100);
+  assert.match(String(sentOf(other, "session.commentary.append")[0]?.content), /couldn't get that/);
+  await broken.voice.end("owner", "live_123");
+  await broken.db.close();
+});
+
+test("something asked just before hanging up is still done, and added to the saved call", async () => {
+  const told: { title: string; body: string }[] = [];
+  const { voice, sockets, db } = await setup({
+    answer: () =>
+      new Promise((resolve) => setTimeout(() => resolve("Done, I'll remind you at 7 PM."), 300)),
+    tell: async (_owner, title, body) => {
+      told.push({ title, body });
+    },
+  });
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({ type: "session.input_transcript.delta", delta: "Remind me to call Mom at seven" });
+  await wait(450);
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_m" } });
+  await wait(50);
+  await voice.end("owner", "live_123");
+  // Saved straight away, but not added to the chat until the answer is in.
+  assert.equal((await db.get<VoiceSession>("owner", "voice-sessions", "live_123"))?.pending, true);
+  await wait(400);
+  const saved = await db.get<VoiceSession>("owner", "voice-sessions", "live_123");
+  assert.equal(saved?.pending, undefined);
+  assert.deepEqual(saved?.turns.at(-1), {
+    role: "assistant",
+    text: "After the call: Done, I'll remind you at 7 PM.",
+  });
+  assert.deepEqual(told, [{ title: "After your call", body: "Done, I'll remind you at 7 PM." }]);
+  // Nothing is said into a call that's over.
+  assert.equal(sentOf(socket, "session.commentary.append").length, 0);
+  await db.close();
+});
+
+test("a server restart says what it couldn't finish, in the saved call", async () => {
+  const { voice, sockets, db } = await setup({ answer: () => new Promise(() => {}) });
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({ type: "session.input_transcript.delta", delta: "Find me a flight" });
+  await wait(450);
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_f" } });
+  await wait(50);
+  await voice.stop();
+  const saved = await db.get<VoiceSession>("owner", "voice-sessions", "live_123");
+  assert.equal(saved?.reason, "server_restart");
+  assert.equal(saved?.pending, undefined);
+  assert.deepEqual(saved?.turns.at(-1), {
+    role: "assistant",
+    text: "The call ended before I could finish this. Ask me again here: “Find me a flight”",
+  });
   await db.close();
 });

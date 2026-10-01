@@ -997,7 +997,7 @@ export class AgentService {
     body: string,
     taskId?: string,
     key?: string,
-    extra: Pick<AgentNotification, "reminderId" | "checkInId"> = {},
+    extra: Pick<AgentNotification, "reminderId" | "checkInId" | "actionId"> = {},
   ) {
     const value: AgentNotification = {
       id: key ? hash(key) : randomUUID(),
@@ -1015,12 +1015,15 @@ export class AgentService {
           title,
           body,
           tag: value.id,
-          // A check-in opens chat with its card, ready to answer; a job opens that job.
+          // A check-in opens chat with its card, ready to answer; a job opens that job; something
+          // waiting for approval opens its review.
           ...(extra.checkInId
             ? { url: `/?checkin=${encodeURIComponent(extra.checkInId)}` }
             : taskId
               ? { url: `/?task=${encodeURIComponent(taskId)}` }
-              : {}),
+              : extra.actionId
+                ? { url: `/?review=${encodeURIComponent(extra.actionId)}` }
+                : {}),
         })
         .catch((error) => backgroundFailure("push notification", error));
     return inserted;

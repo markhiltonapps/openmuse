@@ -170,6 +170,8 @@ export interface AgentNotification {
   reminderId?: string;
   /** Set on a meal check-in ("What did you have for lunch?"); answered from chat. */
   checkInId?: string;
+  /** Set on something saved for approval outside a job (from a live call): opens its review. */
+  actionId?: string;
   title: string;
   body: string;
   createdAt: string;

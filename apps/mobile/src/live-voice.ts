@@ -14,6 +14,8 @@ export interface LiveHandlers {
   onWords: (role: "user" | "assistant", words: string) => void;
   /** It ended on its own: the other side hung up, the time limit, a lost connection. */
   onEnded: (reason?: string) => void;
+  /** The agent is looking something up ("hold on, let me check"), and when it's done. */
+  onChecking?: (checking: boolean) => void;
 }
 export interface LiveCall {
   setMuted: (muted: boolean) => void;
@@ -29,6 +31,8 @@ export function liveVoiceSupported() {
   );
 }
 
+/** Once answer events have been seen in this tab, the "speaking again" fallback isn't needed. */
+let answerEvents = false;
 export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<LiveCall> {
   const micId = voiceSettings().microphone;
   const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
@@ -70,10 +74,12 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
   const onVisible = () => {
     if (document.visibilityState === "visible" && !over) void keepAwake();
   };
+  let stopChecking = () => {};
   const stop = (reason?: string, tellServer = true) => {
     if (over) return Promise.resolve();
     over = true;
     clearInterval(meter);
+    stopChecking();
     setLiveSpeaking(false);
     try {
       if (channel.readyState === "open") channel.send(JSON.stringify({ type: "session.close" }));
@@ -127,6 +133,28 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
   };
   for (const track of stream.getAudioTracks()) peer.addTrack(track, stream);
   const channel = peer.createDataChannel("oai-events");
+  // "Let me check": while any hand-over is waiting for its answer. Each answer the server adds
+  // closes one; if those events never arrive, the voice speaking again after a pause does, and
+  // a cap ends it regardless.
+  let open = 0;
+  let checkingSince = 0;
+  let lastSaid = 0;
+  let checkingCap: ReturnType<typeof setTimeout> | undefined;
+  const checking = (on: boolean) => {
+    open = on ? open + 1 : 0;
+    const now = open > 0;
+    if (now === checkingSince > 0) return;
+    checkingSince = now ? Date.now() : 0;
+    clearTimeout(checkingCap);
+    if (now) checkingCap = setTimeout(() => checking(false), 130_000);
+    handlers.onChecking?.(now);
+  };
+  const answered = () => {
+    answerEvents = true;
+    if (open <= 1) checking(false);
+    else open -= 1;
+  };
+  stopChecking = () => checking(false);
   channel.onmessage = (message) => {
     let event: { type?: string; delta?: string; reason?: string };
     try {
@@ -137,8 +165,16 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
     if (event.type === "session.started") handlers.onState("listening");
     else if (event.type === "session.input_transcript.delta" && event.delta)
       handlers.onWords("user", event.delta);
-    else if (event.type === "session.output_transcript.delta" && event.delta)
+    else if (event.type === "session.output_transcript.delta" && event.delta) {
+      const now = Date.now();
+      // Without answer events: after "one sec, let me check" and a pause, the voice speaking
+      // again is the answer.
+      if (!answerEvents && checkingSince && now - checkingSince > 1500 && now - lastSaid > 1200)
+        checking(false);
+      lastSaid = now;
       handlers.onWords("assistant", event.delta);
+    } else if (event.type === "session.delegation.created") checking(true);
+    else if (event.type === "session.commentary.appended") answered();
     else if (event.type === "session.closed") void stop(event.reason ?? "ended", false);
   };
   peer.onconnectionstatechange = () => {

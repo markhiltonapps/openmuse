@@ -76,6 +76,7 @@ import { Button, colors, ErrorNotice, IconButton, s } from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
 import {
   listenForCheckIns,
+  listenForReviewLinks,
   listenForTaskLinks,
   registerServiceWorker,
   takeDelegateDraft,
@@ -259,6 +260,29 @@ function WorkspaceApp({ token }: { token: string }) {
   );
   // A job email's link or a tapped notification opens that job.
   useEffect(() => listenForTaskLinks((taskId) => setDetail({ type: "task", taskId })), []);
+  // A tapped "Ready for your review" notification opens that review once the workspace is in;
+  // if it's already been decided or has expired, Activity shows where things stand.
+  const [reviewLink, setReviewLink] = useState("");
+  useEffect(() => listenForReviewLinks(setReviewLink), []);
+  useEffect(() => {
+    if (!reviewLink || !workspace) return;
+    const id = reviewLink;
+    setReviewLink("");
+    const waiting = (list: Workspace["actions"]) =>
+      list.find((item) => item.id === id && item.status === "awaiting_review");
+    const action = waiting(workspace.actions);
+    if (action) return setDetail({ type: "review", action });
+    // Saved during a call while the app was open: it may not be in what's loaded yet.
+    void api
+      .request<Workspace>("/api/workspace")
+      .then((fresh) => {
+        setWorkspace(fresh);
+        const found = waiting(fresh.actions);
+        if (found) setDetail({ type: "review", action: found });
+        else setSection("activity");
+      })
+      .catch(() => setSection("activity"));
+  }, [reviewLink, workspace, api]);
   // A ?delegate= link opens Delegate task with the job filled in, ready to check and send.
   useEffect(() => {
     const prompt = takeDelegateDraft();

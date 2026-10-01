@@ -43,6 +43,8 @@ import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
+import { SPOKEN_PREFIX, spokenCallText } from "../voice-brain.ts";
+import type { VoiceSession } from "../voice-live.ts";
 import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import type { AgentService } from "./service.ts";
@@ -81,6 +83,9 @@ export class ConversationAgent extends AbstractAgent {
     return new ConversationAgent(this.config, this.service, this.owner);
   }
   run(input: RunAgentInput): Observable<BaseEvent> {
+    // The app adds a finished live voice call to the chat this way: no model, just the call.
+    const spoken = (input.forwardedProps as { spokenCall?: unknown } | undefined)?.spokenCall;
+    if (typeof spoken === "string" && spoken) return this.addSpokenCall(input, spoken);
     const latest = input.messages.filter((m) => m.role === "user").at(-1);
     const requestKey = `${input.threadId}:${latest?.id ?? input.runId}`;
     if (this.config.agentBackend === "sample")
@@ -752,6 +757,56 @@ export class ConversationAgent extends AbstractAgent {
         agent.abortRun();
         subscription?.unsubscribe();
       };
+    });
+  }
+  /** Writes a saved live voice call into this chat as one message, once. */
+  private addSpokenCall(input: RunAgentInput, id: string): Observable<BaseEvent> {
+    return new Observable((subscriber) => {
+      subscriber.next({
+        type: EventType.RUN_STARTED,
+        threadId: input.threadId,
+        runId: input.runId,
+      });
+      const db = this.service.db;
+      void (async () => {
+        const session = await db.get<VoiceSession>(this.owner, "voice-sessions", id);
+        // Once only, however many open tabs ask at the same time.
+        const claimed =
+          // A call still finishing something asked at the end waits until that's added.
+          session?.turns.length && !session.inChat && !session.pending
+            ? await db.insertIfAbsent(this.owner, "voice-in-chat", {
+                id,
+                threadId: input.threadId,
+              })
+            : null;
+        if (session && claimed) {
+          const [identity, timeZone] = await Promise.all([
+            db.get<{ name?: string }>(this.owner, "agent-settings", "identity").catch(() => null),
+            this.service.timeZone(this.owner).catch(() => "UTC"),
+          ]);
+          await db.put(this.owner, "voice-sessions", { ...session, inChat: input.threadId });
+          const messageId = `${SPOKEN_PREFIX}${id}`;
+          subscriber.next({ type: EventType.TEXT_MESSAGE_START, messageId, role: "assistant" });
+          subscriber.next({
+            type: EventType.TEXT_MESSAGE_CONTENT,
+            messageId,
+            delta: spokenCallText(session, identity?.name?.trim() || "Neddy", timeZone),
+          });
+          subscriber.next({ type: EventType.TEXT_MESSAGE_END, messageId });
+        }
+        subscriber.next({
+          type: EventType.RUN_FINISHED,
+          threadId: input.threadId,
+          runId: input.runId,
+        });
+        subscriber.complete();
+      })().catch((error: unknown) => {
+        subscriber.next({
+          type: EventType.RUN_ERROR,
+          message: error instanceof Error ? error.message : "Couldn't add the call to the chat",
+        });
+        subscriber.complete();
+      });
     });
   }
   private async sample(prompt: string, key: string) {
