@@ -553,6 +553,10 @@ PENDING
   - Waiting on the owner: go ahead with A? Do they use side chats much? Should the Menu list
     Spaces and Files too? Retire the "Computer · ready" pill? Hide Terminal and Linux Files,
     or set up the Linux computer elsewhere? Keep the name "New job"?
+  - Owner's answers: build A. They use side chats sometimes, so "Other chats" gets a show/hide
+    toggle. The Menu lists Spaces and Files too ("make things readily accessible"). Remove
+    the "Computer · ready" pill. Hide Terminal and Linux Files (they don't work on Railway).
+    Keep "New job", as long as it works. Leave the built-in Google sign-in for now.
 - Help guide (#143–147; owner's picks: a Help screen in the app, real screenshots, the agent
   answers from it by voice and chat, everyone plus an admin-only part):
   - Content: packages/domain/src/help.ts. 13 groups and about 89 topics, each with a summary,
@@ -709,5 +713,5 @@ PENDING
   - match an end reason to the right call;
   - plain words for a non-JSON server error;
   - a caption fade.
-- Time-log hours for 2026-09-29 evening, 2026-09-30 and 2026-10-01 (asked, not answered yet).
+- Time log: the owner doesn't want time logged for this project (CLAUDE.md says so now).
 - Phase 1 slices 2–6.

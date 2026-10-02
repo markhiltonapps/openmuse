@@ -40,6 +40,9 @@ Also update any skills or CLAUDE.md with any lessons learned.
 
 ## Time Log
 
+**This project (owner, 2026-10-01): no time is logged.** Don't ask for hours and don't update
+`docs/time_log.txt`; the rest of this section is for projects that bill.
+
 Track daily work for billing in `docs/time_log.txt`. That file is the single
 source of truth for hours — do not duplicate hours anywhere else.
 
