@@ -26,7 +26,7 @@ export const APP_PLACES = {
     where: "Feed",
     about: "upcoming reminders, and those sent in the last 7 days",
   },
-  calendar: { name: "Calendar", where: "Menu, top left", about: "their calendar" },
+  calendar: { name: "Calendar", where: "Menu (☰, top left)", about: "their calendar" },
   mail: { name: "Mail", where: "Apps", about: "their email, when Google is connected" },
   updates: {
     name: "Updates",
@@ -116,13 +116,13 @@ export const APP_PLACES = {
       "every report, comparison, plan and finance tracker the agent saved (id: one saved result's id, to open it)",
   },
   "agent-computer": {
-    name: "Agent computer",
-    where: "Menu, top left",
-    about: "the agent's browser, terminal and files, to watch or take control",
+    name: "The agent's browser",
+    where: "Menu (☰, top left)",
+    about: "the websites the agent opened, to watch or take control (sign in somewhere for it)",
   },
   delegate: {
     name: "New job",
-    where: "The + at the top, next to the bell",
+    where: "Top right, next to the bell",
     about: "hand the agent a job to work on in the background",
   },
   apps: {

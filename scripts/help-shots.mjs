@@ -123,9 +123,66 @@ async function open(context, state, height = HEIGHT) {
       action.status === "awaiting_review" ? { ...action, expiresAt: later } : action,
     );
     await route.fulfill({
-      json: { ...real, actions: state.actions, runtime: { ...real.runtime, richThreads: false } },
+      json: {
+        ...real,
+        actions: state.actions,
+        runtime: { ...real.runtime, richThreads: true },
+      },
     });
   });
+  // Chats as on the real app (CopilotKit's list): a few made-up ones, and a short made-up
+  // exchange in the main chat.
+  {
+    const ago = (hours) => new Date(Date.now() - hours * 3600_000).toISOString();
+    const chat = (id, name, hours, archived = false) => ({
+      id,
+      agentId: "default",
+      name,
+      archived,
+      createdAt: ago(hours + 5),
+      updatedAt: ago(hours),
+      lastRunAt: ago(hours),
+    });
+    const threads = [
+      chat("t-plumber", "Plumber for the upstairs bath", 2),
+      chat("t-car", "Car insurance renewal", 30),
+      chat("t-kitchen", "Kitchen remodel quotes", 100),
+      chat("t-denver", "Denver trip ideas", 300, true),
+    ];
+    await page.route(/\/api\/copilotkit\/threads/, (route) =>
+      route.request().method() === "GET" && !/subscribe/.test(route.request().url())
+        ? route.fulfill({ json: { threads, nextCursor: null } })
+        : route.fulfill({ status: 404, json: {} }),
+    );
+    const exchange = [
+      { id: "help-u1", role: "user", content: "What’s on my calendar today?" },
+      {
+        id: "help-a1",
+        role: "assistant",
+        content: "You have a dentist visit at 9:30 and lunch with Alex at noon.",
+      },
+    ];
+    await page.route(/\/api\/copilotkit\/agent\/default\/connect$/, (route) => {
+      const { threadId, runId } = JSON.parse(route.request().postData() || "{}");
+      const events = [
+        { type: "RUN_STARTED", threadId, runId },
+        { type: "MESSAGES_SNAPSHOT", messages: threadId === "t-main" ? exchange : [] },
+        { type: "RUN_FINISHED", threadId, runId },
+      ];
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+      });
+    });
+    await page.route(/\/api\/main-thread$/, (route) =>
+      route.fulfill({ json: { threadId: "t-main", existing: true } }),
+    );
+    await page.route(/\/api\/threads\/archive$/, (route) => route.fulfill({ json: [] }));
+    await page.route(/\/api\/chats\/(known|name)$/, (route) =>
+      route.fulfill({ json: { ok: true, named: {} } }),
+    );
+  }
   await page.route(/\/api\/weather/, (route) => route.fulfill({ json: weather() }));
   await page.route(/\/api\/voice\/live$/, (route) =>
     route.request().method() === "GET"
@@ -208,10 +265,26 @@ const SHOTS = [
     id: "home",
     showNewJob: true,
     marks: {
-      1: (p) => button(p, "Open conversations and menu"),
-      2: (p) => p.getByRole("button", { name: /^Neddy|^Open Neddy/ }).first(),
+      1: (p) => p.getByRole("button", { name: "Menu", exact: true }),
+      2: {
+        find: (p) => p.getByRole("button", { name: /^Neddy|^Open Neddy/ }).first(),
+        also: (p) => p.locator("#chat-button"),
+        side: "corner",
+      },
       3: (p) => button(p, /^New job for/),
       4: (p) => p.getByRole("tablist", { name: "Sections" }),
+    },
+  },
+  {
+    id: "chats",
+    go: async (p) => {
+      await p.locator("#chat-button").click();
+      await p.waitForTimeout(1500);
+    },
+    marks: {
+      2: { find: (p) => button(p, "New chat"), side: "inside-right" },
+      3: (p) => p.getByRole("button", { name: "Options for Car insurance renewal" }),
+      4: (p) => p.getByRole("button", { name: "Hide other chats" }),
     },
   },
   {
@@ -454,12 +527,24 @@ async function boxOf(locator, tight) {
 async function mark(page, marks) {
   const boxes = [];
   for (const [number, mark] of Object.entries(marks)) {
-    const { find, side, tight } =
+    const { find, side, tight, also } =
       typeof mark === "function" ? { find: mark, side: "corner", tight: false } : mark;
     try {
       // Never scrolls: each shot's own steps put the screen where it should be, and a scroll
       // here would move the marks already placed.
-      const box = await boxOf(find(page), tight);
+      let box = await boxOf(find(page), tight);
+      // `also`: one ring around two things that belong together (the agent and the chat button).
+      const other = also && box ? await boxOf(also(page), tight) : undefined;
+      if (box && other) {
+        const x = Math.min(box.x, other.x);
+        const y = Math.min(box.y, other.y);
+        box = {
+          x,
+          y,
+          width: Math.max(box.x + box.width, other.x + other.width) - x,
+          height: Math.max(box.y + box.height, other.y + other.height) - y,
+        };
+      }
       const height = page.viewportSize()?.height ?? HEIGHT;
       if (box && box.y + box.height > 0 && box.y < height) boxes.push({ number, side, ...box });
       else console.warn(`  mark ${number}: not on screen`);
@@ -630,8 +715,12 @@ for (const scheme of ["light", "dark"]) {
 }
 await browser.close();
 const sorted = Object.fromEntries(Object.entries(sizes).sort(([a], [b]) => a.localeCompare(b)));
+// One shot a line, as Biome formats it, so lint stays clean after a retake.
+const lines = Object.entries(sorted).map(
+  ([id, size]) => `  ${id}: { width: ${size.width}, height: ${size.height} },`,
+);
 writeFileSync(
   SIZES,
-  `// Written by scripts/help-shots.mjs: each help screenshot's size, for its shape on the page.\nexport const HELP_SHOTS: Record<string, { width: number; height: number }> = ${JSON.stringify(sorted)};\n`,
+  `// Written by scripts/help-shots.mjs: each help screenshot's size, for its shape on the page.\nexport const HELP_SHOTS: Record<string, { width: number; height: number }> = {\n${lines.join("\n")}\n};\n`,
 );
 console.log(failed.length ? `Failed: ${failed.join(", ")}` : "All shots taken.");

@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import {
   Bell,
   Check,
+  ClipboardPlus,
   FolderOpen,
   Lightbulb,
   type LucideIcon,
@@ -10,7 +11,6 @@ import {
   MessageCircle,
   Newspaper,
   PanelsTopLeft,
-  Plus,
   Shapes,
   SquareCheck,
   UsersRound,
@@ -61,12 +61,13 @@ import {
 import { BackToChat, usePillsRoom } from "./src/app-places-ui";
 import { AgentAvatar, Mascot, type Mood, useChatActivity } from "./src/avatar";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
-import { ComputerEntry } from "./src/computer";
+import { ChatButton, ChatReporter, ChatsSheet, onOpenChats } from "./src/chats-ui";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { FeedScreen } from "./src/feed";
 import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
 import { LiveTalkSheet } from "./src/live-talk-ui";
+import { MenuSheet } from "./src/menu-ui";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import {
   clearSession,
@@ -80,7 +81,7 @@ import { SpaceChip } from "./src/spaces";
 import { SpacesScreen } from "./src/spaces-screen";
 import TipLayer from "./src/TipLayer";
 import { dark } from "./src/theme";
-import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
+import { ThreadsProvider, useMuseThread } from "./src/threads";
 import { tipProps } from "./src/tips";
 import { Button, colors, ErrorNotice, IconButton, SheetStatus, SheetTop, s } from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
@@ -411,7 +412,11 @@ function WorkspaceShell({
     retry: retryThreads,
     enabled: richThreads,
   } = useMuseThread();
-  const [threadsOpen, setThreadsOpen] = useState(false);
+  // The ☰ Menu, or the Chats list (from the chat button or the Menu).
+  const [panel, setPanel] = useState<"menu" | "chats">();
+  const threadsOpen = !!panel;
+  // A chat card's "See all" opens the Chats sheet.
+  useEffect(() => onOpenChats(() => setPanel("chats")), []);
   const { width } = useWindowDimensions();
   const callBar = useContext(SheetTop);
   const call = useCallControls();
@@ -490,11 +495,14 @@ function WorkspaceShell({
                       : AppsScreen;
   const utility = ["mail", "calendar", "browser"].includes(section);
   const chat = section === "chat";
-  const headerHeight = chat ? (desktop ? 150 : 128) : desktop ? 158 : 132;
+  // The chat's header takes the height of what's in it (the chat button grows with big text);
+  // this is its least.
+  const headerHeight = chat ? (desktop ? 176 : 155) : desktop ? 158 : 132;
   const pillsRoom = usePillsRoom(section);
   return (
     <>
       <WorkspaceTools />
+      <ChatReporter />
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
         {/* A sheet over the page shows the bar itself (the page's would be under its shade). */}
         {callBar && !detail && !threadsOpen && (
@@ -507,7 +515,12 @@ function WorkspaceShell({
             pointerEvents="box-none"
             style={
               chat
-                ? { height: headerHeight, paddingTop: desktop ? 14 : 4, marginHorizontal: 20 }
+                ? {
+                    minHeight: headerHeight,
+                    paddingTop: desktop ? 14 : 4,
+                    paddingBottom: 6,
+                    marginHorizontal: 20,
+                  }
                 : {
                     // Floats over the page, which scrolls underneath, like Meta Muse.
                     position: "absolute",
@@ -539,12 +552,11 @@ function WorkspaceShell({
               </View>
             )}
             {/* Above the centered title, which spans the full header width and would take the tap. */}
-            <View style={{ position: "absolute", left: chat ? 0 : 20, top: 16, zIndex: 2 }}>
-              <IconButton
-                icon={Menu}
-                label="Open conversations and menu"
-                onPress={() => setThreadsOpen(true)}
-              />
+            <View
+              nativeID="menu-button"
+              style={{ position: "absolute", left: chat ? 0 : 20, top: 16, zIndex: 2 }}
+            >
+              <IconButton icon={Menu} label="Menu" onPress={() => setPanel("menu")} />
             </View>
             <View style={{ alignItems: "center", gap: 1 }}>
               <Pressable
@@ -612,7 +624,7 @@ function WorkspaceShell({
                   {mood === "idle" ? " " : status}
                 </Text>
               </Pressable>
-              {section === "chat" && <ComputerEntry />}
+              {section === "chat" && <ChatButton onPress={() => setPanel("chats")} />}
             </View>
             <View
               style={{
@@ -625,7 +637,7 @@ function WorkspaceShell({
               }}
             >
               <IconButton
-                icon={Plus}
+                icon={ClipboardPlus}
                 label={`New job for ${agentName}`}
                 onPress={() => open({ type: "delegate" })}
               />
@@ -706,12 +718,9 @@ function WorkspaceShell({
                   ) : threadsLoading ? (
                     <ActivityIndicator color={colors.blueDark} />
                   ) : null}
+                  {/* A space's chat links to its overview; the chat button above names any chat. */}
                   {!threadsLoading && selection.id !== mainId && (
-                    <SpaceChip threadId={selection.id}>
-                      <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
-                        Side chat
-                      </Text>
-                    </SpaceChip>
+                    <SpaceChip threadId={selection.id} />
                   )}
                   {visited.map((thread) => (
                     <View
@@ -862,7 +871,10 @@ function WorkspaceShell({
         </View>
         {/* What happened to a shrunk call; a sheet says it itself while one is open. */}
         <CallNews quiet={!!detail || threadsOpen || call.shown} />
-        {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
+        {panel === "menu" && (
+          <MenuSheet onClose={() => setPanel(undefined)} onChats={() => setPanel("chats")} />
+        )}
+        {panel === "chats" && <ChatsSheet onClose={() => setPanel(undefined)} />}
         {detail && (
           <Details
             key={
@@ -923,7 +935,7 @@ function NewJobButton({ round }: { round: boolean }) {
         transform: [{ scale: pressed ? 0.97 : 1 }],
       })}
     >
-      <Plus size={20} strokeWidth={2.4} color={colors.onInverse} />
+      <ClipboardPlus size={20} strokeWidth={2.2} color={colors.onInverse} />
       {!round && (
         <Text style={{ color: colors.onInverse, fontSize: 16, fontWeight: "700" }}>New job</Text>
       )}
@@ -1025,10 +1037,7 @@ function NewVersion({
               setLater(true);
               // The button that had focus has gone; the menu is the nearest place to go on from.
               setTimeout(
-                () =>
-                  document
-                    .querySelector<HTMLElement>('[aria-label="Open conversations and menu"]')
-                    ?.focus(),
+                () => document.querySelector<HTMLElement>('#menu-button [role="button"]')?.focus(),
                 60,
               );
             }}

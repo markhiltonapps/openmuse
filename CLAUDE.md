@@ -185,7 +185,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Matching actions:** compare what an action does (app + tool + arguments, recipients + subject),
   never its title, summary or hash: the agent rewords those each time it sets something up again.
 - **Always-mounted status lines inside a `gap` layout:** take the empty line out of the flow with
-  `position: "absolute"` (1×1, opacity 0), or its slot adds a gap.
+  `position: "absolute"` (1×1, opacity 0), or its slot adds a gap. Also give it
+  `pointerEvents: "none"`: an invisible line still catches taps, and in a centred row it sits
+  right in the middle (one swallowed every tap on the chat button).
 - **Biome on a broken file:** if an edit leaves a parse error, `biome check --write` can apply odd
   fixes (it turned a reassigned `let` into `const`). Check `git diff` after fixing the break.
 - **Worker deploys:** the browser worker (Railway service be23c5b9) redeploys only when
@@ -242,6 +244,19 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   approvals need a future `expiresAt` in the mocked workspace, or they show as expired. After
   taking shots, rebuild the web app (`npx expo export --clear`) before checking them in Help,
   because the build copies `public/` when it's made.
+  The pictures mock CopilotKit's chat list (as on Railway), so the chat button reads "Main chat".
+- **Cards that do something (switch chats, open a place):** act only for a live result: one seen
+  unfinished, a reply to a message sent from this screen (`BrowserRunContext`'s `fresh`), or on a
+  live call. A card drawn again from a chat's history (a reload, another device, a saved call) only
+  says what happened. Playwright sends a mocked SSE body all at once, so a card's first render can
+  already be complete.
+- **Mocking chats in Playwright:** set `runtime.richThreads: true` in `/api/workspace`; GET
+  `/api/copilotkit/threads` → `{threads, nextCursor: null}` (404 for `subscribe`); `.../connect` →
+  an SSE body with `MESSAGES_SNAPSHOT`; `/api/main-thread` → `{threadId, existing}`. Give mocked
+  tool calls ids that are unique across runs (e.g. `Date.now()` in them): the sample server keeps
+  each chat's saved copy, and a reused id makes a new call look like an old one from history.
+- **Lint scope:** `pnpm lint` also checks an untracked `_backups/` folder at the repo root if one
+  is there. Keep backups in the scratchpad, or run `npx biome check apps packages scripts tests`.
 - **Example phrases people can tap:** an example that would save, change or start something ("I
   weighed 173", "Remind me to…") must open the chat with the words in the message box
   (`draft()` in the workspace), never send in one tap; only questions that change nothing send

@@ -312,6 +312,8 @@ export function Sheet({
   closeIcon = X,
   closeLabel = "Close",
   fill,
+  narrow,
+  onBack,
 }: {
   title: string;
   subtitle?: string;
@@ -327,6 +329,10 @@ export function Sheet({
   closeLabel?: string;
   /** Keeps one height whatever is inside (search results, pages), so nothing jumps. */
   fill?: boolean;
+  /** About 560px wide on a computer, for a list whose rows read best close together. */
+  narrow?: boolean;
+  /** What Escape or Android's back does first (close an open ⋯, go back a page); closes otherwise. */
+  onBack?: () => void;
 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -359,13 +365,19 @@ export function Sheet({
     return stop;
   }, []);
   return (
-    <Modal transparent animationType={compact ? "slide" : "fade"} visible onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType={compact ? "slide" : "fade"}
+      visible
+      onRequestClose={onBack ?? onClose}
+    >
       <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
         <View
           accessibilityViewIsModal
           style={[
             s.sheet,
             wide && { maxWidth: 1050 },
+            narrow && { maxWidth: 560 },
             fill && { height: compact ? "94%" : Math.min(height * 0.9, 860) },
             compact && {
               borderBottomLeftRadius: 0,

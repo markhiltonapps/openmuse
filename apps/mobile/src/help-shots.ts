@@ -1,2 +1,23 @@
 // Written by scripts/help-shots.mjs: each help screenshot's size, for its shape on the page.
-export const HELP_SHOTS: Record<string, { width: number; height: number }> = {"about":{"width":720,"height":2400},"activity":{"width":720,"height":2123},"agent":{"width":720,"height":3028},"approve":{"width":720,"height":1558},"apps":{"width":720,"height":1558},"call":{"width":720,"height":1558},"callbar":{"width":720,"height":1558},"chat":{"width":720,"height":1558},"family":{"width":720,"height":1558},"feed":{"width":720,"height":1558},"files":{"width":720,"height":1558},"health":{"width":720,"height":1558},"home":{"width":720,"height":1558},"job":{"width":720,"height":1558},"money":{"width":720,"height":1558},"newjob":{"width":720,"height":1558},"seeit":{"width":720,"height":1558},"spaces":{"width":720,"height":1558},"weight":{"width":720,"height":1150}};
+export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
+  about: { width: 720, height: 2400 },
+  activity: { width: 720, height: 2123 },
+  agent: { width: 720, height: 3028 },
+  approve: { width: 720, height: 1558 },
+  apps: { width: 720, height: 1558 },
+  call: { width: 720, height: 1558 },
+  callbar: { width: 720, height: 1558 },
+  chat: { width: 720, height: 1558 },
+  chats: { width: 720, height: 1558 },
+  family: { width: 720, height: 1558 },
+  feed: { width: 720, height: 1558 },
+  files: { width: 720, height: 1558 },
+  health: { width: 720, height: 1558 },
+  home: { width: 720, height: 1558 },
+  job: { width: 720, height: 1558 },
+  money: { width: 720, height: 1558 },
+  newjob: { width: 720, height: 1558 },
+  seeit: { width: 720, height: 1558 },
+  spaces: { width: 720, height: 1558 },
+  weight: { width: 720, height: 1150 },
+};

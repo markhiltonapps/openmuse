@@ -765,7 +765,7 @@ function HomePage({
         style={
           searching
             ? { fontSize: 13, lineHeight: 18, color: colors.mutedStrong }
-            : { position: "absolute", width: 1, height: 1, opacity: 0 }
+            : { position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }
         }
       >
         {searching

@@ -23,6 +23,7 @@ import { BrowserService } from "./browser.ts";
 import { runApprovedStep } from "./browser-tools.ts";
 import { CalendarToday, MAX_RANGE_DAYS } from "./calendar-today.ts";
 import { ChatArchive } from "./chat-archive.ts";
+import { chatNameFrom, knownChatsSchema } from "./chat-tools.ts";
 import { CodeSandbox } from "./code-sandbox.ts";
 import { Commitments } from "./commitments.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
@@ -87,7 +88,9 @@ export async function createApp(
     mcp?: McpApps;
     mailer?: Mailer;
     search?: WebSearch;
-    intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread"> & ThreadStore;
+    intelligence?: Pick<CopilotKitIntelligence, "getOrCreateThread" | "deleteThread"> &
+      ThreadStore &
+      Partial<Pick<CopilotKitIntelligence, "getThread" | "updateThread" | "getThreadMessages">>;
     /** Where file contents live; the bucket when configured, else the data folder. */
     blobs?: Blobs;
   } = {},
@@ -412,6 +415,14 @@ export async function createApp(
   if (inbox.configured) agent.mail = inbox;
   const intelligence = new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey });
   const threads = options.intelligence ?? intelligence;
+  // A chat with no name yet is named from its first message (only if it still has none).
+  agent.nameThread = async (owner, threadId, firstMessage) => {
+    const name = chatNameFrom(firstMessage);
+    if (!name || !threads.getThread || !threads.updateThread) return;
+    const thread = await threads.getThread({ threadId, userId: owner }).catch(() => undefined);
+    if (!thread || thread.name) return;
+    await threads.updateThread({ threadId, userId: owner, agentId: "default", updates: { name } });
+  };
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
@@ -1102,6 +1113,50 @@ export async function createApp(
       );
     }
     return c.json({ threadId: main.threadId, existing: true });
+  });
+  // The chats the app has (names, kinds, which is open), so the agent can open or tidy them by
+  // name, on a call too (manage_chats). The app sends them whenever they change.
+  app.post("/api/chats/known", async (c) => {
+    const owner = c.get("owner");
+    const body = knownChatsSchema.parse(await c.req.json());
+    await db.put(owner, "chat-directory", {
+      id: "known",
+      ...body,
+      updatedAt: new Date().toISOString(),
+    });
+    return c.json({ ok: true });
+  });
+  // Names older chats that never got one, from their first message, once (the Chats list asks).
+  app.post("/api/chats/name", async (c) => {
+    const owner = c.get("owner");
+    const { threadIds } = z
+      .object({ threadIds: z.array(z.string().min(1).max(120)).max(20) })
+      .parse(await c.req.json());
+    const named: Record<string, string> = {};
+    if (!threads.getThread || !threads.updateThread || !threads.getThreadMessages)
+      return c.json({ named });
+    for (const threadId of threadIds) {
+      try {
+        const thread = await threads.getThread({ threadId, userId: owner });
+        if (thread.name) continue;
+        const { messages } = await threads.getThreadMessages({ threadId, userId: owner });
+        const first = (messages as { role?: string; content?: unknown }[]).find(
+          (message) => message.role === "user" && typeof message.content === "string",
+        );
+        const name = typeof first?.content === "string" ? chatNameFrom(first.content) : undefined;
+        if (!name) continue;
+        await threads.updateThread({
+          threadId,
+          userId: owner,
+          agentId: "default",
+          updates: { name },
+        });
+        named[threadId] = name;
+      } catch {
+        // One that can't be read keeps its date for a name.
+      }
+    }
+    return c.json({ named });
   });
   // Starts the main chat over; the old conversation is deleted.
   app.post("/api/main-thread/reset", async (c) => {

@@ -50,6 +50,7 @@ import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { ToolCalendar } from "./calendar-card";
 import { ToolFile } from "./call-details";
+import { ChatActionCard } from "./chats-ui";
 import { BrowserThreadCard } from "./computer";
 import { ToolConnect, ToolOwnApp } from "./connect-card";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
@@ -293,6 +294,15 @@ export function WorkspaceTools() {
       <HelpAnswerCard result={result} loading={status !== "complete"} />
     ),
   });
+  // A chat opened, started, renamed, archived or listed, or a Delete to tap.
+  useRenderTool({
+    name: "manage_chats",
+    description: "Show what the agent did to the chats",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ChatActionCard result={result} loading={status !== "complete"} />
+    ),
+  });
   // A Connect button for an app right where they asked, not a link to find in Apps.
   useRenderTool({
     name: "connect_app",
@@ -444,7 +454,14 @@ export function ChatScreen({
   // During a call the headset goes back to it.
   const headsetLabel =
     call.phase === "on" ? `Go back to the call with ${agentName}` : `Talk live with ${agentName}`;
-  const { enabled: richThreads, mainId, claimPrompt, resets } = useMuseThread();
+  const {
+    enabled: richThreads,
+    mainId,
+    claimPrompt,
+    resets,
+    queued,
+    flush: switchQueued,
+  } = useMuseThread();
   const selection = thread || { id: "local", existing: false };
   // A space's chat starts with its saved questions instead of the general ones.
   const space = useSpaces().spaces?.find((item) => item.threadId === selection.id);
@@ -942,6 +959,10 @@ export function ChatScreen({
   useEffect(() => {
     if (!busy && !agent.isRunning && outbox.pending.length) flush();
   }, [busy, agent.isRunning, outbox.pending.length, flush]);
+  // A chat switch asked for here (manage_chats) happens once the reply is in.
+  useEffect(() => {
+    if (active && queued && !busy && !agent.isRunning) switchQueued();
+  }, [active, queued, busy, agent.isRunning, switchQueued]);
   useEffect(() => {
     if (!active || !prompt?.text.trim()) return;
     // A draft goes in the message box for them to finish; it waits for nothing.
@@ -1179,7 +1200,7 @@ export function ChatScreen({
             <Text style={[s.muted, { maxWidth: 320, textAlign: "center", lineHeight: 23 }]}>
               {space
                 ? "Tap a question, or just ask. Everything here follows the space’s playbook."
-                : "Tell me what’s on your mind. I can make a plan, work with your apps, and use my computer to help."}
+                : "Tell me what’s on your mind. I can make a plan, work with your apps, and use a web browser to help."}
             </Text>
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
               {(space

@@ -1,60 +1,14 @@
-import {
-  FileText,
-  FolderOpen,
-  Globe2,
-  Monitor,
-  Plus,
-  RefreshCw,
-  Terminal,
-} from "lucide-react-native";
+import { FileText, FolderOpen, Globe2, Plus, RefreshCw, Terminal } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { AppState, Image, Pressable, Text, View } from "react-native";
+import { AppState, Image, Text, View } from "react-native";
 import type { BrowserSession } from "../../../packages/domain/src";
+import { useAgentWorkspace } from "./agent-workspace";
 import { browserAddress } from "./browser-address";
 import { useComputerDraft } from "./computer-drafts";
 import { LinuxWorkspace } from "./computer-workspace";
-import { Button, Card, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
+import { Button, Card, colors, dateLabel, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-export function ComputerEntry() {
-  const { workspace, open } = useWorkspace();
-  const available = workspace.connections.some(
-    (c) => c.id === "browser" && c.status === "connected",
-  );
-  const active = workspace.browsers.filter((b) => b.status === "active").length;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Agent computer — take control"
-      onPress={() => open({ type: "computer" })}
-      style={[
-        s.row,
-        {
-          alignSelf: "center",
-          gap: 6,
-          paddingHorizontal: 12,
-          paddingVertical: 7,
-          borderRadius: 20,
-          backgroundColor: colors.subtle,
-        },
-      ]}
-    >
-      <Monitor size={13} color={colors.muted} />
-      <Text style={{ fontSize: 12, color: colors.muted }}>
-        Computer
-        {!available ? " · offline" : active ? " · take control" : " · ready"}
-      </Text>
-      <View
-        style={{
-          width: 5,
-          height: 5,
-          borderRadius: 3,
-          backgroundColor: available ? "#57AD85" : "#ACB0B5",
-        }}
-      />
-    </Pressable>
-  );
-}
 export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
   const { open } = useWorkspace();
   const [failed, setFailed] = useState(false);
@@ -124,10 +78,31 @@ export function ComputerSheet() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [tab, setTab] = useComputerDraft("tab");
+  const [chosen, setTab] = useComputerDraft("tab");
+  const { data } = useAgentWorkspace();
+  const agent = data?.identity.name || "your agent";
+  const Agent = agent.charAt(0).toUpperCase() + agent.slice(1);
   const available = workspace.connections.some(
     (c) => c.id === "browser" && c.status === "connected",
   );
+  // Terminal and Linux files only once the Linux computer is set up (it isn't on Railway); while
+  // that's unknown, nothing shows, so no tabs appear and vanish.
+  const [linux, setLinux] = useState(false);
+  useEffect(() => {
+    void api
+      .request<{ enabled?: boolean }>("/api/computer")
+      .then((snapshot) => setLinux(!!snapshot.enabled))
+      .catch(() => undefined);
+  }, [api]);
+  const tab = linux ? chosen : "Browser";
+  const [checking, setChecking] = useState(false);
+  const checkAgain = () => {
+    setChecking(true);
+    void refresh()
+      .then(() => setError(""))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setChecking(false));
+  };
   useEffect(() => {
     let active = true;
     const timer = setInterval(() => {
@@ -159,79 +134,120 @@ export function ComputerSheet() {
   }
   return (
     <Sheet
-      title="Agent computer"
-      subtitle="Your agent works here. Step in whenever you need."
+      title={`${Agent}’s browser`}
+      subtitle={`See the websites ${agent} is using, or take control.`}
       onClose={close}
     >
       <View style={{ gap: 20 }}>
-        {tab === "Browser" && (
-          <View
-            style={[s.row, { gap: 12, padding: 18, borderRadius: 20, backgroundColor: colors.sky }]}
-          >
-            <Monitor size={28} color={colors.blueDark} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.heading}>{available ? "Browser connected" : "Browser offline"}</Text>
-              <Text style={s.muted}>
-                {available
-                  ? "Your agent’s browser and documents, in one place."
-                  : "Start the browser worker to connect this computer."}
-              </Text>
+        {tab === "Browser" && !available && (
+          <View style={{ gap: 12, padding: 18, borderRadius: 20, backgroundColor: colors.subtle }}>
+            <View style={[s.row, { gap: 12, alignItems: "flex-start" }]}>
+              <View style={[s.iconBox, { width: 36, height: 36, borderRadius: 11 }]}>
+                <Globe2 size={19} color={colors.blueDark} />
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={s.heading}>{`${Agent}’s browser is offline right now.`}</Text>
+                <Text style={[s.text, { color: colors.mutedStrong }]}>
+                  {`${Agent} can’t open or use websites until the browser is back.`}
+                </Text>
+              </View>
             </View>
+            <Button
+              primary
+              icon={RefreshCw}
+              busy={checking}
+              style={{ alignSelf: "flex-start" }}
+              onPress={checkAgain}
+            >
+              Check again
+            </Button>
           </View>
         )}
-        <View style={[s.row, { gap: 8 }]}>
-          {(["Browser", "Terminal", "Files"] as const).map((item) => (
-            <Button
-              key={item}
-              primary={tab === item}
-              icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
-              onPress={() => setTab(item)}
-            >
-              {item}
-            </Button>
-          ))}
-        </View>
-        <View style={{ display: tab === "Browser" ? "none" : "flex" }}>
-          <LinuxWorkspace tab={tab === "Files" ? "Files" : "Terminal"} />
-        </View>
+        {linux && (
+          <View style={[s.row, { gap: 8 }]}>
+            {(["Browser", "Terminal", "Files"] as const).map((item) => (
+              <Button
+                key={item}
+                primary={tab === item}
+                icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
+                onPress={() => setTab(item)}
+              >
+                {item}
+              </Button>
+            ))}
+          </View>
+        )}
+        {linux && (
+          <View style={{ display: tab === "Browser" ? "none" : "flex" }}>
+            <LinuxWorkspace tab={tab === "Files" ? "Files" : "Terminal"} />
+          </View>
+        )}
         <ErrorNotice error={error} />
         {tab === "Browser" ? (
           <>
-            <View>
-              <Field
-                label="Website address"
-                value={url}
-                onChangeText={setUrl}
-                placeholder="https://example.com"
-                autoCapitalize="none"
-                keyboardType="url"
-                onSubmitEditing={() => void create()}
-              />
-              <Button
-                primary
-                icon={Plus}
-                busy={busy}
-                disabled={!available || !url.trim()}
-                onPress={() => void create()}
-              >
-                Open a browser session
-              </Button>
-            </View>
+            {available && (
+              <View>
+                <Field
+                  label="Website address"
+                  value={url}
+                  onChangeText={setUrl}
+                  placeholder="https://example.com"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  onSubmitEditing={() => void create()}
+                />
+                <Button
+                  primary
+                  icon={Plus}
+                  busy={busy}
+                  disabled={!available || !url.trim()}
+                  onPress={() => void create()}
+                >
+                  Open a website
+                </Button>
+              </View>
+            )}
+            {workspace.browsers.length ? (
+              <Text role="heading" aria-level={3} style={s.heading}>
+                {`Websites ${agent} used`}
+              </Text>
+            ) : null}
             {[...workspace.browsers]
               .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-              .map((browser) => (
-                <BrowserThreadCard key={browser.id} browser={browser} />
-              ))}
+              .map((browser) =>
+                available ? (
+                  <BrowserThreadCard key={browser.id} browser={browser} />
+                ) : (
+                  // Listed, but greyed out: nothing can open until the browser is back.
+                  <View
+                    key={browser.id}
+                    aria-disabled
+                    style={[s.row, { gap: 12, opacity: 0.6, minHeight: 52 }]}
+                  >
+                    <Globe2 size={18} color={colors.mutedStrong} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text numberOfLines={1} style={s.text}>
+                        {browser.title || browser.url}
+                      </Text>
+                      <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>
+                        {`${dateLabel(browser.updatedAt)} · Can’t open until the browser is back`}
+                      </Text>
+                    </View>
+                  </View>
+                ),
+              )}
             {!workspace.browsers.length && (
               <Text style={s.muted}>
-                Open a page here or ask your agent to research something. Its browsing sessions will
-                appear here.
+                {available
+                  ? `Open a website here, or ask ${agent} to look something up. The websites it uses show here.`
+                  : `The websites ${agent} uses show here once the browser is back.`}
               </Text>
             )}
-            <Text style={s.small}>
-              Browsing sessions keep their own logins and downloads. Open one to take over, then
-              return to your conversation.
-            </Text>
+            {available ? (
+              <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>
+                {`Each website ${agent} opens keeps its own sign-ins and downloads. Tap Take control on one to do a step yourself, then come back to your chat.`}
+              </Text>
+            ) : null}
           </>
         ) : tab === "Files" ? (
           <>
@@ -257,17 +273,6 @@ export function ComputerSheet() {
             </Button>
           </>
         ) : null}
-        <Button
-          small
-          icon={RefreshCw}
-          onPress={() =>
-            void refresh()
-              .then(() => setError(""))
-              .catch((e) => setError(String(e)))
-          }
-        >
-          Refresh computer
-        </Button>
       </View>
     </Sheet>
   );

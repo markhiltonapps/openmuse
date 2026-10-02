@@ -939,6 +939,8 @@ export class AgentService {
   areaChanged?: (owner: string) => void;
   /** Whether this person runs the app (the help guide's admin topics are theirs alone). */
   isAdmin?: (owner: string) => Promise<boolean>;
+  /** Names a chat that has no name yet from its first message (the Chats list never says "Untitled"). */
+  nameThread?: (owner: string, threadId: string, firstMessage: string) => Promise<void>;
   /** The home city's forecast from the US National Weather Service. */
   weather?: WeatherService;
   /** Where searches should treat as local: the saved area and the person's time zone. */

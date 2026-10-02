@@ -557,6 +557,95 @@ PENDING
     toggle. The Menu lists Spaces and Files too ("make things readily accessible"). Remove
     the "Computer · ready" pill. Hide Terminal and Linux Files (they don't work on Railway).
     Keep "New job", as long as it works. Leave the built-in Google sign-in for now.
+  - Menu A built (#151–153, uncommitted until the Design division signs off):
+    - Chat screen: a "Main chat ⌄" button under the agent's name says which chat you're in and
+      opens Chats. The "Computer · ready" pill is gone. The top + is a clipboard-with-+ (New
+      job), and the floating New job button uses the same icon.
+    - ☰ is now "Menu": Chats, New job, Calendar, Spaces, Files, "<agent>'s browser" (with a
+      Ready / In use / Offline badge), Apps & settings, Help & how-to. Each row has a line
+      saying what it's for. The "Say …" lines show only when the screen has room; on a phone
+      they drop so the Menu fits. Menu › Chats swaps in place, with no stacked sheets.
+    - Chats list (chats-ui.tsx):
+      - New chat, then Main chat (⋯ › Clear main chat), then the Spaces' chats.
+      - "Other chats" with Hide / Show (n), shown by default and remembered.
+      - Older chats the app keeps copies of can only be deleted.
+      - Archived chats with Restore / Delete, and "Show more chats".
+      - A chat's ⋯ has Rename / Archive / Delete; Escape closes the ⋯ first.
+      - An untitled chat shows "Chat from Sep 24, 3:10 PM" until the server names it.
+    - Naming: a new chat is named from its first message (chatNameFrom). Untitled older chats
+      are named from their first message when the Chats list loads (POST /api/chats/name).
+    - The agent's browser: titled "<agent>'s browser". Terminal and Linux Files are hidden
+      unless /api/computer says Linux is set up. When offline, a notice with "Check again" shows
+      and the website list is greyed. "Refresh computer" moved to Apps › Account as "Reload my
+      data".
+    - Chats by voice (manage_chats, apps/server/src/chat-tools.ts):
+      - Actions: list, open, start, rename, archive, restore, delete, clear the main chat, and
+        show or hide other chats.
+      - The app reports its chats to the server (POST /api/chats/known) and does each action
+        itself from the card, in the chat or on a call's screen.
+      - In a typed chat, a switch waits until the reply is in. On a call, the chat underneath
+        switches and the call carries on.
+      - Delete and Clear wait for a tap. Two matches give "Which chat?" with Open on each.
+    - Fixed while testing: an action card drawn again from a chat's history (after a reload,
+      or on another device) re-did its action. Saved test history reopened "Car insurance
+      renewal" at load. Now a card acts only if it saw the tool run, is a reply to a message
+      sent from this screen (the chat's existing `fresh` signal), or is on a live call. A
+      saved call's card never acts.
+    - Help: find-your-way (Menu, chat button, clipboard +), side-chats is now "Your chats"
+      (new chats picture with marks), agent-computer is "<agent>'s browser", and calendar says
+      "☰ Menu › Calendar". The help pictures now mock CopilotKit's chat list and a short made-up
+      main-chat exchange, so they show "Main chat ⌄" as on Railway. All 40 pictures retaken.
+    - Tests: tests/chat-tools.test.ts (4): matching, manage_chats rules, whenLabel /
+      threadTitle, chatNameFrom.
+    - Checks: Biome clean (apps, packages, scripts, tests), typecheck (root, app, worker) clean,
+      478 tests pass.
+    - Browser checks (scratchpad menu/build-review.mjs and menu/voice-review.mjs, 416 / 360 /
+      390 dark):
+      - Menu rows and Chats work as above; no page errors.
+      - A typed "open my car insurance chat" switches after the reply.
+      - The delete card waits for a tap, and Keep it says "Kept as it is".
+      - On a call, the chat underneath switches.
+      - A fresh load stays on Main chat.
+    - Design division review of the built version, round 1: none signed off (visual 1 MUST,
+      usability 2, copy 4). All fixed, plus nearly every SHOULD and NICE:
+      - Every small button in the Chats sheet, the chat cards and the browser sheet is 44px.
+      - No "You're in …" pop-up after a switch (it covered the talk button for 5 seconds): the
+        chat button shows the new name, and a hidden status line beside it says it for screen
+        readers. That line first sat mid-button and swallowed every tap; it now ignores taps
+        (lesson added).
+      - The chat button is a quieter 36px pill (14/500) inside a 44px target. Chat titles are
+        500 (600 for the one you're in); other chats have plain icons and Main chat a tint.
+      - An opened ⋯ low in the list scrolls into view.
+      - Archiving the chat you're in goes back to Main chat and says where the chat went; by
+        voice it waits for the reply, like Open. With other chats hidden, the one you're in
+        still shows.
+      - A delete/clear card that appeared while the screen was open stays good; an old one
+        from history says "This was asked a while ago". Long list cards show 8 and "See all N
+        chats", which opens the Chats sheet.
+      - "bring back my archived chat" finds the only archived chat (test added).
+      - Copy: "Empty chat"; the clipboard button for New job (Help, app-places, app guide);
+        jobs ask people to sign in "in <agent>'s browser … then Take control"; "Hide" instead
+        of "fold away"; offline browser wording; single-chat mode wording; "use a web
+        browser to help" on the new-chat welcome.
+      - The home Help picture's ring 2 covers the agent and the chat button; all pictures
+        retaken.
+      - Checks: Biome, typecheck (root, app, worker), 478 tests pass. A browser check script
+        (scratchpad menu/round2.mjs) covers each fix at 416 light and 390 dark.
+      - Test lesson: mocked tool call ids must be unique across runs, or a new call can match
+        one in a chat's saved history and look old.
+    - Round 2: all three SIGNED OFF (copy, usability, visual). Their last notes, done:
+      "Chat archived. It's in Archived chats, and you're back in Main chat."; the list result
+      says `othersHidden` (not "folded away"); "You're in …" is read only on a switch, not a
+      rename; the offline browser no longer claims web search still works (the app can't tell
+      whether it's on); the list card's titles are 500 like the sheet's.
+    - Final checks: Biome clean, typecheck (root, app, worker), 478 tests pass, and the
+      browser checks (round2.mjs, build-review.mjs, voice-review.mjs) pass with no page errors.
+      Committed locally; waiting for "push it".
+    - Later NICEs: the Chats sheet's status line pushes the list down when it appears (reserve
+      its space or move it to the bottom); a visible note in Main chat after archiving by voice;
+      "Retry loading conversation" / "Conversation unavailable" → "chat".
+    - For the owner: the new-chat welcome's starter buttons ("Find cool things on Hacker
+      News", "Summarize copilotkit.ai") are leftovers from a template. What should they be?
 - Help guide (#143–147; owner's picks: a Help screen in the app, real screenshots, the agent
   answers from it by voice and chat, everyone plus an admin-only part):
   - Content: packages/domain/src/help.ts. 13 groups and about 89 topics, each with a summary,

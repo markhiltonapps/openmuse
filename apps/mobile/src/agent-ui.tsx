@@ -2959,8 +2959,8 @@ export function AppsScreen() {
     },
     {
       section: "browser" as const,
-      title: "Agent computer",
-      detail: "Persistent browser sessions",
+      title: `${(data?.identity.name || "Your agent").replace(/^./, (c) => c.toUpperCase())}’s browser`,
+      detail: "The websites it opened, to watch or take control",
       icon: Globe2,
     },
     {

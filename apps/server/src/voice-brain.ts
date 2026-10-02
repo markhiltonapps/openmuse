@@ -99,6 +99,12 @@ function shown(tool: CallDetailTool, raw: string) {
       const { shown: _, ...calendar } = result;
       return some("events") || some("reminders") || some("couldNotRead") ? calendar : undefined;
     }
+    case "manage_chats": {
+      // A chat opened, renamed, archived or listed, or a Delete to tap: the card does it.
+      if (result.shown !== true) return undefined;
+      const { shown: _, ...action } = result;
+      return action;
+    }
     case "get_help":
       // The help topics found, as cards that open them in Help.
       return some("topics")
@@ -176,6 +182,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Writing the email";
     case "get_help":
       return "Looking it up in Help";
+    case "manage_chats":
+      return "Sorting out your chats";
     default:
       return nowDoing(tool, args)?.label ?? "Looking into it";
   }
@@ -643,6 +651,10 @@ export function shownText(details: CallDetail[]) {
         lines.push(`- Saved for your OK: ${join(value.title) || "something"}`);
       else if (tool === "get_help")
         for (const topic of list("topics").slice(0, 3)) lines.push(`- Help: ${join(topic.title)}`);
+      else if (tool === "manage_chats")
+        lines.push(
+          `- Chats: ${join(value.action)}${value.chat ? ` ${join((value.chat as { name?: unknown }).name)}` : ""}`,
+        );
       else lines.push(`- ${join(value.name)} (saved in Files)`);
     }
     return lines.join("\n");

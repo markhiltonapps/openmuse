@@ -2119,7 +2119,7 @@ export function RemoveSpace({ space, onRemoved }: { space: AnySpace; onRemoved: 
               {deleteChat && <Check size={14} color={colors.onInverse} />}
             </View>
             <Text style={[s.text, { flex: 1 }]}>
-              Also delete its chat{deleteChat ? "" : " (it stays in your side chats)"}
+              Also delete its chat{deleteChat ? "" : " (it moves to Other chats)"}
             </Text>
           </Pressable>
           <View style={[s.row, { gap: 8 }]}>

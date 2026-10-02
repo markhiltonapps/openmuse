@@ -28,9 +28,10 @@ const subheading = [s.small, { fontWeight: "600" as const, color: colors.text, m
 
 /** Who is signed in on this device, their agent's address, and signing out. */
 export function AccountCard() {
-  const { api } = useWorkspace();
+  const { api, refresh, notify } = useWorkspace();
   const [me, setMe] = useState<Person>();
   const [busy, setBusy] = useState(false);
+  const [reloading, setReloading] = useState(false);
   useEffect(() => {
     void api.request<Person>("/api/me").then(setMe, () => undefined);
   }, [api]);
@@ -54,6 +55,19 @@ export function AccountCard() {
           Your agent's email address is <Text selectable>{me.agentEmail}</Text>.
         </Text>
       )}
+      {/* The app reloads by itself when you come back to it; this is for the rare stuck moment. */}
+      <Button
+        busy={reloading}
+        onPress={() => {
+          setReloading(true);
+          void refresh()
+            .then(() => notify("Your data is up to date."))
+            .catch(() => notify("Couldn’t reload. Check your connection and try again."))
+            .finally(() => setReloading(false));
+        }}
+      >
+        Reload my data
+      </Button>
       <Button busy={busy} onPress={() => void signOut()}>
         Sign out of this device
       </Button>

@@ -21,6 +21,7 @@ import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { areaInstructions, areaToolSpecs } from "../area.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
+import { type ChatDirectory, chatToolInstructions, chatToolSpecs } from "../chat-tools.ts";
 import { codeSandboxInstructions, codeSandboxToolSpecs } from "../code-sandbox.ts";
 import { commitmentInstructions, commitmentToolSpecs } from "../commitments.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
@@ -78,8 +79,14 @@ export class ConversationAgent extends AbstractAgent {
     // The app adds a finished live voice call to the chat this way: no model, just the call.
     const spoken = (input.forwardedProps as { spokenCall?: unknown } | undefined)?.spokenCall;
     if (typeof spoken === "string" && spoken) return this.addSpokenCall(input, spoken);
-    const latest = input.messages.filter((m) => m.role === "user").at(-1);
+    const asked = input.messages.filter((m) => m.role === "user");
+    const latest = asked.at(-1);
     const requestKey = `${input.threadId}:${latest?.id ?? input.runId}`;
+    // A new chat's first message names it, so the Chats list never says "Untitled".
+    if (asked.length === 1 && typeof latest?.content === "string")
+      void this.service
+        .nameThread?.(this.owner, input.threadId, latest.content)
+        .catch(() => undefined);
     if (this.config.agentBackend === "sample")
       return new Observable((subscriber) => {
         subscriber.next({
@@ -602,6 +609,19 @@ export class ConversationAgent extends AbstractAgent {
         }),
       ),
     );
+    // Chats by asking: the app does each action when its card appears.
+    tools.push(
+      ...chatToolSpecs(this.owner, (owner) =>
+        this.service.db.get<ChatDirectory>(owner, "chat-directory", "known"),
+      ).map((spec) =>
+        defineTool({
+          ...spec,
+          parameters: spec.parameters as z.ZodObject,
+          execute: async (args: unknown) =>
+            spec.execute(args as Parameters<typeof spec.execute>[0]),
+        }),
+      ),
+    );
     const showInApp = showInAppToolSpec();
     tools.push(
       defineTool({
@@ -719,6 +739,7 @@ export class ConversationAgent extends AbstractAgent {
         computerInstructions +
         appGuideInstructions +
         helpToolInstructions +
+        chatToolInstructions +
         showInAppInstructions,
     });
     return new Observable((subscriber) => {

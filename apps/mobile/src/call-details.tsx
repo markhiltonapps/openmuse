@@ -13,6 +13,7 @@ import type { CallDetail } from "../../../packages/domain/src/voice";
 import { ApprovalCard } from "./approval-card";
 import { AssistantResponse } from "./assistant-response";
 import { CalendarCard } from "./calendar-card";
+import { ChatActionCard } from "./chats-ui";
 import { ConnectCard, OwnAppCard } from "./connect-card";
 import { EmailCards, emailItems } from "./email-cards";
 import { fileLabel } from "./file-kinds";
@@ -168,6 +169,10 @@ export function CallDetails({
                   return <CalendarCard key={key} result={result} onCall={onCall} wide />;
                 case "get_help":
                   return <HelpAnswerCard key={key} result={result} onCall={onCall} />;
+                case "manage_chats":
+                  return (
+                    <ChatActionCard key={key} result={result} onCall={onCall} saved={!onCall} />
+                  );
                 case "connect": {
                   const { app, own } = result as { app?: unknown; own?: unknown };
                   if (typeof own === "string")

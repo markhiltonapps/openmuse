@@ -151,12 +151,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     group: "start",
     title: "Find your way around",
     summary:
-      "The bottom bar has the main screens; the top has the menu, {agent}, New job and Updates.",
+      "The bottom bar has the main screens; the top has the Menu, {agent}, New job and Updates.",
     shot: "home",
     steps: [
-      "**☰ (top left):** your chats, Spaces, New job, Agent computer, Calendar, Files, Apps & settings and Help & how-to.",
-      "**{agent}’s picture:** what it’s working on now. Tap it to open that job, or Activity when it’s free.",
-      "**+ (top right):** hand {agent} a new job. The **bell** next to it has your updates.",
+      "**☰ Menu (top left):** Chats, New job, Calendar, Spaces, Files, {agent}’s browser, Apps & settings and Help & how-to, each with a line saying what it’s for.",
+      "**{agent}’s picture:** what it’s working on now. Tap it to open that job, or Activity when it’s free. On the chat screen, the button under it says which chat you’re in and opens your chats.",
+      "**The clipboard button (top right):** hand {agent} a new job. The **bell** next to it has your updates.",
       "**The bottom bar:** Chat, Feed, Spaces, Activity, Ideas, Goals, Files and Apps.",
     ],
     body: [
@@ -350,15 +350,23 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: "side-chats",
     group: "chat",
-    title: "Side chats",
-    summary: "Keep a separate conversation for a topic; your main chat is always there.",
+    title: "Your chats",
+    summary: "Keep a separate chat for a topic; your main chat is always there.",
+    shot: "chats",
     steps: [
-      "Tap **☰** at the top left.",
-      "Tap **New side chat** to start one, or tap a side chat to open it.",
-      "**Rename**, **Archive** or **Delete** a side chat with the buttons under it. **Archived** shows the ones you archived.",
+      "On the chat screen, tap the button under {agent}’s name (it says which chat you’re in), or open **☰ Menu › Chats**.",
+      "Tap **New chat** to start one, or tap a chat to open it. Each space has its own chat too.",
+      "Tap a chat’s **⋯** to **Rename**, **Archive** or **Delete** it. **Archived chats** at the bottom has the ones you put away, to **Restore**.",
+      "Tap **Hide** next to **Other chats** to hide them, and **Show** to bring them back.",
     ],
     body: [
-      "A side chat keeps its own conversation; what {agent} remembers about you is shared. **Clear main chat** starts your main chat fresh.",
+      "Each chat is separate, but what {agent} knows about you is shared. The main chat’s **⋯** has **Clear main chat**, which starts it fresh.",
+      "Or just say it: {agent} opens, starts, renames, archives or brings back a chat for you, in the chat or on a call. Deleting a chat waits for you to tap **Delete** on its card, and clearing the main chat waits for **Clear**.",
+    ],
+    say: [
+      "Open my car insurance chat.",
+      "Start a new chat about the kitchen.",
+      { text: "What chats do I have?", send: true },
     ],
     keywords: [
       "chats",
@@ -434,7 +442,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Connect Google Calendar or Outlook under **Apps**.",
       "Ask “What’s on today?” and a calendar card shows your day, with your reminders.",
-      "To see the calendar itself, open **☰ › Calendar**.",
+      "To see the calendar itself, open **☰ Menu › Calendar**.",
     ],
     body: [
       "New events and changes wait for you to tap **Approve**; attendees may get an invitation.",
@@ -553,7 +561,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "newjob",
     place: "delegate",
     steps: [
-      "Tap **+** at the top right (or **New job** at the bottom of most screens).",
+      "Tap the **clipboard** button at the top right (or **New job** at the bottom of most screens).",
       "Say what you want done in one box, like “Compare the three best-reviewed robot vacuums”.",
       "Tap **Start job**. It keeps going even if you close the app.",
       "When it’s done you get an update (and a notification if they’re on).",
@@ -664,13 +672,13 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: "agent-computer",
     group: "jobs",
-    title: "{agent}’s computer and browser",
+    title: "{agent}’s browser",
     summary: "Watch {agent} work on a website, or take control to do a step yourself.",
     place: "agent-computer",
     steps: [
-      "Open **☰ › Agent computer**.",
-      "**Browser** shows the websites {agent} has open. Tap **Take control** on one to sign in or finish something yourself.",
-      "**Terminal** and **Files** only work if the person who runs Neato_Muse set up {agent}’s computer; otherwise they say so.",
+      "Open **☰ Menu › {agent}’s browser**. Beside it, **Ready**, **In use** or **Offline** says how it is.",
+      "It lists the websites {agent} used. Tap **Take control** on one to sign in or finish something yourself.",
+      "If it’s offline, {agent} can’t open or use websites until the browser is back; tap **Check again**.",
     ],
     body: [
       "Each website {agent} opens keeps its own sign-ins and downloads. What you do there is real: it’s a live website, and there’s no Approve step for what you click yourself.",
@@ -1626,10 +1634,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     group: "admin",
     admin: true,
     title: "The agent’s browser (worker)",
-    summary: "Website jobs and Agent computer run on a separate browser service.",
+    summary: "Website jobs and the agent’s browser run on a separate browser service.",
     body: [
       "At startup the api logs “Agent browser reachable” when it can reach the browser service. If jobs say the browser is offline, check that service in Railway.",
-      "The terminal part of Agent computer needs a Docker computer on the server, which isn’t set up on Railway.",
+      "Terminal and Linux files need a Docker computer on the server, which isn’t set up on Railway, so the app hides them.",
     ],
     keywords: ["browser", "worker", "offline", "agent computer", "terminal"],
     related: ["agent-computer", "admin-logs"],

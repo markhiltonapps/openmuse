@@ -37,6 +37,7 @@ import type {
   CalendarEvent,
   EmailDraft,
 } from "../../../packages/domain/src";
+import { useAgentWorkspace } from "./agent-workspace";
 import { Mascot } from "./avatar";
 import { type AppCalendarEvent, type AppDay, calendarName } from "./calendar-apps";
 import { localDateTime, zonedInstant } from "./date-time";
@@ -1632,6 +1633,7 @@ function MoreApps() {
 }
 export function ConnectionsScreen({ query = "" }: { query?: string }) {
   const { workspace: w, api, refresh, notify, open } = useWorkspace();
+  const agentName = useAgentWorkspace().data?.identity.name || "Your agent";
   const [selected, setSelected] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1683,7 +1685,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
     },
     {
       id: "browser",
-      name: "Agent computer",
+      name: `${agentName}’s browser`,
       icon: Globe2,
       color: "#1987CF",
       connected: w.connections.some((c) => c.id === "browser" && c.status === "connected"),

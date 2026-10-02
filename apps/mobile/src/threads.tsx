@@ -1,20 +1,13 @@
-import { useThreads } from "@copilotkit/react-native/headless";
+import { type UseThreadsResult, useThreads } from "@copilotkit/react-native/headless";
 import {
-  Archive,
-  CalendarDays,
-  FileText,
-  LifeBuoy,
-  MessageCircle,
-  Monitor,
-  Plus,
-  RefreshCw,
-  Settings2,
-  Trash2,
-  UsersRound,
-} from "lucide-react-native";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useWorkspace } from "./workspace";
 
 function newThreadId() {
@@ -25,6 +18,19 @@ function newThreadId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 export type Selection = { id: string; existing: boolean };
+/** The app's own copy of an older chat, which outlives CopilotKit's retention period. */
+export type SavedChat = { threadId: string; name: string; updatedAt: string };
+
+// Whether "Other chats" is folded away in the Chats list, remembered on this device.
+const OTHERS_KEY = "neato.otherChatsHidden";
+function readOthersHidden() {
+  try {
+    return globalThis.localStorage?.getItem(OTHERS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 const ThreadContext = createContext<{
   enabled: boolean;
   selection: Selection;
@@ -42,9 +48,27 @@ const ThreadContext = createContext<{
   /** Changes when the main chat is cleared, so an open chat reloads. */
   resets: number;
   claimPrompt: (id: number) => boolean;
+  /** The chats CopilotKit keeps (side chats and the spaces' chats), archived ones included. */
+  list: UseThreadsResult;
+  /** The app's own copies of older chats. */
+  saved: SavedChat[];
+  /** Deletes a chat: CopilotKit's copy and the app's. */
+  remove: (id: string) => Promise<void>;
+  /** "Other chats" folded away in the Chats list. */
+  othersHidden: boolean;
+  setOthersHidden: (hidden: boolean) => void;
+  /**
+   * A switch asked for in the chat (manage_chats): it happens once the reply is in, so the answer
+   * isn't cut off. `first` is sent in the new chat once it's open.
+   */
+  queued?: Queued;
+  queue: (next: Queued) => void;
+  /** Makes the queued switch, if any; the open chat calls it once it's done replying. */
+  flush: () => void;
 } | null>(null);
+export type Queued = Selection & { label: string; first?: string };
 export function ThreadsProvider({ children }: { children: ReactNode }) {
-  const { workspace, navigate, api } = useWorkspace();
+  const { workspace, navigate, api, ask } = useWorkspace();
   const handledPrompt = useRef(0);
   const enabled = workspace.runtime.richThreads === true;
   const [selection, setSelection] = useState<Selection>({ id: "local", existing: false });
@@ -54,6 +78,23 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [resets, setResets] = useState(0);
+  const list = useThreads({ agentId: "default", enabled, includeArchived: true, limit: 20 });
+  const [saved, setSaved] = useState<SavedChat[]>([]);
+  const [othersHidden, setHidden] = useState(readOthersHidden);
+  const [queued, setQueued] = useState<Queued>();
+  const setOthersHidden = useCallback((hidden: boolean) => {
+    setHidden(hidden);
+    try {
+      if (hidden) globalThis.localStorage?.setItem(OTHERS_KEY, "1");
+      else globalThis.localStorage?.removeItem(OTHERS_KEY);
+    } catch {
+      // Private windows: it's still folded for now.
+    }
+  }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    void api.request<SavedChat[]>("/api/threads/archive").then(setSaved, () => undefined);
+  }, [api, enabled]);
   useEffect(() => {
     if (!enabled) return;
     let active = true;
@@ -76,6 +117,10 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [api, enabled, attempt]);
+  function forget(id: string) {
+    setVisited((items) => items.filter((item) => item.id !== id));
+    if (selection.id === id) setSelection({ id: mainId, existing: true });
+  }
   function select(next: Selection) {
     setSelection(next);
     setVisited((items) => (items.some((item) => item.id === next.id) ? items : [...items, next]));
@@ -98,16 +143,36 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         selection,
         select,
         start: () => select({ id: newThreadId(), existing: false }),
-        forget: (id) => {
-          setVisited((items) => items.filter((item) => item.id !== id));
-          if (selection.id === id) setSelection({ id: mainId, existing: true });
-        },
+        forget,
         resetMain: async () => {
           await api.request("/api/main-thread/reset", {});
           setAttempt((n) => n + 1);
           setResets((n) => n + 1);
         },
         resets,
+        list,
+        saved,
+        remove: async (id) => {
+          if (list.threads.some((thread) => thread.id === id)) await list.deleteThread(id);
+          await api
+            .request(`/api/threads/${encodeURIComponent(id)}/archive/delete`, {})
+            .catch(() => undefined);
+          setSaved((items) => items.filter((item) => item.threadId !== id));
+          forget(id);
+        },
+        othersHidden,
+        setOthersHidden,
+        queued,
+        queue: setQueued,
+        flush: () => {
+          if (!queued) return;
+          setQueued(undefined);
+          // The chat button shows (and says) the chat you're in now.
+          if (queued.id !== selection.id) select(queued);
+          const first = queued.first;
+          // Asked once the new chat is the one on screen.
+          if (first) setTimeout(() => ask(first), 0);
+        },
       }}
     >
       {children}
@@ -118,358 +183,4 @@ export function useMuseThread() {
   const context = useContext(ThreadContext);
   if (!context) throw new Error("Threads provider is unavailable");
   return context;
-}
-export function ThreadsSheet({ onClose }: { onClose: () => void }) {
-  const {
-    enabled,
-    selection,
-    visited,
-    mainId,
-    loading,
-    error: mainError,
-    retry,
-    select,
-    start,
-    forget,
-    resetMain,
-  } = useMuseThread();
-  const { workspace, open, navigate, refresh, notify, api } = useWorkspace();
-  const [confirming, setConfirming] = useState<string>();
-  const [deleting, setDeleting] = useState(false);
-  // The app's own copies of chats, which outlive CopilotKit's retention period.
-  const [saved, setSaved] = useState<{ threadId: string; name: string; updatedAt: string }[]>([]);
-  useEffect(() => {
-    if (!enabled) return;
-    void api
-      .request<{ threadId: string; name: string; updatedAt: string }[]>("/api/threads/archive")
-      .then(setSaved, () => undefined);
-  }, [api, enabled]);
-  async function remove(id: string) {
-    setDeleting(true);
-    setError("");
-    try {
-      if (id === "main") await resetMain();
-      else {
-        const live = threads.threads.some((thread) => thread.id === id);
-        if (live) await threads.deleteThread(id);
-        await api
-          .request(`/api/threads/${encodeURIComponent(id)}/archive/delete`, {})
-          .catch(() => undefined);
-        setSaved((items) => items.filter((item) => item.threadId !== id));
-        forget(id);
-      }
-      setConfirming(undefined);
-      notify(id === "main" ? "Main chat cleared." : "Conversation deleted.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDeleting(false);
-    }
-  }
-  const confirmDelete = (id: string, what: string) =>
-    confirming === id ? (
-      <View style={{ gap: 8 }}>
-        <Text style={s.small}>{what} This can't be undone.</Text>
-        <View style={[s.row, { gap: 8 }]}>
-          <Button small onPress={() => setConfirming(undefined)}>
-            Cancel
-          </Button>
-          <Button small danger icon={Trash2} busy={deleting} onPress={() => void remove(id)}>
-            Delete
-          </Button>
-        </View>
-      </View>
-    ) : null;
-  const threads = useThreads({ agentId: "default", enabled, includeArchived: true, limit: 20 });
-  const [editing, setEditing] = useState<string>();
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
-  const [archived, setArchived] = useState(false);
-  async function mutate(action: () => Promise<void>) {
-    setError("");
-    try {
-      await action();
-      setEditing(undefined);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-  function go(section: "calendar" | "files" | "apps" | "spaces") {
-    onClose();
-    navigate(section);
-  }
-  return (
-    <Sheet
-      title="Neato_Muse"
-      subtitle={workspace.mode === "sample" ? "Your workspace" : workspace.profile.name}
-      onClose={onClose}
-    >
-      <View style={{ gap: 14 }}>
-        {enabled && loading ? (
-          <>
-            <ErrorNotice error={mainError} />
-            {mainError ? (
-              <Button onPress={retry}>Retry main chat</Button>
-            ) : (
-              <ActivityIndicator color={colors.blueDark} />
-            )}
-          </>
-        ) : enabled ? (
-          <>
-            <LinkRow
-              icon={MessageCircle}
-              title="Main chat"
-              detail="Your ongoing conversation"
-              onPress={() => {
-                select({ id: mainId, existing: true });
-                onClose();
-              }}
-            />
-            <LinkRow
-              icon={UsersRound}
-              title="Spaces"
-              detail="Social media, the family week and your health"
-              onPress={() => go("spaces")}
-            />
-            {confirmDelete("main", "Delete everything in your main chat and start it fresh?") ?? (
-              <Button
-                small
-                icon={Trash2}
-                style={{ alignSelf: "flex-start" }}
-                onPress={() => setConfirming("main")}
-              >
-                Clear main chat
-              </Button>
-            )}
-            <Button
-              primary
-              icon={Plus}
-              onPress={() => {
-                start();
-                onClose();
-              }}
-            >
-              New side chat
-            </Button>
-            <View style={[s.between, { marginTop: 12 }]}>
-              <Text style={s.heading}>Side chats</Text>
-              <Button small onPress={() => setArchived(!archived)}>
-                {archived ? "Show active" : "Archived"}
-              </Button>
-            </View>
-            {threads.isLoading && <ActivityIndicator color={colors.blueDark} />}
-            <ErrorNotice error={error || threads.error?.message} />
-            {threads.error && (
-              <Button small onPress={threads.refetchThreads}>
-                Retry conversations
-              </Button>
-            )}
-            {!archived &&
-              visited
-                .filter(
-                  (item) =>
-                    item.id !== mainId && !threads.threads.some((saved) => saved.id === item.id),
-                )
-                .map((item, index) => (
-                  <LinkRow
-                    key={item.id}
-                    icon={MessageCircle}
-                    title={`Side chat ${index + 1}`}
-                    detail="Open in this app"
-                    onPress={() => {
-                      select(item);
-                      onClose();
-                    }}
-                  />
-                ))}
-            {threads.threads
-              .filter((thread) => thread.id !== mainId && thread.archived === archived)
-              .map((thread) => (
-                <View
-                  key={thread.id}
-                  style={{
-                    paddingVertical: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.line,
-                    gap: 10,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open conversation: ${thread.name || "Untitled conversation"}`}
-                    accessibilityState={{ selected: selection.id === thread.id }}
-                    onPress={() => {
-                      select({ id: thread.id, existing: true });
-                      onClose();
-                    }}
-                    style={[s.row, { gap: 10 }]}
-                  >
-                    <MessageCircle size={19} color={colors.text} />
-                    <Text style={[s.text, { flex: 1 }]}>
-                      {thread.name || "Untitled conversation"}
-                    </Text>
-                  </Pressable>
-                  {editing === thread.id && (
-                    <Field label="Conversation name" value={name} onChangeText={setName} />
-                  )}
-                  <View style={[s.row, { gap: 8 }]}>
-                    <Button
-                      small
-                      disabled={threads.isMutating || (editing === thread.id && !name.trim())}
-                      onPress={() => {
-                        if (editing === thread.id)
-                          void mutate(() => threads.renameThread(thread.id, name.trim()));
-                        else {
-                          setEditing(thread.id);
-                          setName(thread.name || "");
-                        }
-                      }}
-                    >
-                      {editing === thread.id ? "Save name" : "Rename"}
-                    </Button>
-                    <Button
-                      small
-                      icon={Archive}
-                      disabled={threads.isMutating}
-                      onPress={() =>
-                        void mutate(() =>
-                          thread.archived
-                            ? threads.unarchiveThread(thread.id)
-                            : threads.archiveThread(thread.id),
-                        )
-                      }
-                    >
-                      {thread.archived ? "Restore" : "Archive"}
-                    </Button>
-                    <Button
-                      small
-                      danger
-                      icon={Trash2}
-                      disabled={threads.isMutating}
-                      onPress={() => setConfirming(thread.id)}
-                    >
-                      Delete
-                    </Button>
-                  </View>
-                  {confirmDelete(thread.id, `Delete “${thread.name || "Untitled conversation"}”?`)}
-                </View>
-              ))}
-            {!archived &&
-              !threads.isLoading &&
-              !threads.hasMoreThreads &&
-              saved
-                .filter(
-                  (chat) =>
-                    chat.threadId !== mainId &&
-                    !threads.threads.some((thread) => thread.id === chat.threadId) &&
-                    !visited.some((item) => item.id === chat.threadId),
-                )
-                .map((chat) => (
-                  <View key={chat.threadId} style={{ gap: 8 }}>
-                    <LinkRow
-                      icon={MessageCircle}
-                      title={chat.name}
-                      detail={`Saved ${new Date(chat.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
-                      onPress={() => {
-                        select({ id: chat.threadId, existing: true });
-                        onClose();
-                      }}
-                    />
-                    {confirmDelete(chat.threadId, `Delete “${chat.name}”?`) ?? (
-                      <Button
-                        small
-                        danger
-                        icon={Trash2}
-                        style={{ alignSelf: "flex-start" }}
-                        onPress={() => setConfirming(chat.threadId)}
-                      >
-                        Delete
-                      </Button>
-                    )}
-                  </View>
-                ))}
-            {!threads.isLoading &&
-              !threads.error &&
-              !threads.threads.some(
-                (thread) => thread.id !== mainId && thread.archived === archived,
-              ) && (
-                <Text style={s.muted}>
-                  {archived
-                    ? "No archived conversations."
-                    : "Keep a separate topic here. Your main chat is always available."}
-                </Text>
-              )}
-            <ErrorNotice error={threads.fetchMoreError?.message} />
-            {threads.hasMoreThreads && (
-              <Button small busy={threads.isFetchingMoreThreads} onPress={threads.fetchMoreThreads}>
-                Load more conversations
-              </Button>
-            )}
-            <Text style={s.small}>
-              Side chats keep their own conversation context. Your agent’s saved memory is shared.
-            </Text>
-          </>
-        ) : (
-          <>
-            <LinkRow
-              icon={MessageCircle}
-              title="Main chat"
-              detail="Saved in this workspace"
-              onPress={() => {
-                navigate("chat");
-                onClose();
-              }}
-            />
-            <Text style={s.muted}>
-              Your conversation is saved in this workspace. You can manage connections in Apps.
-            </Text>
-            {confirmDelete("main", "Delete this conversation and start fresh?") ?? (
-              <Button
-                small
-                icon={Trash2}
-                style={{ alignSelf: "flex-start" }}
-                onPress={() => setConfirming("main")}
-              >
-                Clear chat
-              </Button>
-            )}
-          </>
-        )}
-        <View style={s.divider} />
-        <LinkRow
-          icon={Plus}
-          title="New job"
-          detail="Something for your agent to work on in the background"
-          onPress={() => {
-            onClose();
-            open({ type: "delegate" });
-          }}
-        />
-        <LinkRow
-          icon={Monitor}
-          title="Agent computer"
-          detail="Browser, sessions and documents"
-          onPress={() => {
-            onClose();
-            open({ type: "computer" });
-          }}
-        />
-        <LinkRow icon={CalendarDays} title="Calendar" onPress={() => go("calendar")} />
-        <LinkRow icon={FileText} title="Files" onPress={() => go("files")} />
-        <LinkRow icon={Settings2} title="Apps & settings" onPress={() => go("apps")} />
-        <LinkRow
-          icon={LifeBuoy}
-          title="Help & how-to"
-          detail="Pictures and simple steps"
-          onPress={() => {
-            onClose();
-            open({ type: "help" });
-          }}
-        />
-        <Button small icon={RefreshCw} onPress={() => void mutate(refresh)}>
-          Refresh workspace
-        </Button>
-      </View>
-    </Sheet>
-  );
 }

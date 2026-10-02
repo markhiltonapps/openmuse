@@ -695,7 +695,7 @@ export function CallBar() {
       (
         title ??
         document.getElementById("call-headset") ??
-        document.querySelector<HTMLElement>('[aria-label="Open conversations and menu"]')
+        document.querySelector<HTMLElement>('#menu-button [role="button"]')
       )?.focus();
     }, 60);
   };

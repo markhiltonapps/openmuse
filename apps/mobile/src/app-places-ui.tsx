@@ -256,11 +256,13 @@ export function usePlace(request: PlaceRequest) {
         ? (task?.title ?? "Activity")
         : request.place === "agent-settings"
           ? `${agentName}’s settings`
-          : space && spaceTab?.tab === "overview"
-            ? space.name
-            : space && spaceTab?.tab === "playbook"
-              ? `${space.name} playbook`
-              : info.name;
+          : request.place === "agent-computer"
+            ? `${agentName}’s browser`
+            : space && spaceTab?.tab === "overview"
+              ? space.name
+              : space && spaceTab?.tab === "playbook"
+                ? `${space.name} playbook`
+                : info.name;
   const label = missing
     ? KINDS[(spaceTab as { kind: SpaceKind }).kind].start
     : request.place === "log-meal" || request.place === "delegate"
