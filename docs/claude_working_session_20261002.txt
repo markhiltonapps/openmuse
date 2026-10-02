@@ -1,0 +1,51 @@
+Claude working session — 2026-10-02
+====================================
+
+Carried over from 2026-10-01 (see that day's notes)
+- Menu redesign (Menu A) committed locally as 3bf3aaa after all three Design division
+  reviewers signed off. Not pushed yet; waiting for the owner's "push it".
+
+A tester's chat stuck on "That reply didn't go through"
+- Report: a colleague testing the app saw every message in her main chat fail with "That reply
+  didn't go through. Tap Retry response to try again."; a hard refresh didn't help, and the
+  owner's own chats worked.
+- What the logs showed: her messages reached the server and were accepted (12:41, 12:46 and
+  12:52 UTC, about half a second each); the server logged nothing, because a failed chat reply
+  wasn't logged; and the app showed only the follow-on bookkeeping error ("Cannot send event
+  type… already errored"), so the real reason was lost.
+- Likely cause: a reply cut off mid-step (a deploy restart, a lost connection) leaves a tool
+  call with no result in the chat's saved history. Claude refuses any conversation where a tool
+  call isn't followed by its result, so every later message in that chat fails. The earlier fix
+  (93d8e6a, endWithPerson) only tidied the end of a chat, not a cut-off step earlier in it.
+- Fixed:
+  - Server (engine/tanstack-agent.ts, chats and background jobs): repairToolSteps puts every
+    tool result right after its call; a call with no result gets a "This step was cut off before
+    it finished." result; a misplaced result moves to its call; a result with no call and a
+    repeated call id are left out. A warning in the log says when it repairs something.
+  - Server: a failed reply is now logged ("[OpenMuse] A chat reply failed: <reason>"), from the
+    model agent and from the chat agent's own error paths, so Railway shows why.
+  - App (conversation-run.ts): when a reply fails, the first real reason is kept, not the
+    bookkeeping error that follows it, so the chat shows the model's own words.
+  - Tests: end-with-person.test.ts (2 new: the stuck chat; misplaced, stray and repeated
+    steps), reply-failure.test.ts (1 new: the real reason wins).
+- Help: "{agent} got something wrong" now says what to do if a reply doesn't go through
+  (Retry response; if it keeps happening in one chat, start a new chat and tell the admin).
+- For the tester right now: her stuck chat repairs itself once this is deployed. Until then, a
+  new side chat (☰ › New side chat on the live version) works around it.
+
+Starter buttons on a new, empty chat
+- Owner's call: "whatever makes the most sense". The template leftovers ("Find cool things on
+  Hacker News", "Summarize copilotkit.ai", "Keep an eye on a website") are replaced by three
+  questions that change nothing, so one tap sends them: "What's on my calendar today?", "Help me
+  plan my week", "What can you do for me?" (the same words as the Help welcome topic).
+- Copy reviewer SIGNED OFF (applied its SHOULD: "what the error said"; and its NICE: the
+  topic summary mentions retrying a reply).
+
+Checks
+- Biome clean (apps, packages, scripts, tests); typecheck root, app and worker clean; 481 tests
+  pass.
+
+Pending
+- Committed locally; push both commits on the owner's "push it" (check for a
+  live call first).
+- Later NICEs from the menu review (see 2026-10-01 notes).

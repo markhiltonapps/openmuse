@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { replyFailure } from "../src/conversation-run.ts";
+import { replyFailure, runConversationTurn } from "../src/conversation-run.ts";
 
 test("the chat's bookkeeping errors read as a plain retry hint", () => {
   assert.equal(
@@ -22,4 +22,29 @@ test("a model error keeps its own words without the JSON around them", () => {
     replyFailure("The conversation is not ready yet."),
     "The conversation is not ready yet.",
   );
+});
+
+test("a failed reply keeps its real reason, not the bookkeeping error after it", async () => {
+  let listener: (event: { error: unknown }) => void = () => undefined;
+  const turn = runConversationTurn(
+    "default",
+    async () => {
+      listener({
+        error: new Error(
+          '400 {"error":{"message":"tool_use ids were found without tool_result blocks"}}',
+        ),
+      });
+      listener({
+        error: new Error("Cannot send event type 'RUN_STARTED': The run has already errored"),
+      });
+    },
+    (next) => {
+      listener = next;
+      return { unsubscribe: () => undefined };
+    },
+  );
+  await assert.rejects(turn, (error: Error) => {
+    assert.equal(replyFailure(error), "tool_use ids were found without tool_result blocks");
+    return true;
+  });
 });

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { endWithPerson } from "../apps/server/src/engine/tanstack-agent.ts";
+import {
+  CUT_OFF,
+  endWithPerson,
+  repairToolSteps,
+} from "../apps/server/src/engine/tanstack-agent.ts";
 
 const user = (content: string) => ({ role: "user", content });
 const agent = (content: string) => ({ role: "assistant", content });
@@ -41,4 +45,39 @@ test("a finished reply after a tool step is left out, so the model writes it aga
     call("a"),
     result("a"),
   ]);
+});
+
+test("a step cut off earlier in the chat gets a result, so later messages still go through", () => {
+  // The stuck chat: a tool call with no result, then the person carried on.
+  const messages = [
+    user("Connect Facebook"),
+    call("fb"),
+    user("I have connected"),
+    user("Check my email"),
+  ];
+  assert.deepEqual(repairToolSteps(messages), [
+    user("Connect Facebook"),
+    call("fb"),
+    { role: "tool", toolCallId: "fb", content: CUT_OFF },
+    user("I have connected"),
+    user("Check my email"),
+  ]);
+});
+
+test("tool results go right after their call; strays and repeated calls are left out", () => {
+  const healthy = [user("Hi"), call("a"), result("a"), agent("Done"), user("Thanks")];
+  assert.equal(repairToolSteps(healthy), healthy);
+  // A result saved after the next message moves back to its call.
+  assert.deepEqual(repairToolSteps([user("Hi"), call("a"), agent("…"), result("a"), user("Ok")]), [
+    user("Hi"),
+    call("a"),
+    result("a"),
+    agent("…"),
+    user("Ok"),
+  ]);
+  // A result with no call, and a call id used twice.
+  assert.deepEqual(
+    repairToolSteps([user("Hi"), result("zz"), call("a"), result("a"), call("a"), user("Ok")]),
+    [user("Hi"), call("a"), result("a"), user("Ok")],
+  );
 });

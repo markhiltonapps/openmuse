@@ -9,7 +9,9 @@ export async function runConversationTurn(
   let failure: Error | undefined;
   const subscription = subscribe((event) => {
     if (event.context?.agentId && event.context.agentId !== agentId) return;
-    failure = event.error instanceof Error ? event.error : new Error(String(event.error));
+    const error = event.error instanceof Error ? event.error : new Error(String(event.error));
+    // The first real reason wins: the chat's own bookkeeping error that follows it says nothing.
+    if (!failure || (bookkeeping(failure.message) && !bookkeeping(error.message))) failure = error;
   });
   try {
     await execute();
@@ -23,9 +25,10 @@ export async function runConversationTurn(
  * What the person reads when a reply fails. The chat's own bookkeeping errors ("Cannot send event
  * type…") say nothing useful; a model error keeps its message without the JSON around it.
  */
+const bookkeeping = (message: string) => /Cannot send event type|already errored/i.test(message);
+
 export function replyFailure(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  if (/Cannot send event type|already errored/i.test(message))
-    return "That reply didn't go through. Tap Retry response to try again.";
+  if (bookkeeping(message)) return "That reply didn't go through. Tap Retry response to try again.";
   return /"message":"((?:[^"\\]|\\.)*)"/.exec(message)?.[1] ?? message;
 }

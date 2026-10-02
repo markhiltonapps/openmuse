@@ -138,6 +138,9 @@ export class ConversationAgent extends AbstractAgent {
             subscriber.complete();
           })
           .catch((error) => {
+            console.error(
+              `[OpenMuse] A chat reply failed: ${error instanceof Error ? error.message : "Could not start the task"}`,
+            );
             subscriber.next({
               type: EventType.RUN_ERROR,
               message: error instanceof Error ? error.message : "Could not start the task",
@@ -897,6 +900,9 @@ export class ConversationAgent extends AbstractAgent {
         });
         subscriber.complete();
       })().catch((error: unknown) => {
+        console.error(
+          `[OpenMuse] A chat reply failed: ${error instanceof Error ? error.message : "Couldn't add the call to the chat"}`,
+        );
         subscriber.next({
           type: EventType.RUN_ERROR,
           message: error instanceof Error ? error.message : "Couldn't add the call to the chat",

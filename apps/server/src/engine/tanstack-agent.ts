@@ -145,6 +145,62 @@ export function endWithPerson<T extends { role: string; toolCalls?: unknown[] }>
     : messages.slice(0, last + 1);
 }
 
+type ToolStep = {
+  role: string;
+  toolCalls?: { id: string }[];
+  toolCallId?: string;
+  content?: unknown;
+};
+/** What a tool call that never finished reads as, so the model sees it was cut off. */
+export const CUT_OFF = JSON.stringify({ error: "This step was cut off before it finished." });
+
+/**
+ * Every tool call is followed straight away by its result, as the model requires; otherwise it
+ * refuses the whole conversation, and every later message in that chat fails. A reply cut off
+ * mid-step (a deploy, a lost connection) can leave a call with no result anywhere in the chat:
+ * it gets a "cut off" result. A result saved in the wrong place moves to its call, one with no
+ * call is left out, and a call id used twice keeps only its first use.
+ */
+export function repairToolSteps<T extends ToolStep>(messages: T[]): T[] {
+  const results = new Map<string, T>();
+  for (const message of messages)
+    if (message.role === "tool" && message.toolCallId && !results.has(message.toolCallId))
+      results.set(message.toolCallId, message);
+  const placed = new Set<string>();
+  const out: T[] = [];
+  let cutOff = 0;
+  let moved = 0;
+  messages.forEach((message, index) => {
+    if (message.role === "tool") return;
+    const calls = (message.role === "assistant" && message.toolCalls) || [];
+    const fresh = calls.filter((call) => !placed.has(call.id));
+    if (fresh.length !== calls.length) {
+      // A repeated call id: the model refuses it twice, so only the first one stays.
+      if (!fresh.length && !message.content) return;
+      out.push({ ...message, toolCalls: fresh.length ? fresh : undefined });
+    } else out.push(message);
+    let next = index + 1;
+    for (const call of fresh) {
+      placed.add(call.id);
+      const result = results.get(call.id);
+      if (!result) {
+        cutOff++;
+        out.push({ role: "tool", toolCallId: call.id, content: CUT_OFF } as T);
+        continue;
+      }
+      if (messages[next] !== result) moved++;
+      else next++;
+      out.push(result);
+    }
+  });
+  const strays = [...results.keys()].filter((id) => !placed.has(id)).length;
+  if (cutOff || moved || strays)
+    console.warn(
+      `[OpenMuse] Repaired the chat's tool steps: ${cutOff} cut off, ${moved} moved, ${strays} left out.`,
+    );
+  return cutOff || moved || strays || out.length !== messages.length ? out : messages;
+}
+
 /** Anthropic prompt caching: a cache read costs a tenth of the normal input price. */
 const CACHE = { type: "ephemeral" } as const;
 export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
@@ -181,7 +237,7 @@ export function tanstackAgent(options: {
       const cached = caches(options.model);
       return chat({
         adapter: adapter(options.model),
-        messages: endWithPerson(converted.messages),
+        messages: repairToolSteps(endWithPerson(converted.messages)),
         systemPrompts: [
           ...(options.prompt
             ? [
@@ -214,12 +270,25 @@ export function tanstackAgent(options: {
   });
   const run = agent.run.bind(agent);
   agent.run = (input: RunAgentInput) => {
-    const events = splitTextAtToolCalls(run(input));
+    const events = logRunErrors(splitTextAtToolCalls(run(input)));
     return options.stepLimitNote
       ? reportStepLimit(events, options.maxSteps, options.stepLimitNote)
       : events;
   };
   return agent;
+}
+
+/** A failed reply says why in the server's log (the model's or tool's message, never the chat). */
+export function logRunErrors(events: Observable<BaseEvent>) {
+  return events.pipe(
+    map((event) => {
+      if (event.type === EventType.RUN_ERROR)
+        console.error(
+          `[OpenMuse] A chat reply failed: ${String((event as { message?: unknown }).message ?? "no reason given").slice(0, 500)}`,
+        );
+      return event;
+    }),
+  );
 }
 
 /**

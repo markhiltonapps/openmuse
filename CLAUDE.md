@@ -162,6 +162,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   wait, save `git diff` and new files to the scratchpad so nothing depends on one container.
 - **Job emails and notify():** `notify()` returns whether the update is new; send anything extra
   (email) only then, because maintenance re-publishes every job's outcome each minute.
+- **Tool steps in a chat's history:** the model refuses any conversation where a tool call isn't
+  followed straight away by its result, and then every later message in that chat fails.
+  `repairToolSteps` (engine/tanstack-agent.ts) fixes cut-off steps anywhere in the history before
+  each model call. Failed replies are logged as "A chat reply failed: …"; the app keeps the
+  first real error, not the "Cannot send event type…" bookkeeping error that follows it.
 - **How a job's run ends:** the model may stop without finish_task. Only its text after the last
   tool call is its answer or question (earlier text is commentary); `readLastWords` in
   `engine/job-words.ts` decides which. Never show the whole run's text to the person.

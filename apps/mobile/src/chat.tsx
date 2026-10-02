@@ -1210,17 +1210,12 @@ export function ChatScreen({
                     action: () =>
                       /\[/.test(prompt.text) ? navigate("spaces") : enqueue(prompt.text),
                   }))
-                : [
-                    {
-                      text: "Find cool things on Hacker News",
-                      action: () => enqueue("Check out Hacker News for cool stuff"),
-                    },
-                    {
-                      text: "Summarize copilotkit.ai",
-                      action: () => enqueue("Summarize copilotkit.ai"),
-                    },
-                    { text: "Keep an eye on a website", action: () => navigate("goals") },
-                  ]
+                : // Questions that change nothing, so one tap can send them.
+                  [
+                    "What’s on my calendar today?",
+                    "Help me plan my week",
+                    "What can you do for me?",
+                  ].map((text) => ({ text, action: () => enqueue(text) }))
               ).map((item) => (
                 <Button key={item.text} onPress={item.action}>
                   {item.text}
