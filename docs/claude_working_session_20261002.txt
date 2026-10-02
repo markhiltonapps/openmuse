@@ -46,6 +46,10 @@ Checks
   pass.
 
 Pending
-- Committed locally; push both commits on the owner's "push it" (check for a
-  live call first).
+- Pushed on the owner's "push it" at 14:33 UTC (no live call: no call starts in the hour
+  before): 3bf3aaa (menu redesign) and 304d1bc (this fix). api and web SUCCESS at 14:34, the
+  worker SKIPPED; the api started cleanly (live voice on, connected apps ready, agent browser
+  reachable).
+- Gave the owner plain-language steps for the tester: close and reopen the tab, type the
+  question again, Retry once, and send a screenshot if it still fails (the error now says why).
 - Later NICEs from the menu review (see 2026-10-01 notes).
