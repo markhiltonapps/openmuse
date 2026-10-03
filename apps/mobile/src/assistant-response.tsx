@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { Linking, Platform, Text, type TextStyle, View } from "react-native";
+import { Linking, Platform, Text, type TextStyle, View, type ViewStyle } from "react-native";
 import Markdown, {
+  type ASTNode,
   renderRules as defaultRules,
   type MarkdownStyles,
   type RenderFunction,
@@ -52,7 +53,58 @@ const headingRules = (top: number) =>
   Object.fromEntries(
     [1, 2, 3, 4, 5, 6].map((level) => [`heading${level}`, headingRule(level, top)]),
   ) as RenderRules;
+/**
+ * A paragraph that's only a **bold** line, like "**Needs action:**": the label of a group in a
+ * list-style answer (engine/answer-layout.ts).
+ */
+const isGroupLine = (node: ASTNode) => {
+  const inline =
+    node.children.length === 1 && node.children[0]?.type === "textgroup"
+      ? node.children[0].children
+      : [];
+  return (
+    inline[0]?.type === "strong" &&
+    inline.slice(1).every((child) => child.type === "text" && /^\s*:?\s*$/.test(child.content))
+  );
+};
+/**
+ * A group's label sits with its own list (more room above, little below) and is a heading a screen
+ * reader can jump to, one level below the answer's own # headings if it has any.
+ */
+const groupLineRule =
+  (top: number): RenderFunction =>
+  (node, children, parent, styles) =>
+    parent.length === 0 && isGroupLine(node) ? (
+      <View
+        key={node.key}
+        role="heading"
+        aria-level={top < 6 ? 4 : 3}
+        style={[
+          styles.paragraph as ViewStyle,
+          { marginTop: node.index === 0 ? 0 : 12, marginBottom: 0 },
+        ]}
+      >
+        {children}
+      </View>
+    ) : (
+      defaultRules.paragraph?.(node, children, parent, styles)
+    );
+/** Bullets as a real dot (the library's "·" is a speck), at the same hanging indent. */
+const listItemRule: RenderFunction = (node, children, parent, styles) =>
+  parent.some((item) => item.type === "bullet_list") ? (
+    <View key={node.key} style={styles.listUnorderedItem as ViewStyle}>
+      <View style={{ width: 20, marginLeft: 4, paddingTop: 9 }}>
+        <View
+          style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.mutedStrong }}
+        />
+      </View>
+      <View style={[styles.listItem as ViewStyle, { flex: 1 }]}>{children}</View>
+    </View>
+  ) : (
+    defaultRules.list_item?.(node, children, parent, styles)
+  );
 const rules: RenderRules = {
+  list_item: listItemRule,
   textgroup: (node, children) => (
     <Text key={node.key} selectable style={textStyle}>
       {children}
@@ -76,7 +128,10 @@ export function AssistantResponse({ content }: { content: string }) {
     ),
     6,
   );
-  const withHeadings = useMemo(() => ({ ...rules, ...headingRules(top) }), [top]);
+  const withHeadings = useMemo(
+    () => ({ ...rules, ...headingRules(top), paragraph: groupLineRule(top) }),
+    [top],
+  );
   const onLinkPress = useCallback((url: string) => {
     if (!isSafeAssistantUrl(url)) return false;
     setLinkError("");

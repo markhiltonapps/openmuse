@@ -55,7 +55,7 @@ export function showOnScreenToolSpec() {
   return {
     name: "show_on_screen",
     description:
-      "On a live call: show a long answer on the person's screen instead of reading it out, such as search results, options to compare, a list, steps or a recipe. Write it in simple Markdown: **bold** lines for sections (no # headings; the title is the heading), - bullets and [link text](https://…) links. Then say only the gist.",
+      "On a live call: show a long answer on the person's screen instead of reading it out, such as search results, options to compare, a list, steps or a recipe. Write it in simple Markdown: lead with a one-sentence short answer, then **bold** lines for groups (no # headings; the title is the heading), one - bullet per item starting with a **bold** name, and [link text](https://…) links. Then say only the gist.",
     parameters: z.object({
       title: z
         .string()

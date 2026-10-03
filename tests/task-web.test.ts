@@ -174,6 +174,12 @@ test("a background job works a website: reads it, downloads, and stops before pa
   const tools = (bodies[0]?.tools ?? []).map((tool) => tool.name);
   for (const name of ["open_page", "look_at_page", "use_page", "save_downloads"])
     assert.ok(tools.includes(name), `${name} is offered`);
+  // Its answer is laid out like the chat's (short answer first, grouped, one line each), and an
+  // inbox check covers every mailbox and their sent mail.
+  const system = JSON.stringify((bodies[0] as { system?: unknown }).system ?? "");
+  assert.match(system, /start with one sentence that gives the short answer/);
+  assert.match(system, /\*\*Needs action:\*\*/);
+  assert.match(system, /look in that mailbox's sent mail/);
   // It downloaded the statement (a plain click), and kept the file.
   assert.deepEqual(clicked, ["e1"], "only the download was clicked; paying was not");
   // Paying commits, so it waits for the person's approval, and the job pauses.

@@ -107,6 +107,78 @@ Design review (Design division)
 - Help screenshots: none retaken. The "approve" shot is a call's Approve card for a step outside
   a job, which hasn't changed.
 
+Answers laid out like Meta Muse; email checks every mailbox
+- The owner asked both apps "Do I have any emails I need to respond to?" and compared them.
+  - Meta Muse led with the short answer, grouped items under Needs action / FYI only (one line
+    each, the sender in bold, what to do) and ended with one offer.
+  - Ours was one dense paragraph. It read only Gmail, called a security alert and payment
+    notices "automated", and said a reply was still owed that Outlook shows was sent.
+- Owner's choices (asked): the layout for every list-style answer; also fix the email check.
+- Changes:
+  - engine/answer-layout.ts `answerLayoutInstructions`, added to the chat (so also a call's
+    hand-overs) and to jobs.
+    - Short answers stay a sentence or two. Several things: one-sentence short answer, groups
+      under **bold** lines (never # headings), one bullet each starting with a bold name, then
+      one offer.
+    - On a call it goes on screen; out loud, only the short answer and the most urgent item.
+  - engine/mailboxes.ts `inboxCheckInstructions` (chat and jobs, so routines like "every Friday
+    check my inbox" too):
+    - Check every mailbox (each connected mail app, via list_connected_apps), and say which.
+    - Look in sent mail before saying a reply is owed.
+    - Count security alerts, failed or declined payments, bills and renewals due, and deadlines
+      or decisions as needing them.
+    - Leave out newsletters and marketing.
+  - The chat's email line says "their mail apps (Gmail, Outlook)" instead of one app.
+  - Help "gmail-two": a line about the inbox check, a tappable "Do I have any emails I need to
+    respond to?", new keywords.
+  - Tests: tests/answer-layout.test.ts (3); task-web.test.ts checks a job's prompt has both rules.
+- A sample answer in the new layout, rendered on a job page (same renderer as the chat), reads
+  well at 416 light and 360 dark (scratchpad layout/shots).
+- Checks: Biome, typechecks, 488 tests pass.
+- Design review round 1 (restarted after the usage limit reset at 14:20 UTC):
+  - Copy: 2 MUST, 4 SHOULD.
+    - The closing offer is chat only; a job's result leaves it out. Its page has no reply box,
+      and a closing question can make readLastWords call the answer a question.
+    - The layout starts at three or more items.
+    - Groups follow the content: Needs action / FYI only, by day for a calendar, best fit first.
+    - Never send people to a link in an alert email.
+    - Help line made accurate ("Gmail, Outlook or both").
+    - show_on_screen's description now asks for the same layout.
+  - Visual: SIGN-OFF, with 2 SHOULDs, applied in assistant-response.tsx:
+    - A bold-only line ("**Needs action:**") gets 12px above and none below, so it sits with
+      its own list, and is a heading for screen readers.
+    - Bullets are a real 6px dot instead of the library's "·" speck.
+    - Ordinary replies keep their spacing.
+  - Usability: 2 MUST, 6 SHOULD, 5 NICE.
+    - Name a mailbox that couldn't be read, first.
+    - Warn that an alert may be a scam, and check in the company's own app.
+    - People waiting on them come first; also bank activity checks, invitations, forms and
+      deliveries.
+    - A 7-day window, said out loud.
+    - Settled items left out; an email in both mailboxes listed once.
+    - The count matches the items.
+    - "When it's safe" for urgent items on a call.
+    - Chat only: the app's own emails lead to the card (show_approvals).
+    - More Help keywords.
+  - Not done: a run of the real model against sample inboxes. The sandbox has no model key, so
+    the first real check is on Railway after the push: ask "Do I have any emails I need to
+    respond to?" in the chat and on a call.
+- Round 2: copy, visual and usability SIGN-OFF. Last touches:
+  - On a call, it says the rest is on their screen for when it's safe to look.
+  - "What's new" looks since yesterday, not a week.
+- Committed locally.
+- To check on Railway straight after the push (usability's list; note the results here):
+  1. In the chat, ask "Do I have any emails I need to respond to?". Check that:
+     - the first sentence names Gmail and Outlook and "the last week"
+     - it doesn't say a reply is owed when one is already in Outlook's sent mail
+     - alerts and payment problems are under Needs action, pointing to the company's own app or
+       website
+     - newsletters are left out
+     - a waiting approval shows its card
+  2. On a call, ask the same. The answer goes on screen; out loud it's at most two sentences.
+  3. A two-item question ("What's on today?" on a light day) comes back as plain sentences.
+  4. If easy, one mailbox disconnected: it's named first, with a Connect card.
+
 Known issues
 - "Ask me each time" can't be done by voice yet; it belongs to the pending slice for running jobs
   from the chat and calls, which has no job-control tools yet. Approving by voice already shows

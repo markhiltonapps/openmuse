@@ -175,6 +175,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   card, and Space must toggle it (`onKeyDown`; RN-web's Pressable passes it on). When only one of
   several options can be chosen, use `CheckRow`'s `radio` (a round box, `role="radio"` inside a
   `radiogroup`), not a column of checkboxes.
+- **How answers are laid out (owner, 2026-10-03):** an answer covering several things leads with
+  a one-sentence short answer, groups items under **bold** lines (Needs action / FYI only), one
+  bullet each starting with a bold name, then one offer (`answer-layout.ts`, chat and jobs). An
+  inbox check reads every connected mailbox and the sent mail before saying a reply is owed, and
+  counts alerts and failed payments as needing the person (`inboxCheckInstructions`).
 - **"Connect it first" is a question:** `asksToConnect`/`connectLink`/`appToConnect`
   (packages/domain/src/app-names.ts) are shared by the server and the app, so a job asking for a
   connection waits for an answer and its page offers Connect plus a one-tap "carry on".
