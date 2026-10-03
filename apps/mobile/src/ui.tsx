@@ -444,36 +444,66 @@ export function Sheet({
 }
 export function CheckRow({
   label,
+  detail,
   checked,
   onPress,
+  radio = false,
 }: {
   label: string;
+  /** The fine print under it, smaller. */
+  detail?: string;
   checked: boolean;
   onPress: () => void;
+  /** One choice of several (a round box), not a tick of its own. */
+  radio?: boolean;
 }) {
   return (
     <Pressable
-      accessibilityRole="checkbox"
+      role={radio ? "radio" : "checkbox"}
       accessibilityState={{ checked }}
       aria-checked={checked}
+      aria-label={detail ? `${label}. ${detail}` : undefined}
       onPress={onPress}
-      style={[s.row, { gap: 10, paddingVertical: 11 }]}
+      // react-native-web presses only role="button" on Space; a checkbox takes it too.
+      {...({
+        onKeyDown: (event: { key?: string; preventDefault?: () => void }) => {
+          if (event.key !== " ") return;
+          event.preventDefault?.();
+          onPress();
+        },
+      } as object)}
+      // The box sits beside the first line, however many lines the label takes.
+      style={[s.row, { gap: 10, paddingVertical: 11, alignItems: "flex-start" }]}
     >
       <View
         style={{
           width: 19,
           height: 19,
-          borderRadius: 5,
-          borderWidth: 1,
-          borderColor: checked ? colors.text : colors.line,
+          marginTop: 2,
+          borderRadius: radio ? 10 : 5,
+          // An unticked box stands out from the card (edge, not line: line is near-invisible).
+          borderWidth: 1.5,
+          borderColor: checked ? colors.text : colors.edge,
           backgroundColor: checked ? colors.inverse : colors.surface,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        {checked && <Check size={13} color={colors.onInverse} />}
+        {checked &&
+          (radio ? (
+            <View
+              style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.onInverse }}
+            />
+          ) : (
+            <Check size={13} color={colors.onInverse} />
+          ))}
       </View>
-      <Text style={[s.text, { flex: 1 }]}>{label}</Text>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.text}>{label}</Text>
+        {detail ? (
+          <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>{detail}</Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }

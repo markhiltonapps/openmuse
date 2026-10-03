@@ -226,7 +226,48 @@ export class ActionService {
     }
     await this.db.put(owner, "actions", finished);
     await this.record(owner, finished, finished.result ?? finished.error ?? finished.status);
+    // How each approved step ended, in the server's log (what it was, never what it carried).
+    const what =
+      finished.kind === "app.action"
+        ? `${finished.data.tool} (${finished.data.app})`
+        : finished.kind;
+    if (finished.status === "succeeded")
+      console.log(`[OpenMuse] Approved step ran: ${what}${finished.taskId ? " in a job" : ""}`);
+    else
+      console.error(
+        `[OpenMuse] Approved step ${finished.status}: ${what}: ${String(finished.error ?? "").slice(0, 300)}`,
+      );
     return finished;
+  }
+  /**
+   * "Allow the rest of this job in Google Drive": approving this step also lets the same job's
+   * later steps in that app go ahead without asking (never deleting, cancelling or paying).
+   */
+  async allowRestOfJob(owner: string, id: string, hash: string) {
+    const proposal = await this.db.get<ActionProposal>(owner, "actions", id);
+    if (!proposal || proposal.hash !== hash || proposal.status !== "awaiting_review") return;
+    if (proposal.kind !== "app.action" || !proposal.taskId) return;
+    const app = String(proposal.data.app).toLowerCase();
+    const current = await this.db.get<{ id: string; apps: string[] }>(
+      owner,
+      "job-allowances",
+      proposal.taskId,
+    );
+    const apps = [...new Set([...(current?.apps ?? []), app])];
+    await this.db.put(owner, "job-allowances", { id: proposal.taskId, apps });
+  }
+  /** Whether this job may run steps in this app without asking (see allowRestOfJob). */
+  async jobAllows(owner: string, taskId: string, app: string) {
+    return (await this.jobAllowances(owner, taskId)).includes(app.toLowerCase());
+  }
+  /** The apps this job may run steps in without asking. */
+  async jobAllowances(owner: string, taskId: string) {
+    const current = await this.db.get<{ apps: string[] }>(owner, "job-allowances", taskId);
+    return current?.apps ?? [];
+  }
+  /** "Ask me each time": the job asks again before each step. */
+  async stopJobAllowances(owner: string, taskId: string) {
+    await this.db.remove(owner, "job-allowances", taskId);
   }
   private async record(owner: string, action: ActionProposal, detail: string) {
     await this.db.put(owner, "activity", {

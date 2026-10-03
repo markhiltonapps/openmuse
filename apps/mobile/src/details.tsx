@@ -42,6 +42,7 @@ import {
   type ProposalInput,
 } from "../../../packages/domain/src";
 import type { AgentArtifact } from "../../../packages/domain/src/agent";
+import { appLabel } from "../../../packages/domain/src/app-names";
 import { ArtifactCard, DelegateSheet, NotificationsSheet, TaskDetail } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import BrowserConsole from "./BrowserConsole";
@@ -93,7 +94,8 @@ export function Details({ detail }: { detail: Detail }) {
     return <EventEditor event={detail.event} draft={detail.draft} neighbors={detail.neighbors} />;
   if (detail.type === "file") return <FileDetail file={detail.file} />;
   if (detail.type === "appEmail") return <AppEmailSheet email={detail.email} />;
-  if (detail.type === "review") return <ReviewDetail initial={detail.action} />;
+  if (detail.type === "review")
+    return <ReviewDetail initial={detail.action} restOfJob={detail.restOfJob} />;
   if (detail.type === "browser") return <BrowserDetail initial={detail.browser} />;
   return (
     <Sheet title="Your workspace" subtitle="A little room for everything." onClose={close}>
@@ -130,7 +132,8 @@ function SavedResultSheet({ artifact }: { artifact: AgentArtifact }) {
       onClose={close}
     >
       <View style={{ gap: 16 }}>
-        <ArtifactCard key={artifact.id} artifact={artifact} />
+        {/* The sheet's title and subtitle already name it and say what kind it is. */}
+        <ArtifactCard key={artifact.id} artifact={artifact} titled={false} />
         {!!task && (
           <Button
             icon={Clock3}
@@ -585,7 +588,14 @@ function EventEditor({
     </Sheet>
   );
 }
-function ReviewDetail({ initial }: { initial: ActionProposal }) {
+function ReviewDetail({
+  initial,
+  restOfJob = false,
+}: {
+  initial: ActionProposal;
+  /** Ticked on the card before See details: kept here. */
+  restOfJob?: boolean;
+}) {
   const { workspace: w, api, refresh, close, open } = useWorkspace();
   const [local, setLocal] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -595,7 +605,9 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
   const d = action.data;
   const pending = action.status === "awaiting_review";
   // "Always allow" for connected-app actions: this one action, or everything in the app.
-  const [allow, setAllow] = useState<"none" | "hour" | "action" | "app">("none");
+  const [allow, setAllow] = useState<"none" | "job" | "hour" | "action" | "app">(
+    restOfJob && initial.taskId ? "job" : "none",
+  );
   // A code the site sent, typed here for a sign-in: used once, never saved.
   const [code, setCode] = useState("");
   const needsCode = action.kind === "browser.signin" && d.step === "code" && !d.savedCode;
@@ -603,7 +615,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
     setBusy(true);
     setError("");
     try {
-      if (decision === "approve" && allow !== "none")
+      if (decision === "approve" && allow !== "none" && allow !== "job")
         await api.request("/api/approval-rules", {
           app: String(d.app || ""),
           ...(allow !== "app" ? { tool: String(d.tool || "") } : {}),
@@ -613,6 +625,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         decision,
         hash: action.hash,
         ...(needsCode && decision === "approve" ? { code } : {}),
+        ...(decision === "approve" && allow === "job" ? { restOfJob: true } : {}),
       });
       setCode("");
       setLocal(result);
@@ -660,7 +673,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       title={pending ? "One last look" : action.title}
       subtitle={
         w.mode === "sample"
-          ? "This action stays in your local workspace."
+          ? "This is a sample, so nothing is really sent."
           : step || signin
             ? "Your agent does this on the website only after you approve."
             : "Review this exact action before it changes your connected account."
@@ -711,24 +724,46 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
           </Text>
           {app && typeof d.amountUsd !== "number" && (
             <View style={{ gap: 4, marginBottom: 14 }}>
-              <CheckRow
-                label="Don't ask again for this for the next hour"
-                checked={allow === "hour"}
-                onPress={() => setAllow(allow === "hour" ? "none" : "hour")}
-              />
-              <CheckRow
-                label={`Always allow ${String(d.tool || "this action")} without asking`}
-                checked={allow === "action"}
-                onPress={() => setAllow(allow === "action" ? "none" : "action")}
-              />
-              <CheckRow
-                label={`Always allow everything in ${appLabel(String(d.app || ""))}, except deleting or cancelling things`}
-                checked={allow === "app"}
-                onPress={() => setAllow(allow === "app" ? "none" : "app")}
-              />
-              <Text style={s.small}>
-                Purchases always ask. Change this any time under Apps → Always allowed.
+              {/* One choice: how much to skip asking from now on (none, by default). */}
+              <Text role="heading" aria-level={4} style={[s.label, { color: colors.mutedStrong }]}>
+                Skip asking next time
               </Text>
+              <View role="radiogroup" aria-label="Skip asking next time">
+                <CheckRow
+                  radio
+                  label="No, ask me each time"
+                  checked={allow === "none"}
+                  onPress={() => setAllow("none")}
+                />
+                {action.taskId ? (
+                  <CheckRow
+                    radio
+                    label={restOfJobLabel(String(d.app || ""))}
+                    detail={REST_OF_JOB_DETAIL}
+                    checked={allow === "job"}
+                    onPress={() => setAllow("job")}
+                  />
+                ) : null}
+                <CheckRow
+                  radio
+                  label="Don’t ask again for the next hour"
+                  checked={allow === "hour"}
+                  onPress={() => setAllow("hour")}
+                />
+                <CheckRow
+                  radio
+                  label={`Always allow “${toolLabel(String(d.app || ""), String(d.tool || ""))}” in ${appLabel(String(d.app || ""))} without asking`}
+                  checked={allow === "action"}
+                  onPress={() => setAllow("action")}
+                />
+                <CheckRow
+                  radio
+                  label={`Always allow everything in ${appLabel(String(d.app || ""))}, except deleting, cancelling and paying`}
+                  checked={allow === "app"}
+                  onPress={() => setAllow("app")}
+                />
+              </View>
+              <Text style={s.small}>Change this any time under Apps › Always allowed.</Text>
             </View>
           )}
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
@@ -975,8 +1010,21 @@ export function approveLabel(action: ActionProposal, sample = false) {
               ? "Approve & send"
               : "Approve change";
 }
-const appLabel = (app: string) =>
-  app.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "this app";
+/** An app's action in words: GOOGLEDRIVE_CREATE_FILE_FROM_TEXT is "Create file from text". */
+export const toolLabel = (app: string, tool: string) => {
+  const words = tool
+    .replace(new RegExp(`^${app.replace(/[^A-Za-z0-9]/g, "")}_`, "i"), "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .trim();
+  return words ? `${words[0]?.toUpperCase()}${words.slice(1)}` : "this action";
+};
+/** One OK for a job: its later steps in this app go ahead without asking. */
+export const restOfJobLabel = (app: string) =>
+  `Let this job do its other ${appLabel(app)} steps without asking`;
+export const REST_OF_JOB_DETAIL = "Deleting, cancelling and paying still ask.";
+export { appLabel };
+
 function arrayText(value: unknown) {
   return Array.isArray(value) ? value.map(String).join(", ") : "";
 }

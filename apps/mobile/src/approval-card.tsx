@@ -3,16 +3,13 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src";
 import { useAgentWorkspace } from "./agent-workspace";
-import { approveLabel, ReviewBody } from "./details";
+import { appLabel, approveLabel, REST_OF_JOB_DETAIL, ReviewBody, restOfJobLabel } from "./details";
 import { codeReady } from "./sign-in-ui";
-import { Button, colors, ErrorNotice, resultSummary, s } from "./ui";
+import { Button, CheckRow, colors, ErrorNotice, resultSummary, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 const list = (value: unknown) => (Array.isArray(value) ? value.map(String).join(", ") : "");
-const appName = (app: unknown) =>
-  String(app || "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+const appName = (app: unknown) => (app ? appLabel(String(app)) : "");
 const short = (value: unknown) => {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
@@ -60,9 +57,23 @@ function whatItDoes(action: ActionProposal) {
         .join(" · ");
     }
     case "app.action": {
+      // The details a person would recognise (a name as itself), not ids, links, file types or
+      // long text such as a file's contents; See details has all of them.
       const args = Object.entries((d.arguments ?? {}) as Record<string, unknown>)
+        .filter(
+          ([key, value]) =>
+            value !== undefined &&
+            value !== null &&
+            value !== "" &&
+            !(typeof value === "string" && value.length > 80) &&
+            !/(^|_)(mime_?type|id|ids|url|uri|type)$/i.test(key),
+        )
         .slice(0, 3)
-        .map(([key, value]) => `${key.replace(/_/g, " ")} ${short(value)}`);
+        .map(([key, value]) =>
+          /(^|_)(name|title|subject)$/i.test(key) && typeof value === "string"
+            ? `“${short(value)}”`
+            : `${key.replace(/_/g, " ")} ${short(value)}`,
+        );
       return [appName(d.app), actionName(d.app, d.tool), ...args].filter(Boolean).join(" · ");
     }
     case "browser.step":
@@ -136,13 +147,15 @@ export function ApprovalCard({
   eyebrow?: boolean;
 }) {
   const { workspace: w, api, refresh, open, ask } = useWorkspace();
-  const { data } = useAgentWorkspace();
+  const { data, refresh: refreshJobs } = useAgentWorkspace();
   const name = data?.identity.name || "Neddy";
   const [local, setLocal] = useState<ActionProposal>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [details, setDetails] = useState(false);
   const [code, setCode] = useState("");
+  // One OK for a job: its later steps in this app go ahead without asking.
+  const [restOfJob, setRestOfJob] = useState(false);
   const [, setTick] = useState(0);
   const looked = useRef(false);
   const heading = useRef<Text>(null);
@@ -182,18 +195,21 @@ export function ApprovalCard({
   const waiting = action.status === "awaiting_review" && expiresAt > Date.now();
   const needsCode =
     action.kind === "browser.signin" && action.data.step === "code" && !action.data.savedCode;
-  const approve = async () => {
+  const decide = async (decision: "approve" | "deny") => {
     setBusy(true);
     setError("");
     try {
       const result = await api.request<ActionProposal>(`/api/actions/${action.id}/decide`, {
-        decision: "approve",
+        decision,
         hash: action.hash,
-        ...(needsCode ? { code } : {}),
+        ...(needsCode && decision === "approve" ? { code } : {}),
+        ...(restOfJob && decision === "approve" ? { restOfJob: true } : {}),
       });
       setCode("");
       setLocal(result);
       void refresh().catch(() => undefined);
+      // Its job's page says what it's doing now, not still "Waiting for your OK".
+      if (action.taskId) void refreshJobs().catch(() => undefined);
     } catch (e) {
       // Shown as it is now (changed, expired, done elsewhere), so the next tap is on what's shown.
       setLocal(undefined);
@@ -206,7 +222,7 @@ export function ApprovalCard({
     }
   };
   const seeDetails = () =>
-    onCall ? setDetails((open) => !open) : open({ type: "review", action });
+    onCall ? setDetails((open) => !open) : open({ type: "review", action, restOfJob });
   const done = action.status === "succeeded";
   const outcome = done
     ? action.result
@@ -258,7 +274,7 @@ export function ApprovalCard({
           action={action}
           code={code}
           onCode={waiting ? setCode : undefined}
-          onSubmit={() => !busy && void approve()}
+          onSubmit={() => !busy && void decide("approve")}
           onCall={onCall}
           style={{
             padding: 0,
@@ -290,6 +306,17 @@ export function ApprovalCard({
       >
         {waiting ? "" : outcome}
       </Text>
+      {waiting &&
+      action.kind === "app.action" &&
+      action.taskId &&
+      typeof action.data.amountUsd !== "number" ? (
+        <CheckRow
+          label={restOfJobLabel(String(action.data.app || ""))}
+          detail={REST_OF_JOB_DETAIL}
+          checked={restOfJob}
+          onPress={() => setRestOfJob((on) => !on)}
+        />
+      ) : null}
       {waiting ? (
         <View style={[s.row, { gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 4 }]}>
           {needsCode && !details ? (
@@ -308,7 +335,7 @@ export function ApprovalCard({
               busy={busy}
               disabled={needsCode && !codeReady(code)}
               accessibilityLabel={`${label}: ${action.title}`}
-              onPress={() => void approve()}
+              onPress={() => void decide("approve")}
             >
               {label}
             </Button>
@@ -329,6 +356,25 @@ export function ApprovalCard({
               {onCall && details ? "Hide details" : "See details"}
             </Text>
           </Pressable>
+          {/* Saying no without opening the details, where a job waits on the answer. */}
+          {wide && !onCall ? (
+            <Pressable
+              role="button"
+              aria-label={`Don’t proceed: ${action.title}`}
+              disabled={busy}
+              onPress={() => void decide("deny")}
+              style={({ pressed }) => ({
+                minHeight: 44,
+                justifyContent: "center",
+                paddingHorizontal: 10,
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <Text style={[s.text, { color: colors.mutedStrong, fontWeight: "600" }]}>
+                Don’t proceed
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : expired && !onCall && Date.now() - expiresAt < 86_400_000 ? (
         <Button

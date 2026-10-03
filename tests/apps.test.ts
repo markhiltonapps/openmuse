@@ -698,7 +698,7 @@ test("actions the person always allows run straight away; purchases and deletes 
     summary: "Add the dentist to the calendar",
   });
   assert.equal(created.status, "done");
-  assert.match(String(created.message), /always allows Googlecalendar actions/);
+  assert.match(String(created.message), /the person allowed Googlecalendar actions/);
   const removed = await run({
     tool: "GOOGLECALENDAR_DELETE_EVENT",
     arguments: { id: "e1" },

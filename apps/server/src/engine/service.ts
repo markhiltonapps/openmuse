@@ -72,6 +72,7 @@ import type { WeatherService } from "../weather.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
+import { rememberStep } from "./job-steps.ts";
 import { executeModelTask } from "./model.ts";
 import { nextRun, routinePrompt } from "./routines.ts";
 import { complete } from "./tanstack-agent.ts";
@@ -289,7 +290,15 @@ export class AgentService {
       artifacts: (await this.db.list<AgentArtifact>(owner, "agent-artifacts")).filter(
         (a) => a.taskId === id,
       ),
+      /** Apps it may run steps in without asking, from "the rest of this job" on an approval. */
+      allowedApps: await this.actions.jobAllowances(owner, id),
     };
+  }
+  /** The job asks again before each step in other apps. */
+  async askEachTime(owner: string, id: string) {
+    await this.getTask(owner, id);
+    await this.actions.stopJobAllowances(owner, id);
+    return { allowedApps: [] as string[] };
   }
   async createTask(owner: string, raw: unknown, idempotencyKey?: string, held = false) {
     const input = createTaskSchema.parse(raw);
@@ -1302,7 +1311,24 @@ export class AgentService {
         if (task.kind === "document")
           return this.finish(task, context, action.result ?? "Reply completed");
         task = await context.checkpoint({
-          state: { ...task.state, approvalResult: action.result },
+          state: {
+            ...(action.kind === "app.action"
+              ? rememberStep(task.state, {
+                  app: String(action.data.app),
+                  tool: String(action.data.tool),
+                  title: action.title,
+                  args: action.data.arguments,
+                  result: action.result,
+                })
+              : rememberStep(task.state, {
+                  app: action.kind,
+                  tool: action.kind,
+                  title: action.title,
+                  args: action.data,
+                  result: action.result,
+                })),
+            approvalResult: action.result,
+          },
           actionId: null,
         });
       } else if (action.status !== "awaiting_review" && action.status !== "executing")
@@ -1450,10 +1476,14 @@ export class AgentService {
       )
         email("question");
     } else if (task.status === "waiting_approval") {
+      // The pop-up names the job; its second line names the step waiting for their OK.
+      const action = task.actionId
+        ? await this.db.get<ActionProposal>(owner, "actions", task.actionId)
+        : undefined;
       await this.notify(
         owner,
         "Ready for your review",
-        task.title,
+        action?.title || task.title,
         task.id,
         `review:${task.actionId}`,
       );

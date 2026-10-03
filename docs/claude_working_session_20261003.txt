@@ -1,0 +1,125 @@
+Claude working session — 2026-10-03
+====================================
+
+An Idea that asked for the same OK four times
+- Report: the owner tapped an Idea ("organize your glasses vendor pipeline (YuanFeng Tech, Solos,
+  AIAF) into a tracker"). Every approval took three screens (the "Needs you" pop-up's Open, the
+  job page's "Review action", then "One last look" scrolled to Approve), and the job asked for the
+  same "Create a Google Drive spreadsheet" step four times (approved at 10:17, 10:19, 10:19 and
+  10:20 UTC, with one question at 10:18). It then ended by asking to connect Google Sheets, but
+  saved that as a finished "report"; its "Explore full result" did nothing.
+- Causes:
+  - A job starts its work again after each approval, with only `approvalResult` in its saved
+    state. The model wrote the spreadsheet again with slightly different contents, and the
+    repeat check keyed on the whole step, including the agent's own summary, so each rewrite
+    was a new review. Up to four copies of the spreadsheet may be in the owner's Google Drive.
+  - finish_task accepted "I need you to connect Google Sheets first: <link>" as the job's result.
+  - The report card's "Explore full result" only expands rows; this report had none. Its summary
+    was plain text, so the markdown link showed as **…** and couldn't be tapped.
+  - Approved steps' outcomes weren't logged, so the logs couldn't say whether they failed.
+- Owner's choices (asked): the approvals were the same each time; approve on the job page; one OK
+  per job ("Also allow the rest of this job in <app>").
+- Fixed (before the design review):
+  - engine/job-steps.ts: a job's `done` list (app, tool, title, result) of steps it has done; a
+    step is the same when its app, tool and short arguments match (long text and the summary
+    don't count). A repeat returns the earlier result without a review. The job prompt says to
+    carry on from `done`. Recorded on resume after an approval, when a step was allowed without
+    asking, and when the same review had already run.
+  - The review key for app steps (jobs and chat) is app + tool + arguments, never the summary.
+  - finish_task and a run's last words: asking to connect an app first (a Composio link, or
+    "connect … first") is a question: the job waits, the link is clickable.
+  - Server log: "Approved step ran: <tool> (<app>)" or "Approved step failed: … <reason>".
+  - One OK per job: the Approve card (job page, Activity, chat) and the review sheet offer "Also
+    allow the rest of this job in Google Drive (deleting, cancelling and paying still ask)". The
+    server keeps it per job (`job-allowances`); that job's later steps in that app go ahead
+    without asking, except destructive ones; purchases always ask.
+  - Job page: the chat's Approve card replaces "Ready for your review / Review action", so it's
+    pop-up Open → Approve (2 taps).
+  - Report card: the summary renders as the agent wrote it (links work); "Explore full result"
+    shows only when there's more.
+  - App names: Google Drive, Google Sheets, Gmail, OneDrive… instead of "Googledrive"; the
+    review sheet says "Always allow “Create file from text” in Google Drive" instead of the
+    raw slug.
+  - Help: "approvals" (the job page, "Also allow the rest of this job") and "always-allowed".
+  - Tests: tests/job-steps.test.ts (4): same step despite new contents; key without summary;
+    connect-first is a question; the rest-of-job allowance is per job and app and needs the
+    right hash.
+- Browser check (scratchpad approve/review.mjs, 416 light and 390 dark): pop-up Open → job page
+  with Approve & run and the checkbox; Approve sends restOfJob: true; the report's link is
+  clickable and has no Explore button; no page errors.
+- Checks: Biome clean, typecheck root/app/worker, 485 tests pass.
+- Told the owner how to get the tracker now: ask in the chat for a spreadsheet saved in Files
+  (no Google needed), or connect Google Sheets and ask again; and check Drive for copies of
+  "Wearable Glasses Vendor Pipeline".
+
+Design review (Design division)
+- Round 1:
+  - Copy: 1 MUST, 3 SHOULD, 4 NICE, all applied. The checkbox now reads "Let this job do its
+    other Google Drive steps without asking", with the detail line "Deleting, cancelling and
+    paying still ask."
+  - Visual: 1 MUST, applied (the checkbox's edge colour, 1.5px). Also applied: the SHOULDs (detail
+    line, alignment) and the NICEs (a radio group in See details, the job list refreshes after
+    Approve, no repeated title on the report sheet, no "mime type"/ids in the card's summary).
+  - Usability: signed off, with 7 SHOULDs and 2 NICEs, all applied:
+    - Plainer checkbox wording.
+    - A Don't proceed button on the job page's card.
+    - Space toggles a checkbox.
+    - The tick carries into See details.
+    - A job asking to connect an app gets "Connect <app>" (opens the sign-in link during the tap)
+      and "I've connected it, carry on" (one tap), with the answer box under "Or tell it
+      something else:".
+    - While a job may go ahead without asking, its page says so, with "Ask me each time" (new
+      POST /api/agent/tasks/:id/ask-each-time clears it).
+    - Old reports that only asked to connect show "This job didn't finish" and what to do.
+    - The "Ready for your review" pop-up's second line names the step.
+    - More Help search words: keeps asking, asks again, every time, stop asking.
+- Shared helpers: asksToConnect, connectLink and appToConnect moved to
+  packages/domain/src/app-names.ts, so the server (job-words) and the app read the same words.
+- Help: approvals (new label, where Don't proceed is, Ask me each time), always-allowed,
+  job-answers (Approve on the card; Connect + carry on).
+- Tests: job-steps tests now also cover the connect link and app name, and that Ask me each time
+  clears the allowance. tests/apps.test.ts expects the new "the person allowed …" wording.
+- Browser checks (scratchpad approve/review.mjs and approve/connect.mjs, 416 light and 390 dark):
+  - Approve with the tick sends restOfJob: true.
+  - Connect opens the sign-in link, and carry on sends "I've connected it. Carry on."
+  - Ask me each time posts and removes the card, and the status line announces it.
+  - No page errors.
+- Checks: Biome clean, typecheck root/app/worker, 485 tests pass.
+- Round 2:
+  - Copy: SIGN-OFF, with 1 SHOULD and 4 NICEs, all applied:
+    - The connect job page no longer repeats the agent's message and raw link; its heading
+      reads "<agent> needs Google Sheets connected to carry on".
+    - "No, ask me each time" is the first radio in See details.
+    - "Don't ask again for the next hour".
+    - Long text is left out of the card's summary.
+    - The sample review sheet says "This is a sample, so nothing is really sent."
+  - Usability: 1 MUST (Ask me each time was 38px; now 44) and 2 SHOULDs, applied:
+    - Connect gets a fresh sign-in link from POST /api/apps/connect, in a tab opened during the
+      tap. The job's own link may have expired while it waited, so it's only the fallback. If
+      the app is already connected, the job just carries on.
+    - After Ask me each time, the card stays and says "It will ask you before each step again."
+  - Visual: 1 MUST (a long sign-in link ran past its card; links now wrap on the web) and 2
+    SHOULDs, applied: Ask me each time is a small left-aligned button; the job sheet keeps one
+    height (`fill`).
+  - Checked in the browser at 416 light and 360 dark (a 60-character link wraps).
+  - Checks: Biome, typechecks and 485 tests pass.
+- Round 3: visual and usability SIGN-OFF (copy signed off in round 2). Committed locally.
+- Help screenshots: none retaken. The "approve" shot is a call's Approve card for a step outside
+  a job, which hasn't changed.
+
+Known issues
+- "Ask me each time" can't be done by voice yet; it belongs to the pending slice for running jobs
+  from the chat and calls, which has no job-control tools yet. Approving by voice already shows
+  the same Approve card, tick included.
+- Links in a report's text are tappable text from the shared Markdown renderer, not <a> links
+  (as everywhere else in the app).
+
+Pending
+- Reviewers' remaining NICEs (not done):
+  - A Connect button when the job names an app but gives no link ("connect Gmail first");
+    connectNow can already get a fresh link from the app's name.
+  - Dim the old text under "This job didn't finish", and mark it "Not finished" in Files.
+  - Give Don't proceed a line that says what happens next.
+  - On Railway, check that the "Ready for your review" pop-up's second line names the step.
+  - The job page's Stop button looks about 38px tall (older code); give it 44px in a separate pass.
+- Push on "push it" (check for a live call first). 732f38a (session notes) is also unpushed.

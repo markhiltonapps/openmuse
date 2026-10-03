@@ -847,8 +847,11 @@ export async function createApp(
         hash: z.string(),
         decision: z.enum(["approve", "deny"]),
         code: z.string().max(40).optional(),
+        restOfJob: z.boolean().optional(),
       })
       .parse(await c.req.json());
+    if (body.restOfJob && body.decision === "approve")
+      await actions.allowRestOfJob(c.get("owner"), c.req.param("id"), body.hash);
     return c.json(
       await actions.decide(c.get("owner"), c.req.param("id"), body.hash, body.decision, {
         ...(body.code ? { code: body.code } : {}),

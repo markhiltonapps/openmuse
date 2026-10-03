@@ -41,6 +41,12 @@ import type {
   Routine,
   RunEvent,
 } from "../../../packages/domain/src/agent";
+import {
+  appLabel,
+  appToConnect,
+  asksToConnect,
+  connectLink,
+} from "../../../packages/domain/src/app-names";
 import { AboutYou } from "./about-you-ui";
 import { AccountCard, PeopleCard } from "./account-ui";
 import { taskActivity } from "./activity";
@@ -56,6 +62,7 @@ import { AvatarPicker } from "./avatar-settings";
 import { BarChart, DataTable, Meter } from "./charts";
 import { LineChart } from "./charts-extra";
 import { ChatgptImport, YourDataCard } from "./data-ui";
+import { REST_OF_JOB_DETAIL } from "./details";
 import { Emoji, topicEmoji } from "./emoji";
 import { HealthSection } from "./health-ui";
 import { HelpCard } from "./help-ui";
@@ -69,7 +76,7 @@ import {
   WorkingCard,
 } from "./job-working-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
-import { OwnAppsCard } from "./own-apps";
+import { blankTab, OwnAppsCard, openPage } from "./own-apps";
 import { PeopleNotesCard } from "./people-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { PasswordsCard } from "./sign-in-ui";
@@ -682,6 +689,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     artifacts: AgentArtifact[];
     files: Artifact[];
     browsers: BrowserSession[];
+    allowedApps?: string[];
   }>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -691,6 +699,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
   const [fields, setFields] = useState<Record<string, string | boolean>>({});
   const [showDetails, setShowDetails] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [askingAgain, setAskingAgain] = useState(false);
   const task = data?.tasks.find((item) => item.id === taskId) || detail?.task;
   useEffect(() => {
     let active = true;
@@ -701,6 +710,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         artifacts: AgentArtifact[];
         files: Artifact[];
         browsers: BrowserSession[];
+        allowedApps?: string[];
       }>(`/api/agent/tasks/${taskId}`)
       .then((result) => {
         if (active) {
@@ -757,6 +767,42 @@ export function TaskDetail({ taskId }: { taskId: string }) {
       setError(errorText(e));
     }
   }
+  /**
+   * Connect the app the job asked for. A job can wait for days and its link may have expired, so
+   * a tab opened during the tap goes to a fresh sign-in page (the job's link if that fails). If the
+   * app is connected already, the job just carries on.
+   */
+  async function connectNow() {
+    const tab = blankTab();
+    setError("");
+    const slug = connectApp?.toLowerCase().replace(/[^a-z0-9]/g, "");
+    try {
+      if (slug) {
+        const result = await api.request<{ connected: boolean; url?: string }>(
+          "/api/apps/connect",
+          { app: slug },
+        );
+        if (result.connected) {
+          tab?.close();
+          await act("input", { answer: `${connectApp} is connected now. Carry on.`, fields: {} });
+          return;
+        }
+        if (result.url && openPage(result.url, tab)) return;
+      }
+    } catch {
+      // The job's own link below.
+    }
+    if (connectUrl && openPage(connectUrl, tab)) return;
+    tab?.close();
+    setError("Your browser blocked the sign-in page. Tap Connect again.");
+  }
+  /** Undo "the rest of this job" from an approval: it asks before each step again. */
+  async function askEachTime() {
+    if (!(await act("ask-each-time", {}))) return;
+    setDetail((current) => (current ? { ...current, allowedApps: [] } : current));
+    setAskingAgain(true);
+    setNews("It will ask you before each step again.");
+  }
   async function review() {
     setBusy(true);
     setError("");
@@ -782,10 +828,15 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           : "",
     )
     .filter(Boolean);
+  // A job that needs an app connected first: its sign-in link, and one tap to carry on after.
+  const asksConnect = asksToConnect(task?.question ?? "");
+  const connectUrl = connectLink(task?.question ?? "");
+  const connectApp = appToConnect(task?.question ?? "");
   const canPause =
     !!task &&
     ["queued", "running", "scheduled", "waiting_input", "waiting_approval"].includes(task.status);
   const canCancel = !!task && activeTask(task);
+  const allowedApps = detail?.allowedApps ?? [];
   const files = detail?.files ?? [];
   const handedOff = task?.input.handedOff === true;
   // When the job moves on (done, stopped, back to work), say so, and if the button that was
@@ -857,6 +908,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
       title={task?.title || "Job"}
       // A long request is clipped here; Details has it in full.
       titleLines={3}
+      // One height while the job moves on (cards come and go), so nothing drops under a thumb.
+      fill
       subtitle={
         // While it's under way the card says it all.
         !task
@@ -876,7 +929,11 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         <ActivityIndicator color={colors.blueDark} />
       ) : (
         <View style={{ gap: 20 }}>
-          {task.status === "waiting_approval" && (
+          {/* What it will do, with Approve right here: one tap from the pop-up's Open. */}
+          {task.status === "waiting_approval" && task.actionId ? (
+            <ApprovalCard actionId={task.actionId} wide />
+          ) : null}
+          {task.status === "waiting_approval" && !task.actionId && (
             <Card style={{ backgroundColor: colors.lavender, gap: 12 }}>
               <Text {...jobHeading} style={s.heading}>
                 Ready for your review
@@ -891,7 +948,12 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           )}
           {task.status === "waiting_input" && (
             <Card style={{ backgroundColor: colors.sky, gap: 10 }}>
-              {task.question && (task.question.length > 120 || task.question.includes("\n")) ? (
+              {connectUrl ? (
+                // The Connect button below does what the agent's link says; don't show both.
+                <Text {...jobHeading} style={s.heading}>
+                  {`${data?.identity.name || "Your agent"} needs ${connectApp || "an app"} connected to carry on`}
+                </Text>
+              ) : task.question && (task.question.length > 120 || task.question.includes("\n")) ? (
                 <>
                   {/* A longer message is the agent's own words, shown as it wrote them. */}
                   <Text {...jobHeading} style={s.heading}>
@@ -904,9 +966,36 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   {task.question || "A detail from you will help"}
                 </Text>
               )}
-              <Text style={[s.muted, { color: colors.mutedStrong }]}>
-                I’ll carry on once you answer.
-              </Text>
+              {asksConnect ? (
+                <>
+                  <Text style={[s.muted, { color: colors.mutedStrong }]}>
+                    {connectUrl
+                      ? "Sign in on the page that opens, then come back here."
+                      : "Connect it under Apps, then come back here."}
+                  </Text>
+                  {connectUrl && (
+                    <Button primary onPress={() => void connectNow()}>
+                      {`Connect ${connectApp || "the app"}`}
+                    </Button>
+                  )}
+                  <Button
+                    primary={!connectUrl}
+                    busy={busy}
+                    onPress={() =>
+                      void act("input", { answer: "I’ve connected it. Carry on.", fields: {} })
+                    }
+                  >
+                    I’ve connected it, carry on
+                  </Button>
+                  <Text style={[s.muted, { color: colors.mutedStrong }]}>
+                    Or tell it something else:
+                  </Text>
+                </>
+              ) : (
+                <Text style={[s.muted, { color: colors.mutedStrong }]}>
+                  I’ll carry on once you answer.
+                </Text>
+              )}
               {fieldNames.map((name) =>
                 missing.some(
                   (f) => typeof f === "object" && f && f.name === name && f.type === "checkbox",
@@ -965,7 +1054,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 </>
               )}
               <Button
-                primary
+                primary={!asksConnect}
                 busy={busy}
                 disabled={!answer.trim() && !Object.keys(fields).length && !fieldJson.trim()}
                 onPress={() => void submitInput()}
@@ -1037,6 +1126,27 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                   onConfirm={() => void act("control", { action: "cancel" })}
                 />
               </View>
+            </Card>
+          )}
+          {/* "The rest of this job" from an approval, below its status, while it can still matter,
+              with its undo (and, once undone, a line that says so). */}
+          {canCancel && (allowedApps.length > 0 || askingAgain) && (
+            <Card style={{ gap: 10 }}>
+              <Text style={s.text}>
+                {allowedApps.length
+                  ? `${allowedApps.map(appLabel).join(" and ")} steps in this job go ahead without asking. ${REST_OF_JOB_DETAIL}`
+                  : "It will ask you before each step again."}
+              </Text>
+              {allowedApps.length > 0 && (
+                <Button
+                  small
+                  busy={busy}
+                  style={{ minHeight: 44, alignSelf: "flex-start" }}
+                  onPress={() => void askEachTime()}
+                >
+                  Ask me each time
+                </Button>
+              )}
             </Card>
           )}
           {handedOff && ["queued", "running", "scheduled"].includes(task.status) && (
@@ -1214,20 +1324,36 @@ function display(value: unknown): string {
         ? "—"
         : JSON.stringify(value, null, 2) || "";
 }
-export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
+export function ArtifactCard({
+  artifact,
+  titled = true,
+}: {
+  artifact: AgentArtifact;
+  /** Off inside its own sheet, whose title already names it. */
+  titled?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   if (artifact.kind === "finance") return <FinanceArtifact artifact={artifact} />;
   // Where the agent looked is shown as links on the job, not as raw page text here.
   const rows = Object.entries(artifact.data).filter(([key]) => key !== "evidence");
   return (
     <Card style={{ gap: 13, backgroundColor: colors.card }}>
-      <View style={s.between}>
-        <Text style={s.heading}>{artifact.title}</Text>
-        <Chip>{statusLabel(artifact.kind)}</Chip>
-      </View>
-      <Text selectable style={s.muted}>
-        {artifact.summary}
-      </Text>
+      {titled ? (
+        <View style={s.between}>
+          <Text style={s.heading}>{artifact.title}</Text>
+          <Chip>{statusLabel(artifact.kind)}</Chip>
+        </View>
+      ) : null}
+      {/* Saved before jobs knew that asking to connect an app is a question, not the result. */}
+      {asksToConnect(artifact.summary) ? (
+        <View style={{ backgroundColor: colors.orange, borderRadius: 12, padding: 12, gap: 4 }}>
+          <Text style={[s.text, { fontWeight: "700" }]}>This job didn’t finish</Text>
+          <Text style={[s.text, { color: colors.mutedStrong }]}>
+            {`It stopped to ask you to connect ${appToConnect(artifact.summary) || "an app"}. Connect it under Apps, then ask for this again.`}
+          </Text>
+        </View>
+      ) : null}
+      <AssistantResponse content={artifact.summary} />
       {(expanded ? rows : rows.slice(0, 4)).map(([key, value]) => (
         <View key={key} style={{ gap: 6 }}>
           <Text style={s.label}>{key.replace(/_/g, " ")}</Text>
@@ -1269,9 +1395,12 @@ export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
           )}
         </View>
       ))}
-      <Button small onPress={() => setExpanded(!expanded)}>
-        {expanded ? "Show summary" : "Explore full result"}
-      </Button>
+      {/* Only when there's more than the summary shows. */}
+      {rows.length > 4 || rows.some(([, value]) => Array.isArray(value) && value.length > 5) ? (
+        <Button small style={{ minHeight: 44 }} onPress={() => setExpanded(!expanded)}>
+          {expanded ? "Show summary" : "Explore full result"}
+        </Button>
+      ) : null}
     </Card>
   );
 }

@@ -44,6 +44,9 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       .parse(await c.req.json());
     return c.json(await service.control(c.get("owner"), c.req.param("id"), action));
   });
+  app.post("/tasks/:id/ask-each-time", async (c) =>
+    c.json(await service.askEachTime(c.get("owner"), c.req.param("id"))),
+  );
   app.post("/tasks/:id/input", async (c) => {
     const body = z
       .object({

@@ -20,7 +20,7 @@ export type Detail =
   | { type: "file"; file: Artifact }
   | { type: "appEmail"; email: EmailItem }
   | { type: "browser"; browser: BrowserSession }
-  | { type: "review"; action: ActionProposal }
+  | { type: "review"; action: ActionProposal; restOfJob?: boolean }
   | { type: "task"; taskId: string }
   /** Delegate task; `prompt` arrives filled in (from a ?delegate= link), as a General task. */
   | { type: "delegate"; prompt?: string }

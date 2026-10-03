@@ -167,6 +167,17 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   `repairToolSteps` (engine/tanstack-agent.ts) fixes cut-off steps anywhere in the history before
   each model call. Failed replies are logged as "A chat reply failed: …"; the app keeps the
   first real error, not the "Cannot send event type…" bookkeeping error that follows it.
+- **A job starts again after each approval:** it keeps only its saved state, so it must be told
+  what it has done (`done` in engine/job-steps.ts) and a repeat must be caught by what the step
+  does (app + tool + short arguments), never by the agent's own summary or long text it rewrites
+  each time. One Idea once asked four times for the same Google Drive spreadsheet.
+- **Checkboxes and choices:** a checkbox's box needs the `edge` colour (1.5px) to be seen on a
+  card, and Space must toggle it (`onKeyDown`; RN-web's Pressable passes it on). When only one of
+  several options can be chosen, use `CheckRow`'s `radio` (a round box, `role="radio"` inside a
+  `radiogroup`), not a column of checkboxes.
+- **"Connect it first" is a question:** `asksToConnect`/`connectLink`/`appToConnect`
+  (packages/domain/src/app-names.ts) are shared by the server and the app, so a job asking for a
+  connection waits for an answer and its page offers Connect plus a one-tap "carry on".
 - **How a job's run ends:** the model may stop without finish_task. Only its text after the last
   tool call is its answer or question (earlier text is commentary); `readLastWords` in
   `engine/job-words.ts` decides which. Never show the whole run's text to the person.

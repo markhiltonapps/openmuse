@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Linking, Text, type TextStyle, View } from "react-native";
+import { Linking, Platform, Text, type TextStyle, View } from "react-native";
 import Markdown, {
   renderRules as defaultRules,
   type MarkdownStyles,
@@ -23,7 +23,12 @@ const style: Partial<MarkdownStyles> = {
   heading1: { fontSize: 21, lineHeight: 27 },
   heading2: { fontSize: 19, lineHeight: 25 },
   heading3: { fontSize: 17, lineHeight: 23 },
-  link: { color: colors.blueText, textDecorationLine: "underline" },
+  // A long link (a sign-in address) wraps inside its card instead of running past it (web).
+  link: {
+    color: colors.blueText,
+    textDecorationLine: "underline",
+    ...(Platform.OS === "web" ? ({ wordBreak: "break-word" } as TextStyle) : null),
+  },
   codeInline: { backgroundColor: colors.subtle, color: colors.text },
   codeBlock: { backgroundColor: colors.subtle, color: colors.text },
 };

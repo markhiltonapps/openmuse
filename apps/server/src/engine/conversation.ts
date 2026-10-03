@@ -517,7 +517,8 @@ export class ConversationAgent extends AbstractAgent {
               this.service.actions.propose(
                 this.owner,
                 { kind: "app.action", data },
-                key("app", data),
+                // The same step however it's summed up: app, tool and arguments only.
+                key("app", { app: data.app, tool: data.tool, arguments: data.arguments }),
               ),
             this.service.spending,
             this.service.approvals && {

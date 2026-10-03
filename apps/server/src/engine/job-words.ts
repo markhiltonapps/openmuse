@@ -4,6 +4,8 @@
  * ends without finish_task or ask_user.
  */
 
+import { asksToConnect } from "../../../../packages/domain/src/app-names.ts";
+
 /** "amazon.com" from "https://www.amazon.com/s?k=…". */
 export function siteOf(url: string) {
   try {
@@ -109,6 +111,7 @@ export function nowDoing(
  * tool call) are a question for the person, the answer itself, or a stop part-way ("Let me check
  * the price:"), which isn't worth showing.
  */
+
 export function readLastWords(words: string): {
   kind: "question" | "answer" | "stopped";
   text: string;
@@ -124,6 +127,7 @@ export function readLastWords(words: string): {
   )
     text = first.slice(1).join("\n\n").trim();
   if (!text) return { kind: "stopped", text };
+  if (asksToConnect(text)) return { kind: "question", text };
   const paragraphs = text.split(/\n\s*\n/);
   const end = paragraphs.at(-1)?.trim() ?? "";
   // A question mark in the last paragraph (not in a link's address) asks the person something,
