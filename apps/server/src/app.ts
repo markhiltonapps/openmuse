@@ -56,6 +56,7 @@ import {
   recentHistory,
 } from "./memory-import.ts";
 import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.ts";
+import { ModelChoices, SERVER_MODEL } from "./model-choices.ts";
 import { monitorChecks } from "./monitor-history.ts";
 import { PastChats } from "./past-chats.ts";
 import { PushService } from "./push.ts";
@@ -209,6 +210,29 @@ export async function createApp(
       : undefined;
   const usage = new UsageMeter(db);
   agent.usage = usage;
+  // Today and the last 7 days are counted in each person's own time zone.
+  usage.zoneOf = (owner) => agent.timeZone(owner);
+  // Which model does which job: the admin's Models card, else the picks, else MODEL/WORKER_MODEL.
+  const models = await new ModelChoices(db, config, {
+    onPrice: (model, price) => usage.addPrice(model, price),
+  }).load();
+  agent.models = models;
+  /** Everyone's AI costs together: today, the last 7 days and all time (the admin's view). */
+  const everyoneCosts = async () => {
+    const ids = new Set([ADMIN_OWNER, ...(await accounts.list()).map((account) => account.id)]);
+    const all = await Promise.all([...ids].map((id) => usage.periods(id)));
+    const sum = (key: "today" | "week" | "all") =>
+      all.reduce(
+        (total, periods) => ({
+          cost: total.cost + periods[key].cost,
+          calls: total.calls + periods[key].calls,
+          tokens: total.tokens + periods[key].tokens,
+        }),
+        { cost: 0, calls: 0, tokens: 0 },
+      );
+    return { today: sum("today"), week: sum("week"), all: sum("all") };
+  };
+  agent.everyoneCosts = everyoneCosts;
   if (claude)
     agent.look = (image, question, owner) =>
       lookAtImage(image, question, {
@@ -707,8 +731,57 @@ export async function createApp(
     return c.json({
       ...(await usage.month(owner, month)),
       history: await usage.history(owner),
-      models: { chat: config.model, background: config.workerModel ?? config.model },
+      periods: await usage.periods(owner),
+      models: {
+        chat: agent.modelFor("chat").model,
+        background: agent.modelFor("background").model,
+        simple: agent.modelFor("simple").model,
+      },
     });
+  });
+  // The Models card (admin): which model does which job.
+  // (everyoneCosts is defined with the usage meter, for this route and the chat's ai_costs.)
+  app.get("/api/models", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can choose the AI models", 403);
+    return c.json(models.view());
+  });
+  app.post("/api/models", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can choose the AI models", 403);
+    const body = z
+      .union([
+        z.object({
+          job: z.enum(["chat", "background", "simple"]),
+          // null: back to the recommended pick.
+          choice: z
+            .object({
+              model: z.string().trim().min(1).max(200),
+              effort: z.enum(["low", "medium", "high"]).optional(),
+            })
+            .nullable(),
+        }),
+        // Every job at once: back on Claude, or on the recommended picks.
+        z.object({ all: z.enum(["claude", "recommended"]) }),
+      ])
+      .parse(await c.req.json());
+    if ("all" in body) return c.json(await models.saveAll(body.all));
+    const model = body.choice?.model;
+    const choice = body.choice
+      ? {
+          ...body.choice,
+          // "openai/gpt-6.1-sol" as typed, or "openrouter/openai/gpt-6.1-sol".
+          model:
+            model === SERVER_MODEL || /^openrouter\//i.test(model ?? "")
+              ? (model as string)
+              : `openrouter/${model}`,
+        }
+      : null;
+    try {
+      return c.json(await models.save(body.job, choice));
+    } catch (error) {
+      throw new AppError(error instanceof Error ? error.message : String(error), 400);
+    }
   });
   app.get("/api/usage/people", async (c) => {
     if (!(await accounts.isAdmin(c.get("owner"))))
@@ -736,7 +809,8 @@ export async function createApp(
     return c.json({
       month: rows[0]?.month,
       people: rows.filter((row) => row.calls > 0 || row.id !== ADMIN_OWNER),
-      cost: rows.reduce((sum, row) => sum + row.cost, 0),
+      cost: rows.reduce((total, row) => total + row.cost, 0),
+      periods: await everyoneCosts(),
     });
   });
   app.get("/api/accounts", async (c) => {

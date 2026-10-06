@@ -33,6 +33,8 @@ export type UsageKind =
 export interface Price {
   input: number;
   output: number;
+  /** Input read from the cache, when it isn't a tenth of `input`. */
+  cacheRead?: number;
 }
 /**
  * List prices in US dollars per million tokens, matched on the start of the model name.
@@ -48,6 +50,9 @@ export const PRICES: Record<string, Price> = {
   "gpt-5.6-luna": { input: 0.2, output: 1.2 },
   "gemini-3.1-pro": { input: 2, output: 12 },
   "gemini-3.7-flash": { input: 0.75, output: 3.75 },
+  // On OpenRouter (openrouter.ai/api/v1/models, 2026-10-06).
+  "gpt-6.1-sol": { input: 2, output: 10, cacheRead: 0.1 },
+  "deepseek-v4.1-flash": { input: 0.0395, output: 1.2, cacheRead: 0.015 },
 };
 /** Anthropic's server-side web search: $10 per 1,000 searches. */
 const SEARCH_PRICE = 0.01;
@@ -76,10 +81,11 @@ export function parsePrices(value = process.env.MODEL_PRICES ?? ""): Record<stri
   return prices;
 }
 
-/** "anthropic/claude-sonnet-5" → "claude-sonnet-5". */
+/** "anthropic/claude-sonnet-5" → "claude-sonnet-5"; "openrouter/openai/gpt-6.1-sol" → "gpt-6.1-sol". */
 export function modelName(model: string) {
   return model
     .trim()
+    .replace(/^openrouter[/:]/i, "")
     .replace(/^[^/:]*[/:]/, "")
     .toLowerCase();
 }
@@ -103,7 +109,7 @@ export function costOf(model: string, tokens: Tokens, prices: Record<string, Pri
   const write = provider(modelName(model)) === "anthropic" ? 1.25 : 1;
   return (
     (tokens.input * price.input +
-      tokens.cacheRead * price.input * 0.1 +
+      tokens.cacheRead * (price.cacheRead ?? price.input * 0.1) +
       tokens.cacheWrite * price.input * write +
       tokens.output * price.output) /
       1_000_000 +
@@ -141,7 +147,10 @@ export function fromTanstack(
 ): Tokens {
   const cacheRead = usage.promptTokensDetails?.cachedTokens ?? 0;
   const cacheWrite = usage.promptTokensDetails?.cacheWriteTokens ?? 0;
-  const claude = provider(modelName(model)) === "anthropic";
+  // Claude counts cache reads apart from prompt tokens; OpenAI-style usage (OpenRouter too)
+  // includes them.
+  const claude =
+    !/^openrouter[/:]/i.test(model.trim()) && provider(modelName(model)) === "anthropic";
   const details = usage.providerUsageDetails as
     | { serverToolUse?: { webSearchRequests?: number } }
     | undefined;
@@ -167,6 +176,24 @@ interface UsageMonth {
   lines: UsageLine[];
   updatedAt: string;
 }
+/** One day's usage, in the person's own time zone: "2026-10-06". */
+type UsageDay = UsageMonth;
+/** Totals for a stretch of time. */
+export interface UsageTotals {
+  cost: number;
+  calls: number;
+  /** Tokens read and written. */
+  tokens: number;
+}
+const DAY = 86_400_000;
+/** The person's calendar day, never UTC's. */
+const localDay = (at: Date, timeZone: string) => {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone }).format(at);
+  } catch {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(at);
+  }
+};
 const TOKEN_KEYS = ["input", "cacheRead", "cacheWrite", "output", "searches"] as const;
 
 /**
@@ -175,6 +202,8 @@ const TOKEN_KEYS = ["input", "cacheRead", "cacheWrite", "output", "searches"] as
  */
 export class UsageMeter {
   private readonly queues = new Map<string, Promise<void>>();
+  /** The person's time zone, for Today and the last 7 days; UTC when unset. */
+  zoneOf?: (owner: string) => Promise<string>;
   constructor(
     private readonly db: Store,
     private readonly prices: Record<string, Price> = { ...PRICES, ...parsePrices() },
@@ -184,6 +213,11 @@ export class UsageMeter {
       ...parseMinutePrices(),
     },
   ) {}
+  /** A model's price from OpenRouter, unless a list price or MODEL_PRICES already has it. */
+  addPrice(model: string, price: Price) {
+    const name = modelName(model);
+    if (!Object.keys(this.prices).some((key) => name.startsWith(key))) this.prices[name] = price;
+  }
   /** What a line cost: live voice by the minute, models by the token. */
   private lineCost(line: UsageLine) {
     if (line.seconds === undefined) return costOf(line.model, line, this.prices);
@@ -200,6 +234,11 @@ export class UsageMeter {
   }
   /** Adds one call; calls for one person are saved one at a time so none are lost. */
   record(owner: string, kind: UsageKind, model: string, tokens: Tokens): Promise<void> {
+    // One line per model call in the logs: what it was for, what it read and wrote, and its cost.
+    const cost = this.cost(model, tokens);
+    console.log(
+      `[OpenMuse] Model call: ${kind} · ${modelName(model)} · read ${tokens.input + tokens.cacheRead + tokens.cacheWrite} (${tokens.cacheRead} cached) · wrote ${tokens.output}${tokens.searches ? ` · ${tokens.searches} searches` : ""} · ${cost === undefined ? "price unknown" : `$${cost.toFixed(4)}`}`,
+    );
     return this.update(owner, kind, model, (line) => {
       line.calls++;
       for (const key of TOKEN_KEYS) line[key] += Math.max(0, Math.round(tokens[key] || 0));
@@ -214,29 +253,37 @@ export class UsageMeter {
     const name = modelName(model);
     const month = this.now().toISOString().slice(0, 7);
     const previous = this.queues.get(owner) ?? Promise.resolve();
+    const at = this.now();
     const next = previous.then(async () => {
-      const current = (await this.db.get<UsageMonth>(owner, "usage", month)) ?? {
-        id: month,
-        lines: [],
-        updatedAt: "",
-      };
-      let line = current.lines.find((l) => l.kind === kind && l.model === name);
-      if (!line) {
-        line = {
-          kind,
-          model: name,
-          calls: 0,
-          input: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          output: 0,
-          searches: 0,
+      const day = localDay(at, (await this.zoneOf?.(owner).catch(() => "UTC")) ?? "UTC");
+      // The month (kept since the start) and the day (for Today and the last 7 days).
+      for (const [collection, id] of [
+        ["usage", month],
+        ["usage-days", day],
+      ] as const) {
+        const current = (await this.db.get<UsageMonth>(owner, collection, id)) ?? {
+          id,
+          lines: [],
+          updatedAt: "",
         };
-        current.lines.push(line);
+        let line = current.lines.find((l) => l.kind === kind && l.model === name);
+        if (!line) {
+          line = {
+            kind,
+            model: name,
+            calls: 0,
+            input: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            output: 0,
+            searches: 0,
+          };
+          current.lines.push(line);
+        }
+        change(line);
+        current.updatedAt = at.toISOString();
+        await this.db.put(owner, collection, current);
       }
-      change(line);
-      current.updatedAt = this.now().toISOString();
-      await this.db.put(owner, "usage", current);
     });
     const settled = next.catch((error: unknown) => {
       console.warn(
@@ -273,6 +320,37 @@ export class UsageMeter {
       /** Models without a price, whose cost is left out. */
       unpriced: [...new Set(lines.filter((l) => l.cost === undefined).map((l) => l.model))],
       lines: lines.sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0)),
+    };
+  }
+  private totals(lines: UsageLine[]): UsageTotals {
+    return {
+      cost: lines.reduce((sum, line) => sum + (this.lineCost(line) ?? 0), 0),
+      calls: lines.reduce((sum, line) => sum + line.calls, 0),
+      tokens: lines.reduce(
+        (sum, line) => sum + line.input + line.cacheRead + line.cacheWrite + line.output,
+        0,
+      ),
+    };
+  }
+  /**
+   * Today, the last 7 days (today and the six before, in the person's time zone) and all time.
+   * Days are kept from 2026-10-06; `since` is the first day counted, so a shorter stretch can say
+   * so. All time adds up every month since the start.
+   */
+  async periods(owner: string) {
+    const zone = (await this.zoneOf?.(owner).catch(() => "UTC")) ?? "UTC";
+    const at = this.now();
+    const week = Array.from({ length: 7 }, (_, i) =>
+      localDay(new Date(at.getTime() - i * DAY), zone),
+    );
+    const days = await this.db.list<UsageDay>(owner, "usage-days");
+    const months = await this.db.list<UsageMonth>(owner, "usage");
+    const inWeek = days.filter((day) => week.includes(day.id));
+    return {
+      today: this.totals(days.find((day) => day.id === week[0])?.lines ?? []),
+      week: this.totals(inWeek.flatMap((day) => day.lines)),
+      all: this.totals(months.flatMap((month) => month.lines)),
+      since: days.map((day) => day.id).sort()[0] ?? week[0],
     };
   }
   /** Earlier months, newest first, with their totals. */

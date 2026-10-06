@@ -141,6 +141,7 @@ test("a background job works a website: reads it, downloads, and stops before pa
   } as unknown as AgentTask;
   const service = {
     config: { model: "anthropic/claude-haiku-4-5-20251001" },
+    modelFor: () => ({ model: "anthropic/claude-haiku-4-5-20251001" }),
     computer: {},
     files: {},
     browser,
@@ -213,6 +214,7 @@ test("a job that doesn't name the site asks which one, in the agent's own words"
   } as unknown as AgentTask;
   const service = {
     config: { model: "anthropic/claude-haiku-4-5-20251001" },
+    modelFor: () => ({ model: "anthropic/claude-haiku-4-5-20251001" }),
     computer: {},
     files: {},
     browser: {},

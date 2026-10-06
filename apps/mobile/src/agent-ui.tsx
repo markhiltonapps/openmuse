@@ -76,6 +76,7 @@ import {
   WorkingCard,
 } from "./job-working-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
+import { ModelsCard } from "./models-ui";
 import { blankTab, OwnAppsCard, openPage } from "./own-apps";
 import { PeopleNotesCard } from "./people-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
@@ -3147,6 +3148,7 @@ export function AppsScreen() {
         <>
           <SpendingCard />
           <UsageCard />
+          <ModelsCard />
         </>
       )}
       {tab === "account" && (

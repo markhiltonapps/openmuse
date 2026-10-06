@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
+import { modelLabel, USAGE_KINDS } from "../../../packages/domain/src/model-names";
 import { BarChart } from "./charts";
 import { Card, colors, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -16,6 +17,16 @@ interface UsageLine {
   seconds?: number;
   cost?: number;
 }
+interface Totals {
+  cost: number;
+  calls: number;
+  tokens: number;
+}
+interface Periods {
+  today: Totals;
+  week: Totals;
+  all: Totals;
+}
 interface Usage {
   month: string;
   cost: number;
@@ -23,7 +34,9 @@ interface Usage {
   unpriced: string[];
   lines: UsageLine[];
   history: { month: string; cost: number; calls: number }[];
-  models: { chat?: string; background?: string };
+  /** Today and the last 7 days are counted from `since` (the day this started). */
+  periods?: Periods & { since: string };
+  models: { chat?: string; background?: string; simple?: string };
 }
 interface PeopleUsage {
   people: {
@@ -35,21 +48,8 @@ interface PeopleUsage {
     voiceMinutes?: number;
   }[];
   cost: number;
+  periods?: Periods;
 }
-const KINDS: Record<string, string> = {
-  chat: "Chat",
-  background: "Background jobs and routines",
-  search: "Web searches",
-  feed: "Feed",
-  pictures: "Looking at pictures",
-  import: "Memory import",
-  avatar: "Avatar design",
-  ideas: "Ideas",
-  summary: "Summarizing long chats",
-  code: "Running code",
-  recipes: "Dinner recipes",
-  voice: "Live voice",
-};
 /** "under 1 min", "12 min", "1 hr", "1 hr 5 min". */
 const minutesLabel = (minutes: number) => {
   if (minutes < 1) return "under\u00a01\u00a0min";
@@ -59,8 +59,17 @@ const minutesLabel = (minutes: number) => {
   if (!hours) return `${total}\u00a0min`;
   return rest ? `${hours}\u00a0hr ${rest}\u00a0min` : `${hours}\u00a0hr`;
 };
+/** "$0.84", "$1,234.56", or "under $0.01". */
 const dollars = (value: number) =>
-  value > 0 && value < 0.01 ? "under $0.01" : `$${value.toFixed(2)}`;
+  value > 0 && value < 0.01
+    ? "under $0.01"
+    : `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** "about $0.84", or "under $0.01" (never "about under $0.01"). */
+const about = (value: number) =>
+  value > 0 && value < 0.01 ? "under $0.01" : `about ${dollars(value)}`;
+/** "63 AI calls" ("calls" alone would read as voice calls). */
+const aiCalls = (count: number) =>
+  `${count.toLocaleString()} ${count === 1 ? "AI call" : "AI calls"}`;
 const monthName = (month: string) =>
   new Date(`${month}-15T12:00:00Z`).toLocaleDateString(undefined, {
     month: "long",
@@ -89,11 +98,107 @@ function monthsTo(current: string, history: Usage["history"]) {
   });
 }
 const tokens = (value: number) =>
-  value >= 1_000_000
-    ? `${(value / 1_000_000).toFixed(1)}M`
-    : value >= 1000
-      ? `${Math.round(value / 1000)}K`
-      : String(value);
+  value >= 1_000_000_000
+    ? `${(value / 1_000_000_000).toFixed(1)}B`
+    : value >= 1_000_000
+      ? `${(value / 1_000_000).toFixed(1)}M`
+      : value >= 1000
+        ? `${Math.round(value / 1000)}K`
+        : String(value);
+/** The same, as a screen reader should say it: "412 thousand", "3.9 million". */
+const spokenTokens = (value: number) =>
+  value >= 1_000_000_000
+    ? `${(value / 1_000_000_000).toFixed(1)} billion`
+    : value >= 1_000_000
+      ? `${(value / 1_000_000).toFixed(1)} million`
+      : value >= 1000
+        ? `${Math.round(value / 1000)} thousand`
+        : String(value);
+
+/** Tile figures: the amount never shortens, so a long one gets a little smaller. */
+const tileDollars = (cost: number) => (cost > 0 && cost < 0.01 ? "<$0.01" : dollars(cost));
+const tileSize = (text: string) => (text.length >= 9 ? 16 : text.length >= 7 ? 18 : 20);
+const detail = [s.small, { color: colors.mutedStrong, fontSize: 12, lineHeight: 17 }];
+/**
+ * Today, the last 7 days and all time: three tiles side by side, or on a narrow card (a phone)
+ * one row each, so the amounts always have room.
+ */
+function PeriodTiles({ periods, label }: { periods: Periods; label: string }) {
+  const [width, setWidth] = useState(0);
+  const narrow = width > 0 && width < 420;
+  const tiles: [string, Totals][] = [
+    ["Today", periods.today],
+    ["Last 7 days", periods.week],
+    ["All time", periods.all],
+  ];
+  return (
+    <View
+      role="list"
+      aria-label={label}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={{ flexDirection: narrow ? "column" : "row", gap: 8 }}
+    >
+      {tiles.map(([name, totals]) => {
+        const value = tileDollars(totals.cost);
+        const figure = (
+          <Text style={[s.text, { fontWeight: "700", fontSize: narrow ? 18 : tileSize(value) }]}>
+            {value}
+          </Text>
+        );
+        return (
+          <View
+            key={name}
+            role="listitem"
+            aria-label={`${name}: ${about(totals.cost)}, ${spokenTokens(totals.tokens)} tokens, ${aiCalls(totals.calls)}`}
+            style={{
+              flex: narrow ? undefined : 1,
+              minWidth: 0,
+              gap: 2,
+              paddingVertical: 10,
+              paddingHorizontal: narrow ? 12 : 8,
+              borderRadius: 14,
+              backgroundColor: colors.subtle,
+            }}
+          >
+            {narrow ? (
+              <>
+                <View style={[s.row, { justifyContent: "space-between", gap: 8 }]}>
+                  <Text style={[s.text, { fontWeight: "600", flexShrink: 1 }]}>{name}</Text>
+                  {figure}
+                </View>
+                <Text style={detail}>
+                  {tokens(totals.tokens)} tokens · {aiCalls(totals.calls)}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={detail} numberOfLines={1}>
+                  {name}
+                </Text>
+                {figure}
+                {/* Detail lines wrap rather than clip, at big numbers or a large font. */}
+                <Text style={detail}>{tokens(totals.tokens)} tokens</Text>
+                <Text style={detail}>{aiCalls(totals.calls)}</Text>
+              </>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+/** "Oct 6". */
+const dayName = (day: string) =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+/** Today in the person's own calendar, as YYYY-MM-DD. */
+const localToday = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 
 /** What the agent's model calls cost this month, and for the admin, what each person costs. */
 export function UsageCard() {
@@ -110,6 +215,7 @@ export function UsageCard() {
       .then(setPeople, () => undefined);
   }, [api]);
   if (!usage) return null;
+  const everyone = people && people.people.length > 1 ? people : undefined;
   const byKind = new Map<
     string,
     { cost: number; calls: number; seconds: number; priced: boolean }
@@ -134,14 +240,32 @@ export function UsageCard() {
   return (
     <Card style={{ gap: 12 }}>
       <SectionHeading title="Usage" />
+      {usage.periods && (
+        <View style={{ gap: 10 }}>
+          {everyone && <Text style={[s.label, { color: colors.mutedStrong }]}>Just you</Text>}
+          <PeriodTiles periods={usage.periods} label="Your AI costs" />
+          {/* Days are counted from the day this started; all time goes back to the start. */}
+          {Date.parse(usage.periods.since) > Date.now() - 6 * 86_400_000 && (
+            <Text style={s.muted}>
+              {usage.periods.since === localToday()
+                ? "Day-by-day counting began today, so Today and Last 7 days only include use since then. All time includes everything."
+                : `Day-by-day counting began on ${dayName(usage.periods.since)}, so Today and Last 7 days only include use since then. All time includes everything.`}
+            </Text>
+          )}
+          <Text style={s.muted}>
+            Costs are estimates from each model’s published prices, so the AI provider’s actual bill
+            may differ a little.
+            {usage.unpriced.length ? ` No price yet for ${usage.unpriced.join(", ")}.` : ""}
+          </Text>
+        </View>
+      )}
       <Text style={s.text}>
-        {monthName(usage.month)}: about {dollars(usage.cost)} in AI costs, {usage.calls}{" "}
-        {usage.calls === 1 ? "model call" : "model calls"}.
+        {monthName(usage.month)}: {about(usage.cost)} in AI costs, {aiCalls(usage.calls)}.
       </Text>
       {[...byKind.entries()].map(([kind, entry]) => (
         <View key={kind} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
           <Text style={[s.muted, { flex: 1 }]}>
-            {KINDS[kind] ?? kind} ·{" "}
+            {USAGE_KINDS[kind] ?? kind} ·{" "}
             {kind === "voice" ? minutesLabel(entry.seconds / 60) : entry.calls}
           </Text>
           <Text style={s.muted}>{entry.priced ? dollars(entry.cost) : "price unknown"}</Text>
@@ -164,7 +288,7 @@ export function UsageCard() {
               name: monthName(m.month),
               value: m.cost,
               tip: m.calls
-                ? `${monthName(m.month)}: about ${dollars(m.cost)}, ${m.calls.toLocaleString()} ${m.calls === 1 ? "model call" : "model calls"}`
+                ? `${monthName(m.month)}: ${about(m.cost)}, ${aiCalls(m.calls)}`
                 : `${monthName(m.month)}: no AI use`,
               strong: m.month === usage.month,
             }))}
@@ -174,18 +298,28 @@ export function UsageCard() {
         </View>
       )}
       <Text style={s.muted}>
-        Chat uses {usage.models.chat ?? "no model"}
-        {usage.models.background && usage.models.background !== usage.models.chat
-          ? `; background work uses ${usage.models.background}`
-          : ""}
-        . Costs are estimates from list prices
-        {usage.unpriced.length ? ` (no price yet for ${usage.unpriced.join(", ")})` : ""}; your
-        provider's bill is the final word.
+        Chat uses {modelLabel(usage.models.chat) || "no model yet"}. Background jobs and routines
+        use {modelLabel(usage.models.background) || "no model yet"}. Simple jobs use{" "}
+        {modelLabel(usage.models.simple) || "no model yet"}.
       </Text>
-      {people && people.people.length > 1 && (
-        <View style={{ gap: 6 }}>
-          <Text style={s.text}>Everyone this month: about {dollars(people.cost)}</Text>
-          {people.people
+      {everyone && (
+        <View
+          style={{
+            gap: 10,
+            marginTop: 10,
+            paddingTop: 16,
+            borderTopWidth: 1,
+            borderTopColor: colors.line,
+          }}
+        >
+          <Text role="heading" aria-level={4} style={[s.label, { color: colors.mutedStrong }]}>
+            Everyone together
+          </Text>
+          {everyone.periods && (
+            <PeriodTiles periods={everyone.periods} label="Everyone’s AI costs together" />
+          )}
+          <Text style={s.text}>Everyone this month: {about(everyone.cost)}</Text>
+          {everyone.people
             .slice()
             .sort((a, b) => b.cost - a.cost)
             .map((person) => (

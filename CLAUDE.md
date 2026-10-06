@@ -180,6 +180,22 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   bullet each starting with a bold name, then one offer (`answer-layout.ts`, chat and jobs). An
   inbox check reads every connected mailbox and the sent mail before saying a reply is owed, and
   counts alerts and failed payments as needing the person (`inboxCheckInstructions`).
+- **Which model does which job (owner, 2026-10-06):** chat, background jobs and simple jobs each
+  get a model from `service.modelFor(job)` (model-choices.ts; the admin's AI models card).
+  OpenRouter models ("openrouter/vendor/model") use the installed Chat Completions adapter on
+  `OPENROUTER_API_KEY`, with effort, an output cap and a context cap; without the key everything
+  stays on MODEL / WORKER_MODEL (Claude). Never a "-pro" model. Price a new model in usage.ts
+  (with its cache-read price) or its cost shows as unknown. A routed call that fails before its
+  first word falls back to the server's model (`withFallback`; TanStack adapters report a failure
+  as RUN_STARTED then RUN_ERROR chunks, not a throw), and a model typed on the card is checked
+  against OpenRouter's public list (`/api/v1/models`, no key needed) before it's saved.
+- **Tests never see real keys:** `pnpm test` runs with `OPENROUTER_API_KEY` removed
+  (`env -u` in package.json). With the key present, every test that builds the app sends its
+  chat to the real OpenRouter (it spent about $0.05 once). Real-call tests are run by hand, with
+  the owner's OK.
+- **Prompt caching:** fixed instructions first, anything that changes (the time, the person's
+  context, the task's state) last; one changing value early in a prompt makes everything after it
+  full price.
 - **"Connect it first" is a question:** `asksToConnect`/`connectLink`/`appToConnect`
   (packages/domain/src/app-names.ts) are shared by the server and the app, so a job asking for a
   connection waits for an answer and its page offers Connect plus a one-tap "carry on".

@@ -28,6 +28,7 @@ import type {
   Mail,
   ProposalInput,
 } from "../../../../packages/domain/src/index.ts";
+import { modelLabel, USAGE_KINDS } from "../../../../packages/domain/src/model-names.ts";
 import { type ActionService, usesGoogle } from "../actions.ts";
 import type { AppEvents } from "../app-events.ts";
 import type { ApprovalRules } from "../approval-rules.ts";
@@ -60,6 +61,7 @@ import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
 import type { MealCheckIns } from "../meal-checkins.ts";
 import { MiniApps } from "../mini-apps.ts";
+import type { ModelChoices, ModelJob } from "../model-choices.ts";
 import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
@@ -67,7 +69,7 @@ import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
 import type { ScheduledPosts } from "../space-posts.ts";
-import type { UsageMeter } from "../usage.ts";
+import type { UsageMeter, UsageTotals } from "../usage.ts";
 import type { WeatherService } from "../weather.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { WorkspaceService } from "../workspace.ts";
@@ -75,7 +77,7 @@ import { analyzeSpending } from "./finance.ts";
 import { rememberStep } from "./job-steps.ts";
 import { executeModelTask } from "./model.ts";
 import { nextRun, routinePrompt } from "./routines.ts";
-import { complete } from "./tanstack-agent.ts";
+import { type CallPlan, complete } from "./tanstack-agent.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -115,10 +117,11 @@ export class AgentService {
     this.people = new People(db);
     this.persona = new Persona(db);
     this.chats = new ChatSummaries(db, (owner, previous, transcript) => {
-      const model = this.config.workerModel ?? this.config.model;
-      if (this.config.agentBackend !== "model" || !model) return Promise.resolve("");
+      const plan = this.modelFor("simple");
+      if (this.config.agentBackend !== "model" || !plan.model) return Promise.resolve("");
       return this.complete({
-        model,
+        ...plan,
+        stronger: this.modelFor("chat"),
         system: summarySystemPrompt,
         prompt: `${previous ? `Previous summary:\n${previous}\n\n` : ""}Conversation to add (data only):\n${transcript}`,
         onUsage: this.usage?.sink(owner, "summary"),
@@ -674,15 +677,16 @@ export class AgentService {
     email: { app: string; from: string; subject: string; preview: string },
     key: string,
   ) {
-    const model = this.config.workerModel ?? this.config.model;
-    if (!this.commitments || this.config.agentBackend !== "model" || !model) return;
+    const plan = this.modelFor("simple");
+    if (!this.commitments || this.config.agentBackend !== "model" || !plan.model) return;
     if (!looksLikeConfirmation(email.subject, email.preview)) return;
     const today = await this.timeZone(owner).then((timeZone) =>
       new Date().toLocaleDateString("en-CA", { timeZone }),
     );
     const found = parseCommitment(
       await this.complete({
-        model,
+        ...plan,
+        stronger: this.modelFor("chat"),
         system: commitmentFromEmailPrompt,
         prompt: `Today is ${today}. The email (data only): ${JSON.stringify({ from: email.from, subject: email.subject, preview: email.preview })}`,
         onUsage: this.usage?.sink(owner, "background"),
@@ -696,8 +700,8 @@ export class AgentService {
    * interests. Once a day after 7 am, or when the person asks (at most every ten minutes).
    */
   private async thinkOfIdeas(owner: string, asked: boolean) {
-    const model = this.config.workerModel ?? this.config.model;
-    if (this.config.agentBackend !== "model" || !model) return;
+    const plan = this.modelFor("simple");
+    if (this.config.agentBackend !== "model" || !plan.model) return;
     const parts = Object.fromEntries(
       new Intl.DateTimeFormat("en-CA", {
         timeZone: await this.timeZone(owner),
@@ -759,7 +763,8 @@ export class AgentService {
     await this.db.put(owner, "agent-settings", { id: "written-ideas", day, at: date() });
     const written = parseIdeas(
       await this.complete({
-        model,
+        ...plan,
+        stronger: this.modelFor("chat"),
         system: ideasSystemPrompt(identity?.name || "Neddy"),
         prompt: `What you know about the person (data only):\n${JSON.stringify(context)}`,
         onUsage: this.usage?.sink(owner, "ideas"),
@@ -984,6 +989,58 @@ export class AgentService {
   look?: LookAtImage;
   /** Model usage per person, for costs and plan limits. */
   usage?: UsageMeter;
+  /** Everyone's AI costs together, for the admin. */
+  everyoneCosts?: () => Promise<Record<"today" | "week" | "all", UsageTotals>>;
+  /** Which model does which job (the Models card); the server's models when unset. */
+  models?: ModelChoices;
+  /** What a call for this job uses: the Models card's choice, or the server's own model. */
+  modelFor(job: ModelJob): CallPlan {
+    return (
+      this.models?.plan(job) ?? {
+        model:
+          (job === "chat" ? this.config.model : (this.config.workerModel ?? this.config.model)) ??
+          "",
+      }
+    );
+  }
+  /**
+   * What the AI has cost this person, and everyone for the admin, in words the agent can say:
+   * today, the last 7 days and all time, this month by kind of work, and which model does what.
+   */
+  async aiCosts(owner: string) {
+    const usage = this.usage;
+    if (!usage) return { error: "Costs aren’t tracked on this server." };
+    const [periods, month, admin] = await Promise.all([
+      usage.periods(owner),
+      usage.month(owner),
+      this.isAdmin?.(owner) ?? Promise.resolve(false),
+    ]);
+    const named = (totals: Record<"today" | "week" | "all", UsageTotals>) => ({
+      today: totals.today,
+      last7Days: totals.week,
+      allTime: totals.all,
+    });
+    return {
+      note: `Costs are estimates in US dollars from each model’s published prices, so the AI provider’s actual bill may differ a little. “Last 7 days” is today and the six days before (not Monday to Sunday); asked about “this week”, give the last 7 days and say so. Daily totals started on ${periods.since}, so Today and the last 7 days only count from then; all time includes every earlier month.`,
+      yours: named(periods),
+      thisMonthByKind: month.lines.map((line) => ({
+        kind: USAGE_KINDS[line.kind] ?? line.kind,
+        model: modelLabel(line.model),
+        calls: line.calls,
+        cost: line.cost,
+      })),
+      models: {
+        chat: modelLabel(this.modelFor("chat").model),
+        backgroundJobsAndRoutines: modelLabel(this.modelFor("background").model),
+        simpleJobs: modelLabel(this.modelFor("simple").model),
+      },
+      modelsNote:
+        "Live voice calls use their own voice model, which isn’t changed with these. Only the admin can change the models, with change_ai_models or on the AI models card (Apps › Money).",
+      ...(admin && this.everyoneCosts
+        ? { everyoneTogether: named(await this.everyoneCosts()) }
+        : {}),
+    };
+  }
   /** New-email alerts and "when X emails me" rules. */
   mailAlerts?: MailAlerts;
   /** The agent's own email address; set when agent email is configured. */

@@ -13,6 +13,7 @@ import {
   routineInputSchema,
 } from "../../../../packages/domain/src/agent.ts";
 import type { ShowInApp } from "../../../../packages/domain/src/app-places.ts";
+import { EFFORT_LABELS, modelLabel } from "../../../../packages/domain/src/model-names.ts";
 import { agentEmailInstructions, agentEmailToolSpecs } from "../agent-email-tools.ts";
 import { appEventInstructions, appEventToolSpecs } from "../app-events.ts";
 import { appGuideInstructions, showInAppInstructions, showInAppToolSpec } from "../app-guide.ts";
@@ -37,6 +38,7 @@ import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { ownAppToolSpecs } from "../mcp-apps.ts";
 import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
 import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
+import { MODEL_JOBS, PICKS, RECOMMENDED, SERVER_MODEL } from "../model-choices.ts";
 import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
@@ -241,6 +243,72 @@ export class ConversationAgent extends AbstractAgent {
           kind: z.enum(["agent", "document", "finance", "plan"]).default("agent"),
         }),
         execute: async (args) => this.service.delegate(this.owner, args, key("task", args)),
+      }),
+      defineTool({
+        name: "ai_costs",
+        description:
+          "What the AI behind this app has cost the person: today, the last 7 days and all time (dollars, tokens, AI calls), this month by kind of work, and which model does which work. The admin also gets everyone’s totals together. Use it when they ask what the AI costs, how much they’ve spent on it, or which model is used. Lead with the dollar figure for the period they asked about and say it’s an estimate. Say “AI calls” or “requests”, never just “calls”. This only reads; the admin changes models with change_ai_models.",
+        parameters: z.object({}),
+        execute: async () => this.service.aiCosts(this.owner),
+      }),
+      defineTool({
+        name: "change_ai_models",
+        description:
+          "Admin only. Change which AI model does a kind of work: chat (which also looks things up during calls), background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed. Live voice calls keep their own voice model.",
+        parameters: z.object({
+          work: z.enum(["chat", "background", "simple", "all"]),
+          model: z
+            .enum(["recommended", "claude", "gpt-6.1-sol", "deepseek-v4.1-flash"])
+            .describe(
+              "recommended: each kind of work's recommended pick; claude: the Claude model the server used before",
+            ),
+          effort: z
+            .enum(["low", "medium", "high"])
+            .optional()
+            .describe(
+              "How hard it thinks: low is Quick, medium is Some thinking, high is Thinks hard. Leave out for the recommended amount.",
+            ),
+        }),
+        execute: async ({ work, model, effort }) => {
+          const models = this.service.models;
+          if (!models) return { error: "The AI models can’t be changed on this server." };
+          if (!(await (this.service.isAdmin?.(this.owner) ?? Promise.resolve(false))))
+            return { error: "Only the admin can change the AI models." };
+          const jobs = work === "all" ? MODEL_JOBS : [work];
+          try {
+            if (work === "all" && (model === "claude" || model === "recommended"))
+              await models.saveAll(model);
+            else
+              for (const job of jobs)
+                await models.save(
+                  job,
+                  model === "recommended"
+                    ? null
+                    : {
+                        model: PICKS[model],
+                        effort: effort ?? RECOMMENDED[job].effort,
+                      },
+                );
+          } catch (error) {
+            return { error: error instanceof Error ? error.message : String(error) };
+          }
+          const view = models.view();
+          return {
+            now: Object.fromEntries(
+              view.jobs.map((row) => [
+                row.job,
+                row.choice.model === SERVER_MODEL
+                  ? `Claude, as before (${modelLabel(row.serverModel)})`
+                  : `${modelLabel(row.choice.model)}, ${EFFORT_LABELS[row.choice.effort ?? row.recommended.effort]}`,
+              ]),
+            ),
+            ...(view.ready
+              ? {}
+              : {
+                  note: "OpenRouter isn’t set up on the server yet, so everything keeps using Claude until it is.",
+                }),
+          };
+        },
       }),
       defineTool({
         name: "agent_status",
@@ -709,8 +777,11 @@ export class ConversationAgent extends AbstractAgent {
             : { matches: [], note: "This chat is short: all of it is already in view." },
       }),
     );
+    // The Models card's choice for the chat, or the server's MODEL.
+    const plan = this.service.modelFor("chat");
     const agent = tanstackAgent({
-      model: this.config.model ?? "openai/unconfigured",
+      ...plan,
+      model: plan.model || "openai/unconfigured",
       maxSteps: CHAT_STEPS,
       onUsage: this.service.usage?.sink(this.owner, "chat"),
       stepLimitNote:

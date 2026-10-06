@@ -9,7 +9,7 @@ import {
 import { chat, maxIterations, type SchemaInput, toolDefinition } from "@tanstack/ai";
 import { type AnthropicChatModel, anthropicText } from "@tanstack/ai-anthropic";
 import { type GeminiTextModel, geminiText } from "@tanstack/ai-gemini";
-import { type OpenAIChatModel, openaiText } from "@tanstack/ai-openai";
+import { createOpenaiChatCompletions, type OpenAIChatModel, openaiText } from "@tanstack/ai-openai";
 import { map, mergeMap, type Observable } from "rxjs";
 import { z } from "zod";
 import { MODEL_MAX_RETRIES } from "../config.ts";
@@ -21,7 +21,7 @@ function adapter(spec: string) {
   const [, provider = "", model = ""] = spec.trim().match(/^([^/:]*)[/:](.*)$/) ?? [];
   if (!provider || !model.trim())
     throw new Error(
-      `Invalid model string "${spec}". Use "openai/gpt-5", "anthropic/claude-sonnet-4.5", or "google/gemini-2.5-pro".`,
+      `Invalid model string "${spec}". Use "openai/gpt-5", "anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro" or "openrouter/openai/gpt-6.1-sol".`,
     );
   const id = model.trim();
   switch (provider.toLowerCase()) {
@@ -36,6 +36,16 @@ function adapter(spec: string) {
         baseURL: process.env.ANTHROPIC_BASE_URL?.replace(/\/v1\/?$/, ""),
         maxRetries: MODEL_MAX_RETRIES,
       });
+    case "openrouter": {
+      // OpenRouter speaks OpenAI's Chat Completions, on its own key; "openrouter/openai/gpt-6.1-sol".
+      const key = process.env.OPENROUTER_API_KEY?.trim();
+      if (!key) throw new Error("OPENROUTER_API_KEY isn't set on this server.");
+      return createOpenaiChatCompletions(id as OpenAIChatModel, key, {
+        baseURL: process.env.OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
+        maxRetries: MODEL_MAX_RETRIES,
+        defaultHeaders: { "X-Title": "Neato_Muse" },
+      });
+    }
     case "google":
     case "gemini":
     case "google-gemini":
@@ -62,7 +72,7 @@ export function unknownProvider(
     ? ` For a model on your OPENAI_BASE_URL gateway, use "openai/${spec.trim()}".`
     : "";
   return new Error(
-    `Unknown provider "${provider}" in "${spec}". Supported: openai, anthropic, google (gemini).${hint}`,
+    `Unknown provider "${provider}" in "${spec}". Supported: openai, anthropic, google (gemini), openrouter.${hint}`,
   );
 }
 
@@ -99,29 +109,133 @@ const stateTools = [
 ];
 
 /** Tells `onUsage` the tokens of each model call, to track what each person costs. */
-function usageMiddleware(model: string, onUsage: UsageSink) {
+function usageMiddleware(model: string | (() => string), onUsage: UsageSink) {
+  const name = () => (typeof model === "string" ? model : model());
   return {
     name: "usage",
     onUsage: (_ctx: unknown, usage: Parameters<typeof fromTanstack>[1]) =>
-      onUsage(model, fromTanstack(model, usage)),
+      onUsage(name(), fromTanstack(name(), usage)),
   };
 }
 
-/** One reply without tools, for small background jobs such as writing ideas. */
-export async function complete(options: {
+/** How the last call to a model went, for the Models card. */
+export interface LastCall {
+  ok: boolean;
+  at: string;
+  /** Why it failed, in plain words. */
+  error?: string;
+  /** The model that answered instead. */
+  usedInstead?: string;
+}
+export const lastCalls = new Map<string, LastCall>();
+/** The last call for each kind of work (or each model, for calls outside one) since startup. */
+const noteCall = (plan: CallPlan, call: Omit<LastCall, "at">) =>
+  lastCalls.set(plan.job ?? plan.model.trim(), { ...call, at: new Date().toISOString() });
+
+/** A provider's error in plain words: "OpenRouter is out of credit (402)". */
+export function plainReason(error: unknown) {
+  const text = (error instanceof Error ? error.message : String(error ?? "")).trim();
+  const status = Number(
+    (error as { status?: unknown })?.status ?? /\b([45]\d\d)\b/.exec(text)?.[1] ?? 0,
+  );
+  if (status === 401 || status === 403) return `The key was refused (${status})`;
+  if (status === 402) return "Out of credit (402)";
+  if (status === 404) return "No such model (404)";
+  if (status === 429) return "Too many requests right now (429)";
+  if (status >= 500) return `The provider had a problem (${status})`;
+  return text.slice(0, 160) || "No reason given";
+}
+
+/** How a call is run: the model, and for OpenRouter how hard it thinks and how much it writes. */
+export interface CallPlan {
   model: string;
-  system: string;
-  prompt: string;
-  onUsage?: UsageSink;
-}) {
-  const reply = await chat({
-    adapter: adapter(options.model),
-    messages: [{ role: "user", content: options.prompt }],
-    systemPrompts: [options.system],
-    stream: false,
-    ...(options.onUsage ? { middleware: [usageMiddleware(options.model, options.onUsage)] } : {}),
-  } as never);
-  return String(reply ?? "");
+  effort?: "low" | "medium" | "high";
+  /** Most it may write, reasoning included (OpenRouter models). */
+  maxTokens?: number;
+  /** Most it may read, in estimated tokens (OpenRouter models). */
+  contextLimit?: number;
+  /** The server's own model, used when this one fails before it says anything. */
+  fallback?: string;
+  /** The kind of work, so the Models card can say how its last call went. */
+  job?: string;
+}
+const routed = (model: string) => /^openrouter[/:]/i.test(model.trim());
+/** OpenRouter's request fields for effort and output; other providers keep their defaults. */
+function openRouterOptions(plan: CallPlan) {
+  return {
+    ...(plan.maxTokens ? { max_tokens: plan.maxTokens } : {}),
+    ...(plan.effort ? { reasoning: { effort: plan.effort } } : {}),
+  };
+}
+/** About four characters a token. */
+const estimate = (value: unknown) => Math.ceil((JSON.stringify(value ?? "")?.length ?? 0) / 4);
+
+/**
+ * Leaves out the oldest messages until a call fits under `limit` estimated tokens, keeping the
+ * person's latest turn and everything after it. Long chats are summarized long before this
+ * (ChatSummaries); it's the last guard against GPT-6.1 Sol's price doubling past 272,000 tokens.
+ */
+export function fitContext<T extends { role: string }>(
+  messages: T[],
+  fixed: number,
+  limit?: number,
+): T[] {
+  if (!limit) return messages;
+  let total = fixed + messages.reduce((sum, message) => sum + estimate(message), 0);
+  if (total <= limit) return messages;
+  let lastPerson = messages.length - 1;
+  while (lastPerson > 0 && messages[lastPerson]?.role !== "user") lastPerson--;
+  let start = 0;
+  while (total > limit && start < lastPerson) total -= estimate(messages[start++]);
+  if (start)
+    console.warn(
+      `[OpenMuse] Left out the ${start} oldest messages to keep a call under ${limit.toLocaleString("en-US")} tokens.`,
+    );
+  return messages.slice(start);
+}
+
+/**
+ * One reply without tools, for small background jobs such as writing ideas. A call that fails is
+ * tried once on the plan's `fallback` (the server's own model); one that comes back empty is
+ * tried once on the `stronger` plan.
+ */
+export async function complete(
+  options: CallPlan & {
+    system: string;
+    prompt: string;
+    onUsage?: UsageSink;
+    stronger?: CallPlan;
+  },
+) {
+  const once = async (plan: CallPlan) => {
+    const reply = await chat({
+      adapter: adapter(plan.model),
+      messages: [{ role: "user", content: options.prompt }],
+      systemPrompts: [options.system],
+      stream: false,
+      ...(routed(plan.model) ? { modelOptions: openRouterOptions(plan) } : {}),
+      ...(options.onUsage ? { middleware: [usageMiddleware(plan.model, options.onUsage)] } : {}),
+    } as never);
+    return String(reply ?? "");
+  };
+  const run = async (plan: CallPlan) => {
+    try {
+      const text = await once(plan);
+      noteCall(plan, { ok: true });
+      return text;
+    } catch (error) {
+      if (!plan.fallback || plan.fallback === plan.model) throw error;
+      const reason = plainReason(error);
+      noteCall(plan, { ok: false, error: reason, usedInstead: plan.fallback });
+      console.warn(`[OpenMuse] ${plan.model} failed (${reason}); trying ${plan.fallback} once.`);
+      return once({ model: plan.fallback });
+    }
+  };
+  const text = await run(options);
+  const stronger = options.stronger;
+  if (text.trim() || !stronger?.model || stronger.model === options.model) return text;
+  console.warn(`[OpenMuse] ${options.model} gave no answer; trying ${stronger.model} once.`);
+  return run(stronger);
 }
 
 /**
@@ -201,6 +315,66 @@ export function repairToolSteps<T extends ToolStep>(messages: T[]): T[] {
   return cutOff || moved || strays || out.length !== messages.length ? out : messages;
 }
 
+type Adapter = ReturnType<typeof adapter>;
+type StreamOptions = Parameters<Adapter["chatStream"]>[0];
+/**
+ * A model that fails before it says anything (no credit, a refused key, an unknown model, an
+ * outage) hands the call to `fallback`, the server's own model, and so does every later step of
+ * that reply. `current` says which model is answering, so its tokens are priced right.
+ */
+function withFallback(primary: Adapter, plan: CallPlan, current: { model: string }) {
+  const fallback = plan.fallback;
+  if (!fallback || fallback === plan.model) return primary;
+  let backup: Adapter | undefined;
+  const useBackup = (options: StreamOptions) => {
+    backup ??= adapter(fallback);
+    current.model = fallback;
+    // Effort and output caps are OpenRouter's fields; the server's model keeps its defaults.
+    return backup.chatStream({ ...options, model: backup.model, modelOptions: undefined } as never);
+  };
+  return new Proxy(primary, {
+    get(target, key, receiver) {
+      if (key !== "chatStream") return Reflect.get(target, key, receiver);
+      return async function* (options: StreamOptions) {
+        if (backup) {
+          yield* useBackup(options);
+          return;
+        }
+        const held: unknown[] = [];
+        let said = false;
+        for await (const chunk of target.chatStream(options as never)) {
+          const type = (chunk as { type?: string }).type;
+          if (!said && type === "RUN_STARTED") {
+            held.push(chunk);
+            continue;
+          }
+          // A stopped reply isn't a failure.
+          if (!said && type === "RUN_ERROR" && (chunk as { code?: unknown }).code !== "aborted") {
+            const reason = plainReason(
+              Object.assign(new Error(String((chunk as { message?: unknown }).message ?? "")), {
+                status: (chunk as { code?: unknown }).code,
+              }),
+            );
+            noteCall(plan, { ok: false, error: reason, usedInstead: fallback });
+            console.warn(
+              `[OpenMuse] ${plan.model} failed (${reason}); this reply uses ${fallback} instead.`,
+            );
+            yield* useBackup(options);
+            return;
+          }
+          if (!said) {
+            said = true;
+            noteCall(plan, { ok: true });
+            yield* held as (typeof chunk)[];
+          }
+          yield chunk;
+        }
+        if (!said) yield* held as never[];
+      };
+    },
+  });
+}
+
 /** Anthropic prompt caching: a cache read costs a tenth of the normal input price. */
 const CACHE = { type: "ephemeral" } as const;
 export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
@@ -208,6 +382,13 @@ export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
 /** A BuiltInAgent in TanStack factory mode with the options of the classic AI SDK mode. */
 export function tanstackAgent(options: {
   model: string;
+  /** How hard it thinks, and how much it may read and write (OpenRouter models). */
+  effort?: CallPlan["effort"];
+  maxTokens?: number;
+  contextLimit?: number;
+  /** The server's own model, for a reply the chosen model can't start. */
+  fallback?: string;
+  job?: string;
   maxSteps: number;
   tools: ToolDefinition[];
   prompt: string;
@@ -235,9 +416,14 @@ export function tanstackAgent(options: {
       )
         system += `\n## Application State\nThis is state from the application that you can edit by calling AGUISendStateSnapshot or AGUISendStateDelta.\n\`\`\`json\n${JSON.stringify(input.state, null, 2)}\n\`\`\`\n`;
       const cached = caches(options.model);
+      // Tool definitions are read with every call too; about 20,000 tokens is a safe allowance.
+      const fixed = estimate(options.prompt) + estimate(system) + 20_000;
+      const current = { model: options.model };
       return chat({
-        adapter: adapter(options.model),
-        messages: repairToolSteps(endWithPerson(converted.messages)),
+        adapter: withFallback(adapter(options.model), options, current),
+        messages: repairToolSteps(
+          fitContext(endWithPerson(converted.messages), fixed, options.contextLimit),
+        ),
         systemPrompts: [
           ...(options.prompt
             ? [
@@ -249,7 +435,9 @@ export function tanstackAgent(options: {
           ...(system.trim() ? [system.trim()] : []),
         ] as never,
         // The conversation so far is cached too, so each step of a reply rereads it cheaply.
+        // OpenRouter models cache a repeated beginning by themselves.
         ...(cached ? { modelOptions: { cache_control: CACHE } as never } : {}),
+        ...(routed(options.model) ? { modelOptions: openRouterOptions(options) as never } : {}),
         tools: [
           ...converted.tools,
           ...[...options.tools, ...stateTools].map((tool) =>
@@ -262,7 +450,7 @@ export function tanstackAgent(options: {
         ],
         agentLoopStrategy: maxIterations(options.maxSteps),
         ...(options.onUsage
-          ? { middleware: [usageMiddleware(options.model, options.onUsage)] }
+          ? { middleware: [usageMiddleware(() => current.model, options.onUsage)] }
           : {}),
         abortController,
       });

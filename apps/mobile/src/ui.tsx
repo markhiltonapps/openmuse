@@ -124,9 +124,12 @@ export function Button({
   accessibilityLabel,
   selected,
   strong,
+  nativeID,
 }: {
   children: ReactNode;
   onPress: () => void;
+  /** An id to move focus back to it (on the web). */
+  nativeID?: string;
   icon?: LucideIcon;
   primary?: boolean;
   /** The one thing to do on a card: dark, like the send button. */
@@ -146,6 +149,7 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      nativeID={nativeID}
       aria-pressed={selected}
       disabled={disabled || busy}
       accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}

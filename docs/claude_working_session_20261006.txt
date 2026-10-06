@@ -69,14 +69,132 @@ OpenRouter: cut LLM costs (Oct 6) — step 1 (investigation) done, nothing chang
     tokens per task and cheaper cache reads); the clear per-token saving is moving the simple
     jobs to DeepSeek V4.1 Flash, plus the job caching fix.
 
+OpenRouter build (Oct 6; pushed on the owner's "push it" before review round 2)
+- The owner's choices (asked):
+  - Add OpenRouter as an option.
+  - I pick the models.
+  - A screen in the app to change them, preset to my picks.
+  - The Usage card shows Today / Last 7 days / All time.
+  - All the cost controls.
+  - Test first.
+- Server:
+  - Adapter (engine/tanstack-agent.ts): a new "openrouter/vendor/model" provider, using the
+    installed Chat Completions adapter (createOpenaiChatCompletions) on OPENROUTER_API_KEY and
+    https://openrouter.ai/api/v1 (OPENROUTER_BASE_URL overrides). No new SDK; anthropic/ stays.
+  - model-choices.ts: three jobs.
+    - Chat: GPT-6.1 Sol, effort high, up to 16K out.
+    - Background jobs and routines: GPT-6.1 Sol, effort medium, 32K out.
+    - Simple jobs (chat summaries, Ideas, bookings from emails): DeepSeek V4.1 Flash, effort low,
+      4K out (8K at medium, 16K at high, so thinking never crowds out the answer).
+    - The picks apply only when OPENROUTER_API_KEY is set; without it, every job stays on
+      MODEL / WORKER_MODEL (Claude), as before.
+    - The admin's choices are saved in system/model-choices. "server" means the server's model.
+      "-pro" models are refused.
+  - Calls: chat (conversation.ts), jobs (model.ts) and simple jobs (service.ts) ask
+    service.modelFor(job). OpenRouter calls send reasoning.effort and max_tokens, and drop the
+    oldest messages past about 250K estimated tokens (fitContext; GPT-6.1 Sol's price doubles
+    past 272K).
+  - A simple job that comes back empty is tried once on the chat's model (complete's `stronger`).
+  - Caching fix: a job's instructions had the time ("It's …") ahead of the long fixed text. It
+    now comes at the end, so the fixed instructions are a shared, cacheable start across runs.
+    Within one run the prompt never changed, so this helps between jobs and restarts, not every
+    call. (Corrects the earlier note.)
+  - Usage (usage.ts):
+    - Per-day totals in each person's time zone (usage-days), for Today and the last 7 days.
+      All time adds up every month.
+    - OpenRouter prices, with their own cache-read prices.
+    - modelName drops "openrouter/" and the vendor.
+    - fromTanstack subtracts cache reads for OpenRouter calls.
+    - One log line per call: "[OpenMuse] Model call: <job> · <model> · read N (M cached) · wrote
+      K · $cost".
+  - Routes:
+    - GET/POST /api/models (admin).
+    - /api/usage adds periods and the three jobs' models.
+    - /api/usage/people adds everyone's periods.
+  - Chat: a read-only ai_costs tool ("How much has the AI cost this week?"); the admin also gets
+    everyone's totals.
+- App:
+  - Usage card (Apps › Money): three tiles, Today / Last 7 days / All time (cost, tokens, calls),
+    "Everyone" tiles for the admin, and friendly model names.
+  - New admin "AI models" card below it: each job with its model, Change (radio list of models
+    with prices, "How hard it thinks", Save / Cancel / Use the recommended pick), and a "not set
+    up yet" state with the Railway steps.
+- Help:
+  - "usage" updated, with a tap-to-ask "How much has the AI cost this week?".
+  - New admin topic "admin-models".
+- Tests: tests/openrouter.test.ts (6).
+  - A fake OpenRouter checks the request: path, Bearer key, model, reasoning effort, max_tokens.
+  - Token counting and cost.
+  - The fallback retry.
+  - Model choices with and without the key, saving, refusing -pro, surviving a restart.
+  - fitContext.
+  - Daily totals across time zones.
+  - A whole background job through OpenRouter (tools offered, medium effort, 32K, the time
+    after the fixed instructions).
+  - task-web.test.ts stand-ins got modelFor.
+- Browser check (scratchpad models/shots.mjs, 416 light and 360 dark): the tiles, the card when
+  ready and when not set up, the editor, Save posting {job, choice} and announcing it. No errors.
+- Checks: Biome, typechecks and 494 tests pass.
+- Design review round 1 (visual, usability, copy): none signed off. Fixed:
+  - Safety net (usability M3): an OpenRouter call that fails before it says anything (no credit,
+    refused key, unknown model, outage) is answered by the server's own Claude model, for the
+    chat, background jobs and simple jobs (withFallback in tanstack-agent.ts wraps the adapter;
+    complete() does the same). A stopped reply isn't treated as a failure. The usage meter prices
+    the model that actually answered. The last call per kind of work is kept (lastCalls) and the
+    card shows "Working. Last call at …" or "The last call … didn't work: Out of credit (402).
+    Claude Sonnet 5 answered instead."
+  - Typos can't take the app down (usability M2): "Another OpenRouter model" is checked against
+    OpenRouter's free public model list before saving (exists; chat and background need tools;
+    no "-pro"); refusals are in plain words. Its price comes from the same list, so its cost is
+    known (UsageMeter.addPrice).
+  - Tiles never cut off (usability M1): on a card narrower than 420px each period is one row
+    (label left, amount right, "412K tokens · 63 AI calls" under it); amounts get thousands
+    separators; tokens get a B step.
+  - One tap: "Put everything back on Claude" and "Use the recommended picks" (POST /api/models
+    {all}). Voice-first: a new admin-only chat tool change_ai_models (recommended, claude,
+    gpt-6.1-sol, deepseek-v4.1-flash; optional effort), so "Put all the AI back on Claude" works
+    by voice. ai_costs is now shared (service.aiCosts) and in background jobs too, with friendly
+    names (last7Days, "Claude Haiku 4.5"), and a note on what "Last 7 days" means.
+  - Without the key, rows say "Claude, as before (Claude Sonnet 5)" and "Switches to GPT-6.1 Sol,
+    Thinks hard once OpenRouter is set up"; Save stays off until something changes, so a look
+    never pins a job; the setup box says to add credit at openrouter.ai.
+  - Copy: "AI calls" everywhere, "about"/"under $0.01", curly apostrophes, the error messages,
+    "Just you" / "Everyone together", the estimate line under the tiles, "Day-by-day counting
+    began on …", one sentence per kind of work, "Saved. Chat: GPT-6.1 Sol, Thinks hard.".
+  - Focus moves into the editor on Change and back to Change on Save or Cancel; the card refetches
+    when the tab comes back into view; non-admins no longer call /api/models.
+  - Shared names: packages/domain/src/model-names.ts (modelLabel, USAGE_KINDS, EFFORT_LABELS).
+  - Help: usage, admin-usage and admin-models rewritten (copy review's wording), with spoken
+    examples.
+- Tests: openrouter.test.ts now 8 (adds the out-of-credit chat fallback, the model check against
+  OpenRouter's list with its price, revert-all, and addPrice).
+- Checks after round 1's fixes: Biome, pnpm typecheck, the worker's tsc and 496 tests pass (no
+  real calls). The web build wasn't re-checked in a browser before the push (owner's call).
+- Unplanned real calls (owner told): after a container restart this session could see
+  OPENROUTER_API_KEY, and `pnpm test` builds the app with it, so the chat tests talked to the real
+  OpenRouter. Stopped as soon as it showed in the log: 7 calls, about $0.05 in all (6 chat calls
+  on GPT-6.1 Sol, about 18,500 tokens read each; 1 Ideas call on DeepSeek V4.1 Flash, $0.001).
+  They worked: tool definitions accepted, and from the second call 18,524 of 18,527 tokens came
+  from the cache ($0.002 a call instead of $0.037). Two browse_web tests failed only because a
+  real model answered instead of their script. Fix: `pnpm test` now runs with the key removed
+  (env -u OPENROUTER_API_KEY); lesson added to CLAUDE.md.
+- The owner said "push it" again before round 2, so this was pushed with round 1's fixes; round 2
+  of the reviews runs after the push, and its fixes wait for the next "push it".
+- Not done:
+  - Real calls. They need OPENROUTER_API_KEY, which only a new session sees.
+  - Production. It switches only once OPENROUTER_API_KEY is added on Railway, after the tests.
+  - The chat's tool-calling turns don't pass OpenRouter's reasoning details back between steps
+    (the Chat Completions adapter drops them). Fine for now; watch quality in the tests.
+
 Pending
-- OpenRouter: once openrouter.ai is allowed and the key is set (likely in a new session), check
-  the exact model IDs and prices on openrouter.ai, then show the owner a short plan (which job
-  gets which model and effort, cost controls, tests) before changing anything.
+- OpenRouter: design review round 2 (visual, usability, copy) on the pushed card.
+- OpenRouter real tests: a new session sees OPENROUTER_API_KEY ("Carry on with the OpenRouter
+  tests from the session notes"): a few small real calls (under about $0.10), results and cost to
+  the owner. Then ask before adding the key on Railway (production).
+- Not done from the reviews: a "Check connection" button (the last-call line covers it for now),
+  per-job "this month" cost on each row, and a price for the Claude option.
 - Upstream: wait for the owner's decision on 9f4fe3b and 6151b4e.
-- Three local commits wait for "push it" (check for a live call first): 732f38a session notes,
-  0aeaa52 approvals fix, e861fd1 answer layout and inbox check. After the push, run the Railway
-  checks listed in claude_working_session_20261003.txt (the inbox question in the chat and on a
-  call).
+- Railway checks of the Oct 3 inbox answer (in the chat and on a call), listed in
+  claude_working_session_20261003.txt.
 - The owner should set up Zapier MCP on their own computer (steps given on Oct 3); in this cloud
   environment it's blocked by the network policy.
