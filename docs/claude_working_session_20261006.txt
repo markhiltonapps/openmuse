@@ -1,0 +1,70 @@
+Claude working session — 2026-10-05 / 2026-10-06
+================================================
+
+Weekly upstream check (Oct 5, routine)
+- CopilotKit/OpenMuse main has 9 commits we don't have; merging them all would conflict in 11
+  files (our chat, chat agent and computer screens differ a lot from upstream's).
+- Recommended taking only two, by hand: 9f4fe3b (worker tests survive example.com wording
+  changes; merges cleanly) and 6151b4e (one focus box in the chat composer on Chrome; a
+  7-line change to port by hand).
+- Hold: 4f3f7c7 (choices and comparison cards, about 4,400 lines) and b06caad (agent computer on
+  a paid E2B desktop). Skip: Render blueprint, README changes, Parallel web search (we have our
+  own), scheme-less worker address (optional; our Railway address has http://).
+- Nothing merged or pushed; the owner hasn't decided yet. Only a local upstream/main ref was
+  added by the fetch.
+
+OpenRouter: cut LLM costs (Oct 6) — step 1 (investigation) done, nothing changed yet
+- Owner's goal: route model calls through OpenRouter. Manager / hard work on
+  openai/gpt-6.1-sol with reasoning effort "high" (never the -pro variant); simple routine work on
+  a cheap fast model such as DeepSeek V4.1 Flash with low effort. The model for each job a
+  config setting. Prompt caching, short context (under 272k input tokens on GPT-6.1 Sol), max
+  output tokens per job, cost logged per call, one retry on the stronger model. The current
+  provider setup stays as a fallback. Small real test calls first; ask before production changes
+  or spending beyond small tests. Key only from OPENROUTER_API_KEY, never in code, logs, commits
+  or chat.
+- How models are called today:
+  - TanStack AI through CopilotKit (adapters: Anthropic, OpenAI, Gemini), chosen by
+    provider/model strings: MODEL (chat agent, also a call's hand-overs; a Claude model) and
+    WORKER_MODEL (background jobs and routines, chat summaries, Ideas, bookings from emails;
+    anthropic/claude-haiku-4-5-20251001 since Sept 30). Adapter switch:
+    apps/server/src/engine/tanstack-agent.ts adapter(); settings: apps/server/src/config.ts.
+  - Direct Anthropic Messages API calls (ANTHROPIC_API_KEY) for Anthropic-only features: web
+    search (Claude's web_search tool, WEB_SEARCH_MODEL, Haiku by default), the code sandbox
+    (code execution + Files API, CODE_MODEL, Sonnet 5 by default), pictures, recipes, ChatGPT
+    import and avatar design (VISION_MODEL / AVATAR_MODEL, else the chat model).
+  - OpenAI Live API (gpt-live-1) for live voice calls.
+  - Movable to OpenRouter: chat agent, background jobs, summaries, Ideas, bookings from emails.
+    Staying put unless replaced separately: web search, code sandbox, live voice.
+- OpenAI-compatible base URL: MODEL=openai/<id> + OPENAI_BASE_URL already reaches a gateway,
+  but that adapter (openaiText) speaks OpenAI's Responses API, reads OPENAI_API_KEY, and sets
+  the base URL for the whole app; caching markers are only added for anthropic/ models. The
+  installed @tanstack/ai-openai also has a Chat Completions adapter (createOpenaiChatCompletions)
+  that takes its own key and base URL and reports cached tokens: an "openrouter/" provider in
+  adapter() is about 15 lines, no new SDK.
+- Also found:
+  - Usage and cost are stored per person and per kind (usage.ts), but the price table has no
+    OpenRouter models, OpenRouter's reported cost isn't used, and nothing logs per call.
+  - No max output tokens or reasoning effort is set on agent calls.
+  - Caching bug: a background job's instructions start with the current time ("It's …") ahead
+    of the long fixed instructions, so the cached prefix breaks every minute. Moving the time to
+    the end saves money on Claude too.
+- Blocked in this sandbox:
+  - openrouter.ai is denied by the environment's network policy (curl and web fetch), so model
+    IDs and prices couldn't be checked and no test calls were made.
+  - OPENROUTER_API_KEY isn't set here.
+  - Told the owner where to fix both: the cloud environment menu in the session's title bar ›
+    Edit › Network access › Custom › add openrouter.ai (keep the defaults), and add the
+    environment variable OPENROUTER_API_KEY there. Production later: Railway api service ›
+    Variables › OPENROUTER_API_KEY, then Deploy on Railway's banner.
+
+Pending
+- OpenRouter: once openrouter.ai is allowed and the key is set (likely in a new session), check
+  the exact model IDs and prices on openrouter.ai, then show the owner a short plan (which job
+  gets which model and effort, cost controls, tests) before changing anything.
+- Upstream: wait for the owner's decision on 9f4fe3b and 6151b4e.
+- Three local commits wait for "push it" (check for a live call first): 732f38a session notes,
+  0aeaa52 approvals fix, e861fd1 answer layout and inbox check. After the push, run the Railway
+  checks listed in claude_working_session_20261003.txt (the inbox question in the chat and on a
+  call).
+- The owner should set up Zapier MCP on their own computer (steps given on Oct 3); in this cloud
+  environment it's blocked by the network policy.
