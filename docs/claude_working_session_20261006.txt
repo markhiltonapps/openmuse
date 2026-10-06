@@ -57,6 +57,18 @@ OpenRouter: cut LLM costs (Oct 6) — step 1 (investigation) done, nothing chang
     environment variable OPENROUTER_API_KEY there. Production later: Railway api service ›
     Variables › OPENROUTER_API_KEY, then Deploy on Railway's banner.
 
+- Oct 6, later: the owner allowed openrouter.ai in the environment's network settings (works in
+  this session: HTTP 200). OPENROUTER_API_KEY isn't visible yet (variables load when a session
+  starts). Confirmed on openrouter.ai/api/v1/models (USD per million tokens):
+  - openai/gpt-6.1-sol: in 2, out 10, cache read 0.10, cache write 2.50, 1.05M context, reasoning
+    and tools supported. openai/gpt-6.1-sol-pro: same prices (avoid: many more reasoning tokens).
+  - deepseek/deepseek-v4.1-flash: in 0.0395, out 1.20, cache read 0.015, reasoning and tools.
+  - For comparison, today's models there: anthropic/claude-sonnet-5 in 2, out 10, cache read
+    0.20; anthropic/claude-haiku-4.5 in 1, out 5, cache read 0.10.
+  - So GPT-6.1 Sol has the same list price as Claude Sonnet 5 (savings would come from fewer
+    tokens per task and cheaper cache reads); the clear per-token saving is moving the simple
+    jobs to DeepSeek V4.1 Flash, plus the job caching fix.
+
 Pending
 - OpenRouter: once openrouter.ai is allowed and the key is set (likely in a new session), check
   the exact model IDs and prices on openrouter.ai, then show the owner a short plan (which job
