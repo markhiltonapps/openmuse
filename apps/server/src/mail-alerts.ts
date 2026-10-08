@@ -155,6 +155,11 @@ export class MailAlerts {
   private settingUp?: Promise<string | undefined>;
   /** Events from other app alerts (not email) that arrive on the same webhook. */
   others?: (triggerId: string, data: Record<string, unknown>, key: string) => Promise<boolean>;
+  /** Said on the person's live call when it's urgent (urgent-alerts.ts). */
+  urgent?: (
+    owner: string,
+    item: { from?: string; title: string; text?: string; key: string },
+  ) => Promise<unknown>;
   constructor(
     private readonly db: Store,
     private readonly apps: AppConnector | undefined,
@@ -388,6 +393,13 @@ export class MailAlerts {
         undefined,
         `mail:${email.app}:${key}`,
       );
+    // Urgent (security, money, someone they chose): said on their call if they're on one.
+    await this.urgent?.(watch.owner, {
+      from: email.from,
+      title: email.subject || "New email",
+      text: email.preview,
+      key: `mail:${email.app}:${key}`,
+    }).catch(() => undefined);
     // Confirmations (bookings, deliveries, trips, bills) are tracked; a failure never loses the alert.
     await this.agent
       .commitmentFromEmail?.(watch.owner, email, key)

@@ -70,6 +70,7 @@ import { ScheduledPosts } from "./space-posts.ts";
 import { spaceRoutes } from "./space-routes.ts";
 import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
+import { UrgentAlerts } from "./urgent-alerts.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
 import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
@@ -320,6 +321,8 @@ export async function createApp(
     notify: (owner, title, body, key, actionId) =>
       agent.notify(owner, title, body, undefined, key, actionId ? { actionId } : {}),
   };
+  // Urgent alerts said on a live call (time to leave, security, money, people they chose).
+  let urgentAlerts: UrgentAlerts | undefined;
   const liveVoice = new LiveVoice(
     db,
     async (owner) => {
@@ -356,8 +359,18 @@ export async function createApp(
       setupUrl: config.railwayVariablesUrl,
       ...(canLookUp ? { answer: voiceAnswer(voiceBrain) } : {}),
       tell: (owner, title, body, key) => agent.notify(owner, title, body, undefined, key),
+      onCallMinute: (owner) => urgentAlerts?.checkLeave(owner),
     },
   );
+  urgentAlerts = new UrgentAlerts(db, {
+    speak: (owner, line, key) => liveVoice.speakUp(owner, line, key),
+    events: async (owner, from, to) => (await agent.calendarRange?.(owner, from, to))?.events ?? [],
+    timeZone: (owner) => agent.timeZone(owner),
+  });
+  agent.urgent = urgentAlerts;
+  if (mailAlerts)
+    mailAlerts.urgent = (owner, item) => urgentAlerts?.consider(owner, item) ?? Promise.resolve();
+  appEvents.urgent = (owner, item) => urgentAlerts?.consider(owner, item) ?? Promise.resolve();
   agent.voiceEar = (owner, sessionId) => liveVoice.ear(owner, sessionId);
   agent.areas = new Areas(
     db,
@@ -704,6 +717,12 @@ export async function createApp(
     if (!mailAlerts) throw new AppError("Connected apps aren't set up on the server", 503);
     return mailAlerts;
   };
+  app.get("/api/urgent-alerts", async (c) =>
+    c.json(await (urgentAlerts as UrgentAlerts).settings(c.get("owner"))),
+  );
+  app.post("/api/urgent-alerts", async (c) =>
+    c.json(await (urgentAlerts as UrgentAlerts).update(c.get("owner"), await c.req.json())),
+  );
   app.get("/api/mail-alerts", async (c) => c.json(await alerts().status(c.get("owner"))));
   app.post("/api/mail-alerts/watch", async (c) => {
     const { app: mail, enabled } = z

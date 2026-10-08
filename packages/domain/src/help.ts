@@ -1015,6 +1015,40 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["email-alerts"],
   },
   {
+    id: "urgent-alerts",
+    group: "talk",
+    title: "Urgent alerts on calls",
+    summary:
+      "During a call, {agent} speaks up straight away about what can’t wait: time to leave, security alerts, money problems, and people you choose.",
+    place: "alerts",
+    steps: [
+      "Open **Apps › Alerts › Urgent alerts on calls**.",
+      "Tick the kinds you want: **Time to leave**, **Security alerts**, **Money problems**, **People you choose**. All four are on to start with.",
+      "Under **People you choose**, add names or email addresses; email from them counts as urgent.",
+      "Or just say it: “Stop telling me about money alerts on calls”, or “Tell me straight away if Mom emails.”",
+    ],
+    body: [
+      "Time to leave is said about 15 minutes before something on your calendar starts (it doesn’t know about traffic yet). Security, money and people alerts come from your connected email and app alerts, so email alerts need to be on.",
+      "Everything else stays a normal notification. If {agent} can’t break in at once, it tells you first thing in its next answer.",
+    ],
+    say: [
+      { text: "What urgent alerts are on?", send: true },
+      "Stop telling me about money alerts on calls",
+    ],
+    keywords: [
+      "urgent",
+      "alerts on calls",
+      "interrupt me",
+      "speak up",
+      "time to leave",
+      "security alert",
+      "money alert",
+      "important people",
+      "vip",
+    ],
+    related: ["live-call", "email-alerts", "app-alerts"],
+  },
+  {
     id: "email-alerts",
     group: "apps",
     title: "New-email alerts and email rules",

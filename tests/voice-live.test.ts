@@ -555,3 +555,34 @@ test("a call isn't hung up for quiet while they sign in to an app from its Conne
   assert.equal(sentOf(socket, "session.close").length, 1);
   await db.close();
 });
+
+test("something urgent is said on the call straight away, or with the next answer if refused", async () => {
+  const { voice, sockets, db } = await setup({
+    answer: async () => "Your next meeting is at 3.",
+  });
+  // Not on a call: nothing to say it on.
+  assert.equal(voice.speakUp("owner", "A security alert", "k0"), false);
+  await voice.start("owner", "offer");
+  const socket = sockets[0] as FakeSocket;
+  assert.equal(voice.speakUp("owner", "A security alert just came in from Google.", "k1"), true);
+  const [note] = sentOf(socket, "session.commentary.append");
+  assert.equal(note?.delegation_id, null);
+  assert.match(String(note?.content), /urgent.*security alert just came in from Google/s);
+  // The same thing isn't said twice on a call.
+  voice.speakUp("owner", "A security alert just came in from Google.", "k1");
+  assert.equal(sentOf(socket, "session.commentary.append").length, 1);
+  // OpenAI refuses an unasked note: from now on it's said with the next answer instead.
+  socket.emit({ type: "error", error: { message: "delegation_id required" } });
+  voice.speakUp("owner", "A money alert just came in: card declined.", "k2");
+  socket.emit({ type: "session.input_transcript.delta", delta: "What's next today?" });
+  socket.emit({ type: "session.delegation.created", delegation: { id: "del_1" } });
+  await wait(900);
+  const said = sentOf(socket, "session.commentary.append").at(-1);
+  assert.equal(said?.delegation_id, "del_1");
+  assert.match(
+    String(said?.content),
+    /something urgent came in.*security alert.*money alert.*meeting is at 3/s,
+  );
+  await voice.end("owner", "live_123");
+  await db.close();
+});

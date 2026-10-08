@@ -174,6 +174,9 @@ export function voiceNote(tool: string, args: unknown) {
       return "Looking back through your chats";
     case "agent_status":
       return "Checking your jobs";
+    case "urgent_alert_settings":
+    case "change_urgent_alerts":
+      return "Checking your urgent alerts";
     case "brief_me":
       return "Pulling your day together";
     case "read_back_approvals":

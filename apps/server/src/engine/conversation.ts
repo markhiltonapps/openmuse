@@ -51,6 +51,7 @@ import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
+import { urgentToolSpecs } from "../urgent-alerts.ts";
 import { voiceApprovalTools } from "../voice-approval.ts";
 import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-brain.ts";
 import type { VoiceSession } from "../voice-live.ts";
@@ -470,6 +471,18 @@ export class ConversationAgent extends AbstractAgent {
         }),
       );
     }
+    const urgent = this.service.urgent;
+    if (urgent)
+      tools.push(
+        ...urgentToolSpecs(urgent, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
+          }),
+        ),
+      );
     const mailAlerts = this.service.mailAlerts;
     if (mailAlerts)
       tools.push(

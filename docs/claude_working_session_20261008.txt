@@ -63,3 +63,22 @@ Built: "brief me" on demand (7), committed locally
 - Labels for brief_me, read_back_approvals and approve_by_voice (call and chat "now doing").
 - Help: live-call topic (brief me, approving by voice, interrupting).
 - Tests: brief.test.ts.
+
+Built: urgent alerts on calls (5) — server committed; the switches card waits for design review
+- urgent-alerts.ts: settings (timeToLeave, security, money, people + people list; all on to
+  start), urgentKind (security and money wording; sender matches the list), consider() for new
+  emails (mail-alerts.ts) and app alerts (app-events.ts), and checkLeave(): during a call, about
+  once a minute, something on the calendar (not all day) starting in 10 to 20 minutes is said
+  once. No traffic (owner: not now).
+- voice-live.ts speakUp(): sends the voice an unasked note (session.commentary.append with
+  delegation_id null). If OpenAI answers with an error within a few seconds, the call marks it
+  can't take unasked notes, and urgent lines are said first thing in the next answer instead.
+  Each alert once per call. OpenAI's errors on the sideband are now logged (reason only).
+  Whether unasked notes work is only known on Railway: look for "Live voice error" in the api
+  logs after an urgent alert during a call.
+- Voice-first: urgent_alert_settings / change_urgent_alerts in the chat and on calls.
+- Routes: GET/POST /api/urgent-alerts. Card (uncommitted until reviewed): Apps › Alerts ›
+  Urgent alerts on calls (four ticks, people list, the "just say it" line).
+- Help: new "urgent-alerts" topic (talk group, place alerts).
+- Tests: urgent-alerts.test.ts (3) and a live-call test (said straight away, once; next answer
+  after a refusal).

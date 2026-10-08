@@ -124,6 +124,10 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "writing", label: "Making a note…" };
     case "agent_status":
       return { kind: "plan", label: "Checking on your jobs…" };
+    case "urgent_alert_settings":
+      return { kind: "plan", label: "Checking your urgent alerts…" };
+    case "change_urgent_alerts":
+      return { kind: "plan", label: "Changing your urgent alerts…" };
     case "brief_me":
       return { kind: "plan", label: "Pulling your day together…" };
     case "read_back_approvals":

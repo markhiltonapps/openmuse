@@ -55,6 +55,11 @@ export function eventSummary(data: Record<string, unknown>) {
 }
 
 export class AppEvents {
+  /** Said on the person's live call when it's urgent (urgent-alerts.ts). */
+  urgent?: (
+    owner: string,
+    item: { from?: string; title: string; text?: string; key: string },
+  ) => Promise<unknown>;
   constructor(
     private readonly db: Store,
     private readonly apps: AppConnector | undefined,
@@ -137,6 +142,18 @@ export class AppEvents {
       undefined,
       `app-event:${watch.id}:${key}`,
     );
+    // Urgent (security, money, someone they chose): said on their call if they're on one.
+    await this.urgent?.(trigger.owner, {
+      title: watch.name,
+      text: summary,
+      from:
+        typeof data.from === "string"
+          ? data.from
+          : typeof data.sender === "string"
+            ? data.sender
+            : undefined,
+      key: `app-event:${watch.id}:${key}`,
+    }).catch(() => undefined);
     return true;
   }
 }
