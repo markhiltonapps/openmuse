@@ -1038,7 +1038,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Weather and local news still use your home city (on the Feed). Live traffic isn’t included yet.",
     ],
     say: [{ text: "Where am I?", send: true }, "Turn off my location"],
-    keywords: ["location", "gps", "where am i", "near me", "nearby", "privacy", "traffic"],
+    keywords: ["location", "gps", "my location", "current location", "near me", "nearby", "privacy"],
     related: ["urgent-alerts", "live-call"],
   },
   {
