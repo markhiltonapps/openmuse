@@ -138,13 +138,13 @@ export function voiceApprovalTools(
         }));
         const named = items.map((item) => item.what);
         const tap = tapOnly.length
-          ? ` ${tapOnly.length === 1 ? `${spokenWhat(tapOnly[0] as ActionProposal)} involves money, so it needs` : `${tapOnly.length} others involve money, so they need`} a tap on Approve when it's safe.`
+          ? ` ${tapOnly.length === 1 ? `${spokenWhat(tapOnly[0] as ActionProposal)} can’t be approved by voice` : `${tapOnly.length} others can’t be approved by voice`}, so tap Approve on your screen.`
           : "";
         const say = !items.length
           ? `${tap.trim()}`
           : items.length === 1
-            ? `That's ${named[0]}. Say “yes, approve” to go ahead, or “no” to leave it.${tap}`
-            : `${items.length} things are waiting: ${list(named.map((what, i) => `${i + 1}, ${what}`))}. Say “approve all”, or tell me which ones.${tap}`;
+            ? `Waiting for your OK: ${named[0]}. Say “yes, approve” to go ahead, or “no” to leave it.${tap}`
+            : `${items.length} things are waiting for your OK. ${named.map((what, i) => `Number ${i + 1}: ${what}.`).join(" ")} Say “approve all”, or tell me which ones.${tap}`;
         return {
           // Their Approve cards go on the screen too.
           approvals: chosen.map((action) => ({ actionId: action.id, title: action.title })),

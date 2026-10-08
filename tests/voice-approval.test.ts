@@ -115,10 +115,13 @@ test("Neddy reads back what's waiting, and money stays a tap", async () => {
   const { read, ear } = await setUp("voice-1");
   const result = await read();
   const say = String(result.say);
-  assert.match(say, /2 things are waiting/);
+  assert.match(
+    say,
+    /^2 things are waiting for your OK\. Number 1: .*\. Number 2: .*\. Say “approve all”/,
+  );
   assert.match(say, /the email to bob@example.com about “Friday”/);
   assert.match(say, /adding “Dentist” to your calendar/);
-  assert.match(say, /involves money, so it needs a tap/);
+  assert.match(say, /can’t be approved by voice, so tap Approve on your screen/);
   assert.deepEqual(ear.heard()?.ids.sort(), ["a1", "a2"]);
   // All three cards go on the screen.
   assert.equal((result.approvals as unknown[]).length, 3);

@@ -138,11 +138,13 @@ export function plainReason(error: unknown) {
   const status = Number(
     (error as { status?: unknown })?.status ?? /\b([45]\d\d)\b/.exec(text)?.[1] ?? 0,
   );
-  if (status === 401 || status === 403) return `The key was refused (${status})`;
-  if (status === 402) return "Out of credit (402)";
-  if (status === 404) return "No such model (404)";
-  if (status === 429) return "Too many requests right now (429)";
-  if (status >= 500) return `The provider had a problem (${status})`;
+  if (status === 401 || status === 403)
+    return "OpenRouter refused the key. Check OPENROUTER_API_KEY on Railway";
+  if (status === 402) return "OpenRouter is out of credit. Add credit at openrouter.ai";
+  if (status === 404)
+    return "OpenRouter doesn’t have that model. Pick another on the AI models card";
+  if (status === 429) return "Too many requests right now. It should clear up by itself";
+  if (status >= 500) return "OpenRouter had a problem on its side. It should clear up by itself";
   return text.slice(0, 160) || "No reason given";
 }
 

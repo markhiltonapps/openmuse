@@ -261,7 +261,7 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "change_ai_models",
         description:
-          "Admin only. Change which AI model does a kind of work: chat (which also looks things up during calls), background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed. Live voice calls keep their own voice model.",
+          "Admin only. Change which AI model does a kind of work: chat (which also looks things up during voice calls), background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed, with the model’s plain name (GPT-6.1 Sol), never its ID. If OpenRouter isn’t set up yet, say the change only starts once it is. Live voice calls keep their own voice model.",
         parameters: z.object({
           work: z.enum(["chat", "background", "simple", "all"]),
           model: z

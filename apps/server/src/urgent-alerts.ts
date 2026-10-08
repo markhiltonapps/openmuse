@@ -30,13 +30,18 @@ export const urgentChangeSchema = z.object({
   security: z.boolean().optional(),
   money: z.boolean().optional(),
   people: z.boolean().optional(),
-  addPeople: z.array(z.string().trim().min(2).max(120)).max(20).optional(),
+  addPeople: z
+    .array(z.string().trim().min(3, "Use at least 3 letters, or an email address").max(120))
+    .max(20)
+    .optional(),
   removePeople: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
 });
 export type UrgentChange = z.infer<typeof urgentChangeSchema>;
 
+// Not plain sign-in codes (they come all day, and the code would be read aloud): only sign-ins,
+// changes and codes the person didn't ask for.
 const SECURITY =
-  /\b(new sign[- ]?in|signed in from|login attempt|log[- ]?in attempt|suspicious|unusual (activity|sign)|security alert|password (was )?(reset|changed)|reset your password|verification code|one[- ]time (code|passcode)|2-step|two[- ]factor|account (locked|compromised))\b/i;
+  /\b(new sign[- ]?in|signed in from|login attempt|log[- ]?in attempt|suspicious|unusual (activity|sign)|security alert|password (was )?(reset|changed)|account (locked|compromised)|didn'?t request|did not request|wasn'?t you|was this you)\b/i;
 const MONEY =
   /\b(payment (failed|declined|was declined|unsuccessful)|card (was )?(declined|blocked|frozen)|fraud|overdra(wn|ft)|low balance|insufficient funds|past due|overdue|due today|final notice|chargeback|unauthori[sz]ed (charge|transaction))\b/i;
 
@@ -46,11 +51,10 @@ export function urgentKind(
   settings: Omit<UrgentSettings, "id">,
 ): UrgentKind | undefined {
   const words = `${item.title} ${item.text ?? ""}`;
-  const from = (item.from ?? "").toLowerCase();
   if (
     settings.people &&
-    from &&
-    settings.peopleList.some((person) => from.includes(person.toLowerCase()))
+    item.from &&
+    settings.peopleList.some((person) => fromPerson(item.from ?? "", person))
   )
     return "people";
   if (settings.security && SECURITY.test(words)) return "security";
@@ -58,6 +62,18 @@ export function urgentKind(
   return undefined;
 }
 
+/** "Mom" matches "Mom <mom@x.com>" but not "Mom's Bakery"; an address matches exactly. */
+export function fromPerson(from: string, person: string) {
+  const wanted = person.trim().toLowerCase();
+  const sender = from.toLowerCase();
+  if (wanted.includes("@")) return (sender.match(/[^\s<>"]+@[^\s<>"]+/g) ?? ([] as string[])).includes(wanted);
+  const name = sender.replace(/<.*>/, "").replace(/["']/g, "").trim();
+  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}'’])${escaped}($|[^\\p{L}\\p{N}'’])`, "u").test(name);
+}
+/** Never read out a code or an account number: runs of four or more digits are left out. */
+const noCodes = (text: string) =>
+  text.replace(/\d[\d\s-]{2,}\d/g, (run) => (run.replace(/\D/g, "").length >= 4 ? "…" : run));
 const clip = (text: string, length = 160) =>
   text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text;
 
@@ -67,7 +83,10 @@ export function urgentLine(
   item: { from?: string; title: string; text?: string },
 ) {
   const who = (item.from ?? "").replace(/\s*<.*>$/, "").trim();
-  const what = clip([item.title, item.text].filter(Boolean).join(": "));
+  // Security alerts: the subject only, never the body (it can hold a code or a link).
+  const what = noCodes(
+    clip(kind === "security" ? item.title : [item.title, item.text].filter(Boolean).join(": ")),
+  );
   switch (kind) {
     case "people":
       return `A message just came in from ${who || "someone you asked me to watch for"}: ${what}`;
@@ -106,10 +125,10 @@ export class UrgentAlerts {
   async update(owner: string, raw: unknown) {
     const change = urgentChangeSchema.parse(raw);
     const current = await this.settings(owner);
-    const remove = (change.removePeople ?? []).map((p) => p.toLowerCase());
+    const remove = (change.removePeople ?? []).map((p) => p.trim().toLowerCase());
     const people = [
-      ...current.peopleList.filter((p) => !remove.some((r) => p.toLowerCase().includes(r))),
-      ...(change.addPeople ?? []),
+      ...current.peopleList.filter((p) => !remove.includes(p.toLowerCase())),
+      ...(change.addPeople ?? []).map((p) => p.trim()),
     ];
     const next: UrgentSettings = {
       ...current,
@@ -160,7 +179,7 @@ export class UrgentAlerts {
       });
       this.deps.speak(
         owner,
-        `Heads up: “${event.title}” starts at ${at}, in about ${minutes} minutes${event.location ? `, at ${clip(event.location, 80)}` : ""}.`,
+        `Heads up: “${event.title}” starts in about ${minutes} minutes, at ${at}.${event.location ? ` It’s at ${clip(event.location, 80)}.` : ""}`,
         `leave:${event.title}:${event.start}`,
       );
     }
@@ -180,7 +199,7 @@ export function urgentToolSpecs(alerts: UrgentAlerts, owner: string) {
     {
       name: "change_urgent_alerts",
       description:
-        "Turn an urgent-alert kind on or off (timeToLeave, security, money, people), or add or remove people whose messages count as urgent. Then say what changed in a sentence.",
+        "Turn an urgent-alert kind on or off (timeToLeave, security, money, people), or add or remove people whose messages count as urgent (a name exactly as it shows on their emails, or an email address). Then say what changed in a sentence.",
       parameters: urgentChangeSchema,
       execute: async (change: UrgentChange) => alerts.update(owner, change),
     },

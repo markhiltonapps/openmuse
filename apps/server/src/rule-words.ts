@@ -19,15 +19,14 @@ export function spokenTime(time: string) {
   const hour = h % 12 || 12;
   return `${hour}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "AM" : "PM"}`;
 }
-const sentence = (text: string) => {
-  const trimmed = text.trim().replace(/\s+/g, " ");
-  const short = trimmed.length > 160 ? `${trimmed.slice(0, 157).trimEnd()}…` : trimmed;
-  return /[.!?…]$/.test(short) ? short : `${short}.`;
+/** Their own words, short, without a closing full stop (the sentence adds one). */
+const quoted = (text: string) => {
+  const trimmed = text.trim().replace(/\s+/g, " ").replace(/[.]+$/, "");
+  return trimmed.length > 160 ? `${trimmed.slice(0, 157).trimEnd()}…` : trimmed;
 };
 
 export function routineWords(rule: { prompt: string; time: string; days?: number[] }) {
-  const what = rule.prompt.charAt(0).toLowerCase() + rule.prompt.slice(1);
-  return `${spokenDays(rule.days)} at ${spokenTime(rule.time)}, I'll do this: ${sentence(what)}`.replace(
+  return `${spokenDays(rule.days)} at ${spokenTime(rule.time)}, I’ll run this request: “${quoted(rule.prompt)}”.`.replace(
     /^./,
     (c) => c.toUpperCase(),
   );
@@ -40,14 +39,13 @@ export function emailRuleWords(rule: {
 }) {
   const where = rule.app === "gmail" ? " in Gmail" : rule.app === "outlook" ? " in Outlook" : "";
   const about = rule.subjectContains ? ` about “${rule.subjectContains}”` : "";
-  const what = rule.instruction.charAt(0).toLowerCase() + rule.instruction.slice(1);
-  return `When an email from ${rule.from}${about} arrives${where}, I'll do this: ${sentence(what)}`;
+  return `When an email from ${rule.from}${about} arrives${where}, I’ll do this: “${quoted(rule.instruction)}”.`;
 }
 
 /** What a tool says instead of saving, until they've heard it and said yes. */
 export const confirmFirst = (words: string) => ({
   saved: false,
-  say: `${words} Shall I set that up?`,
+  say: `${words} Want me to set that up?`,
   message:
     "Nothing is saved yet. Say `say` to them, and only if they say yes, call this again with the same details and confirmed: true. If they change something, use their change.",
 });

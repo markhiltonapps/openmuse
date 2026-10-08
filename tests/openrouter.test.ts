@@ -244,7 +244,10 @@ test("a chat reply OpenRouter can't start (out of credit) is answered by the ser
   assert.equal(seen[1]?.body.reasoning, undefined);
   // Its tokens are priced as the model that answered, and the card can say what happened.
   assert.deepEqual(used, ["openrouter/deepseek/deepseek-v4.1-flash"]);
-  assert.equal(lastCalls.get("test-chat")?.error, "Out of credit (402)");
+  assert.equal(
+    lastCalls.get("test-chat")?.error,
+    "OpenRouter is out of credit. Add credit at openrouter.ai",
+  );
 });
 
 test("each job uses the picks once OpenRouter is set up, and the admin's choice after that", async (t) => {

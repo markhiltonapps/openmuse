@@ -184,7 +184,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "**End** hangs up. The call is saved in your main chat.",
     ],
     body: [
-      "When {agent} has to look something up or do something, it says “One sec” and tells you when it’s done. Long answers, lists and anything to approve go on your screen instead of being read out.",
+      "When {agent} has to look something up or do something, it says “One sec” and tells you when it’s done. Long answers and lists go on your screen instead of being read out. Anything to approve appears there too.",
+      "Things that can’t wait (time to leave, security and money alerts) are said out loud; see **Urgent alerts on calls**.",
       "Say “brief me” any time, on a call or in the chat, for a short rundown of your day: what’s next, what’s waiting for your OK, jobs that need you, and what’s coming up.",
       "Things waiting for your OK can be approved by voice too: {agent} reads each one back, and you say “yes, approve” (purchases and payments still need a tap).",
       "A call hangs up by itself after about a minute and a half of quiet, so silence doesn’t cost anything.",
@@ -1034,7 +1035,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "To stop, untick it, or say “Turn off my location”.",
     ],
     body: [
-      "It’s shared only while the app is open. Only your latest spot is kept, never saved for good, and it’s forgotten after an hour or as soon as you turn it off.",
+      "It’s shared only while the app is open on your screen (when your phone locks, it stops until you open the app again). Only your latest spot is kept, never saved for good, and it’s forgotten after an hour or as soon as you turn it off. To name the street, the spot is looked up with OpenStreetMap.",
       "Weather and local news still use your home city (on the Feed). Live traffic isn’t included yet.",
     ],
     say: [{ text: "Where am I?", send: true }, "Turn off my location"],
@@ -1059,12 +1060,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Open **Apps › Alerts › Urgent alerts on calls**.",
       "Tick the kinds you want: **Time to leave**, **Security alerts**, **Money problems**, **People you choose**. All four are on to start with.",
-      "Under **People you choose**, add names or email addresses; email from them counts as urgent.",
+      "Under **People you choose**, add an email address, or a name exactly as it shows on their emails; email from them counts as urgent.",
       "Or just say it: “Stop telling me about money alerts on calls”, or “Tell me straight away if Mom emails.”",
     ],
     body: [
       "Time to leave is said about 15 minutes before something on your calendar starts (it doesn’t know about traffic yet). Security, money and people alerts come from your connected email and app alerts, so email alerts need to be on.",
-      "Everything else stays a normal notification. If {agent} can’t break in at once, it tells you first thing in its next answer.",
+      "Everything else stays a normal notification. If {agent} can’t break in at once, it tells you first thing in its next answer. Alerts say who they’re from and the subject out loud, so keep that in mind on speakerphone; sign-in codes are never read out.",
     ],
     say: [
       { text: "What urgent alerts are on?", send: true },
@@ -1298,7 +1299,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "Approvals expire after a while; if one has, ask {agent} again. You can say “Show me what’s waiting for my OK” any time.",
-      "**On a call, approve by voice:** say “approve it” or “what’s waiting?”. {agent} reads back exactly what each one is; say “yes, approve”, “approve all”, or which ones (“the email, not the calendar one”). Only your own yes counts, and anything involving money (purchases and payments) still needs a tap.",
+      "**On a call, approve by voice:** say “approve it” or “what’s waiting?”. {agent} reads back exactly what each one is; say “yes, approve”, “approve all”, or which ones (“the email, not the calendar one”). Only your own yes counts. Anything involving money (purchases and payments) or a sign-in code still needs a tap.",
       "Anything you’ve marked as always allowed goes ahead without asking (see “Let small things go ahead”); purchases always ask.",
       "A job that needs several steps in one app: when you approve the first one, tick **Let this job do its other … steps without asking**, and its later steps in that app go ahead. Deleting, cancelling and paying still ask. To undo it, tap **Ask me each time** on the job’s page.",
     ],
@@ -1474,7 +1475,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "A token is a small piece of text, about three-quarters of a word.",
-      "Costs are estimates from the models’ published prices; the AI provider’s actual bill may differ a little. **Last 7 days** is today and the six days before. Day-by-day numbers began on the date shown under the boxes, so **Last 7 days** is short at first.",
+      "Costs are estimates from the models’ published prices; the AI provider’s actual bill may differ a little. **Last 7 days** is today and the six days before, and starts short because day-by-day numbers began on the date shown under the boxes.",
     ],
     say: [{ text: "How much has the AI cost this week?", send: true }],
     keywords: [
@@ -1713,8 +1714,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "money",
     steps: [
       "Open **Apps › Money › AI models**.",
-      "Tap **Change** next to a kind of work, pick a model and how hard it thinks, then tap **Save**. It applies to everyone, from the next message, and to jobs that start after.",
-      "**Claude, as before** puts that work back on the Claude model the server was using before. The button that starts with **Back to** goes back to the recommended pick. **Put everything back on Claude** and **Use the recommended picks** change all three at once.",
+      "Tap **Change** next to a kind of work, pick a model and how hard it thinks, then tap **Save**. It applies to everyone: from the next message, and to jobs that start after it.",
+      "**Claude, as before** puts that work back on the Claude model the server was using before. The **Back to … (recommended)** button under a kind of work returns it to the recommended pick. **Put everything back on Claude** and **Use the recommended picks** change all three at once.",
       "Or say it: “Put all the AI back on Claude”, or “Use DeepSeek for simple jobs”.",
     ],
     body: [

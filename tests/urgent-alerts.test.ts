@@ -22,6 +22,15 @@ const on = {
 test("what counts as urgent: security, money, and people they chose", () => {
   assert.equal(urgentKind({ title: "New sign-in from Chrome on Windows" }, on), "security");
   assert.equal(urgentKind({ title: "Your password was changed" }, on), "security");
+  // An ordinary sign-in code isn't urgent (they come all day, and the code would be read aloud).
+  assert.equal(urgentKind({ title: "Your verification code is 482913" }, on), undefined);
+  // A name matches the sender's name as a whole word; an address matches exactly.
+  assert.equal(
+    urgentKind({ from: "Mom's Bakery <hi@bakery.com>", title: "Fresh bread" }, on),
+    undefined,
+  );
+  assert.equal(urgentKind({ from: "Dana <dana@acme.com>", title: "Quick one" }, on), "people");
+  assert.equal(urgentKind({ from: "Dan <dan@acme.com.au>", title: "Hi" }, on), undefined);
   assert.equal(urgentKind({ title: "Payment failed for your subscription" }, on), "money");
   assert.equal(urgentKind({ title: "Your card was declined" }, on), "money");
   assert.equal(urgentKind({ from: "Mom <mom@example.com>", title: "Call me" }, on), "people");
@@ -58,7 +67,10 @@ test("switches change by voice or tap, and an urgent email is said on the call o
     "security",
   );
   assert.match(said[0]?.[0] ?? "", /security alert just came in from Google/);
+  // Removing takes the exact entry only.
   await alerts.update(owner, { removePeople: ["dana"] });
+  assert.deepEqual((await alerts.settings(owner)).peopleList, ["Dana at Acme"]);
+  await alerts.update(owner, { removePeople: ["dana at acme"] });
   assert.deepEqual((await alerts.settings(owner)).peopleList, []);
 });
 
@@ -80,7 +92,7 @@ test("time to leave: something starting in 10 to 20 minutes is said on the call"
   });
   await alerts.checkLeave("urgent-2");
   assert.deepEqual(said, [
-    "Heads up: “Dentist” starts at 3:00 PM, in about 15 minutes, at 12 Main St.",
+    "Heads up: “Dentist” starts in about 15 minutes, at 3:00 PM. It’s at 12 Main St.",
   ]);
   await alerts.update("urgent-2", { timeToLeave: false });
   said.length = 0;
