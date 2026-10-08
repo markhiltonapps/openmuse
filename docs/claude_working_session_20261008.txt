@@ -1,0 +1,28 @@
+Claude working session — 2026-10-08
+
+Owner's feature requests (8), and decisions (asked Oct 8)
+1. Location awareness: while the app is open (on a call or not), after one permission. Only the
+   latest spot is kept, forgotten after an hour, with a switch to turn it off. Separate from the
+   saved home area (weather, local news), which stays as is. No live traffic for now (it needs a
+   paid map service such as Google Maps); nearby places use free sources.
+2 + 4. Voice approval, one item or several ("approve all", or yes/no for each): everything except
+   money (purchases and payments still need a tap). The check listens to the person's own words
+   in the call's input transcript, never to the model's decision, so text read aloud (an email
+   saying "approve") can't approve. Neddy reads back who and what first.
+3. Interrupting mid-sentence: should already work (live voice hears the person while it talks;
+   the call's instructions say stop and listen; the call's turns stay in context). Can't call
+   from the sandbox: the owner tests it on a call.
+5. Urgent alerts mid-call: time to leave, security alerts, money problems, people they choose;
+   each with its own switch (and changeable by voice). Open question: whether OpenAI Live lets
+   the server make the voice speak unprompted (only testable on Railway); fallback is a tone and
+   the alert at the next pause.
+6. Rules by voice: already reaches create_routine / create_email_rule through the hand-over; add
+   a plain-words read-back before saving.
+7. Brief on demand: one "brief me" action reusing the morning brief's sources, short for
+   listening.
+8. Adaptive reminders: for reminders tied to a calendar event ("30 minutes before the
+   dentist"); when the event moves the reminder moves, and the person is told.
+Order: 2+4, 6, 7, 5, 8, 1. UI goes through the Design division.
+
+Also pending from Oct 6: the AI models card's review round 2 (folded into this work, with the
+owner's notes from testing it).
