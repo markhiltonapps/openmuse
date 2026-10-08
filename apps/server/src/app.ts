@@ -78,6 +78,7 @@ import { LiveVoice, liveInstructions } from "./voice-live.ts";
 import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
+import { nominatimStreets, Whereabouts } from "./whereabouts.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -372,6 +373,14 @@ export async function createApp(
     mailAlerts.urgent = (owner, item) => urgentAlerts?.consider(owner, item) ?? Promise.resolve();
   appEvents.urgent = (owner, item) => urgentAlerts?.consider(owner, item) ?? Promise.resolve();
   agent.voiceEar = (owner, sessionId) => liveVoice.ear(owner, sessionId);
+  // Where they are right now (only while the app is open and it's on; kept in memory, an hour).
+  const whereabouts = new Whereabouts(
+    db,
+    config.mode === "live"
+      ? nominatimStreets(`Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; where am I)`)
+      : undefined,
+  );
+  agent.whereabouts = whereabouts;
   agent.areas = new Areas(
     db,
     config.mode === "live"
@@ -717,6 +726,15 @@ export async function createApp(
     if (!mailAlerts) throw new AppError("Connected apps aren't set up on the server", 503);
     return mailAlerts;
   };
+  app.get("/api/location", async (c) => c.json(await whereabouts.view(c.get("owner"))));
+  app.post("/api/location", async (c) =>
+    c.json(await whereabouts.report(c.get("owner"), await c.req.json())),
+  );
+  app.post("/api/location/sharing", async (c) => {
+    const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());
+    await whereabouts.setEnabled(c.get("owner"), on);
+    return c.json(await whereabouts.view(c.get("owner")));
+  });
   app.get("/api/urgent-alerts", async (c) =>
     c.json(await (urgentAlerts as UrgentAlerts).settings(c.get("owner"))),
   );

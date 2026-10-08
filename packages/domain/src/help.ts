@@ -1022,6 +1022,26 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["email-alerts"],
   },
   {
+    id: "location",
+    group: "control",
+    title: "Share where you are",
+    summary:
+      "Let {agent} know where you are right now, for what’s nearby and help while you’re out. Off until you turn it on.",
+    place: "account",
+    steps: [
+      "Open **Apps › Account › Your location** and tick **Share where I am while the app is open**. Your browser asks once; tap **Allow**.",
+      "Ask “Where am I?” or “Find a coffee shop near me”, in the chat or on a call.",
+      "To stop, untick it, or say “Turn off my location”.",
+    ],
+    body: [
+      "It’s shared only while the app is open. Only your latest spot is kept, never saved for good, and it’s forgotten after an hour or as soon as you turn it off.",
+      "Weather and local news still use your home city (on the Feed). Live traffic isn’t included yet.",
+    ],
+    say: [{ text: "Where am I?", send: true }, "Turn off my location"],
+    keywords: ["location", "gps", "where am i", "near me", "nearby", "privacy", "traffic"],
+    related: ["urgent-alerts", "live-call"],
+  },
+  {
     id: "urgent-alerts",
     group: "talk",
     title: "Urgent alerts on calls",

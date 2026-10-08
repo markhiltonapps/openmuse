@@ -74,6 +74,7 @@ import type { UsageMeter, UsageTotals } from "../usage.ts";
 import type { CallEar } from "../voice-approval.ts";
 import type { WeatherService } from "../weather.ts";
 import type { WebSearch } from "../web-search.ts";
+import type { Whereabouts } from "../whereabouts.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
 import { rememberStep } from "./job-steps.ts";
@@ -1004,6 +1005,8 @@ export class AgentService {
   private lastFollowed = 0;
   /** Urgent alerts said on a live call, and their switches. */
   urgent?: UrgentAlerts;
+  /** Where they are right now, from their phone (while the app is open and it's on). */
+  whereabouts?: Whereabouts;
   /** A live call's ear, for approving by voice (what was read back, and their words since). */
   voiceEar?: (owner: string, sessionId: string) => CallEar | undefined;
   /** Everyone's AI costs together, for the admin. */

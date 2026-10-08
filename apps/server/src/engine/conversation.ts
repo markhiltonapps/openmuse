@@ -57,6 +57,7 @@ import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-br
 import type { VoiceSession } from "../voice-live.ts";
 import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
+import { whereaboutsToolSpecs } from "../whereabouts.ts";
 import { answerLayoutInstructions } from "./answer-layout.ts";
 import { localNow } from "./clock.ts";
 import { builtInMailOff, inboxCheckInstructions, mailContext } from "./mailboxes.ts";
@@ -471,6 +472,18 @@ export class ConversationAgent extends AbstractAgent {
         }),
       );
     }
+    const whereabouts = this.service.whereabouts;
+    if (whereabouts)
+      tools.push(
+        ...whereaboutsToolSpecs(whereabouts, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
+          }),
+        ),
+      );
     const urgent = this.service.urgent;
     if (urgent)
       tools.push(

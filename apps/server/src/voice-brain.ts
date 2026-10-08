@@ -174,6 +174,10 @@ export function voiceNote(tool: string, args: unknown) {
       return "Looking back through your chats";
     case "agent_status":
       return "Checking your jobs";
+    case "where_am_i":
+      return "Checking where you are";
+    case "set_location_sharing":
+      return "Changing location sharing";
     case "urgent_alert_settings":
     case "change_urgent_alerts":
       return "Checking your urgent alerts";

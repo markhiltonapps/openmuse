@@ -92,3 +92,17 @@ Built: adaptive reminders (8), committed locally
   told once and the reminder stays. A calendar that can't be read changes nothing.
 - Help: reminders topic.
 - Tests: adaptive-reminders.test.ts.
+
+Built: location while the app is open (1) — server committed; the card waits for design review
+- whereabouts.ts: on/off setting (off to start); the app reports the phone's spot (POST
+  /api/location) only when on; only the latest spot, in memory, never saved; forgotten after an
+  hour or when turned off. A street-level name from OpenStreetMap (zoom 17, one a second, cached
+  while they're within about 100 m), looked up only when asked.
+- Tools (chat and calls): where_am_i (says when it's off or unknown) and set_location_sharing.
+  The live voice hands off "where am I / what's near me". Home area stays for weather and news.
+- App (uncommitted until reviewed): LocationReporter (watchPosition only while visible and on;
+  sends on a ~150 m move or every 5 minutes; re-checks the setting when the app comes back, so a
+  voice change applies) and "Your location" card on Apps › Account (asks the browser during the
+  tap; says how to unblock it).
+- Help: new "location" topic.
+- Tests: whereabouts.test.ts (2).
