@@ -45,6 +45,7 @@ import { personaInstructions, personaToolSpecs } from "../persona.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
 import { richCardInstructions, richCardToolSpecs } from "../rich-cards.ts";
+import { confirmFirst, emailRuleWords, routineWords } from "../rule-words.ts";
 import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
@@ -155,6 +156,8 @@ export class ConversationAgent extends AbstractAgent {
     const key = (name: string, value: unknown) =>
       `${requestKey}:${name}:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
     const browserAbort = new AbortController();
+    // A live call's hand-over: rules are said back before they're saved.
+    const onCall = input.threadId.startsWith("voice-");
     const tools = [
       ...computerTools(this.service.computer, this.service.files, this.owner, `chat:${requestKey}`),
       defineTool({
@@ -354,9 +357,12 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "create_routine",
         description:
-          "Schedule a recurring job the person asked for (for example a weekday morning brief at 07:30, or a Friday follow-up check). Each run becomes a task in Activity and notifies them. time is 24-hour HH:MM in their time zone; days use 0 = Sunday.",
-        parameters: routineInputSchema,
-        execute: async (args) => this.service.createRoutine(this.owner, args, key("routine", args)),
+          "Schedule a recurring job the person asked for (for example a weekday morning brief at 07:30, or a Friday follow-up check). Each run becomes a task in Activity and notifies them. time is 24-hour HH:MM in their time zone; days use 0 = Sunday. On a call it's said back to them first: set confirmed only after they've said yes to it.",
+        parameters: routineInputSchema.extend({ confirmed: z.boolean().optional() }),
+        execute: async ({ confirmed, ...args }) =>
+          onCall && !confirmed
+            ? confirmFirst(routineWords(args))
+            : this.service.createRoutine(this.owner, args, key("routine", args)),
       }),
       defineTool({
         name: "suggest_memory",
@@ -454,8 +460,18 @@ export class ConversationAgent extends AbstractAgent {
         ...mailAlertToolSpecs(mailAlerts, this.owner).map((spec) =>
           defineTool({
             ...spec,
-            parameters: spec.parameters as z.ZodObject,
-            execute: async (args: unknown) => {
+            ...(spec.name === "create_email_rule"
+              ? {
+                  description: `${spec.description} On a call it's said back to them first: set confirmed only after they've said yes to it.`,
+                  parameters: (spec.parameters as z.ZodObject).extend({
+                    confirmed: z.boolean().optional(),
+                  }),
+                }
+              : { parameters: spec.parameters as z.ZodObject }),
+            execute: async (raw: unknown) => {
+              const { confirmed, ...args } = raw as { confirmed?: boolean };
+              if (spec.name === "create_email_rule" && onCall && !confirmed)
+                return confirmFirst(emailRuleWords(args as Parameters<typeof emailRuleWords>[0]));
               try {
                 return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
               } catch (error) {

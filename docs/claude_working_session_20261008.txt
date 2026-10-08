@@ -44,3 +44,11 @@ Built: voice approval (2 + 4), committed locally
 - Tests: voice-approval.test.ts (5); voice and approval tests (26) still pass.
 - Untested on a real call (the sandbox can't reach OpenAI Live): the owner should try "approve it"
   on a call with something waiting.
+
+Built: rules said back on a call (6), committed locally
+- rule-words.ts turns a routine or an email rule into a sentence ("Every weekday at 7:30 AM,
+  I'll do this: give me a brief for today. Shall I set that up?"). On a call's hand-over,
+  create_routine and create_email_rule return that sentence instead of saving until called again
+  with confirmed: true after the person's yes (typed chat saves straight away, as before).
+- Help: routines topic (on a call it's said back first; email rules work the same way).
+- Tests: rule-words.test.ts.

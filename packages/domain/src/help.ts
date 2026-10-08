@@ -638,9 +638,13 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "A job that runs by itself at set times, like a morning rundown.",
     place: "tracking",
     steps: [
-      "Ask in the chat: “Every weekday at 8, send me a rundown of my day.”",
+      "Ask in the chat or on a call: “Every weekday at 8, send me a rundown of my day.”",
+      "On a call, {agent} says the routine back in plain words first; say “yes” to save it, or change it.",
       "Each run becomes a job in **Activity** and sends you an update.",
       "See, pause or remove them in **Goals › Tracking**.",
+    ],
+    body: [
+      "Email rules work the same way: “When Dana at Acme emails me about an invoice, save the PDF and tell me the total.”",
     ],
     say: ["Every Friday at 4, check my inbox for anything I haven’t answered."],
     keywords: ["routine", "schedule", "recurring", "every day", "daily", "weekly", "automation"],
