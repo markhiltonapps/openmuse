@@ -1024,9 +1024,9 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: "location",
     group: "control",
-    title: "Share where you are",
+    title: "Share your location",
     summary:
-      "Let {agent} know where you are right now, for what’s nearby and help while you’re out. Off until you turn it on.",
+      "Let {agent} know your location right now, for what’s nearby and help while you’re out. Off until you turn it on.",
     place: "account",
     steps: [
       "Open **Apps › Account › Your location** and tick **Share where I am while the app is open**. Your browser asks once; tap **Allow**.",
@@ -1038,7 +1038,15 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Weather and local news still use your home city (on the Feed). Live traffic isn’t included yet.",
     ],
     say: [{ text: "Where am I?", send: true }, "Turn off my location"],
-    keywords: ["location", "gps", "my location", "current location", "near me", "nearby", "privacy"],
+    keywords: [
+      "location",
+      "gps",
+      "my location",
+      "current location",
+      "near me",
+      "nearby",
+      "privacy",
+    ],
     related: ["urgent-alerts", "live-call"],
   },
   {
