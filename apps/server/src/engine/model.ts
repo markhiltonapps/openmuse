@@ -1,3 +1,4 @@
+import { briefToolSpec } from "../brief.ts";
 import "../config.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { EventType, type RunAgentInput } from "@ag-ui/core";
@@ -431,25 +432,33 @@ export async function executeModelTask(
   const jobKey = (name: string, value: unknown) =>
     `task:${task.id}:${name}:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
   const calendarRange = service.calendarRange;
+  const jobCalendar = calendarRange
+    ? calendarToolSpec(
+        {
+          between: calendarRange,
+          timeZone: (who) => service.timeZone(who).catch(() => "UTC"),
+          reminders: async (who) => (await service.reminders?.list(who))?.upcoming ?? [],
+        },
+        owner,
+        { background: true },
+      )
+    : undefined;
   tools.push(
     ...[
       ...(service.reminders ? reminderToolSpecs(service.reminders, owner, jobKey) : []),
       ...(service.commitments ? commitmentToolSpecs(service.commitments, owner) : []),
       ...peopleToolSpecs(service.people, owner),
       ...personaToolSpecs(service.persona, owner),
-      ...(calendarRange
-        ? [
-            calendarToolSpec(
-              {
-                between: calendarRange,
-                timeZone: (who) => service.timeZone(who).catch(() => "UTC"),
-                reminders: async (who) => (await service.reminders?.list(who))?.upcoming ?? [],
-              },
-              owner,
-              { background: true },
-            ),
-          ]
-        : []),
+      ...(jobCalendar ? [jobCalendar] : []),
+      briefToolSpec(
+        {
+          db: service.db,
+          ...(jobCalendar ? { calendar: jobCalendar } : {}),
+          comingUp: async (who) => (await service.commitments?.context(who)) ?? "",
+        },
+        owner,
+        { background: true },
+      ),
       ...(service.areas
         ? areaToolSpecs(service.areas, owner, (who) => service.areaChanged?.(who))
         : []),

@@ -124,6 +124,12 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "writing", label: "Making a note…" };
     case "agent_status":
       return { kind: "plan", label: "Checking on your jobs…" };
+    case "brief_me":
+      return { kind: "plan", label: "Pulling your day together…" };
+    case "read_back_approvals":
+      return { kind: "plan", label: "Checking what's waiting…" };
+    case "approve_by_voice":
+      return { kind: "plan", label: "Approving…" };
     case "ai_costs":
       return { kind: "plan", label: "Adding up what the AI has cost…" };
     case "change_ai_models":

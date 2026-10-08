@@ -174,6 +174,12 @@ export function voiceNote(tool: string, args: unknown) {
       return "Looking back through your chats";
     case "agent_status":
       return "Checking your jobs";
+    case "brief_me":
+      return "Pulling your day together";
+    case "read_back_approvals":
+      return "Checking what's waiting";
+    case "approve_by_voice":
+      return "Approving";
     case "ai_costs":
       return "Adding up what the AI has cost";
     case "change_ai_models":

@@ -20,6 +20,7 @@ import { appGuideInstructions, showInAppInstructions, showInAppToolSpec } from "
 import { approvalToolSpec } from "../approval-tools.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { areaInstructions, areaToolSpecs } from "../area.ts";
+import { briefToolSpec } from "../brief.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
 import { type ChatDirectory, chatToolInstructions, chatToolSpecs } from "../chat-tools.ts";
@@ -451,6 +452,21 @@ export class ConversationAgent extends AbstractAgent {
               };
             }
           },
+        }),
+      );
+      const brief = briefToolSpec(
+        {
+          db: this.service.db,
+          calendar,
+          comingUp: async (owner) => (await this.service.commitments?.context(owner)) ?? "",
+        },
+        this.owner,
+      );
+      tools.push(
+        defineTool({
+          ...brief,
+          parameters: brief.parameters as z.ZodObject,
+          execute: async () => brief.execute(),
         }),
       );
     }

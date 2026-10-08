@@ -52,3 +52,14 @@ Built: rules said back on a call (6), committed locally
   with confirmed: true after the person's yes (typed chat saves straight away, as before).
 - Help: routines topic (on a call it's said back first; email rules work the same way).
 - Tests: rule-words.test.ts.
+
+Built: "brief me" on demand (7), committed locally
+- brief.ts: brief_me gathers today's calendar and reminders (the look_at_calendar code), what's
+  waiting for their OK, jobs that need an answer / running / finished or failed today, and
+  what's coming up (commitments, two weeks). Told to lead with what's next, then what's waiting,
+  in about half a minute, then offer an email check (mailbox reads are slow on a call). In the
+  chat, on calls (same agent) and in background jobs (so the scheduled morning brief uses the
+  same sources).
+- Labels for brief_me, read_back_approvals and approve_by_voice (call and chat "now doing").
+- Help: live-call topic (brief me, approving by voice, interrupting).
+- Tests: brief.test.ts.
