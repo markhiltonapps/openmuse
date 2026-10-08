@@ -169,6 +169,15 @@ export class AgentService {
       await this.reminders
         ?.deliverDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("reminders", error));
+      // Reminders for calendar events follow them when they move (every 15 minutes: calendar
+      // reads go to the connected apps).
+      const calendarRange = this.calendarRange;
+      if (calendarRange && Date.now() - this.lastFollowed > 15 * 60_000) {
+        this.lastFollowed = Date.now();
+        await this.reminders
+          ?.followEvents(async (owner, from, to) => (await calendarRange(owner, from, to)).events)
+          .catch((error) => backgroundFailure("reminders following events", error));
+      }
       await this.spacePosts
         ?.publishDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("scheduled posts", error));
@@ -991,6 +1000,8 @@ export class AgentService {
   look?: LookAtImage;
   /** Model usage per person, for costs and plan limits. */
   usage?: UsageMeter;
+  /** When reminders last checked their calendar events. */
+  private lastFollowed = 0;
   /** Urgent alerts said on a live call, and their switches. */
   urgent?: UrgentAlerts;
   /** A live call's ear, for approving by voice (what was read back, and their words since). */

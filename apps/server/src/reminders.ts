@@ -18,8 +18,19 @@ const when = {
     .max(366 * 24 * 60)
     .optional(),
 };
+/** The calendar event a reminder is for, so it moves when the event moves. */
+const linkedEvent = z
+  .object({
+    title: z.string().trim().min(1).max(300),
+    /** The event's start, as look_at_calendar gave it. */
+    start: z.string().min(10).max(40),
+    id: z.string().max(300).optional(),
+  })
+  .describe(
+    "The calendar event this reminder is for (from look_at_calendar), e.g. “30 minutes before the dentist”: the reminder then moves when the event moves",
+  );
 export const reminderInputSchema = z
-  .object({ text: z.string().trim().min(1).max(300), ...when })
+  .object({ text: z.string().trim().min(1).max(300), ...when, event: linkedEvent.optional() })
   .refine((value) => value.at || value.inMinutes, { message: "Say when to remind them" });
 export const reminderChangeSchema = z.object({
   id: z.string().min(1).max(100),
@@ -35,6 +46,15 @@ export interface Reminder {
   status: "upcoming" | "sent";
   createdAt: string;
   sentAt?: string;
+  /** The event it's for: it keeps the same distance from the event's start when that moves. */
+  event?: { title: string; start: string; id?: string; offsetMs: number; gone?: boolean };
+}
+/** A calendar event, as the calendar apps give it. */
+export interface CalendarEvent {
+  id?: string;
+  title: string;
+  start: string;
+  allDay?: boolean;
 }
 const MAX_UPCOMING = 100;
 /** Sent reminders stay listed this long, then are cleared away. */
@@ -82,12 +102,24 @@ export class ReminderService {
     );
     if (upcoming.length >= MAX_UPCOMING)
       throw new AppError("Cancel some reminders before adding more", 409);
+    const due = await this.due(owner, input);
+    const eventStart = input.event ? Date.parse(input.event.start) : Number.NaN;
     const reminder: Reminder = {
       id: key ? createHash("sha256").update(`reminder:${key}`).digest("hex") : randomUUID(),
       text: input.text,
-      ...(await this.due(owner, input)),
+      ...due,
       status: "upcoming",
       createdAt: new Date(this.now()).toISOString(),
+      ...(input.event && Number.isFinite(eventStart)
+        ? {
+            event: {
+              title: input.event.title,
+              start: new Date(eventStart).toISOString(),
+              ...(input.event.id ? { id: input.event.id } : {}),
+              offsetMs: eventStart - Date.parse(due.dueAt),
+            },
+          }
+        : {}),
     };
     return this.view((await this.db.insertIfAbsent(owner, "reminders", reminder)) ?? reminder);
   }
@@ -135,6 +167,79 @@ export class ReminderService {
         .map((r) => this.view(r)),
     };
   }
+  /**
+   * Adaptive reminders (owner, 2026-10-08): a reminder for a calendar event keeps the same
+   * distance from it when the event moves, and the person is told. An event that's gone is said
+   * once; the reminder stays. `events` reads their calendars between two times.
+   */
+  async followEvents(
+    events: (owner: string, from: string, to: string) => Promise<CalendarEvent[]>,
+  ) {
+    const now = this.now();
+    const linked = (await this.db.scan<Reminder>("reminders")).filter(
+      ({ value }) =>
+        value.status === "upcoming" &&
+        value.event &&
+        !value.event.gone &&
+        Date.parse(value.dueAt) > now &&
+        Date.parse(value.dueAt) - now < 30 * 86_400_000,
+    );
+    for (const { owner, value } of linked) {
+      const event = value.event as NonNullable<Reminder["event"]>;
+      const was = Date.parse(event.start);
+      const found = await events(
+        owner,
+        new Date(was - 7 * 86_400_000).toISOString(),
+        new Date(was + 7 * 86_400_000).toISOString(),
+      ).catch(() => undefined);
+      // A calendar that couldn't be read says nothing about the event.
+      if (!found) continue;
+      const same = found
+        .filter((e) =>
+          event.id ? e.id === event.id : e.title.trim().toLowerCase() === event.title.toLowerCase(),
+        )
+        .sort(
+          (a, b) => Math.abs(Date.parse(a.start) - was) - Math.abs(Date.parse(b.start) - was),
+        )[0];
+      if (!same) {
+        // Gone, renamed or moved more than a week: said once, and the reminder stays.
+        const moved = await this.db.compareAndSwap<Reminder>(
+          owner,
+          "reminders",
+          value.id,
+          { status: "upcoming", dueAt: value.dueAt },
+          { event: { ...event, gone: true } },
+        );
+        if (moved)
+          await this.notify(owner, {
+            id: value.id,
+            title: "Can’t find the event for a reminder",
+            body: `I can’t find “${event.title}” on your calendar any more. Your reminder “${value.text}” stays at ${this.describe(value)}; ask me to move or cancel it.`,
+            key: `reminder-gone:${value.id}`,
+          });
+        continue;
+      }
+      const start = Date.parse(same.start);
+      if (!Number.isFinite(start) || Math.abs(start - was) < 60_000) continue;
+      const dueAt = new Date(Math.max(start - event.offsetMs, now + 60_000)).toISOString();
+      const next = await this.db.compareAndSwap<Reminder>(
+        owner,
+        "reminders",
+        value.id,
+        { status: "upcoming", dueAt: value.dueAt },
+        { dueAt, event: { ...event, start: new Date(start).toISOString() } },
+      );
+      if (!next) continue;
+      const moved = { ...value, dueAt };
+      const eventAt = this.describe({ ...value, dueAt: new Date(start).toISOString() });
+      await this.notify(owner, {
+        id: value.id,
+        title: "Reminder moved",
+        body: `“${event.title}” moved to ${eventAt}, so your reminder “${value.text}” is now at ${this.describe(moved)}.`,
+        key: `reminder-moved:${value.id}:${dueAt}`,
+      });
+    }
+  }
   /** Sends each due reminder once (claimed by compare-and-swap) and clears old sent ones. */
   async deliverDue(skip: (owner: string) => Promise<boolean> = async () => false) {
     const now = this.now();
@@ -174,7 +279,7 @@ export function reminderToolSpecs(
     {
       name: "set_reminder",
       description:
-        "Remind the person about something once, at a time: a notification on their devices and an update in chat. Use `at` as their local wall-clock time (YYYY-MM-DDTHH:MM, from the current date and time you were given), or `inMinutes` for a delay. For something that repeats, create a routine instead. Confirm the time back in plain words.",
+        "Remind the person about something once, at a time: a notification on their devices and an update in chat. Use `at` as their local wall-clock time (YYYY-MM-DDTHH:MM, from the current date and time you were given), or `inMinutes` for a delay. When it's for something on their calendar (“30 minutes before the dentist”), find it with look_at_calendar and pass it as `event`: the reminder then moves when the event moves, and they're told. For something that repeats, create a routine instead. Confirm the time back in plain words.",
       parameters: reminderInputSchema,
       execute: (args: z.infer<typeof reminderInputSchema>) =>
         reminders.set(owner, args, key("reminder", args)),

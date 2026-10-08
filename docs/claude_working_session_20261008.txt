@@ -82,3 +82,13 @@ Built: urgent alerts on calls (5) — server committed; the switches card waits 
 - Help: new "urgent-alerts" topic (talk group, place alerts).
 - Tests: urgent-alerts.test.ts (3) and a live-call test (said straight away, once; next answer
   after a refusal).
+
+Built: adaptive reminders (8), committed locally
+- reminders.ts: set_reminder takes an optional `event` (title, start, id from look_at_calendar);
+  the reminder keeps its distance from the event's start. followEvents() runs every 15 minutes
+  from maintenance (calendar reads go to the connected apps): if the event moved, the reminder
+  moves (never into the past) and the person is told ("“Dentist” moved to …, so your reminder …
+  is now at …"); if it can't be found (by id, else by title, within a week either side), they're
+  told once and the reminder stays. A calendar that can't be read changes nothing.
+- Help: reminders topic.
+- Tests: adaptive-reminders.test.ts.

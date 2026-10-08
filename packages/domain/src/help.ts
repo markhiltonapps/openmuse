@@ -477,8 +477,15 @@ export const HELP_TOPICS: HelpTopic[] = [
       "See them all on the **Feed** and tap **See all reminders**: upcoming, and ones sent in the last 7 days.",
       "To move or cancel one, just ask.",
     ],
-    say: ["Remind me to call Mom on Sunday at 5.", "Move my Monday reminder to Tuesday."],
-    keywords: ["remind", "alarm", "notification", "alert", "later"],
+    body: [
+      "A reminder for something on your calendar (“Remind me 30 minutes before the dentist”) follows it: if the appointment moves, the reminder moves with it and you’re told. If the event can’t be found any more, you’re told once and the reminder stays.",
+    ],
+    say: [
+      "Remind me to call Mom on Sunday at 5.",
+      "Remind me 30 minutes before my next appointment.",
+      "Move my Monday reminder to Tuesday.",
+    ],
+    keywords: ["remind", "alarm", "notification", "alert", "later", "before my appointment"],
     related: ["routines", "notifications"],
   },
   {
