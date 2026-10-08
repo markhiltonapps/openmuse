@@ -358,6 +358,7 @@ export async function createApp(
       tell: (owner, title, body, key) => agent.notify(owner, title, body, undefined, key),
     },
   );
+  agent.voiceEar = (owner, sessionId) => liveVoice.ear(owner, sessionId);
   agent.areas = new Areas(
     db,
     config.mode === "live"

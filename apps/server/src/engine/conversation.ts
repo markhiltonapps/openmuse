@@ -49,6 +49,7 @@ import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
+import { voiceApprovalTools } from "../voice-approval.ts";
 import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-brain.ts";
 import type { VoiceSession } from "../voice-live.ts";
 import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
@@ -645,6 +646,21 @@ export class ConversationAgent extends AbstractAgent {
         }),
       ),
     );
+    // A live call's hand-over (its own thread): approving by voice, from their own words.
+    const ear = input.threadId.startsWith("voice-")
+      ? this.service.voiceEar?.(this.owner, input.threadId.slice("voice-".length))
+      : undefined;
+    if (ear)
+      tools.push(
+        ...voiceApprovalTools(this.service.db, this.service.actions, this.owner, ear).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
+          }),
+        ),
+      );
     // A live call's hand-over (its own thread): long answers go on the person's screen.
     if (input.threadId.startsWith("voice-")) {
       const onScreen = showOnScreenToolSpec();

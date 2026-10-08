@@ -26,3 +26,21 @@ Order: 2+4, 6, 7, 5, 8, 1. UI goes through the Design division.
 
 Also pending from Oct 6: the AI models card's review round 2 (folded into this work, with the
 owner's notes from testing it).
+
+Built: voice approval (2 + 4), committed locally
+- voice-approval.ts: read_back_approvals and approve_by_voice, offered only in a call's hand-over
+  (thread voice-<session>). The read-back is written by the server from each action (who it goes
+  to, the subject, the event and time), up to six at once; anything with money (purchases,
+  payment steps, steps needing a typed code) is named as needing a tap. approve_by_voice works
+  only on what was just read back (within 5 minutes, once), and only when the person's own words
+  since then (LiveVoice.ear: OpenAI's transcript of their microphone, user turns after the
+  read-back) say yes. Approving everything needs "all"/"both"; choosing some ("the email, not the
+  calendar") can mix yes and no; declining needs a no. It then decides through the usual
+  ActionService.decide (same checks as a tap).
+- Voice rules: the chat agent on a call uses read_back_approvals, says its text word for word,
+  and calls approve_by_voice on their answer; the live voice hands both turns off and never says
+  something was approved until the answer says so.
+- Help: approvals topic says how to approve by voice.
+- Tests: voice-approval.test.ts (5); voice and approval tests (26) still pass.
+- Untested on a real call (the sandbox can't reach OpenAI Live): the owner should try "approve it"
+  on a call with something waiting.

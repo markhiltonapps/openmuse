@@ -1210,6 +1210,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "Approvals expire after a while; if one has, ask {agent} again. You can say “Show me what’s waiting for my OK” any time.",
+      "**On a call, approve by voice:** say “approve it” or “what’s waiting?”. {agent} reads back exactly what each one is; say “yes, approve”, “approve all”, or which ones (“the email, not the calendar one”). Only your own yes counts, and anything involving money (purchases and payments) still needs a tap.",
       "Anything you’ve marked as always allowed goes ahead without asking (see “Let small things go ahead”); purchases always ask.",
       "A job that needs several steps in one app: when you approve the first one, tick **Let this job do its other … steps without asking**, and its later steps in that app go ahead. Deleting, cancelling and paying still ask. To undo it, tap **Ask me each time** on the job’s page.",
     ],
@@ -1224,6 +1225,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "my ok",
       "needs my ok",
       "waiting for my ok",
+      "approve by voice",
+      "approve all",
       "keeps asking",
       "asks again",
       "every time",
