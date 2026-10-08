@@ -66,14 +66,18 @@ export function urgentKind(
 export function fromPerson(from: string, person: string) {
   const wanted = person.trim().toLowerCase();
   const sender = from.toLowerCase();
-  if (wanted.includes("@")) return (sender.match(/[^\s<>"]+@[^\s<>"]+/g) ?? ([] as string[])).includes(wanted);
+  if (wanted.includes("@"))
+    return (sender.match(/[^\s<>"]+@[^\s<>"]+/g) ?? ([] as string[])).includes(wanted);
   const name = sender.replace(/<.*>/, "").replace(/["']/g, "").trim();
   const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(^|[^\\p{L}\\p{N}'’])${escaped}($|[^\\p{L}\\p{N}'’])`, "u").test(name);
 }
 /** Never read out a code or an account number: runs of four or more digits are left out. */
 const noCodes = (text: string) =>
-  text.replace(/\d[\d\s-]{2,}\d/g, (run) => (run.replace(/\D/g, "").length >= 4 ? "…" : run));
+  text.replace(/(\$\s?)?\d[\d\s,.-]{2,}\d/g, (run, dollars) =>
+    // A dollar amount stays ("$4,500 payment failed"); a code or account number doesn't.
+    dollars || run.replace(/\D/g, "").length < 4 ? run : "…",
+  );
 const clip = (text: string, length = 160) =>
   text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text;
 

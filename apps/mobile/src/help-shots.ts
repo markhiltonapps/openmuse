@@ -15,9 +15,12 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   health: { width: 720, height: 1558 },
   home: { width: 720, height: 1558 },
   job: { width: 720, height: 1558 },
+  location: { width: 720, height: 1558 },
+  models: { width: 720, height: 2400 },
   money: { width: 720, height: 1558 },
   newjob: { width: 720, height: 1558 },
   seeit: { width: 720, height: 1558 },
   spaces: { width: 720, height: 1558 },
+  urgent: { width: 720, height: 1558 },
   weight: { width: 720, height: 1150 },
 };

@@ -55,9 +55,15 @@ function focusSoon(id: string) {
   if (Platform.OS !== "web") return;
   setTimeout(() => document.getElementById(id)?.focus(), 0);
 }
-/** "GPT-6.1 Sol, Thinks hard". */
+/** How hard it thinks, inside a sentence. */
+const EFFORT_SAID: Record<Effort, string> = {
+  low: "quick",
+  medium: "some thinking",
+  high: "thinking hard",
+};
+/** "GPT-6.1 Sol, thinking hard". */
 const named = (choice: Choice, fallback: Effort) =>
-  `${modelLabel(choice.model)}, ${EFFORT_LABELS[choice.effort ?? fallback]}`;
+  `${modelLabel(choice.model)}, ${EFFORT_SAID[choice.effort ?? fallback]}`;
 const onRecommended = (row: Row) =>
   row.choice.model === row.recommended.model &&
   (row.choice.effort ?? row.recommended.effort) === row.recommended.effort;
@@ -196,8 +202,8 @@ export function ModelsCard() {
                 {row.lastCall ? (
                   <Text style={[s.muted, failed ? { color: colors.danger } : undefined]}>
                     {failed
-                      ? `The last call, at ${timeOf(failed.at)}, didn’t work: ${failed.error}. ${modelLabel(failed.usedInstead) || "Claude"} answered instead.`
-                      : `Working. Last call at ${timeOf(row.lastCall.at)}.`}
+                      ? `The last AI call, at ${timeOf(failed.at)}, didn’t work: ${failed.error}. ${modelLabel(failed.usedInstead) || "Claude"} answered instead.`
+                      : `Working. Last AI call at ${timeOf(row.lastCall.at)}.`}
                   </Text>
                 ) : null}
               </View>
@@ -251,19 +257,19 @@ function usingLine(row: Row, ready: boolean): { name: string; note: string; hint
     };
   return {
     name: modelLabel(choice.model),
-    note: `${EFFORT_LABELS[effort]}${hint ? "" : " · recommended pick"}`,
+    note: `${EFFORT_LABELS[effort]}${hint ? "" : " · recommended"}`,
     hint,
   };
 }
 
 /** A saved choice said back: "Saved. Chat: GPT-6.1 Sol, Thinks hard." */
 function savedMessage(title: string, choice: Choice, ready: boolean, reset: boolean) {
-  if (choice.model === SERVER) return `Saved. ${title}: Claude, as before.`;
+  if (choice.model === SERVER) return `Saved. ${title} now uses Claude, as before.`;
   const name = named(choice, "medium");
   const later = ready ? "" : " It starts once OpenRouter is set up.";
   return reset
     ? `Saved. ${title} is back on the recommended pick, ${name}.${later}`
-    : `Saved. ${title}: ${name}.${later}`;
+    : `Saved. ${title} now uses ${name}.${later}`;
 }
 
 function ModelEditor({

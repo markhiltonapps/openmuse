@@ -67,6 +67,7 @@ import { Details } from "./src/details";
 import { FeedScreen } from "./src/feed";
 import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
 import { LiveTalkSheet } from "./src/live-talk-ui";
+import { LocationReporter } from "./src/location-ui";
 import { MenuSheet } from "./src/menu-ui";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import {
@@ -356,6 +357,7 @@ function WorkspaceApp({ token }: { token: string }) {
           <ThreadsProvider>
             {/* The live call carries on across screens and sheets, its bar on top of them. */}
             <LiveCallProvider>
+              <LocationReporter />
               <CallBarSlot>
                 <WorkspaceShell
                   detail={detail}

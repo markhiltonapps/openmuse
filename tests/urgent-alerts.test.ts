@@ -61,12 +61,25 @@ test("switches change by voice or tap, and an urgent email is said on the call o
   assert.equal(
     await alerts.consider(owner, {
       title: "Suspicious sign-in attempt",
+      text: "If this wasn't you, use code 482913 to secure your account",
       from: "Google",
       key: "s1",
     }),
     "security",
   );
-  assert.match(said[0]?.[0] ?? "", /security alert just came in from Google/);
+  // The subject only: never the body, and never a code.
+  assert.equal(
+    said[0]?.[0],
+    "A security alert just came in from Google: Suspicious sign-in attempt",
+  );
+  // Money alerts keep the amount, never an account number.
+  await alerts.update(owner, { money: true });
+  await alerts.consider(owner, {
+    title: "Payment failed",
+    text: "Your $4,500.00 payment from account 12345678 was declined",
+    key: "m2",
+  });
+  assert.match(said[1]?.[0] ?? "", /\$4,500\.00 payment from account … was declined/);
   // Removing takes the exact entry only.
   await alerts.update(owner, { removePeople: ["dana"] });
   assert.deepEqual((await alerts.settings(owner)).peopleList, ["Dana at Acme"]);

@@ -106,3 +106,35 @@ Built: location while the app is open (1) — server committed; the card waits f
   tap; says how to unblock it).
 - Help: new "location" topic.
 - Tests: whereabouts.test.ts (2).
+
+Design review (Oct 8): AI models card round 2 + Urgent alerts card + Your location card
+- Visual (UI Designer), usability (UX Researcher) and copy reviewers: three rounds; all three
+  signed off. Main fixes from the reviews:
+  - Security alerts speak only the sender and subject; plain sign-in code emails aren't urgent;
+    runs of 4+ digits are never spoken (dollar amounts are kept).
+  - "People you choose" match a whole name or an exact address; removal is exact; 3+ letters.
+  - Read-backs say "Number 1: … Number 2: …"; single: "Waiting for your OK: …"; tap-only items
+    "can't be approved by voice, so tap Approve on your screen".
+  - Routine/email-rule read-backs quote the person's words ("I'll run this request: “…”. Want me
+    to set that up?"); time to leave: "starts in about 15 minutes, at 3:00 PM. It's at …".
+  - Failed OpenRouter calls say what to do ("OpenRouter is out of credit. Add credit at
+    openrouter.ai"); "Saved. Chat now uses GPT-6.1 Sol, thinking hard."
+  - Location card: short intro, says the spot is sent to OpenStreetMap, says when the browser
+    blocks location, rechecks the setting every 30 s (so a change by voice applies mid-call).
+  - Urgent card: Add beside its field, quiet Remove, Enter adds, focus moves to the field after
+    Remove, hint about matching names.
+- Help screenshots (owner asked to use them): new shots urgent, location, models
+  (scripts/help-shots.mjs), linked from the urgent-alerts, location and admin-models topics.
+  Fixed a bug in the script: taking only some shots wiped the other shots' sizes (it read its
+  own sizes file as JSON).
+- Checks: Biome, pnpm typecheck, the worker's tsc, 510 tests pass.
+- Deferred (reviewers agreed): cards appear after their fetch (no reserved space); non-breaking
+  hyphen in "GPT‑6.1"; straight apostrophes in agent-facing tool messages.
+
+Pending (for the owner)
+- "push it" to deploy all of today's work (nothing from today is on Railway yet).
+- Try on a call: interrupting Neddy mid-answer; "approve it" with something waiting; "brief me";
+  an urgent alert during a call (and check the api logs for "Live voice error" right after, to
+  see whether OpenAI takes unasked notes); "Where am I?" with location on.
+- OpenRouter: the key on Railway is the owner's call (production); the AI models card shows
+  whether it's set up.

@@ -276,7 +276,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   address, their weight), it should land in a place they can see and change (an About you fact, a
   tracker), not a free-text note. And the voice never says "sure, I can do that" before the answer
   comes back: it doesn't know yet what can be done.
-- **Help screenshots (`scripts/help-shots.mjs`):** each shot's `go()` puts the screen where it
+- **Approving by voice:** only the person's own words count: `approve_by_voice` checks the
+  call's input transcript (OpenAI's transcript of their microphone) after a server-written
+  read-back, never the model's judgement. Money and sign-in codes still need a tap.
+- **Help screenshots (`scripts/help-shots.mjs`):** `node scripts/help-shots.mjs <ids>` retakes
+  only those and keeps the others' sizes in `help-shots.ts`; check its diff afterwards. each shot's `go()` puts the screen where it
   should be; `mark()` never scrolls, or the marks drawn earlier end up in the wrong place. Sample
   approvals need a future `expiresAt` in the mocked workspace, or they show as expired. After
   taking shots, rebuild the web app (`npx expo export --clear`) before checking them in Help,

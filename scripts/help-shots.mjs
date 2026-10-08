@@ -480,6 +480,70 @@ const SHOTS = [
     },
   },
   {
+    id: "urgent",
+    go: async (p) => {
+      await appsTab(p, /Alerts/);
+      await reveal(p.getByText("Urgent alerts on calls", { exact: true }).first());
+    },
+    marks: {
+      2: (p) => p.getByRole("checkbox", { name: /^Time to leave/ }),
+      3: { find: (p) => p.getByLabel(/^Add someone/).first(), side: "inside-right" },
+    },
+  },
+  {
+    id: "location",
+    go: async (p) => {
+      await appsTab(p, /Account/);
+      await reveal(p.getByText("Your location", { exact: true }).first());
+    },
+    marks: {
+      1: (p) => p.getByRole("checkbox", { name: /^Share where I am/ }),
+    },
+  },
+  {
+    id: "models",
+    height: 1300,
+    go: async (p) => {
+      // The admin's card: shown as on a server with OpenRouter set up.
+      await p.route(/\/api\/me$/, async (route) => {
+        const real = await (await route.fetch()).json();
+        await route.fulfill({ json: { ...real, role: "admin" } });
+      });
+      const pick = (model, effort) => ({ model, effort });
+      const sol = "openrouter/openai/gpt-6.1-sol";
+      const flash = "openrouter/deepseek/deepseek-v4.1-flash";
+      const row = (job, choice, serverModel) => ({
+        job,
+        choice,
+        saved: false,
+        recommended: choice,
+        serverModel,
+        using: choice.model,
+        lastCall: { ok: true, at: new Date(Date.now() - 300_000).toISOString() },
+      });
+      await p.route(/\/api\/models$/, (route) =>
+        route.fulfill({
+          json: {
+            ready: true,
+            jobs: [
+              row("chat", pick(sol, "high"), "anthropic/claude-sonnet-5"),
+              row("background", pick(sol, "medium"), "anthropic/claude-haiku-4-5-20251001"),
+              row("simple", pick(flash, "low"), "anthropic/claude-haiku-4-5-20251001"),
+            ],
+          },
+        }),
+      );
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await appsTab(p, /Money/);
+      await reveal(p.getByText("AI models", { exact: true }).first());
+    },
+    marks: {
+      2: (p) => button(p, "Change the model for Chat"),
+      3: (p) => button(p, "Put everything back on Claude"),
+    },
+  },
+  {
     id: "agent",
     height: 1640,
     go: (p) => appsTab(p, /Agent/),
@@ -639,8 +703,13 @@ const shots = only.length ? SHOTS.filter((shot) => only.includes(shot.id)) : SHO
 mkdirSync(OUT, { recursive: true });
 const sizes = (() => {
   try {
+    // One "  id: { width: 720, height: 1558 }," a line, as written below (not JSON).
     const text = readFileSync(SIZES, "utf8");
-    return JSON.parse(text.slice(text.indexOf("= ") + 2, text.lastIndexOf(";")) || "{}");
+    return Object.fromEntries(
+      [...text.matchAll(/^\s+([\w-]+): \{ width: (\d+), height: (\d+) \},$/gm)].map(
+        ([, id, width, height]) => [id, { width: Number(width), height: Number(height) }],
+      ),
+    );
   } catch {
     return {};
   }

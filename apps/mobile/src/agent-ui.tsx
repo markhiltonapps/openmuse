@@ -75,6 +75,7 @@ import {
   STATUS_NEWS,
   WorkingCard,
 } from "./job-working-ui";
+import { LocationCard } from "./location-ui";
 import { MailAlertsCard } from "./mail-alerts-ui";
 import { ModelsCard } from "./models-ui";
 import { blankTab, OwnAppsCard, openPage } from "./own-apps";
@@ -102,6 +103,7 @@ import {
   s,
 } from "./ui";
 import { lateNote, type UpdatesDisplay, updateKind, updatesDisplay } from "./update-toasts";
+import { UrgentAlertsCard } from "./urgent-alerts-ui";
 import { UsageCard } from "./usage-ui";
 import { DictateButton, VoiceCard } from "./voice-ui";
 import { disablePush, enablePush, isInstalled, isIos, type PushState, pushState } from "./web-app";
@@ -3139,6 +3141,7 @@ export function AppsScreen() {
       {tab === "alerts" && (
         <>
           <JobAlertsCard />
+          <UrgentAlertsCard />
           <MailAlertsCard />
           <AppAlertsCard />
           <PhoneAppCard />
@@ -3156,6 +3159,7 @@ export function AppsScreen() {
           <AppearanceCard />
           <AccountCard />
           <PasswordsCard />
+          <LocationCard />
           <YourDataCard />
           <PeopleCard />
         </>

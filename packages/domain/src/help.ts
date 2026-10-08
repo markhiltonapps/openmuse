@@ -1028,6 +1028,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Share your location",
     summary:
       "Let {agent} know your location right now, for what’s nearby and help while you’re out. Off until you turn it on.",
+    shot: "location",
     place: "account",
     steps: [
       "Open **Apps › Account › Your location** and tick **Share where I am while the app is open**. Your browser asks once; tap **Allow**.",
@@ -1035,7 +1036,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "To stop, untick it, or say “Turn off my location”.",
     ],
     body: [
-      "It’s shared only while the app is open on your screen (when your phone locks, it stops until you open the app again). Only your latest spot is kept, never saved for good, and it’s forgotten after an hour or as soon as you turn it off. To name the street, the spot is looked up with OpenStreetMap.",
+      "It’s shared only while the app is open on your screen (when your phone locks, it stops until you open the app again). Only your latest spot is kept, never saved for good, and it’s forgotten after an hour or as soon as you turn it off. To name the street, your spot is sent to OpenStreetMap, a free map service.",
       "Weather and local news still use your home city (on the Feed). Live traffic isn’t included yet.",
     ],
     say: [{ text: "Where am I?", send: true }, "Turn off my location"],
@@ -1056,6 +1057,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Urgent alerts on calls",
     summary:
       "During a call, {agent} speaks up straight away about what can’t wait: time to leave, security alerts, money problems, and people you choose.",
+    shot: "urgent",
     place: "alerts",
     steps: [
       "Open **Apps › Alerts › Urgent alerts on calls**.",
@@ -1711,6 +1713,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Choose which AI model does which job",
     summary:
       "Chat, background jobs and simple jobs can each use a different model, to keep costs down.",
+    shot: "models",
     place: "money",
     steps: [
       "Open **Apps › Money › AI models**.",
