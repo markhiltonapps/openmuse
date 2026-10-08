@@ -52,7 +52,7 @@ export function helpToolSpecs(
     {
       name: "get_help",
       description:
-        "Look up how to do something in this app in its help guide: give the person's question (or a topic id). Returns the best matching topics with their steps.",
+        "Look up how to do something in this app in its help guide: give the person's question (or a topic id). Returns the best matching topics with their steps. Use it whenever they ask how to do something, what the app or you can do, where a setting is, or how a feature works, rather than answering from memory: features change (for example approving by voice, “brief me”, urgent alerts on calls, sharing their location, reminders that follow the calendar, AI models and costs).",
       parameters: z.object({
         question: z.string().trim().min(1).max(300).describe("What they asked, in their words"),
         topic: z.string().trim().max(60).optional().describe("A topic id, when you know it"),

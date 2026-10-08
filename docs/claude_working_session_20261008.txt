@@ -138,3 +138,10 @@ Pending (for the owner)
   see whether OpenAI takes unasked notes); "Where am I?" with location on.
 - OpenRouter: the key on Railway is the owner's call (production); the AI models card shows
   whether it's set up.
+
+Help and the agent (owner asked: Help updated and the agent able to answer from it)
+- Checked Help search with 20+ everyday questions about today's features; fixed the gaps:
+  new "brief" topic (Your day), keywords for reminders that follow the calendar, rules by voice
+  (routines), and OpenRouter failures (admin-models). "Things you can ask" lists the new things.
+- get_help's description now tells the agent to use the guide for how-to and "what can you do"
+  questions instead of memory, naming today's features. Calls hand these to the same agent.
