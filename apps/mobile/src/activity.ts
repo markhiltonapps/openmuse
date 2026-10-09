@@ -128,6 +128,8 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       return { kind: "plan", label: "Checking where you are…" };
     case "set_location_sharing":
       return { kind: "plan", label: "Changing location sharing…" };
+    case "change_backdrop":
+      return { kind: "plan", label: "Changing your backdrop…" };
     case "urgent_alert_settings":
       return { kind: "plan", label: "Checking your urgent alerts…" };
     case "change_urgent_alerts":

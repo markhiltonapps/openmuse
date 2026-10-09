@@ -225,7 +225,10 @@ export function Mascot({
   /** No looping motion (breathing, bobbing), e.g. during a live call; clips still talk. */
   quiet?: boolean;
 }) {
-  const video = character !== "custom" && VIDEO_CHARACTERS[character] === true;
+  // Neddy is always shown whole (owner, 2026-10-09): a still, full-body cut-out, never the
+  // head-and-shoulders clips. Other clip characters keep theirs.
+  const whole = character === "neddy";
+  const video = !whole && character !== "custom" && VIDEO_CHARACTERS[character] === true;
   const reduce = useReducedMotion();
   const motion = animated && !reduce;
   const breathe = useRef(new Animated.Value(0)).current;
@@ -252,22 +255,27 @@ export function Mascot({
         move(lift, 0, 480, Easing.bounce),
       ]);
     const animation =
-      mood === "working"
-        ? activity === "apps" || activity === "computer" || activity === "writing"
-          ? // Quick, small bounces, like typing.
-            Animated.loop(Animated.sequence([move(lift, 0.3, 150), move(lift, 0, 150)]))
-          : Animated.loop(Animated.sequence([move(lift, 0.6, 340), move(lift, 0, 340)]))
-        : mood === "attention"
-          ? Animated.loop(Animated.sequence([Animated.delay(1700), hop(1.4)]))
-          : mood === "celebrate"
-            ? Animated.sequence([hop(2), hop(1.3)])
-            : // Clips breathe on their own.
-              video
-              ? undefined
-              : Animated.loop(Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]));
+      // Whole Neddy has no talking clip: a gentle bob while he speaks.
+      whole && speaking
+        ? Animated.loop(Animated.sequence([move(lift, 0.22, 260), move(lift, 0, 260)]))
+        : mood === "working"
+          ? activity === "apps" || activity === "computer" || activity === "writing"
+            ? // Quick, small bounces, like typing.
+              Animated.loop(Animated.sequence([move(lift, 0.3, 150), move(lift, 0, 150)]))
+            : Animated.loop(Animated.sequence([move(lift, 0.6, 340), move(lift, 0, 340)]))
+          : mood === "attention"
+            ? Animated.loop(Animated.sequence([Animated.delay(1700), hop(1.4)]))
+            : mood === "celebrate"
+              ? Animated.sequence([hop(2), hop(1.3)])
+              : // Clips breathe on their own.
+                video
+                ? undefined
+                : Animated.loop(
+                    Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]),
+                  );
     animation?.start();
     return () => animation?.stop();
-  }, [mood, activity, motion, breathe, lift, video, quiet]);
+  }, [mood, activity, motion, breathe, lift, video, quiet, whole, speaking]);
   const custom = character === "custom";
   const art = video ? (
     <AvatarVideo id={character} size={size} speaking={speaking} still={!motion} />
@@ -286,9 +294,16 @@ export function Mascot({
     ) : image?.kind === "svg" ? (
       <SvgArt svg={image.data} size={size} />
     ) : null
+  ) : whole ? (
+    <Image
+      source={require("../assets/neddy-full.webp")}
+      accessible={false}
+      resizeMode="contain"
+      style={{ width: size, height: size }}
+    />
   ) : character === "capybara" ? (
     <Capybara size={size} blink={motion} />
-  ) : character === "todd" || character === "neddy" ? null : (
+  ) : character === "todd" ? null : (
     <SvgArt svg={ART[character]} size={size} />
   );
   const inset =
@@ -308,17 +323,20 @@ export function Mascot({
       }
       style={{ width: size, height: size }}
     >
-      <View
-        style={{
-          position: "absolute",
-          top: size * inset.top,
-          left: size * inset.left,
-          width: size * inset.size,
-          height: size * inset.size,
-          borderRadius: size,
-          backgroundColor: AVATAR_COLORS[variant] ?? AVATAR_COLORS.sky,
-        }}
-      />
+      {/* Whole Neddy stands on his own, with no disc behind him. */}
+      {!whole && (
+        <View
+          style={{
+            position: "absolute",
+            top: size * inset.top,
+            left: size * inset.left,
+            width: size * inset.size,
+            height: size * inset.size,
+            borderRadius: size,
+            backgroundColor: AVATAR_COLORS[variant] ?? AVATAR_COLORS.sky,
+          }}
+        />
+      )}
       <Animated.View
         style={{
           width: size,

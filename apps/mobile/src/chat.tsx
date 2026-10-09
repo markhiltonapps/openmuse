@@ -46,6 +46,7 @@ import { PlaceButtons, setVoiceAway, usePlace } from "./app-places-ui";
 import { ToolApprovals } from "./approval-card";
 import { AssistantResponse } from "./assistant-response";
 import { setChatActivity } from "./avatar";
+import { BackdropToolCard } from "./backdrop-ui";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { ToolCalendar } from "./calendar-card";
@@ -169,6 +170,12 @@ export function WorkspaceTools() {
     render: ({ result, status }) => (
       <MiniAppToolCard result={result} loading={status !== "complete"} />
     ),
+  });
+  useRenderTool({
+    name: "change_backdrop",
+    description: "Show the backdrop the agent switched to",
+    parameters: displayParameters,
+    render: ({ result, status }) => <BackdropToolCard result={result} status={status} />,
   });
   useRenderTool({
     name: "show_in_app",

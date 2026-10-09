@@ -60,6 +60,9 @@ import {
 } from "./src/api";
 import { BackToChat, usePillsRoom } from "./src/app-places-ui";
 import { AgentAvatar, Mascot, type Mood, useChatActivity } from "./src/avatar";
+import BackdropLayer from "./src/BackdropLayer";
+import { takeReopenedToPicker, useBackdropSync, useReopenPill } from "./src/backdrop";
+import { BackdropReopenPill } from "./src/backdrop-ui";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ChatButton, ChatReporter, ChatsSheet, onOpenChats } from "./src/chats-ui";
 import { ComputerDraftProvider } from "./src/computer-drafts";
@@ -81,7 +84,7 @@ import { SignInCard } from "./src/sign-in";
 import { SpaceChip } from "./src/spaces";
 import { SpacesScreen } from "./src/spaces-screen";
 import TipLayer from "./src/TipLayer";
-import { dark } from "./src/theme";
+import { dark, glass, page } from "./src/theme";
 import { ThreadsProvider, useMuseThread } from "./src/threads";
 import { tipProps } from "./src/tips";
 import { Button, colors, ErrorNotice, IconButton, SheetStatus, SheetTop, s } from "./src/ui";
@@ -358,6 +361,8 @@ function WorkspaceApp({ token }: { token: string }) {
             {/* The live call carries on across screens and sheets, its bar on top of them. */}
             <LiveCallProvider>
               <LocationReporter />
+              {glass && <BackdropLayer />}
+              <BackdropSync />
               <CallBarSlot>
                 <WorkspaceShell
                   detail={detail}
@@ -497,6 +502,9 @@ function WorkspaceShell({
                       : AppsScreen;
   const utility = ["mail", "calendar", "browser"].includes(section);
   const chat = section === "chat";
+  // A backdrop switched on or off by voice or elsewhere waits for a reopen; the pill offers it.
+  const reopenPill = useReopenPill();
+  const reopenPillCanShow = !detail && !threadsOpen && !chatNow && call.phase === "idle";
   // The chat's header takes the height of what's in it (the chat button grows with big text);
   // this is its least.
   const headerHeight = chat ? (desktop ? 176 : 155) : desktop ? 158 : 132;
@@ -505,7 +513,7 @@ function WorkspaceShell({
     <>
       <WorkspaceTools />
       <ChatReporter />
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: page }} edges={["top", "bottom"]}>
         {/* A sheet over the page shows the bar itself (the page's would be under its shade). */}
         {callBar && !detail && !threadsOpen && (
           <View style={{ width: "100%", maxWidth: 760, alignSelf: "center", zIndex: 9 }}>
@@ -519,7 +527,7 @@ function WorkspaceShell({
               chat
                 ? {
                     minHeight: headerHeight,
-                    paddingTop: desktop ? 14 : 4,
+                    paddingTop: desktop ? 14 : 8,
                     paddingBottom: 6,
                     marginHorizontal: 20,
                   }
@@ -544,8 +552,13 @@ function WorkspaceShell({
                 <Svg width="100%" height="100%">
                   <Defs>
                     <LinearGradient id="header-fade" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={0.96} />
-                      <Stop offset="0.62" stopColor={colors.canvas} stopOpacity={0.8} />
+                      {/* Over the backdrop, a lighter fade: the scene's own shade does the rest. */}
+                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={glass ? 0.6 : 0.96} />
+                      <Stop
+                        offset="0.62"
+                        stopColor={colors.canvas}
+                        stopOpacity={glass ? 0.4 : 0.8}
+                      />
                       <Stop offset="1" stopColor={colors.canvas} stopOpacity={0} />
                     </LinearGradient>
                   </Defs>
@@ -580,13 +593,14 @@ function WorkspaceShell({
                 })}
               >
                 <AgentAvatar
-                  size={chat ? (desktop ? 66 : 58) : desktop ? 88 : width < 360 ? 64 : 76}
+                  size={chat ? (desktop ? 68 : 62) : desktop ? 88 : width < 360 ? 64 : 76}
                   mood={mood}
                   activity={mood === "working" ? activity?.kind : undefined}
                 />
                 <View
                   style={{
-                    marginTop: -10,
+                    // Just under his feet: Neddy is drawn whole, and the chip mustn't hide them.
+                    marginTop: -4,
                     paddingHorizontal: 14,
                     paddingVertical: 5,
                     borderRadius: 18,
@@ -828,10 +842,14 @@ function WorkspaceShell({
           </View>
           {/* Background updates pop up under the bell; they wait while a sheet covers the page. */}
           <UpdateToasts hold={!!chatNow || !!detail || threadsOpen || call.shown} />
+          {/* A backdrop switched on or off by voice or elsewhere: one tap to reopen and see it. */}
+          <BackdropReopenPill canShow={reopenPillCanShow} desktop={desktop} chat={chat} />
           <NewVersion
             // Never in a call (a reload would hang it up), nor while its bar says how it ended.
             canReload={() => !detail && !threadsOpen && !chatNow && call.phase === "idle"}
             onCall={call.phase === "on"}
+            // Reopening for the backdrop picks up the new version too, so one pill is enough.
+            giveWay={reopenPill && reopenPillCanShow}
             desktop={desktop}
             chat={chat}
           />
@@ -949,12 +967,15 @@ function NewJobButton({ round }: { round: boolean }) {
 function NewVersion({
   canReload,
   onCall,
+  giveWay,
   desktop,
   chat,
 }: {
   canReload: () => boolean;
   /** It waits until the call is over: Reload would hang it up. */
   onCall: boolean;
+  /** The backdrop's Reopen pill is in this slot. */
+  giveWay: boolean;
   desktop: boolean;
   chat: boolean;
 }) {
@@ -977,7 +998,7 @@ function NewVersion({
       ),
     [],
   );
-  const shown = !!ready && !later && !onCall;
+  const shown = !!ready && !later && !onCall && !giveWay;
   return (
     // Always there, so a screen reader hears it when it appears.
     <View
@@ -1051,4 +1072,15 @@ function NewVersion({
       )}
     </View>
   );
+}
+
+/** Keeps the backdrop in step with the account (changed by voice, or on another device). */
+function BackdropSync() {
+  const { api, open } = useWorkspace();
+  useBackdropSync(api);
+  // Reopened to switch the backdrop on or off: back to the picker, to see it and change more.
+  useEffect(() => {
+    if (takeReopenedToPicker()) open({ type: "backdrop" });
+  }, [open]);
+  return null;
 }

@@ -36,6 +36,7 @@ import {
   UsersRound,
   UtensilsCrossed,
   Wallet,
+  Wallpaper,
 } from "lucide-react-native";
 import { type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
@@ -98,6 +99,7 @@ const ICONS: Record<AppPlaceId, LucideIcon> = {
   money: Wallet,
   account: UserRound,
   help: LifeBuoy,
+  backdrop: Wallpaper,
 };
 
 /** Places that are a space's tab. */
@@ -328,6 +330,7 @@ export function usePlace(request: PlaceRequest) {
     if (task) return open({ type: "task", taskId: task.id });
     if (request.place === "plans") return open({ type: "commitments", tab: request.tab });
     if (request.place === "reminders") return open({ type: "reminders" });
+    if (request.place === "backdrop") return open({ type: "backdrop" });
     if (request.place === "updates") return open({ type: "notifications" });
     if (request.place === "log-meal") return open({ type: "food", log: true });
     if (request.place === "agent-computer") return open({ type: "computer" });

@@ -35,6 +35,8 @@ export type Detail =
   | { type: "reminders" }
   /** A report, comparison, plan or tracker the agent saved. */
   | { type: "saved"; artifact: AgentArtifact }
+  /** The moving backdrop's picker. */
+  | { type: "backdrop" }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

@@ -318,6 +318,7 @@ export function Sheet({
   fill,
   narrow,
   onBack,
+  seeThrough,
 }: {
   title: string;
   subtitle?: string;
@@ -337,6 +338,8 @@ export function Sheet({
   narrow?: boolean;
   /** What Escape or Android's back does first (close an open ⋯, go back a page); closes otherwise. */
   onBack?: () => void;
+  /** Lets the moving backdrop show through, lightly shaded (the Backdrop picker). */
+  seeThrough?: boolean;
 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -375,11 +378,24 @@ export function Sheet({
       visible
       onRequestClose={onBack ?? onClose}
     >
-      <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
+      <View
+        style={[
+          s.modalShade,
+          compact && { padding: 0, justifyContent: "flex-end" },
+          seeThrough && { backgroundColor: "rgba(0,0,0,0.15)" },
+        ]}
+      >
         <View
           accessibilityViewIsModal
           style={[
             s.sheet,
+            // Frosted: the scene shows as colour and movement, never as words behind its own.
+            seeThrough && {
+              backgroundColor: "rgba(14,12,22,0.86)",
+              ...(Platform.OS === "web"
+                ? ({ backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)" } as object)
+                : {}),
+            },
             wide && { maxWidth: 1050 },
             narrow && { maxWidth: 560 },
             fill && { height: compact ? "94%" : Math.min(height * 0.9, 860) },

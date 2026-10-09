@@ -1,4 +1,5 @@
 import { Appearance, Platform } from "react-native";
+import { DEFAULT_BACKDROP, NO_BACKDROP } from "../../../packages/domain/src/backdrops";
 
 export type ThemeChoice = "system" | "light" | "dark";
 const KEY = "openmuse.theme";
@@ -21,10 +22,37 @@ export function setThemeChoice(choice: ThemeChoice) {
   }
   if (Platform.OS === "web" && typeof window !== "undefined") window.location.reload();
 }
+const BACKDROP_KEY = "openmuse.backdrop";
+/**
+ * The backdrop scene this device last knew (the server's choice, kept so the app opens straight
+ * into it). A new device starts on the beach, like a new account.
+ */
+export function savedBackdrop(): string {
+  try {
+    return globalThis.localStorage?.getItem(BACKDROP_KEY) || DEFAULT_BACKDROP;
+  } catch {
+    return DEFAULT_BACKDROP;
+  }
+}
+export function rememberBackdrop(scene: string) {
+  try {
+    globalThis.localStorage?.setItem(BACKDROP_KEY, scene);
+  } catch {
+    // Private browsing: the server still knows.
+  }
+}
+/** The scene the app opened with. Turning the backdrop on or off takes a reload (styles are made once). */
+export const openedWithBackdrop = savedBackdrop();
+/**
+ * A backdrop is on (web only, where the video plays): the see-through glass look, always dark,
+ * whatever the theme (owner, 2026-10-09: "backdrop wins").
+ */
+export const glass = Platform.OS === "web" && openedWithBackdrop !== NO_BACKDROP;
+
 const choice = themeChoice();
 /** Dark when the person chose it, or when their device is set to dark and they left it on automatic. */
 export const dark =
-  choice === "dark" || (choice === "system" && Appearance.getColorScheme() === "dark");
+  glass || choice === "dark" || (choice === "system" && Appearance.getColorScheme() === "dark");
 
 const light = {
   canvas: "#FCFCFC",
@@ -95,7 +123,31 @@ const night: typeof light = {
   onInverseSubtle: "rgba(128,128,128,0.27)",
   shade: "rgba(0,0,0,0.6)",
 };
-export const palette = dark ? night : light;
+/**
+ * Night, see-through: cards and bars let the moving backdrop show around their text. Dense enough
+ * (about 80%) that text keeps its contrast over the brightest scene, after the backdrop's own shade.
+ */
+const glassNight: typeof light = {
+  ...night,
+  card: "rgba(22,19,30,0.8)",
+  surface: "rgba(30,27,40,0.82)",
+  bubble: "rgba(30,27,40,0.82)",
+  // Light text stands on these fills, so they're a dark tint, not a white haze.
+  subtle: "rgba(40,36,52,0.72)",
+  line: "rgba(255,255,255,0.14)",
+  // Small grey text often sits right on the scene: lighter than night's, for contrast.
+  muted: "#B4B4BC",
+  mutedStrong: "#C4C4CB",
+  bubbleLine: "rgba(255,255,255,0.18)",
+  sky: "rgba(22,60,96,0.72)",
+  green: "rgba(15,40,26,0.78)",
+  lavender: "rgba(30,26,52,0.78)",
+  orange: "rgba(46,33,17,0.78)",
+  errorBg: "rgba(62,29,27,0.86)",
+};
+export const palette = glass ? glassNight : dark ? night : light;
+/** Behind the screens: the page colour, or nothing when the backdrop shows through. */
+export const page = glass ? "transparent" : palette.canvas;
 
 // The page behind the app, so there's no white flash or white edges on dark.
 if (Platform.OS === "web" && typeof document !== "undefined") {

@@ -46,6 +46,7 @@ import { appLabel } from "../../../packages/domain/src/app-names";
 import { ArtifactCard, DelegateSheet, NotificationsSheet, TaskDetail } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import BrowserConsole from "./BrowserConsole";
+import { BackdropSheet } from "./backdrop-ui";
 import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
@@ -84,6 +85,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "delegate") return <DelegateSheet prompt={detail.prompt} />;
   if (detail.type === "notifications") return <NotificationsSheet />;
   if (detail.type === "help") return <HelpSheet topic={detail.topic} />;
+  if (detail.type === "backdrop") return <BackdropSheet />;
   if (detail.type === "food") return <FoodLogSheet log={detail.log} />;
   if (detail.type === "commitments") return <CommitmentsSheet tab={detail.tab} />;
   if (detail.type === "reminders") return <RemindersSheet />;

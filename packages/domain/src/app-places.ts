@@ -152,6 +152,12 @@ export const APP_PLACES = {
     where: "Apps",
     about: "appearance, account, passwords, their data",
   },
+  backdrop: {
+    name: "Backdrop",
+    where: "Menu (☰, top left)",
+    about:
+      "the moving scene behind the app: pick a beach, mountains, city, rain, forest or night sky, hold it still, or turn it off",
+  },
   help: {
     name: "Help",
     where: "Apps",

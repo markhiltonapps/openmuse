@@ -304,3 +304,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   straight away. Phrases with "this" need somewhere to point (a photo, a call).
 - **Sheets whose contents change size** (search results, pages inside a sheet) take `fill` on
   `Sheet`, so the sheet keeps one height and nothing moves under a thumb while typing.
+- **Pills that pop up on their own** (new version, backdrop Reopen) go in the top slot under the
+  header (`NewVersion`'s `top`), never near the bottom, where New job, the toasts and the message
+  box are. Show one at a time (`giveWay`); a "Not now" there has to be shared state.
+- **The backdrop's colours are made once:** `glass` (theme.ts) is decided when the app opens, so
+  turning the backdrop on or off needs a reopen (never during a call); a new scene or "hold still"
+  changes live. The sandbox's Chromium can't play H.264, so clips show as their still frame here.

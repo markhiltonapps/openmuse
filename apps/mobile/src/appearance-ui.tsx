@@ -1,5 +1,5 @@
 import { Platform, Text } from "react-native";
-import { setThemeChoice, type ThemeChoice, themeChoice } from "./theme";
+import { glass, setThemeChoice, type ThemeChoice, themeChoice } from "./theme";
 import { Card, CheckRow, SectionHeading, s } from "./ui";
 
 const CHOICES: { value: ThemeChoice; label: string }[] = [
@@ -23,7 +23,11 @@ export function AppearanceCard() {
           onPress={() => current !== choice.value && setThemeChoice(choice.value)}
         />
       ))}
-      <Text style={s.small}>The app reloads to switch.</Text>
+      <Text style={s.small}>
+        {glass
+          ? "A backdrop is on, so the app stays dark. To use light, choose No backdrop in Menu › Backdrop."
+          : "The app reloads to switch."}
+      </Text>
     </Card>
   );
 }

@@ -10,6 +10,7 @@ import {
   Mic,
   Settings2,
   UsersRound,
+  Wallpaper,
 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, useWindowDimensions, View } from "react-native";
@@ -190,6 +191,13 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
           detail={`See the websites ${agent} is using, or take control.`}
           say={say ? "show me your browser" : undefined}
           onPress={() => show({ type: "computer" })}
+        />
+        <MenuRow
+          icon={Wallpaper}
+          title="Backdrop"
+          detail="The moving scene behind the app: beach, city, forest, night sky and more."
+          say={say ? "change my backdrop to the city" : undefined}
+          onPress={() => show({ type: "backdrop" })}
         />
         <View style={[s.divider, { marginVertical: 8 }]} />
         <MenuRow

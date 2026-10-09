@@ -90,11 +90,19 @@ const weather = () => {
 };
 
 /** A fresh page, signed in to the sample workspace, with the network the screens need. */
-async function open(context, state, height = HEIGHT) {
+async function open(context, state, height = HEIGHT, backdrop = "none") {
   const page = await context.newPage();
   await page.setViewportSize({ width: WIDTH, height });
   page.on("pageerror", (error) => console.warn(`  page error: ${error.message}`));
   await page.addInitScript(fakeCall);
+  // The pictures show each screen on the plain page, light and dark; only the Backdrop topic's
+  // shows a scene (its still frame: this Chromium can't play the clips).
+  await page.addInitScript((scene) => localStorage.setItem("openmuse.backdrop", scene), backdrop);
+  await page.route(/\/api\/backdrop$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { scene: backdrop, still: false } })
+      : route.fallback(),
+  );
   await page.route(/\/api\/avatar-media\//, (route) =>
     /poster/.test(route.request().url())
       ? route.fulfill({ path: PORTHOLE, contentType: "image/webp" })
@@ -501,6 +509,23 @@ const SHOTS = [
     },
   },
   {
+    id: "backdrop",
+    // Tall enough to show every group down to No backdrop: marks never scroll.
+    height: 2300,
+    backdrop: "beach-sunset",
+    go: async (p) => {
+      await button(p, "Menu").click();
+      await p.waitForTimeout(1200);
+      await p.getByRole("button", { name: /^Backdrop/ }).click();
+      await p.waitForTimeout(2500);
+    },
+    marks: {
+      2: (p) => p.getByRole("radio", { name: "City lights" }),
+      3: (p) => p.getByRole("checkbox", { name: /^Hold still/ }),
+      4: (p) => p.getByRole("radio", { name: "No backdrop" }),
+    },
+  },
+  {
     id: "models",
     height: 1300,
     go: async (p) => {
@@ -728,7 +753,7 @@ for (const scheme of ["light", "dark"]) {
   for (const shot of shots) {
     console.log(`${shot.id} (${scheme})`);
     const state = {};
-    const page = await open(context, state, shot.height);
+    const page = await open(context, state, shot.height, shot.backdrop);
     try {
       await shot.go?.(page, state);
       // The floating New job button covers the bottom of most screens; only the shots about

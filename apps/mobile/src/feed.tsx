@@ -20,7 +20,7 @@ import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
 import { MealsToday } from "./meal-checkins-ui";
 import { COMMITMENT_EMOJI, type Commitment, onPlansChanged, type Reminder } from "./plans";
-import { dark } from "./theme";
+import { dark, glass } from "./theme";
 import { tipProps } from "./tips";
 import { Button, Card, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWeather, WeatherToday } from "./weather-ui";
@@ -358,9 +358,22 @@ export function FeedScreen() {
           <Svg width="100%" height="100%">
             <Defs>
               <LinearGradient id="day" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor={dark ? "#12263A" : "#D6EDFF"} />
-                <Stop offset="0.55" stopColor={dark ? "#1B1A38" : "#ECE5FF"} />
-                <Stop offset="1" stopColor={dark ? "#2A1830" : "#FFE9DD"} />
+                {/* Over a backdrop it's glass like the other cards, keeping its tint. */}
+                <Stop
+                  offset="0"
+                  stopColor={dark ? "#12263A" : "#D6EDFF"}
+                  stopOpacity={glass ? 0.82 : 1}
+                />
+                <Stop
+                  offset="0.55"
+                  stopColor={dark ? "#1B1A38" : "#ECE5FF"}
+                  stopOpacity={glass ? 0.82 : 1}
+                />
+                <Stop
+                  offset="1"
+                  stopColor={dark ? "#2A1830" : "#FFE9DD"}
+                  stopOpacity={glass ? 0.82 : 1}
+                />
               </LinearGradient>
             </Defs>
             <Rect width="100%" height="100%" fill="url(#day)" />

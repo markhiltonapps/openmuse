@@ -178,6 +178,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Checking where you are";
     case "set_location_sharing":
       return "Changing location sharing";
+    case "change_backdrop":
+      return "Changing your backdrop";
     case "urgent_alert_settings":
     case "change_urgent_alerts":
       return "Checking your urgent alerts";

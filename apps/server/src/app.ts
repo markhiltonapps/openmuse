@@ -17,6 +17,7 @@ import { type AppConnector, ComposioConnector } from "./apps.ts";
 import { Areas, nominatimPlaces } from "./area.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
+import { backdropChangeSchema, backdropView, changeBackdrop } from "./backdrop.ts";
 import { Backups } from "./backups.ts";
 import { type Blobs, createBlobs } from "./blobs.ts";
 import { BrowserService } from "./browser.ts";
@@ -726,6 +727,16 @@ export async function createApp(
     if (!mailAlerts) throw new AppError("Connected apps aren't set up on the server", 503);
     return mailAlerts;
   };
+  // The moving backdrop behind the app: which scene (or none), and whether it holds still.
+  app.get("/api/backdrop", async (c) => c.json(await backdropView(db, c.get("owner"))));
+  app.post("/api/backdrop", async (c) => {
+    const change = backdropChangeSchema.parse(await c.req.json());
+    try {
+      return c.json(await changeBackdrop(db, c.get("owner"), change));
+    } catch (error) {
+      throw new AppError(error instanceof Error ? error.message : String(error), 400);
+    }
+  });
   app.get("/api/location", async (c) => c.json(await whereabouts.view(c.get("owner"))));
   app.post("/api/location", async (c) =>
     c.json(await whereabouts.report(c.get("owner"), await c.req.json())),

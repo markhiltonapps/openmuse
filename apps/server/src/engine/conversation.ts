@@ -20,6 +20,7 @@ import { appGuideInstructions, showInAppInstructions, showInAppToolSpec } from "
 import { approvalToolSpec } from "../approval-tools.ts";
 import { appToolInstructions, appToolSpecs } from "../apps.ts";
 import { areaInstructions, areaToolSpecs } from "../area.ts";
+import { backdropToolSpecs } from "../backdrop.ts";
 import { briefToolSpec } from "../brief.ts";
 import { browserToolInstructions, browserToolSpecs } from "../browser-tools.ts";
 import { earlierChatToolSpec, searchEarlier } from "../chat-summary.ts";
@@ -472,6 +473,16 @@ export class ConversationAgent extends AbstractAgent {
         }),
       );
     }
+    tools.push(
+      ...backdropToolSpecs(this.service.db, this.owner).map((spec) =>
+        defineTool({
+          ...spec,
+          parameters: spec.parameters as z.ZodObject,
+          execute: async (args: unknown) =>
+            (spec.execute as (value: unknown) => Promise<unknown>)(args),
+        }),
+      ),
+    );
     const whereabouts = this.service.whereabouts;
     if (whereabouts)
       tools.push(
