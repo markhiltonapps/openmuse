@@ -14,6 +14,7 @@ ARG EXPO_PUBLIC_API_URL
 RUN test -n "$EXPO_PUBLIC_API_URL" || { echo "Set EXPO_PUBLIC_API_URL to the public API URL" >&2; exit 1; }
 RUN pnpm --dir apps/mobile exec expo export --platform web --output-dir dist/web
 
-FROM caddy:2-alpine
+# Docker Hub limits pulls from Railway's shared builders (429); Google's mirror has the same image.
+FROM mirror.gcr.io/library/caddy:2-alpine
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/apps/mobile/dist/web /srv
