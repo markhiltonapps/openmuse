@@ -76,3 +76,9 @@ Known issues / pending
 - The mockup's glossy dock, glass cards and greeting home screen: not built yet (owner chose
   backdrop first).
 - Animated full-body Neddy: needs generated clips (Higgsfield, credits) when wanted.
+
+Deploy (Oct 9 evening)
+- 0cd3740 pushed on "push it": api deployed; web failed three times on Docker Hub's 429 Too Many
+  Requests (caddy:2-alpine), not our code. 4905ceb and 08e94e3 move every base image in
+  infra/*.Dockerfile to Google's mirror (mirror.gcr.io); api and web then deployed (SUCCESS),
+  "Live voice on". Browser worker SKIPPED (unchanged).
