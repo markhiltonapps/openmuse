@@ -310,3 +310,6 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **The backdrop's colours are made once:** `glass` (theme.ts) is decided when the app opens, so
   turning the backdrop on or off needs a reopen (never during a call); a new scene or "hold still"
   changes live. The sandbox's Chromium can't play H.264, so clips show as their still frame here.
+- **Base images come from `mirror.gcr.io`:** Docker Hub turns Railway's shared builders away
+  with 429 Too Many Requests, and retrying doesn't help. `infra/*.Dockerfile` take Node and Caddy
+  from Google's mirror (`mirror.gcr.io/library/<image>`); do the same for any new image.

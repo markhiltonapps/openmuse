@@ -1,6 +1,7 @@
 # OpenMuse API, CopilotKit runtime and task worker.
 # Build from the repository root: docker build -f infra/api.Dockerfile -t openmuse-api .
-FROM node:24-slim AS build
+# Docker Hub limits pulls from Railway's shared builders (429); Google's mirror has the same images.
+FROM mirror.gcr.io/library/node:24-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -12,7 +13,7 @@ COPY apps/server apps/server
 COPY packages packages
 RUN pnpm build:server
 
-FROM node:24-slim
+FROM mirror.gcr.io/library/node:24-slim
 WORKDIR /app
 RUN npm install -g pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./

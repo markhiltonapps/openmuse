@@ -2,7 +2,7 @@
 # EXPO_PUBLIC_API_URL is compiled into the bundle, so rebuild when the API URL changes.
 # Build from the repository root:
 #   docker build -f infra/web.Dockerfile --build-arg EXPO_PUBLIC_API_URL=https://api.example.com -t openmuse-web .
-FROM node:24-slim AS build
+FROM mirror.gcr.io/library/node:24-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -14,7 +14,7 @@ ARG EXPO_PUBLIC_API_URL
 RUN test -n "$EXPO_PUBLIC_API_URL" || { echo "Set EXPO_PUBLIC_API_URL to the public API URL" >&2; exit 1; }
 RUN pnpm --dir apps/mobile exec expo export --platform web --output-dir dist/web
 
-# Docker Hub limits pulls from Railway's shared builders (429); Google's mirror has the same image.
+# Docker Hub limits pulls from Railway's shared builders (429); Google's mirror has the same images.
 FROM mirror.gcr.io/library/caddy:2-alpine
 COPY infra/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/apps/mobile/dist/web /srv
