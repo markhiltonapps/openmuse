@@ -1217,6 +1217,32 @@ export async function createApp(
       201,
     );
   });
+  // How big each person's main chat has grown (counts and size only, never its words), at most
+  // once an hour, so the load time and the size limits can be watched in the server's log.
+  const sizeLogged = new Map<string, number>();
+  const logMainChatSize = async (owner: string, threadId: string) => {
+    const last = sizeLogged.get(owner) ?? 0;
+    if (Date.now() - last < 3_600_000 || !threads.getThreadMessages) return;
+    sizeLogged.set(owner, Date.now());
+    try {
+      const { messages } = await threads.getThreadMessages({ threadId, userId: owner });
+      const list = messages as { role?: string }[];
+      const count = (role: string) => list.filter((message) => message.role === role).length;
+      const kb = Math.round(Buffer.byteLength(JSON.stringify(list)) / 1024);
+      const summary = await db.get(owner, "chat-summaries", threadId);
+      const backup = await db.get<{ messages?: unknown[] }>(owner, "chat-archive", threadId);
+      console.info(
+        `[OpenMuse] Main chat size (owner ${owner.slice(0, 8)}): ${list.length} messages ` +
+          `(${count("user")} from the person, ${count("assistant")} replies, ` +
+          `${count("tool")} tool results), ${kb} KB; summarized: ${summary ? "yes" : "no"}; ` +
+          `backup copy: ${backup?.messages?.length ?? 0} messages`,
+      );
+    } catch (error) {
+      console.warn(
+        `[OpenMuse] Main chat size couldn't be read: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
   app.get("/api/main-thread", async (c) => {
     const owner = c.get("owner");
     await db.insertIfAbsent(owner, "conversation-settings", {
@@ -1238,6 +1264,7 @@ export async function createApp(
         502,
       );
     }
+    void logMainChatSize(owner, main.threadId);
     return c.json({ threadId: main.threadId, existing: true });
   });
   // The chats the app has (names, kinds, which is open), so the agent can open or tidy them by
