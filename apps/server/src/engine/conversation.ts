@@ -254,6 +254,30 @@ export class ConversationAgent extends AbstractAgent {
         execute: async (args) => this.service.delegate(this.owner, args, key("task", args)),
       }),
       defineTool({
+        name: "tidy_activity",
+        description:
+          "Tidy the person's Activity list of jobs. clear_finished archives every finished job (done, stopped or couldn’t finish) and clears every decided review from Reviews & receipts. archive puts away a finished job. let_go is for a job they no longer want: an unfinished one is stopped (nothing more is done or sent, and what’s waiting for their OK won’t be done), then archived. let_go_waiting does that for every job waiting on them; use it only after they’ve said yes to stopping all of them. restore brings an archived job back. undo brings back everything the last tidy put away (from the app or here; stopped jobs stay stopped, and a routine it turned off is turned back on). turn_off_routine stops a routine (such as a daily check-in) from making new jobs. Archive only works on finished jobs: if they asked to archive or clear one that isn’t finished, ask whether to stop it; never switch to let_go on your own. For one job, pass its name as they said it; when several match, ask which (the latest, or all of them), or pass all when they clearly mean every matching job. When a stopped job was a run of a routine that’s still on, offer to turn the routine off. Archived jobs are under Archived in Activity, and finished jobs archive themselves after 7 days. Say what was done in one short sentence.",
+        parameters: z.object({
+          do: z.enum([
+            "clear_finished",
+            "archive",
+            "let_go",
+            "let_go_waiting",
+            "restore",
+            "undo",
+            "turn_off_routine",
+          ]),
+          job: z
+            .string()
+            .max(200)
+            .optional()
+            .describe("The job's (or routine's) name, as they said it"),
+          all: z.boolean().optional().describe("Every job matching the name"),
+        }),
+        execute: async ({ do: what, job, all }) =>
+          this.service.tidyByName(this.owner, what, job, all ?? false),
+      }),
+      defineTool({
         name: "ai_costs",
         description:
           "What the AI behind this app has cost the person: today, the last 7 days and all time (dollars, tokens, AI calls), this month by kind of work, and which model does which work. The admin also gets everyone’s totals together. Use it when they ask what the AI costs, how much they’ve spent on it, or which model is used. Lead with the dollar figure for the period they asked about and say it’s an estimate. Say “AI calls” or “requests”, never just “calls”. This only reads; the admin changes models with change_ai_models.",

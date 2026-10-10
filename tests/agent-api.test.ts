@@ -352,3 +352,162 @@ test("live mode rejects sample sources and hides the fixture mutation endpoint",
     await live.agent.stop();
   }
 });
+
+test("Activity tidies up: archive finished jobs, let go of one, bring them back, a week on its own", async () => {
+  const owner = "tidy-owner";
+  const agent = server.agent;
+  const finish = async (title: string, status: AgentTask["status"], daysAgo = 0) => {
+    const task = await agent.createTask(owner, { prompt: title });
+    const updatedAt = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+    await db.compareAndSwap(owner, "tasks", task.id, {}, { title, status, updatedAt });
+    return task.id;
+  };
+  const done = await finish("Outlook Sent & Inbox Check-In · Oct 9", "succeeded");
+  const failed = await finish("Price watch", "failed");
+  const waiting = await finish("Social media digest · Sep 29", "waiting_input");
+  const get = (id: string) => db.get<AgentTask>(owner, "tasks", id);
+
+  // Only finished jobs are archived; the waiting one stays.
+  const cleared = await agent.archive(owner);
+  assert.deepEqual(new Set(cleared.jobs), new Set([done, failed]));
+  assert.ok((await get(done))?.archivedAt);
+  assert.equal((await get(waiting))?.archivedAt, undefined);
+  // Archived jobs still come with the snapshot (chat cards and Spaces open them), flagged.
+  const snapshot = await agent.snapshot(owner);
+  assert.ok(snapshot.tasks.find((task) => task.id === done)?.archivedAt);
+
+  // Let go: stopped, then archived.
+  const letGo = await agent.letGo(owner, waiting);
+  assert.equal(letGo.status, "cancelled");
+  assert.ok(letGo.archivedAt);
+
+  // Back again.
+  await agent.restore(owner, [done]);
+  assert.equal((await get(done))?.archivedAt, null);
+
+  // By name, as said in the chat or on a call.
+  const ambiguous = await agent.tidyByName(owner, "restore", "digest");
+  assert.deepEqual(ambiguous, { restored: ["Social media digest · Sep 29"] });
+  const archived = await agent.tidyByName(owner, "archive", "outlook check in");
+  assert.deepEqual(archived, { archived: ["Outlook Sent & Inbox Check-In · Oct 9"] });
+  const none = await agent.tidyByName(owner, "archive", "dentist");
+  assert.match(String((none as { error?: string }).error), /No finished job matches/);
+  const twoMore = await finish("Outlook Sent & Inbox Check-In · Oct 10", "succeeded");
+  await finish("Outlook Sent & Inbox Check-In · Oct 11", "succeeded");
+  const choose = await agent.tidyByName(owner, "archive", "Outlook check-in");
+  assert.equal((choose as { choose?: string[] }).choose?.length, 2);
+  const both = await agent.tidyByName(owner, "archive", "Outlook check-in", true);
+  assert.equal((both as { archived?: string[] }).archived?.length, 2);
+  assert.ok((await get(twoMore))?.archivedAt);
+
+  // A week later, finished jobs archive themselves; recent ones and unfinished ones stay.
+  const old = await finish("Last week's brief", "succeeded", 8);
+  const recent = await finish("Today's brief", "succeeded", 1);
+  const stuck = await finish("Old question", "waiting_input", 30);
+  const tidy = agent as unknown as { lastTidy: number; tidyOld: () => Promise<void> };
+  tidy.lastTidy = 0;
+  await tidy.tidyOld();
+  assert.ok((await get(old))?.archivedAt);
+  assert.equal((await get(recent))?.archivedAt, undefined);
+  assert.equal((await get(stuck))?.archivedAt, undefined);
+});
+
+test("Activity's tidy routes archive, let go and restore the person's own jobs", async () => {
+  const mine = await read<AgentTask>("/tasks", { prompt: "Check the weather" }, 201);
+  const other = await server.agent.createTask("other-user", { prompt: "Not yours" });
+  assert.equal((await request(`/tasks/${other.id}/let-go`, {})).status, 404);
+  const gone = await read<AgentTask>(`/tasks/${mine.id}/let-go`, {});
+  assert.equal(gone.status, "cancelled");
+  assert.ok(gone.archivedAt);
+  await read("/tasks/restore", { jobs: [mine.id] });
+  assert.deepEqual((await read<{ jobs: string[] }>("/tasks/archive", { ids: [mine.id] })).jobs, [
+    mine.id,
+  ]);
+});
+
+test("Activity tidy: Undo brings back the whole batch, restored jobs stay, routines are named", async () => {
+  const owner = "tidy-owner-2";
+  const agent = server.agent;
+  const make = async (title: string, status: AgentTask["status"], daysAgo = 0) => {
+    const task = await agent.createTask(owner, { prompt: title });
+    const updatedAt = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+    await db.compareAndSwap(owner, "tasks", task.id, {}, { title, status, updatedAt });
+    return task.id;
+  };
+  const get = (id: string) => db.get<AgentTask>(owner, "tasks", id);
+  const done = await make("Morning brief", "succeeded");
+  const waiting = await make("Social media digest · Sep 29", "waiting_input");
+
+  // A mixed batch: the waiting one is stopped; Undo brings both back, the stopped one stopped.
+  const batch = await agent.archive(owner, [done, waiting], true);
+  assert.deepEqual(new Set(batch.jobs), new Set([done, waiting]));
+  assert.deepEqual(batch.stopped, [waiting]);
+  const undone = await agent.undoTidy(owner);
+  assert.deepEqual(new Set(undone.jobs), new Set([done, waiting]));
+  assert.equal((await get(waiting))?.archivedAt, null);
+  assert.equal((await get(waiting))?.status, "cancelled");
+  // Nothing left to undo, by voice too.
+  assert.match(
+    String(((await agent.tidyByName(owner, "undo")) as { error?: string }).error),
+    /nothing to undo/,
+  );
+
+  // A ten-day-old job brought back isn't tidied away again within the hour.
+  const old = await make("Old brief", "succeeded", 10);
+  await agent.archive(owner, [old]);
+  await agent.restore(owner, [old]);
+  const tidy = agent as unknown as { lastTidy: number; tidyOld: () => Promise<void> };
+  tidy.lastTidy = 0;
+  await tidy.tidyOld();
+  assert.equal((await get(old))?.archivedAt, null);
+
+  // Letting go of a routine's run says the routine still makes new ones, and it can be turned off.
+  const routine = await agent.createRoutine(owner, {
+    title: "Outlook Sent & Inbox Check-In",
+    prompt: "Check my Outlook inbox and sent mail",
+    time: "09:00",
+    days: [1, 2, 3, 4, 5],
+    enabled: true,
+  });
+  const run = await make("Outlook Sent & Inbox Check-In · Oct 9", "waiting_approval");
+  await make("Outlook Sent & Inbox Check-In · Oct 8", "succeeded");
+  const both = (await agent.tidyByName(owner, "let_go", "outlook check in")) as {
+    choose?: string[];
+    total?: number;
+  };
+  assert.equal(both.total, 2);
+  const one = (await agent.tidyByName(owner, "let_go", "check-in oct 9")) as {
+    stopped?: string[];
+    routinesStillOn?: string[];
+  };
+  assert.deepEqual(one.stopped, ["Outlook Sent & Inbox Check-In · Oct 9"]);
+  assert.deepEqual(one.routinesStillOn, ["Outlook Sent & Inbox Check-In"]);
+  assert.equal((await get(run))?.status, "cancelled");
+  await agent.tidyByName(owner, "turn_off_routine", "outlook check-in");
+  const routineOn = async () =>
+    (await db.get<{ enabled: boolean }>(owner, "routines", routine.id))?.enabled;
+  assert.equal(await routineOn(), false);
+  // "Undo that" turns it back on.
+  const back = (await agent.tidyByName(owner, "undo")) as { routinesBackOn?: string[] };
+  assert.deepEqual(back.routinesBackOn, ["Outlook Sent & Inbox Check-In"]);
+  assert.equal(await routineOn(), true);
+  // The app's Let go with "turn off the routine" is one batch too: Undo turns the routine on.
+  const another = await make("Outlook Sent & Inbox Check-In · Oct 10", "waiting_input");
+  await agent.archive(owner, [another], true, [routine.id]);
+  assert.equal(await routineOn(), false);
+  assert.deepEqual((await agent.undoTidy(owner)).routinesOn, [routine.id]);
+  assert.equal(await routineOn(), true);
+  await agent.tidyByName(owner, "turn_off_routine", "outlook check-in");
+
+  // Asking to archive an unfinished job says so instead of stopping it.
+  await make("Price watch", "waiting_input");
+  const notFinished = (await agent.tidyByName(owner, "archive", "price watch")) as {
+    notFinished?: string[];
+  };
+  assert.deepEqual(notFinished.notFinished, ["Price watch"]);
+  // Everything waiting on them, once they've said yes.
+  const waitingAll = (await agent.tidyByName(owner, "let_go_waiting")) as {
+    stoppedAndArchived?: string[];
+  };
+  assert.deepEqual(waitingAll.stoppedAndArchived, ["Price watch"]);
+});

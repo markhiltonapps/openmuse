@@ -337,4 +337,15 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   tool calls as `{id, name, args}`, while the chat reads `{function: {name, arguments}}`. Convert
   anything saved from it (`asChatMessage` in main-pages.ts / chat-rows.tsx) before the app draws
   it; one unconverted card once blanked the whole app. Each chat row has an error boundary now.
+- **Tidying Activity (engine/service.ts `archive`):** archived jobs stay in the agent snapshot
+  (chat cards and Spaces look them up by id) and are hidden only in Activity's lists. Every tidy
+  is one server batch ("last-tidy") so Undo, tapped or said, restores exactly that; do several
+  things (stop + archive + turn off a routine) in one call, never in a row of calls.
+- **compareAndSwap with `{field: null}`:** Postgres `@>` doesn't match a missing field, so an
+  expected `leaseId: null` fails on records that never had one. Only expect a field you know is
+  stored.
+- **Sample data in screenshots:** the sample server's dates are fixed in the past, so anything that
+  ages things (the weekly Activity tidy) is off there. A test run that archives or stops sample
+  jobs changes `${DATA_DIR}`; copy it before such runs and put it back (while the server is
+  stopped), or the Help shots lose their jobs.
 

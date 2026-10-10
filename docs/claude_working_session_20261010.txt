@@ -153,3 +153,62 @@ Plan: Neddy makes phone calls (no code changed)
   and seven decisions for the owner (calling service, caller ID, recording, limits, voicemail,
   who can use it, voice credit).
 - Pending: the owner's answers to those decisions before Slice 0.
+
+----------------------------------------------------------------------------------------------
+Activity tidy-up: clearing a pile of ~100 jobs
+----------------------------------------------------------------------------------------------
+Owner: "I'm starting to get a pile up of activities … almost a hundred. There should be a way to
+manage that." (Screenshot: the Activity jobs list, recurring "Outlook Sent & Inbox Check-In · Oct 9"
+runs, 9+ on the tab.) Choices: archive (not delete); Clear finished; Select several; tidy up
+automatically (7 days); Let go for unfinished jobs they don't want.
+
+What changed
+- Server (engine/service.ts, routes.ts):
+  - Jobs and receipts get `archivedAt` (kept, still open from the chat and Spaces) and
+    `restoredAt` (the weekly tidy counts a restored item as new).
+  - POST /api/agent/tasks/archive {ids?, stop?, routinesOff?}: no ids = every finished job plus
+    every decided receipt; with ids, unfinished ones only with stop (stopped first: nothing more
+    is done or sent, a waiting approval is turned down). Optional routinesOff turns routines off
+    in the same tidy.
+  - POST /tasks/restore, POST /tasks/:id/let-go, POST /tasks/undo (the last tidy is saved per
+    person; Undo brings back exactly that batch, stopped jobs stay stopped, routines turned back on).
+  - Maintenance archives finished jobs and decided receipts after 7 days (hourly; not on the
+    sample server, whose dates are fixed in the past).
+  - Routine runs now carry input.routineId (older ones match "<routine> · <day>").
+  - Stopping a job whose record has no lease field (never picked up) no longer fails with "This
+    job just changed".
+- Chat and calls: tool tidy_activity (clear_finished, archive, let_go, let_go_waiting, restore,
+  undo, turn_off_routine), matching jobs by name; asks which when several match; never stops a
+  job unless asked; offers to turn off a routine whose run was stopped.
+- App (agent-ui.tsx ActivityJobs, TaskCard):
+  - Filters All / In progress / Finished / Archived; Clear finished and Select on the right.
+  - Each job has Archive (finished), Let go (unfinished, with a confirm naming what happens; for a
+    routine's run, "Let go and turn off the routine") or Restore (Archived).
+  - A tidied job leaves a line in its place with Undo; focus moves there.
+  - Select mode: checkboxes, Select all, Archive / Stop and archive / Restore, Cancel; a
+    fixed-height line says how many are selected and what will happen.
+  - The job page has Archive / Restore to Activity. Archived receipts are hidden from Reviews &
+    receipts.
+- Help: new topic "Clear out Activity" (tidy-activity); Activity topic updated, its shot gets a
+  mark on Clear finished; app guide line.
+
+Design division: visual (2 rounds), copy (3 rounds), usability (3 rounds), all signed off.
+
+Tests
+- tests/agent-api.test.ts: archive/let go/restore/by name/weekly tidy; Undo batches (mixed stop,
+  routines), restore sticking, let_go_waiting, routine notes; routes scoped to the owner.
+- Biome clean; app, server and worker tsc clean; pnpm test 518/518.
+- Local browser checks on four looks (city, plain light, plain dark, desktop): Let go confirm
+  and focus, archive line + Undo in place, Select / Select all / Stop and archive, Undo of a
+  mixed batch, Archived view.
+
+Also today
+- Owner asked which OpenAI account the voice uses: the api's OPENAI_VOICE_API_KEY (added by the
+  owner on Oct 1); logs show "insufficient_quota" on every call. Told them how to match the key's
+  last characters on platform.openai.com and add credits there.
+- Plan written: docs/PHONE-CALLS-PLAN.md (Neddy making phone calls), committed, not pushed.
+
+Known issues / pending
+- Undo covers the last tidy only (one level).
+- "Show more · N left" counts a job whose card became an Undo line.
+- Push waits for the owner's "push it" (both this and the phone-calls plan commit).

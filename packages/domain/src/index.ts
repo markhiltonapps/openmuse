@@ -235,6 +235,10 @@ export interface ActionProposal {
   expiresAt: string;
   result?: string;
   error?: string;
+  /** Cleared from Activity's receipts (kept, and can be brought back). */
+  archivedAt?: string | null;
+  /** Brought back to Activity; the weekly tidy counts it as new from then. */
+  restoredAt?: string | null;
 }
 export interface ActivityEntry {
   id: string;

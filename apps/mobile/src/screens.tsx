@@ -1366,7 +1366,10 @@ export function ActivityScreen() {
   const { workspace: w, open } = useWorkspace();
   const [filter, setFilter] = useState("all");
   const pending = w.actions.filter((a) => a.status === "awaiting_review");
-  const actions = w.actions.filter((a) => filter === "all" || a.status === "awaiting_review");
+  // Archived receipts (cleared, or a week old) stay out of the list; they're kept on the server.
+  const actions = w.actions.filter(
+    (a) => !a.archivedAt && (filter === "all" || a.status === "awaiting_review"),
+  );
   return (
     <View style={{ gap: 20 }}>
       <View style={[s.row, { gap: 10 }]}>

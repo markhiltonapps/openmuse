@@ -86,6 +86,49 @@ import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const date = () => new Date().toISOString();
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
+/** Jobs whose name matches what someone said: the whole phrase, or else all its words. */
+export function matchJobs<T extends { title: string }>(tasks: T[], said: string) {
+  const plain = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const phrase = plain(said);
+  const whole = tasks.filter((task) => plain(task.title).includes(phrase));
+  if (whole.length) return whole;
+  const words = phrase.split(" ").filter((word) => word.length > 2);
+  return words.length
+    ? tasks.filter((task) => words.every((word) => plain(task.title).includes(word)))
+    : [];
+}
+/** The last tidy of Activity, for Undo. */
+interface TidyBatch {
+  id: "last-tidy";
+  jobs: string[];
+  receipts: string[];
+  /** Jobs that were stopped to archive them; Undo brings them back, still stopped. */
+  stopped: string[];
+  /** Routines turned off with them; Undo turns them back on. */
+  routinesOff?: string[];
+  at: string;
+}
+/** How recent something is for the weekly tidy: bringing it back counts as new. */
+const age = (since: string, restoredAt?: string | null) =>
+  Math.max(Date.parse(since), restoredAt ? Date.parse(restoredAt) : 0);
+/** The routine a job is a run of ("Outlook check-in · Oct 9" comes from "Outlook check-in"). */
+export function routineOf(task: AgentTask, routines: Routine[]) {
+  return routines.find(
+    (routine) =>
+      task.input.routineId === routine.id || task.title.startsWith(`${routine.title} · `),
+  );
+}
+/** Finished jobs and decided receipts leave Activity on their own after this long. */
+export const TIDY_AFTER = 7 * 24 * 60 * 60_000;
+/** A review that's been decided (or ran out): nothing left for the person to do on it. */
+const receiptDone = (action: ActionProposal) =>
+  ["succeeded", "failed", "denied", "cancelled", "expired"].includes(action.status) ||
+  (action.status === "awaiting_review" && Date.parse(action.expiresAt) < Date.now());
 export class AgentService {
   readonly worker: TaskWorker;
   /** Summaries of the older part of long chats, written by the background model. */
@@ -99,6 +142,8 @@ export class AgentService {
   /** The About you page: what the agent knows about the person. */
   readonly persona: Persona;
   private maintenance?: ReturnType<typeof setInterval>;
+  /** When Activity was last tidied (hourly). */
+  private lastTidy = 0;
   /** This copy of the server, for the maintenance lease. */
   private readonly instance = randomUUID();
   /** Nightly copies of every record to the bucket. */
@@ -166,6 +211,9 @@ export class AgentService {
       for (const { owner, value } of await this.db.scan<Monitor>("monitors"))
         await this.activateMonitor(owner, value);
       await this.runDueRoutines();
+      // Sample data's dates are fixed in the past: it would all be tidied away at once.
+      if (this.config.mode !== "sample")
+        await this.tidyOld().catch((error) => backgroundFailure("tidying Activity", error));
       await this.feed?.refreshDue().catch((error) => backgroundFailure("feed refresh", error));
       await this.reminders
         ?.deliverDue((owner) => this.removed(owner))
@@ -417,7 +465,8 @@ export class AgentService {
       owner,
       "tasks",
       id,
-      { status: task.status, leaseId: task.leaseId ?? null },
+      // A job never picked up by the worker has no lease field at all.
+      { status: task.status, ...(task.leaseId === undefined ? {} : { leaseId: task.leaseId }) },
       {
         status,
         leaseId: null,
@@ -464,6 +513,248 @@ export class AgentService {
       detail: "Changed by you",
     });
     return updated;
+  }
+  /**
+   * Clears jobs from Activity (they're kept, can be brought back, and still open from the chat or
+   * a Space). Without ids: every finished job (done, stopped or couldn't finish) and every decided
+   * receipt. With ids: those jobs; unfinished ones only with `stop`, which stops them first
+   * (nothing more is done or sent, and a waiting approval is turned down). Each call is
+   * remembered as the last tidy, so Undo (tapped or said) brings back exactly that.
+   */
+  async archive(owner: string, ids?: string[], stop = false, routinesOff: string[] = []) {
+    const at = date();
+    const jobs: string[] = [];
+    const stopped: string[] = [];
+    for (const task of await this.db.list<AgentTask>(owner, "tasks")) {
+      if (task.archivedAt || (ids && !ids.includes(task.id))) continue;
+      if (!terminal.has(task.status)) {
+        if (!ids || !stop) continue;
+        await this.control(owner, task.id, "cancel");
+        stopped.push(task.id);
+      }
+      if (await this.db.compareAndSwap(owner, "tasks", task.id, {}, { archivedAt: at }))
+        jobs.push(task.id);
+    }
+    const receipts = ids ? [] : await this.archiveReceipts(owner, at);
+    // A routine they turned off along with its run is part of the same tidy (and its Undo).
+    const turnedOff: string[] = [];
+    for (const id of routinesOff) {
+      const routine = await this.db.get<Routine>(owner, "routines", id);
+      if (!routine?.enabled) continue;
+      await this.updateRoutine(owner, id, { enabled: false });
+      turnedOff.push(id);
+    }
+    if (jobs.length || receipts.length || turnedOff.length)
+      await this.db.put(owner, "agent-settings", {
+        id: "last-tidy",
+        jobs,
+        receipts,
+        stopped,
+        routinesOff: turnedOff,
+        at,
+      } satisfies TidyBatch);
+    return { jobs, receipts, stopped, routinesOff: turnedOff };
+  }
+  /** Decided reviews (sent, added, turned down, expired) leave Activity's receipts. */
+  private async archiveReceipts(owner: string, at: string, olderThan?: number) {
+    const archived: string[] = [];
+    for (const action of await this.db.list<ActionProposal>(owner, "actions")) {
+      if (action.archivedAt || !receiptDone(action)) continue;
+      if (olderThan && age(action.createdAt, action.restoredAt) > olderThan) continue;
+      await this.db.compareAndSwap(owner, "actions", action.id, {}, { archivedAt: at });
+      archived.push(action.id);
+    }
+    return archived;
+  }
+  /**
+   * Brings archived jobs and receipts back to Activity. They count as new from now, so the
+   * weekly tidy doesn't put them straight away again.
+   */
+  async restore(owner: string, jobs: string[] = [], receipts: string[] = []) {
+    const at = date();
+    for (const id of jobs)
+      await this.db.compareAndSwap(owner, "tasks", id, {}, { archivedAt: null, restoredAt: at });
+    for (const id of receipts)
+      await this.db.compareAndSwap(owner, "actions", id, {}, { archivedAt: null, restoredAt: at });
+    return { jobs, receipts };
+  }
+  /**
+   * Undoes the last tidy: everything it put away comes back (stopped jobs stay stopped), and a
+   * routine it turned off is turned back on.
+   */
+  async undoTidy(owner: string) {
+    const batch = await this.db.take<TidyBatch>(owner, "agent-settings", "last-tidy");
+    if (!batch) return { jobs: [], receipts: [], stopped: [], routinesOn: [] };
+    await this.restore(owner, batch.jobs, batch.receipts);
+    const routinesOn: string[] = [];
+    for (const id of batch.routinesOff ?? [])
+      if (await this.db.get(owner, "routines", id)) {
+        await this.updateRoutine(owner, id, { enabled: true });
+        routinesOn.push(id);
+      }
+    return { jobs: batch.jobs, receipts: batch.receipts, stopped: batch.stopped, routinesOn };
+  }
+  /** A job they no longer want: stopped if unfinished, then archived. */
+  async letGo(owner: string, id: string) {
+    await this.getTask(owner, id);
+    await this.archive(owner, [id], true);
+    return this.getTask(owner, id);
+  }
+  /**
+   * Tidying Activity by name, for the chat and calls ("let go of the Outlook check-in"). One job
+   * is matched by its name; several matches are listed back unless they meant all of them.
+   */
+  async tidyByName(
+    owner: string,
+    what:
+      | "clear_finished"
+      | "archive"
+      | "let_go"
+      | "let_go_waiting"
+      | "restore"
+      | "undo"
+      | "turn_off_routine",
+    name?: string,
+    all = false,
+  ) {
+    const tasks = await this.db.list<AgentTask>(owner, "tasks");
+    const titles = (ids: string[]) =>
+      tasks.filter((task) => ids.includes(task.id)).map((task) => task.title);
+    if (what === "clear_finished") {
+      const { jobs, receipts } = await this.archive(owner);
+      return {
+        archivedJobs: jobs.length,
+        clearedReceipts: receipts.length,
+        note: "Archived jobs are under Archived in Activity. Undo brings back this whole batch.",
+      };
+    }
+    const routines = await this.db.list<Routine>(owner, "routines");
+    /** Routines still on that made these jobs: stopping a run leaves them making new ones. */
+    const stillOn = (picked: AgentTask[]) => {
+      const on = [
+        ...new Set(
+          picked
+            .map((task) => routineOf(task, routines))
+            .filter((routine) => routine?.enabled)
+            .map((routine) => routine?.title as string),
+        ),
+      ];
+      return on.length
+        ? {
+            routinesStillOn: on,
+            note: "These were runs of a routine that keeps making new ones. Offer to turn it off (turn_off_routine).",
+          }
+        : {};
+    };
+    if (what === "undo") {
+      const { jobs, receipts, stopped, routinesOn } = await this.undoTidy(owner);
+      if (!jobs.length && !receipts.length && !routinesOn.length)
+        return { error: "There’s nothing to undo." };
+      return {
+        broughtBack: titles(jobs),
+        receipts: receipts.length,
+        ...(stopped.length ? { stillStopped: titles(stopped) } : {}),
+        ...(routinesOn.length
+          ? {
+              routinesBackOn: routines
+                .filter((routine) => routinesOn.includes(routine.id))
+                .map((routine) => routine.title),
+            }
+          : {}),
+      };
+    }
+    if (what === "let_go_waiting") {
+      const waiting = tasks.filter(
+        (task) => !task.archivedAt && ["waiting_input", "waiting_approval"].includes(task.status),
+      );
+      if (!waiting.length) return { error: "No jobs are waiting on them." };
+      const { jobs } = await this.archive(
+        owner,
+        waiting.map((task) => task.id),
+        true,
+      );
+      const routineNote = stillOn(waiting);
+      return {
+        stoppedAndArchived: titles(jobs),
+        ...routineNote,
+        note: `Undo brings them back, still stopped.${"note" in routineNote ? ` ${routineNote.note}` : ""}`,
+      };
+    }
+    if (!name?.trim()) return { error: "Ask them which job." };
+    if (what === "turn_off_routine") {
+      const found = matchJobs(routines, name).filter((routine) => routine.enabled);
+      if (found.length !== 1)
+        return found.length
+          ? { choose: found.map((routine) => routine.title) }
+          : { error: `No routine that’s on matches “${name}”.` };
+      const routine = found[0] as Routine;
+      await this.archive(owner, [], false, [routine.id]);
+      return {
+        turnedOff: routine.title,
+        note: "It won’t run again until it’s turned back on in Goals › Tracking. Undo turns it back on.",
+      };
+    }
+    const pool = tasks.filter((task) =>
+      what === "restore"
+        ? task.archivedAt
+        : !task.archivedAt && (what === "let_go" || terminal.has(task.status)),
+    );
+    const matches = matchJobs(pool, name);
+    if (!matches.length) {
+      const unfinished =
+        what === "archive"
+          ? matchJobs(
+              tasks.filter((task) => !task.archivedAt && !terminal.has(task.status)),
+              name,
+            )
+          : [];
+      return unfinished.length
+        ? {
+            notFinished: unfinished.slice(0, 8).map((task) => task.title),
+            note: "Not finished, so it can’t just be archived. Ask whether to stop it (let_go).",
+          }
+        : {
+            error: `No ${what === "restore" ? "archived " : what === "archive" ? "finished " : ""}job matches “${name}”.`,
+          };
+    }
+    if (matches.length > 1 && !all)
+      return {
+        choose: matches.slice(0, 8).map((task) => task.title),
+        total: matches.length,
+        note: "Several jobs match. Ask which one (the latest?), or whether they mean all of them.",
+      };
+    const ids = matches.map((task) => task.id);
+    if (what === "restore") {
+      await this.restore(owner, ids);
+      return { restored: titles(ids) };
+    }
+    const { jobs, stopped } = await this.archive(owner, ids, what === "let_go");
+    return {
+      archived: titles(jobs),
+      ...(stopped.length ? { stopped: titles(stopped) } : {}),
+      ...stillOn(matches),
+    };
+  }
+  /** Finished jobs and decided receipts tidy themselves away after a week. */
+  private async tidyOld() {
+    if (Date.now() - this.lastTidy < 60 * 60_000) return;
+    this.lastTidy = Date.now();
+    const before = Date.now() - TIDY_AFTER;
+    const at = date();
+    const owners = new Set<string>();
+    for (const { owner, value } of await this.db.scan<AgentTask>("tasks")) {
+      owners.add(owner);
+      if (value.archivedAt || !terminal.has(value.status)) continue;
+      if (age(value.updatedAt, value.restoredAt) > before) continue;
+      await this.db.compareAndSwap(
+        owner,
+        "tasks",
+        value.id,
+        { status: value.status },
+        { archivedAt: at },
+      );
+    }
+    for (const owner of owners) await this.archiveReceipts(owner, at, before);
   }
   async answer(
     owner: string,
@@ -1220,7 +1511,12 @@ export class AgentService {
     }).format(new Date(occurrence));
     const task = await this.createTask(
       owner,
-      { kind: "agent", title: `${routine.title} · ${day}`, prompt: routinePrompt(routine) },
+      {
+        kind: "agent",
+        title: `${routine.title} · ${day}`,
+        prompt: routinePrompt(routine),
+        input: { routineId: routine.id },
+      },
       `routine:${routine.id}:${occurrence}`,
     );
     await this.db.compareAndSwap<Routine>(

@@ -44,6 +44,31 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       .parse(await c.req.json());
     return c.json(await service.control(c.get("owner"), c.req.param("id"), action));
   });
+  // Tidying Activity: archive finished jobs (all of them, or chosen ones), let go of one, or bring
+  // some back.
+  app.post("/tasks/archive", async (c) => {
+    const { ids, stop, routinesOff } = z
+      .object({
+        ids: z.array(z.string().max(200)).max(2000).optional(),
+        stop: z.boolean().optional(),
+        routinesOff: z.array(z.string().max(200)).max(30).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(await service.archive(c.get("owner"), ids, stop ?? false, routinesOff));
+  });
+  app.post("/tasks/undo", async (c) => c.json(await service.undoTidy(c.get("owner"))));
+  app.post("/tasks/restore", async (c) => {
+    const { jobs, receipts } = z
+      .object({
+        jobs: z.array(z.string().max(200)).max(2000).optional(),
+        receipts: z.array(z.string().max(200)).max(2000).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(await service.restore(c.get("owner"), jobs, receipts));
+  });
+  app.post("/tasks/:id/let-go", async (c) =>
+    c.json(await service.letGo(c.get("owner"), c.req.param("id"))),
+  );
   app.post("/tasks/:id/ask-each-time", async (c) =>
     c.json(await service.askEachTime(c.get("owner"), c.req.param("id"))),
   );

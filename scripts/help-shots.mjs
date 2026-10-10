@@ -217,8 +217,7 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
 }
 
 // A tab's name can carry a count after a comma ("Activity, 2 need you").
-const tab = (page, name) =>
-  page.getByRole("tab", { name: new RegExp(`^${name}(,|$)`) }).first();
+const tab = (page, name) => page.getByRole("tab", { name: new RegExp(`^${name}(,|$)`) }).first();
 const button = (page, name) => page.getByRole("button", { name }).first();
 const say = (page, event) => page.evaluate((e) => window.__channel?.emit(e), event);
 async function startCall(page) {
@@ -446,9 +445,10 @@ const SHOTS = [
     },
     marks: {
       1: (p) => tab(p, "Activity"),
-      2: words((p) => p.getByText(/Waiting for your OK|Wait for your OK/).first()),
+      2: words((p) => p.getByText(/Waiting for your OK ·|Wait for your OK on/).first()),
       3: words((p) => p.getByText(/Done ·/).first()),
       4: words((p) => p.getByText("Reviews & receipts").first()),
+      5: (p) => button(p, /^Clear finished/),
     },
   },
   {

@@ -1,4 +1,6 @@
 import {
+  Archive,
+  ArchiveRestore,
   ArrowRight,
   Bell,
   CalendarDays,
@@ -24,8 +26,9 @@ import {
   Target,
   UserRound,
   Users,
+  X,
 } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Platform, Pressable, Text, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import type { ActionProposal, Artifact, BrowserSession } from "../../../packages/domain/src";
@@ -83,7 +86,7 @@ import { PeopleNotesCard } from "./people-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { PasswordsCard } from "./sign-in-ui";
 import { SubscriptionsCard } from "./subscriptions-ui";
-import { dark } from "./theme";
+import { dark, glass } from "./theme";
 import { tipProps } from "./tips";
 import {
   Button,
@@ -186,10 +189,20 @@ export function TaskCard({
   task,
   compact = false,
   onOpen,
+  selecting = false,
+  selected = false,
+  onToggle,
+  footer,
 }: {
   task: AgentTask;
   compact?: boolean;
   onOpen?: () => void;
+  /** Activity's Select mode: a tap ticks the job instead of opening it. */
+  selecting?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
+  /** Buttons under the job (Archive, Let go, Restore), outside the part that opens it. */
+  footer?: ReactNode;
 }) {
   const { open } = useWorkspace();
   // Steps only when the agent made a real plan; the default four never move until the end.
@@ -202,24 +215,64 @@ export function TaskCard({
     task.status === "running" && typeof task.state.now === "string" && task.state.now
       ? taskActivity(task).label
       : "";
+  const pad = compact ? 15 : 20;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open job: ${task.title}`}
-      onPress={() => {
-        onOpen?.();
-        open({ type: "task", taskId: task.id });
+    <Card
+      style={{
+        padding: 0,
+        gap: 0,
+        borderRadius: 22,
+        backgroundColor: colors.subtle,
+        // The same border width ticked or not, so ticking never nudges anything.
+        ...(selecting
+          ? { borderWidth: 2, borderColor: selected ? colors.blueDark : "transparent" }
+          : {}),
       }}
     >
-      <Card
-        style={{
-          padding: compact ? 15 : 20,
-          gap: 11,
-          borderRadius: 22,
-          backgroundColor: colors.subtle,
-        }}
+      <Pressable
+        {...(selecting
+          ? {
+              role: "checkbox" as const,
+              "aria-checked": selected,
+              accessibilityState: { checked: selected },
+              accessibilityLabel: `${task.title}, ${taskStatus(task.status)}`,
+              onPress: onToggle,
+              // react-native-web presses only role="button" on Space; a checkbox takes it too.
+              ...({
+                onKeyDown: (event: { key?: string; preventDefault?: () => void }) => {
+                  if (event.key !== " ") return;
+                  event.preventDefault?.();
+                  onToggle?.();
+                },
+              } as object),
+            }
+          : {
+              accessibilityRole: "button" as const,
+              accessibilityLabel: `Open job: ${task.title}`,
+              onPress: () => {
+                onOpen?.();
+                open({ type: "task", taskId: task.id });
+              },
+            })}
+        style={{ padding: pad, paddingBottom: footer ? 10 : pad, gap: 11 }}
       >
         <View style={[s.row, { gap: 10 }]}>
+          {selecting && (
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                borderWidth: 1.5,
+                borderColor: selected ? colors.text : colors.edge,
+                backgroundColor: selected ? colors.inverse : colors.surface,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {selected && <Check size={14} color={colors.onInverse} />}
+            </View>
+          )}
           <View
             style={[
               s.iconBox,
@@ -235,7 +288,7 @@ export function TaskCard({
               {steps.length ? ` · ${done}/${steps.length} steps` : ""}
             </Text>
           </View>
-          <ChevronRight size={17} color={colors.muted} />
+          {!selecting && <ChevronRight size={17} color={colors.muted} />}
         </View>
         {!!steps.length && (
           <View style={{ height: 4, backgroundColor: colors.line, borderRadius: 4 }}>
@@ -254,13 +307,16 @@ export function TaskCard({
             {doing || plainPreview(task.question || task.error || task.result || next?.title || "")}
           </Text>
         )}
-        {waiting && (
+        {waiting && !selecting && (
           <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
             {task.status === "waiting_approval" ? "Tap to review" : "Tap to answer"}
           </Text>
         )}
-      </Card>
-    </Pressable>
+      </Pressable>
+      {footer && !selecting ? (
+        <View style={{ paddingHorizontal: pad, paddingBottom: pad - 4 }}>{footer}</View>
+      ) : null}
+    </Card>
   );
 }
 export function ChatWork() {
@@ -279,9 +335,7 @@ export function ChatWork() {
   );
 }
 export function AgentActivityScreen() {
-  const { data } = useAgentWorkspace();
   const { workspace } = useWorkspace();
-  const [filter, setFilter] = useState("All");
   // What's waiting for their OK comes first, with its Approve button, above all the jobs. A card
   // stays (showing what happened) for the rest of this visit after it's decided.
   const waiting = workspace.actions
@@ -292,12 +346,7 @@ export function AgentActivityScreen() {
   const cards = workspace.actions
     .filter((action) => seen.current.has(action.id))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const tasks = [...(data?.tasks || [])]
-    .filter(
-      (task) =>
-        filter === "All" || (filter === "In progress" ? activeTask(task) : !activeTask(task)),
-    )
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
   return (
     <View style={{ gap: 20 }}>
       <AgentStatus />
@@ -315,27 +364,554 @@ export function AgentActivityScreen() {
           </View>
         </View>
       )}
-      <View style={[s.row, { gap: 8 }]}>
-        {["All", "In progress", "Finished"].map((item) => (
-          <Button key={item} small primary={filter === item} onPress={() => setFilter(item)}>
-            {item}
-          </Button>
-        ))}
-      </View>
-      {tasks.map((task) => (
-        <TaskCard key={task.id} task={task} />
-      ))}
-      {!tasks.length && (
-        <Empty
-          icon={ListChecks}
-          title="A place for the work"
-          detail="Tap New job, or ask in Chat. Each job and its result stays here."
-        />
-      )}
+      <ActivityJobs />
       <PlaceAnchor id={cards.length ? "receipts" : "reviews"} label="Reviews & receipts">
         <SectionHeading title="Reviews & receipts" />
       </PlaceAnchor>
       <ActivityScreen />
+    </View>
+  );
+}
+type JobFilter = "All" | "In progress" | "Finished" | "Archived";
+/** How many jobs are drawn at first, and how many more each "Show more" adds. */
+const JOBS_SHOWN = 30;
+type TidyResult = {
+  jobs: string[];
+  receipts: string[];
+  stopped: string[];
+  routinesOn?: string[];
+};
+/** The routine a job is a run of ("Outlook check-in · Oct 9" comes from "Outlook check-in"). */
+function routineOf(task: AgentTask, routines: Routine[]) {
+  return routines.find(
+    (routine) =>
+      task.input.routineId === routine.id || task.title.startsWith(`${routine.title} · `),
+  );
+}
+/** Moves focus to an element by id once the screen has drawn it (on the web). */
+function focusLater(id: string, tries = 8) {
+  if (Platform.OS !== "web") return;
+  setTimeout(() => {
+    const element = globalThis.document?.getElementById(id) as HTMLElement | null;
+    element?.focus();
+    // The line can take a moment to appear (the list refreshes first): try again shortly.
+    if (globalThis.document?.activeElement !== element && tries > 1) focusLater(id, tries - 1);
+  }, 60);
+}
+/**
+ * Activity's jobs, with ways to tidy them: Clear finished, Select (Select all), and Archive,
+ * Let go or Restore on each. Archived jobs are kept (the chat and Spaces still open them) under
+ * Archived. Every tidy can be undone, by tap or by voice ("undo that").
+ */
+function ActivityJobs() {
+  const { data, mutate } = useAgentWorkspace();
+  const { refresh: refreshWorkspace } = useWorkspace();
+  const [filter, setFilter] = useState<JobFilter>("All");
+  const [selecting, setSelecting] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [shown, setShown] = useState(JOBS_SHOWN);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  /** What a list-wide action did (Clear finished, Select), with Undo. */
+  const [said, setSaid] = useState("");
+  const [canUndo, setCanUndo] = useState(false);
+  /** What happened to one job, said where its card was. */
+  const [placed, setPlaced] = useState<{
+    id: string;
+    index: number;
+    text: string;
+    undo: boolean;
+  }>();
+  /** A Let go waiting for "yes" on one job. */
+  const [confirming, setConfirming] = useState<string>();
+  /** Said to screen readers only, when what happened is already plain to see. */
+  const [announce, setAnnounce] = useState("");
+  const agent = data?.identity.name || "Neddy";
+  const routines = data?.routines ?? [];
+  const all = data?.tasks ?? [];
+  const live = all.filter((task) => !task.archivedAt);
+  const finished = live.filter((task) => !activeTask(task));
+  const archivedView = filter === "Archived";
+  const tasks = archivedView
+    ? all
+        .filter((task) => task.archivedAt)
+        .sort((a, b) => String(b.archivedAt).localeCompare(String(a.archivedAt)))
+    : live
+        .filter(
+          (task) =>
+            filter === "All" || (filter === "In progress" ? activeTask(task) : !activeTask(task)),
+        )
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const picked = tasks.filter((task) => chosen.includes(task.id));
+  const unfinishedPicked = picked.filter(activeTask).length;
+  const jobs = (n: number) => `${n} ${n === 1 ? "job" : "jobs"}`;
+  const receiptsText = (n: number) => `${n} ${n === 1 ? "receipt" : "receipts"}`;
+  // Small lines over a backdrop (which can be bright) get their own backing.
+  const backing = glass
+    ? { backgroundColor: colors.card, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 }
+    : undefined;
+  const line = { fontSize: 14, lineHeight: 20, color: colors.text };
+
+  function choose(next: JobFilter) {
+    setFilter(next);
+    setSelecting(false);
+    setAnnounce("");
+    setChosen([]);
+    setShown(JOBS_SHOWN);
+    setConfirming(undefined);
+    setPlaced(undefined);
+    setSaid("");
+    setCanUndo(false);
+    setError("");
+  }
+  /** Runs one action; the old message stays until the new one is ready, so nothing jumps. */
+  async function run(name: string, work: () => Promise<void>) {
+    setBusy(name);
+    setError("");
+    try {
+      await work();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy("");
+    }
+  }
+  /** A whole-list result goes in the line above the list. */
+  function sayTop(text: string, undo: boolean) {
+    setPlaced(undefined);
+    setAnnounce("");
+    setSaid(text);
+    setCanUndo(undo);
+  }
+  /**
+   * One job's result goes where its card was, and focus moves there. A line above the list
+   * stays (nothing moves), but loses its Undo: Undo now means this job.
+   */
+  function sayHere(task: AgentTask, text: string, undo: boolean) {
+    setCanUndo(false);
+    setAnnounce("");
+    setPlaced({ id: task.id, index: tasks.indexOf(task), text, undo });
+    focusLater(undo ? "placed-undo" : "placed-line");
+  }
+  const clearFinished = () =>
+    run("clear", async () => {
+      const result = await mutate<TidyResult>("/tasks/archive", {});
+      await refreshWorkspace().catch(() => {});
+      const r = result.receipts.length;
+      sayTop(
+        `Archived ${jobs(result.jobs.length)}${r ? ` and cleared ${receiptsText(r)}` : ""}.`,
+        true,
+      );
+    });
+  const archiveOne = (task: AgentTask) =>
+    run(`one-${task.id}`, async () => {
+      await mutate<TidyResult>("/tasks/archive", { ids: [task.id] });
+      sayHere(task, `Archived “${task.title}”.`, true);
+    });
+  const letGo = (task: AgentTask, routine?: Routine) =>
+    run(`one-${task.id}`, async () => {
+      // One tidy: the job and (if asked) its routine, so Undo puts both back.
+      await mutate<TidyResult>("/tasks/archive", {
+        ids: [task.id],
+        stop: true,
+        ...(routine ? { routinesOff: [routine.id] } : {}),
+      });
+      setConfirming(undefined);
+      sayHere(
+        task,
+        routine
+          ? `Stopped “${task.title}” (it’s under Archived) and turned off “${routine.title}”.`
+          : `Stopped “${task.title}”. It’s under Archived.`,
+        true,
+      );
+    });
+  const restoreOne = (task: AgentTask) =>
+    run(`one-${task.id}`, async () => {
+      await mutate("/tasks/restore", { jobs: [task.id] });
+      sayHere(
+        task,
+        `Brought back “${task.title}”. It’s under ${activeTask(task) ? "In progress" : "Finished"}.`,
+        false,
+      );
+    });
+  /** The chosen jobs: archived (unfinished ones stopped first), or brought back. */
+  const actOnChosen = () =>
+    run("chosen", async () => {
+      const ids = picked.map((task) => task.id);
+      if (archivedView) {
+        await mutate("/tasks/restore", { jobs: ids });
+        sayTop(`Brought back ${jobs(ids.length)}.`, false);
+      } else {
+        const result = await mutate<TidyResult>("/tasks/archive", { ids, stop: true });
+        const stopped = result.stopped.length;
+        sayTop(
+          stopped && stopped === result.jobs.length
+            ? `Stopped and archived ${jobs(stopped)}.`
+            : stopped
+              ? `Archived ${jobs(result.jobs.length)} (${stopped} stopped first).`
+              : `Archived ${jobs(result.jobs.length)}.`,
+          true,
+        );
+      }
+      setSelecting(false);
+      setChosen([]);
+    });
+  /** Undo the last tidy. From a job's own line, it answers in place: the card simply returns. */
+  const undoLast = (fromCard?: AgentTask) =>
+    run("undo", async () => {
+      const result = await mutate<TidyResult>("/tasks/undo", {});
+      await refreshWorkspace().catch(() => {});
+      const r = result.receipts.length;
+      const stopped = result.stopped;
+      const stoppedTitle = all.find((task) => task.id === stopped[0])?.title;
+      const backOn = routines.filter((routine) => result.routinesOn?.includes(routine.id));
+      const text = `Brought back ${jobs(result.jobs.length)}${r ? ` and ${receiptsText(r)}` : ""}.${
+        stopped.length === 1 && stoppedTitle
+          ? ` “${stoppedTitle}” stays stopped.`
+          : stopped.length
+            ? ` The ${stopped.length} stopped ones stay stopped.`
+            : ""
+      }${backOn.map((routine) => ` “${routine.title}” is back on.`).join("")}`;
+      if (fromCard) {
+        setPlaced(undefined);
+        setAnnounce(text);
+        focusLater(`act-${fromCard.id}`);
+      } else sayTop(text, false);
+    });
+
+  // The list as drawn: the job just tidied keeps its place, as a line saying what happened.
+  const drawn: (AgentTask | "placed")[] = tasks
+    .filter((task) => task.id !== placed?.id)
+    .slice(0, shown);
+  if (placed) drawn.splice(Math.min(placed.index, drawn.length), 0, "placed");
+
+  const selectedLine = picked.length
+    ? `${picked.length} selected${unfinishedPicked && !archivedView ? `, ${unfinishedPicked} not finished` : ""}`
+    : "None selected";
+  return (
+    <View style={{ gap: 14 }}>
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        {(["All", "In progress", "Finished", "Archived"] as const).map((item) => (
+          <Button
+            key={item}
+            small
+            primary={filter === item}
+            selected={filter === item}
+            onPress={() => choose(item)}
+          >
+            {item}
+          </Button>
+        ))}
+      </View>
+      {tasks.length > 0 && (
+        // Actions sit on the right, apart from the filters; Select and Cancel share a place.
+        <View
+          style={[
+            s.row,
+            { gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" },
+          ]}
+        >
+          {selecting ? (
+            <>
+              <Button
+                small
+                onPress={() =>
+                  setChosen(picked.length === tasks.length ? [] : tasks.map((task) => task.id))
+                }
+              >
+                {picked.length === tasks.length ? "Select none" : "Select all"}
+              </Button>
+              <Button
+                small
+                strong={picked.length > 0}
+                disabled={!picked.length}
+                busy={busy === "chosen"}
+                // As wide as "Stop and archive", so the buttons beside it never shift.
+                style={{ minWidth: 150 }}
+                onPress={() => void actOnChosen()}
+              >
+                {archivedView ? "Restore" : unfinishedPicked ? "Stop and archive" : "Archive"}
+              </Button>
+              <Button
+                small
+                onPress={() => {
+                  setSelecting(false);
+                  setChosen([]);
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {!archivedView && filter !== "In progress" && (
+                <Button
+                  small
+                  icon={Archive}
+                  disabled={!finished.length}
+                  busy={busy === "clear"}
+                  onPress={() => void clearFinished()}
+                >
+                  Clear finished
+                </Button>
+              )}
+              <Button
+                small
+                icon={ListChecks}
+                onPress={() => {
+                  setSelecting(true);
+                  setConfirming(undefined);
+                  setPlaced(undefined);
+                  setSaid("");
+                  setCanUndo(false);
+                }}
+              >
+                Select
+              </Button>
+            </>
+          )}
+        </View>
+      )}
+      {selecting && (
+        // Kept the same height the whole time, so ticking a job never moves the list.
+        <View style={{ minHeight: 96, alignItems: "flex-start", justifyContent: "flex-start" }}>
+          <View style={[{ gap: 2 }, backing]}>
+            <Text role="status" aria-live="polite" style={[line, { fontWeight: "700" }]}>
+              {selectedLine}
+            </Text>
+            <Text style={line}>
+              {archivedView
+                ? "Tap jobs to select them. Restore brings them back."
+                : unfinishedPicked === 0
+                  ? "Tap jobs to select them."
+                  : unfinishedPicked === 1
+                    ? `${agent} will stop the unfinished one, and nothing more will be done or sent for it.`
+                    : `${agent} will stop the ${unfinishedPicked} unfinished ones, and nothing more will be done or sent for them.`}
+            </Text>
+          </View>
+        </View>
+      )}
+      <View
+        style={
+          said
+            ? // As tall as its Undo, so the row keeps its height when Undo goes.
+              [s.row, { gap: 10, alignItems: "center", minHeight: 38 }]
+            : {
+                position: "absolute",
+                width: 1,
+                height: 1,
+                opacity: 0,
+                overflow: "hidden",
+                pointerEvents: "none",
+              }
+        }
+      >
+        <View style={{ flexShrink: 1, alignItems: "flex-start" }}>
+          <Text role="status" aria-live="polite" style={[line, { fontWeight: "600" }, backing]}>
+            {said}
+          </Text>
+        </View>
+        {!!said && canUndo && (
+          <Button small busy={busy === "undo"} onPress={() => void undoLast()}>
+            Undo
+          </Button>
+        )}
+      </View>
+      <Text
+        role="status"
+        aria-live="polite"
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          opacity: 0,
+          overflow: "hidden",
+          pointerEvents: "none",
+        }}
+      >
+        {announce}
+      </Text>
+      <ErrorNotice error={error} />
+      {drawn.map((item) => {
+        if (item === "placed")
+          return (
+            <View
+              key="placed"
+              nativeID="placed-line"
+              {...({ tabIndex: -1 } as object)}
+              style={[
+                s.row,
+                {
+                  gap: 10,
+                  alignItems: "center",
+                  minHeight: 56,
+                  paddingHorizontal: 16,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderStyle: "dashed",
+                  borderColor: colors.edge,
+                  backgroundColor: glass ? colors.card : "transparent",
+                },
+              ]}
+            >
+              <Text role="status" style={[line, { flex: 1 }]}>
+                {placed?.text}
+              </Text>
+              {placed?.undo && (
+                <Button
+                  small
+                  nativeID="placed-undo"
+                  busy={busy === "undo"}
+                  onPress={() => void undoLast(all.find((item) => item.id === placed?.id))}
+                >
+                  Undo
+                </Button>
+              )}
+            </View>
+          );
+        const task = item;
+        const unfinished = activeTask(task);
+        const routine = routineOf(task, routines);
+        const routineOn = routine?.enabled ? routine : undefined;
+        const footerButton = {
+          minHeight: 44,
+          backgroundColor: colors.surface,
+          ...(glass ? { borderWidth: 1, borderColor: colors.line } : {}),
+        };
+        return (
+          <TaskCard
+            key={task.id}
+            task={task}
+            selecting={selecting}
+            selected={chosen.includes(task.id)}
+            onToggle={() =>
+              setChosen((ids) =>
+                ids.includes(task.id) ? ids.filter((id) => id !== task.id) : [...ids, task.id],
+              )
+            }
+            footer={
+              confirming === task.id ? (
+                <View style={{ gap: 10 }}>
+                  <Text style={line}>
+                    {routineOn
+                      ? `Stop this run? Nothing more will be done or sent for it, and it moves to Archived. “${routineOn.title}” still runs on its schedule.`
+                      : task.status === "waiting_approval"
+                        ? "Stop this job? What’s waiting for your OK won’t be done, and the job moves to Archived."
+                        : "Stop this job? Nothing more will be done or sent, and it moves to Archived."}
+                  </Text>
+                  <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                    <Button
+                      small
+                      strong
+                      style={{ minHeight: 44 }}
+                      busy={busy === `one-${task.id}`}
+                      onPress={() => void letGo(task)}
+                    >
+                      Let go
+                    </Button>
+                    {routineOn && (
+                      <Button
+                        small
+                        style={footerButton}
+                        disabled={busy === `one-${task.id}`}
+                        onPress={() => void letGo(task, routineOn)}
+                      >
+                        Let go and turn off the routine
+                      </Button>
+                    )}
+                    <Button
+                      small
+                      nativeID={`keep-${task.id}`}
+                      style={footerButton}
+                      onPress={() => setConfirming(undefined)}
+                    >
+                      Keep going
+                    </Button>
+                  </View>
+                </View>
+              ) : (
+                <View style={[s.row, { gap: 8 }]}>
+                  {archivedView ? (
+                    <Button
+                      small
+                      icon={ArchiveRestore}
+                      style={footerButton}
+                      busy={busy === `one-${task.id}`}
+                      nativeID={`act-${task.id}`}
+                      accessibilityLabel={`Restore ${task.title}`}
+                      onPress={() => void restoreOne(task)}
+                    >
+                      Restore
+                    </Button>
+                  ) : unfinished ? (
+                    <Button
+                      small
+                      icon={X}
+                      style={footerButton}
+                      nativeID={`act-${task.id}`}
+                      accessibilityLabel={`Let go of ${task.title}`}
+                      onPress={() => {
+                        setConfirming(task.id);
+                        focusLater(`keep-${task.id}`);
+                      }}
+                    >
+                      Let go
+                    </Button>
+                  ) : (
+                    <Button
+                      small
+                      icon={Archive}
+                      style={footerButton}
+                      busy={busy === `one-${task.id}`}
+                      nativeID={`act-${task.id}`}
+                      accessibilityLabel={`Archive ${task.title}`}
+                      onPress={() => void archiveOne(task)}
+                    >
+                      Archive
+                    </Button>
+                  )}
+                </View>
+              )
+            }
+          />
+        );
+      })}
+      {tasks.filter((task) => task.id !== placed?.id).length > shown && (
+        <Button
+          small
+          style={{ alignSelf: "center" }}
+          onPress={() => setShown((n) => n + JOBS_SHOWN)}
+        >
+          {`Show more · ${tasks.length - shown} left`}
+        </Button>
+      )}
+      {!tasks.length &&
+        !placed &&
+        (archivedView ? (
+          <Empty
+            icon={Archive}
+            title="Nothing archived"
+            detail="Finished jobs move here after 7 days, or when you clear them."
+          />
+        ) : !all.length ? (
+          <Empty
+            icon={ListChecks}
+            title="A place for the work"
+            detail="Tap New job, or ask in Chat. Each job and its result stays here."
+          />
+        ) : (
+          <View style={{ alignItems: "flex-start" }}>
+            <Text style={[line, backing]}>
+              {filter === "In progress"
+                ? "Nothing in progress."
+                : filter === "All"
+                  ? "All clear. Older jobs are under Archived."
+                  : all.some((task) => task.archivedAt)
+                    ? "Nothing finished here. Older ones are under Archived."
+                    : "Nothing finished yet."}
+            </Text>
+          </View>
+        ))}
     </View>
   );
 }
@@ -742,6 +1318,20 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     } catch (e) {
       setError(errorText(e));
       return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  /** Archive a finished job from its page, or bring an archived one back to Activity. */
+  async function shelve(back: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      await (back
+        ? mutate("/tasks/restore", { jobs: [taskId] })
+        : mutate("/tasks/archive", { ids: [taskId] }));
+    } catch (e) {
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -1260,6 +1850,21 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                     )}
                   </View>
                 )}
+              {!activeTask(task) && (
+                <View style={[s.row, { gap: 8, flexWrap: "wrap", alignItems: "center" }]}>
+                  <Button
+                    small
+                    icon={task.archivedAt ? ArchiveRestore : Archive}
+                    busy={busy}
+                    onPress={() => void shelve(!!task.archivedAt)}
+                  >
+                    {task.archivedAt ? "Restore to Activity" : "Archive"}
+                  </Button>
+                  <Text role="status" style={s.small}>
+                    {task.archivedAt ? "Archived" : ""}
+                  </Text>
+                </View>
+              )}
               {!needsPerson && browserCards}
               {realPlan(task) && (
                 <View style={{ gap: 10 }}>

@@ -45,6 +45,10 @@ export interface AgentTask {
   error?: string | null;
   question?: string;
   artifactIds: string[];
+  /** Cleared from Activity (kept, and can be brought back). */
+  archivedAt?: string | null;
+  /** Brought back to Activity; the weekly tidy counts it as new from then. */
+  restoredAt?: string | null;
 }
 export interface RunEvent {
   id: string;
