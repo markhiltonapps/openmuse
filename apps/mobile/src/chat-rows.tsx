@@ -1,6 +1,6 @@
 import type { Message, ToolMessage } from "@copilotkit/react-native/headless";
 import { Check, Copy, Square, Trash2, Volume2 } from "lucide-react-native";
-import { memo, type ReactNode } from "react";
+import { Component, memo, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { AssistantResponse } from "./assistant-response";
 import { BrowserRunContext } from "./browser-tool-card";
@@ -21,11 +21,33 @@ export function rowSignature(
   toolCalls: ToolCall[],
   results: (ToolMessage | undefined)[],
 ) {
-  const calls = toolCalls.map((call) => `${call.id}:${call.function.arguments?.length ?? 0}`);
+  const calls = toolCalls.map((call) => `${call.id}:${call.function?.arguments?.length ?? 0}`);
   const done = results.map((result) =>
     result ? `${result.id}:${typeof result.content === "string" ? result.content.length : 1}` : "",
   );
   return `${text.length}:${text.slice(-24)}|${calls.join(",")}|${done.join(",")}`;
+}
+
+/**
+ * A saved message in the chat's form: an earlier part may hold tool calls as `{id, name, args}`
+ * (CopilotKit Intelligence's history), which the chat can't draw.
+ */
+export function asChatMessage(message: Message): Message {
+  if (!("toolCalls" in message) || !Array.isArray(message.toolCalls)) return message;
+  const toolCalls = message.toolCalls.map((call) => {
+    const raw = call as unknown as { id?: string; name?: string; args?: unknown };
+    if (call.function) return call;
+    const args = raw.args ?? "";
+    return {
+      id: String(raw.id ?? ""),
+      type: "function" as const,
+      function: {
+        name: String(raw.name ?? ""),
+        arguments: typeof args === "string" ? args : JSON.stringify(args),
+      },
+    };
+  });
+  return { ...message, toolCalls } as Message;
 }
 
 export interface MessageRowProps {
@@ -71,8 +93,34 @@ const same = (a: MessageRowProps, b: MessageRowProps) =>
   a.onAskDelete === b.onAskDelete &&
   a.onDelete === b.onDelete;
 
+/** One message that can't be drawn says so, instead of taking the whole screen down with it. */
+class RowBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.warn("A chat message couldn't be shown", error);
+  }
+  render() {
+    return this.state.failed ? (
+      <Text style={[s.small, { alignSelf: "center" }]}>This message can’t be shown.</Text>
+    ) : (
+      this.props.children
+    );
+  }
+}
+
 /** One message in the chat with its buttons and cards; drawn again only when it changes. */
-export const MessageRow = memo(function MessageRow({
+export const MessageRow = memo(function MessageRow(props: MessageRowProps) {
+  return (
+    <RowBoundary>
+      <MessageBody {...props} />
+    </RowBoundary>
+  );
+}, same);
+
+function MessageBody({
   message,
   text,
   toolCalls,
@@ -211,7 +259,7 @@ export const MessageRow = memo(function MessageRow({
       </BrowserRunContext>
     </View>
   );
-}, same);
+}
 
 /** A small label on the chat's background, with its own backing over a backdrop (which can be bright). */
 export function SceneLabel({ text }: { text: string }) {

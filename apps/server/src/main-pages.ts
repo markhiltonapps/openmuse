@@ -41,6 +41,36 @@ interface Threads {
   getThreadMessages?(input: { threadId: string; userId: string }): Promise<{ messages: unknown[] }>;
 }
 
+/**
+ * A message as the chat draws it (AG-UI). CopilotKit Intelligence's saved history gives tool calls
+ * as `{id, name, args}`; the chat reads `{id, type, function: {name, arguments}}` and stops
+ * drawing (the whole screen) on anything else. Messages already in the chat's form pass through.
+ */
+export function asChatMessage(message: unknown): unknown {
+  if (!message || typeof message !== "object") return message;
+  const m = message as Record<string, unknown>;
+  const calls = Array.isArray(m.toolCalls)
+    ? (m.toolCalls as Record<string, unknown>[]).map((call) => {
+        const fn = call.function as { name?: unknown; arguments?: unknown } | undefined;
+        const args = fn?.arguments ?? call.args ?? call.arguments ?? "";
+        return {
+          id: String(call.id ?? ""),
+          type: "function",
+          function: {
+            name: String(fn?.name ?? call.name ?? ""),
+            arguments: typeof args === "string" ? args : JSON.stringify(args),
+          },
+        };
+      })
+    : undefined;
+  // A tool's result is text in the chat.
+  const content =
+    m.role === "tool" && m.content !== undefined && typeof m.content !== "string"
+      ? { content: JSON.stringify(m.content) }
+      : {};
+  return { ...m, ...content, ...(calls ? { toolCalls: calls } : {}) };
+}
+
 export const mainSettings = (db: Store, owner: string) =>
   db.get<MainSettings>(owner, "conversation-settings", "main");
 
@@ -76,7 +106,7 @@ export async function searchEarlierPages(
     const saved = await db.get<SavedPage>(owner, "main-pages", page.threadId);
     // Not when it was said: a part can cover weeks. Only that it's from before this date.
     const partEnded = `From an older part of the chat, which ended ${page.endedAt}`;
-    for (const hit of search((saved?.messages ?? []) as Message[]))
+    for (const hit of search((saved?.messages ?? []).map(asChatMessage) as Message[]))
       found.push({ ...hit, partEnded });
     if (found.length >= limit) break;
   }
@@ -124,7 +154,7 @@ export class MainPages {
       (result) => result.messages,
       () => [],
     );
-    const messages = whole?.length ? whole : await this.backup(owner, old);
+    const messages = (whole?.length ? whole : await this.backup(owner, old)).map(asChatMessage);
     const endedAt = new Date().toISOString();
     // The finished page is saved whole before the chat moves on.
     await this.db.put(owner, "main-pages", { id: old, threadId: old, messages, endedAt });
@@ -181,7 +211,10 @@ export class MainPages {
   async page(owner: string, threadId: string) {
     const main = await mainSettings(this.db, owner);
     if (!main?.pages?.some((page) => page.threadId === threadId)) return undefined;
-    return (await this.db.get<SavedPage>(owner, "main-pages", threadId))?.messages;
+    // Pages saved before asChatMessage existed are put in the chat's form here.
+    return (await this.db.get<SavedPage>(owner, "main-pages", threadId))?.messages.map(
+      asChatMessage,
+    );
   }
   /** Forgets every finished page (the main chat was started over). */
   async clear(owner: string, pages: PageRef[] = []) {

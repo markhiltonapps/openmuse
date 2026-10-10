@@ -47,6 +47,7 @@ import { BrowserToolCard } from "./browser-tool-card";
 import { ToolCalendar } from "./calendar-card";
 import { ToolFile } from "./call-details";
 import {
+  asChatMessage,
   EarlierDivider,
   MessageRow,
   type MessageRowProps,
@@ -1211,7 +1212,8 @@ export function ChatScreen({
     !historyError &&
     // An earlier part loaded on its own waits for this one, so both appear in order.
     ((autoEarlier && showingCopy) ||
-      (showingCopy && (!cached.length || needEarlier)) || needEarlier ||
+      (showingCopy && (!cached.length || needEarlier)) ||
+      needEarlier ||
       (loadingEarlier && !items.length));
   // The top button only once the whole history is in, so it never changes under a thumb.
   const canShowEarlier = historyDone && (hiddenAbove > 0 || !!nextPage);
@@ -1231,7 +1233,10 @@ export function ChatScreen({
         setDrawn((count) => count + DRAW_MORE);
         sayShown();
       } else setAutoEarlier(true);
-      setEarlier((loaded) => [{ ...page, messages: result.messages }, ...loaded]);
+      setEarlier((loaded) => [
+        { ...page, messages: result.messages.map(asChatMessage) },
+        ...loaded,
+      ]);
     } catch {
       setEarlierError("Couldn’t load earlier messages. Try again.");
     } finally {

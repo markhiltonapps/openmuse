@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createStore, type Store } from "../apps/server/src/db.ts";
 import {
+  asChatMessage,
   earlierPages,
   MainPages,
   mainSettings,
@@ -104,4 +105,30 @@ test("the main chat starts a new page once it's big, and keeps the old one whole
 
   await pages.clear(owner, third.pages);
   assert.equal(await pages.page(owner, first.threadId), undefined);
+});
+
+test("a saved part's tool calls come back in the chat's form", async () => {
+  const owner = "pages-2";
+  const { pages, stored } = setup();
+  const first = await pages.open(owner);
+  // CopilotKit Intelligence's history gives tool calls as {id, name, args}.
+  stored.set(first.threadId, [
+    { id: "u1", role: "user", content: "What's on today?" },
+    { id: "a1", role: "assistant", toolCalls: [{ id: "c1", name: "show_today", args: "{}" }] },
+    { id: "t1", role: "tool", toolCallId: "c1", content: { events: [] } },
+    { id: "a2", role: "assistant", content: "Nothing today." },
+  ]);
+  await pages.noteSize(owner, first.threadId, PAGE_BYTES + 1);
+  await pages.open(owner);
+  const saved = (await pages.page(owner, first.threadId)) as {
+    toolCalls?: { type: string; function: { name: string; arguments: string } }[];
+    content?: unknown;
+  }[];
+  assert.deepEqual(saved[1]?.toolCalls, [
+    { id: "c1", type: "function", function: { name: "show_today", arguments: "{}" } },
+  ]);
+  assert.equal(typeof saved[2]?.content, "string");
+  // Already in the chat's form: unchanged.
+  const ready = { id: "a", role: "assistant", toolCalls: saved[1]?.toolCalls };
+  assert.deepEqual(asChatMessage(ready), ready);
 });
