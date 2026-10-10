@@ -143,3 +143,13 @@ Black screen after the main chat started a new part (fixed and deployed, c052c1a
   part it loads; a message that still can't be drawn says "This message can’t be shown."
 - Test added (tests/main-pages.test.ts); local check with an Intelligence-shaped part. Pushed on
   the owner's "Push it" (no live call at the time); deployed 01:56 UTC.
+
+----------------------------------------------------------------------------------------------
+Plan: Neddy makes phone calls (no code changed)
+----------------------------------------------------------------------------------------------
+- Owner asked what it would take for Neddy to phone businesses and book things by voice.
+- Wrote docs/PHONE-CALLS-PLAN.md: the experience, what exists, what's new (phone line, voice over
+  the phone, caller mode, the call as a job), guardrails, legal checks, rough costs, slices 0–4,
+  and seven decisions for the owner (calling service, caller ID, recording, limits, voicemail,
+  who can use it, voice credit).
+- Pending: the owner's answers to those decisions before Slice 0.
