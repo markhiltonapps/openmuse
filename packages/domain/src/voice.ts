@@ -33,3 +33,9 @@ export interface CallDetail {
 
 /** In a saved call's chat message, the line before a summary of what was shown on screen. */
 export const SHOWN_HEADING = "Shown on screen during the call:";
+
+/**
+ * What people see when the voice service turns a call away (busy, or the account out of credit).
+ * The admin's reason goes to the server's log; the app also stops offering calls until it reopens.
+ */
+export const LIVE_UNAVAILABLE = "Live talk isn’t available right now. You can type instead.";

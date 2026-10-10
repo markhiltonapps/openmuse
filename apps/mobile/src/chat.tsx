@@ -1034,15 +1034,18 @@ export function ChatScreen({
     if (active && queued && !busy && !agent.isRunning) switchQueued();
   }, [active, queued, busy, agent.isRunning, switchQueued]);
   useEffect(() => {
-    if (!active || !prompt?.text.trim()) return;
-    // A draft goes in the message box for them to finish; it waits for nothing.
+    if (!active || !prompt) return;
+    // A draft goes in the message box for them to finish; it waits for nothing. An empty one
+    // (the home screen's keyboard button) just puts them in the message box.
     if (prompt.draft) {
       if (!claimPrompt(prompt.id)) return;
       // Anything they'd already typed stays, with the example on a new line.
-      setDraft((typed) => (typed.trim() ? `${typed.trimEnd()}\n${prompt.text}` : prompt.text));
+      if (prompt.text.trim())
+        setDraft((typed) => (typed.trim() ? `${typed.trimEnd()}\n${prompt.text}` : prompt.text));
       setTimeout(() => input.current?.focus(), 0);
       return;
     }
+    if (!prompt.text.trim()) return;
     if (isReady && loaded && claimPrompt(prompt.id)) enqueue(prompt.text);
   }, [active, prompt, isReady, loaded, enqueue, claimPrompt]);
   useEffect(() => {

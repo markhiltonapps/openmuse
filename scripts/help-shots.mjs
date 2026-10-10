@@ -90,7 +90,7 @@ const weather = () => {
 };
 
 /** A fresh page, signed in to the sample workspace, with the network the screens need. */
-async function open(context, state, height = HEIGHT, backdrop = "none") {
+async function open(context, state, height = HEIGHT, backdrop = "none", start = "chat") {
   const page = await context.newPage();
   await page.setViewportSize({ width: WIDTH, height });
   page.on("pageerror", (error) => console.warn(`  page error: ${error.message}`));
@@ -208,10 +208,17 @@ async function open(context, state, height = HEIGHT, backdrop = "none") {
   );
   await page.goto(APP);
   await page.waitForTimeout(3500);
+  // The app opens on Home; most pictures start from the chat.
+  if (start === "chat") {
+    await page.getByRole("tab", { name: "Chat", exact: true }).first().click();
+    await page.waitForTimeout(1200);
+  }
   return page;
 }
 
-const tab = (page, name) => page.getByRole("tab", { name, exact: true }).first();
+// A tab's name can carry a count after a comma ("Activity, 2 need you").
+const tab = (page, name) =>
+  page.getByRole("tab", { name: new RegExp(`^${name}(,|$)`) }).first();
 const button = (page, name) => page.getByRole("button", { name }).first();
 const say = (page, event) => page.evaluate((e) => window.__channel?.emit(e), event);
 async function startCall(page) {
@@ -269,6 +276,16 @@ async function appsTab(page, name) {
  * (a mark for each step that's on this screen). `clip` limits the picture to one part.
  */
 const SHOTS = [
+  {
+    id: "greet",
+    start: "home",
+    marks: {
+      1: (p) => p.getByText("Needs you", { exact: true }).first(),
+      2: (p) => button(p, /^Today:/),
+      3: (p) => button(p, /^Working on|^Give .* a job/),
+      4: (p) => button(p, /^Talk to /),
+    },
+  },
   {
     id: "home",
     showNewJob: true,
@@ -753,7 +770,7 @@ for (const scheme of ["light", "dark"]) {
   for (const shot of shots) {
     console.log(`${shot.id} (${scheme})`);
     const state = {};
-    const page = await open(context, state, shot.height, shot.backdrop);
+    const page = await open(context, state, shot.height, shot.backdrop, shot.start);
     try {
       await shot.go?.(page, state);
       // The floating New job button covers the bottom of most screens; only the shots about

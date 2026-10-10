@@ -68,6 +68,8 @@ import { ChatButton, ChatReporter, ChatsSheet, onOpenChats } from "./src/chats-u
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { FeedScreen } from "./src/feed";
+import { GlossFill, OnGloss, TILE_COLOURS } from "./src/gloss";
+import { HomeScreen, HomeTalkRow, waitingOnYou } from "./src/home";
 import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
 import { LiveTalkSheet } from "./src/live-talk-ui";
 import { LocationReporter } from "./src/location-ui";
@@ -87,7 +89,16 @@ import TipLayer from "./src/TipLayer";
 import { dark, glass, page } from "./src/theme";
 import { ThreadsProvider, useMuseThread } from "./src/threads";
 import { tipProps } from "./src/tips";
-import { Button, colors, ErrorNotice, IconButton, SheetStatus, SheetTop, s } from "./src/ui";
+import {
+  Button,
+  colors,
+  ErrorNotice,
+  glassSurface,
+  IconButton,
+  SheetStatus,
+  SheetTop,
+  s,
+} from "./src/ui";
 import { UpdateToasts } from "./src/update-toasts";
 import {
   listenForCheckIns,
@@ -229,7 +240,8 @@ export default function App() {
 function WorkspaceApp({ token }: { token: string }) {
   const api = useMemo(() => new MuseApi(token), [token]);
   const [workspace, setWorkspace] = useState<Workspace>();
-  const [section, setSection] = useState<Section>("chat");
+  // The greeting home opens first (owner, 2026-10-10).
+  const [section, setSection] = useState<Section>("home");
   const [detail, setDetail] = useState<Detail>();
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
@@ -424,13 +436,17 @@ function WorkspaceShell({
   const threadsOpen = !!panel;
   // A chat card's "See all" opens the Chats sheet.
   useEffect(() => onOpenChats(() => setPanel("chats")), []);
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const callBar = useContext(SheetTop);
   const call = useCallControls();
   const desktop = width >= 900;
+  // A short computer window (1280×720 and the like) gets the phone's header, so Home's cards fit.
+  const shortDesk = desktop && height < 760;
   const pending =
     (data?.notifications.filter((n) => !n.read).length || 0) +
     workspace.actions.filter((a) => a.status === "awaiting_review").length;
+  // What's waiting on the person: approvals and jobs with a question (the Activity tile's badge).
+  const needYou = waitingOnYou(workspace.actions, data?.tasks).count;
   const activeTask =
     data?.tasks.find(
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
@@ -472,7 +488,7 @@ function WorkspaceShell({
     ? chatNow.label
     : activeTask
       ? activeTask.status === "waiting_approval"
-        ? "Ready to review"
+        ? "Waiting for your OK"
         : activeTask.status === "waiting_input"
           ? "Needs your answer"
           : (activity?.label ?? activeTask.title)
@@ -480,6 +496,7 @@ function WorkspaceShell({
         ? "Starting your next job…"
         : "Here when you need me";
   const title = titles[section] || titles.apps;
+  const home = section === "home";
   const Screen =
     section === "mail"
       ? MailScreen
@@ -507,8 +524,10 @@ function WorkspaceShell({
   const reopenPillCanShow = !detail && !threadsOpen && !chatNow && call.phase === "idle";
   // The chat's header takes the height of what's in it (the chat button grows with big text);
   // this is its least.
-  const headerHeight = chat ? (desktop ? 176 : 155) : desktop ? 158 : 132;
+  const headerHeight = chat ? (desktop ? 176 : 155) : desktop && !shortDesk ? 158 : 132;
   const pillsRoom = usePillsRoom(section);
+  // The space beside the 760px column on a wide screen.
+  const sideRoom = Math.max(0, (width - 760) / 2);
   return (
     <>
       <WorkspaceTools />
@@ -547,7 +566,14 @@ function WorkspaceShell({
             {!chat && (
               <View
                 pointerEvents="none"
-                style={{ position: "absolute", top: 0, left: 0, right: 0, height: headerHeight }}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  // Over a backdrop it reaches the window's edges, so a wide screen shows no band.
+                  left: glass ? -sideRoom : 0,
+                  right: glass ? -sideRoom : 0,
+                  height: headerHeight,
+                }}
               >
                 <Svg width="100%" height="100%">
                   <Defs>
@@ -576,14 +602,14 @@ function WorkspaceShell({
             <View style={{ alignItems: "center", gap: 1 }}>
               <Pressable
                 accessibilityRole="button"
+                // Neddy at the top always takes you home, where what he's doing has its own card.
                 accessibilityLabel={
-                  activeTask
-                    ? `${agentName}: ${status.replace(/…$/, "")}. Open this job`
-                    : `Open ${agentName} activity and approvals`
+                  mood === "idle"
+                    ? `${agentName}. Opens Home`
+                    : `${agentName}: ${status.replace(/…$/, "")}. Opens Home`
                 }
-                onPress={() =>
-                  activeTask ? open({ type: "task", taskId: activeTask.id }) : navigate("activity")
-                }
+                {...tipProps("Home")}
+                onPress={() => navigate("home")}
                 style={({ pressed }) => ({
                   alignItems: "center",
                   // The status line sits below the buttons, so it can use the header's width;
@@ -593,7 +619,9 @@ function WorkspaceShell({
                 })}
               >
                 <AgentAvatar
-                  size={chat ? (desktop ? 68 : 62) : desktop ? 88 : width < 360 ? 64 : 76}
+                  size={
+                    chat ? (desktop ? 68 : 62) : desktop && !shortDesk ? 88 : width < 360 ? 64 : 76
+                  }
                   mood={mood}
                   activity={mood === "working" ? activity?.kind : undefined}
                 />
@@ -685,6 +713,17 @@ function WorkspaceShell({
               <ScrollView
                 key={section}
                 showsVerticalScrollIndicator={false}
+                // Home's cards fade at the Talk bar instead of being cut through their words.
+                style={
+                  home && Platform.OS === "web"
+                    ? ({
+                        maskImage:
+                          "linear-gradient(to bottom, #000 calc(100% - 24px), transparent)",
+                        WebkitMaskImage:
+                          "linear-gradient(to bottom, #000 calc(100% - 24px), transparent)",
+                      } as object)
+                    : undefined
+                }
                 contentContainerStyle={{
                   paddingHorizontal: desktop ? 42 : 22,
                   paddingTop: headerHeight,
@@ -693,6 +732,7 @@ function WorkspaceShell({
                 }}
                 keyboardShouldPersistTaps="handled"
               >
+                {home && <HomeScreen desktop={desktop} />}
                 {utility && (
                   <Button
                     small
@@ -702,20 +742,22 @@ function WorkspaceShell({
                     Back to Apps
                   </Button>
                 )}
-                <Text
-                  // Where focus lands when a button in the chat opens this screen.
-                  nativeID="page-title"
-                  role="heading"
-                  aria-level={1}
-                  style={[
-                    s.title,
-                    { fontSize: 34, letterSpacing: -1, fontWeight: "600", marginBottom: 22 },
-                  ]}
-                >
-                  {title?.title}
-                </Text>
+                {!home && (
+                  <Text
+                    // Where focus lands when a button in the chat opens this screen.
+                    nativeID="page-title"
+                    role="heading"
+                    aria-level={1}
+                    style={[
+                      s.title,
+                      { fontSize: 34, letterSpacing: -1, fontWeight: "600", marginBottom: 22 },
+                    ]}
+                  >
+                    {title?.title}
+                  </Text>
+                )}
                 <ErrorNotice error={error} />
-                <Screen />
+                {!home && <Screen />}
               </ScrollView>
             )}
             <View
@@ -757,84 +799,162 @@ function WorkspaceShell({
             </View>
             {/* After a button in the chat brought them here. */}
             <BackToChat section={section} onBack={() => navigate("chat")} />
-            {/* A new job, from any screen but the chat (where you can just ask). */}
-            {section !== "chat" && !pillsRoom && <NewJobButton round={width < 360} />}
+            {/* A new job, from any screen but the chat (where you can just ask) and home (talk). */}
+            {section !== "chat" && !home && !pillsRoom && <NewJobButton round={width < 360} />}
           </View>
+          {/* Talk or type, just above the bar, on the home screen. */}
+          {home && <HomeTalkRow desktop={desktop} />}
           <View
             style={{
-              // Eight tabs: a narrow phone gives the bar nearly all its width, 44px a tab from 360px
-              // wide.
-              paddingHorizontal: width < 420 ? 3 : 22,
+              // Eight tiles: a narrow phone gives the bar nearly all its width.
+              paddingHorizontal: width < 375 ? 3 : width < 420 ? 8 : 22,
               paddingTop: 10,
-              paddingBottom: desktop ? 22 : 7,
+              paddingBottom: desktop ? 18 : 8,
               alignItems: "center",
             }}
           >
+            {/* The glossy bar from the backdrop mockup: a colour tile for each place. */}
             <View
               role="tablist"
               aria-label="Sections"
-              style={{
-                flexDirection: "row",
-                width: "100%",
-                maxWidth: 400,
-                paddingVertical: 4,
-                paddingHorizontal: width < 420 ? 0 : 4,
-                backgroundColor: colors.surface,
-                borderRadius: 40,
-                shadowColor: "#132631",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.07,
-                shadowRadius: 18,
-                elevation: 3,
-                borderWidth: 1,
-                borderColor: colors.line,
-              }}
+              style={[
+                {
+                  flexDirection: "row",
+                  width: "100%",
+                  maxWidth: desktop ? 640 : 420,
+                  paddingTop: 8,
+                  paddingBottom: 6,
+                  paddingHorizontal: width < 375 ? 0 : 4,
+                  borderRadius: 28,
+                  backgroundColor: glass ? "rgba(30, 24, 44, 0.62)" : colors.surface,
+                  borderWidth: 1,
+                  borderColor: glass ? "rgba(255, 255, 255, 0.16)" : colors.line,
+                  shadowColor: glass ? "#0A0618" : "#132631",
+                  shadowOffset: { width: 0, height: glass ? 14 : 2 },
+                  shadowOpacity: glass ? 0.34 : 0.07,
+                  shadowRadius: glass ? 36 : 18,
+                  elevation: 3,
+                },
+                glassSurface,
+              ]}
             >
               {nav.map((item) => {
                 const active = section === item.id || (item.id === "apps" && utility);
-                const ink = active ? colors.text : colors.mutedStrong;
+                const tint = TILE_COLOURS[item.id] ?? TILE_COLOURS.apps;
+                const tile = desktop ? 52 : width < 360 ? 34 : 40;
+                const badge = item.id === "activity" ? needYou : 0;
                 return (
                   <Pressable
                     key={item.id}
                     // react-native-web reads role and aria-*, not accessibilityState.
                     role="tab"
-                    aria-label={item.label}
+                    aria-label={
+                      badge
+                        ? `${item.label}, ${badge} ${badge === 1 ? "needs" : "need"} you`
+                        : item.label
+                    }
                     aria-selected={active}
                     onPress={() => navigate(item.id)}
-                    style={{
+                    style={({ pressed }) => ({
                       flex: 1,
-                      height: 54,
+                      minWidth: 0,
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 2,
+                      gap: 4,
+                      paddingBottom: 6,
                       // Rounds the keyboard focus ring too.
-                      borderRadius: 22,
-                    }}
+                      borderRadius: 14,
+                      transform: [{ scale: pressed ? 0.94 : 1 }],
+                    })}
                   >
-                    {/* The selected tab's icon sits on a blue pill, and its name is bold. */}
                     <View
                       style={{
-                        width: width < 420 ? 36 : 48,
-                        height: 28,
-                        borderRadius: 14,
+                        width: tile,
+                        height: tile,
+                        borderRadius: tile * 0.3,
+                        overflow: "hidden",
                         alignItems: "center",
                         justifyContent: "center",
-                        backgroundColor: active ? colors.blue : "transparent",
+                        shadowColor: "#08041A",
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 14,
                       }}
                     >
-                      <item.icon size={21} strokeWidth={active ? 2 : 1.8} color={ink} />
+                      <GlossFill
+                        id={`tab-${item.id}`}
+                        from={tint.from}
+                        to={tint.to}
+                        angle="tilted"
+                        shine={0.5}
+                        radius={tile * 0.3}
+                      />
+                      <OnGloss>
+                        <item.icon
+                          size={Math.round(tile * 0.52)}
+                          strokeWidth={2}
+                          color={tint.ink ?? "#FFFFFF"}
+                        />
+                      </OnGloss>
                     </View>
+                    {badge > 0 && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: "absolute",
+                          top: -5,
+                          left: "50%",
+                          marginLeft: tile / 2 - 12,
+                          minWidth: 18,
+                          height: 18,
+                          paddingHorizontal: 5,
+                          borderRadius: 9,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          overflow: "hidden",
+                          borderWidth: 2,
+                          borderColor: glass ? "rgba(20, 14, 30, 0.7)" : colors.surface,
+                        }}
+                      >
+                        <GlossFill id="tab-badge" from="#ff6b5e" to="#d9261c" shine={0} />
+                        <OnGloss>
+                          <Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "800" }}>
+                            {badge > 9 ? "9+" : badge}
+                          </Text>
+                        </OnGloss>
+                      </View>
+                    )}
                     <Text
                       numberOfLines={1}
                       style={{
-                        color: ink,
-                        fontSize: width < 360 ? 10 : 11,
-                        lineHeight: 14,
-                        fontWeight: active ? "700" : "500",
+                        color: active
+                          ? glass
+                            ? "#FFFFFF"
+                            : colors.text
+                          : glass
+                            ? "rgba(255, 255, 255, 0.86)"
+                            : colors.mutedStrong,
+                        fontSize: desktop ? 12 : width < 360 ? 10 : 10.5,
+                        lineHeight: 13,
+                        fontWeight: active ? "800" : "600",
                       }}
                     >
                       {item.short ?? item.label}
                     </Text>
+                    {/* The place you're in: a small glowing dot under its name. */}
+                    <View
+                      style={{
+                        position: "absolute",
+                        bottom: -2,
+                        width: 5,
+                        height: 5,
+                        borderRadius: 3,
+                        backgroundColor: active ? (glass ? "#FFFFFF" : colors.text) : "transparent",
+                        // Over a backdrop it glows, like the mockup's.
+                        shadowColor: "#FFFFFF",
+                        shadowOpacity: active && glass ? 1 : 0,
+                        shadowRadius: 6,
+                      }}
+                    />
                   </Pressable>
                 );
               })}

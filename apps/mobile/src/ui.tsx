@@ -16,9 +16,21 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { plainText, readableResult } from "../../../packages/domain/src/plain-text";
-import { palette } from "./theme";
+import { glass, palette } from "./theme";
 import { tipProps, toggleTip } from "./tips";
 export const colors = palette;
+/**
+ * Over a moving backdrop, a card is frosted glass: a fine light edge and a blur of the scene
+ * behind it (the mockup's "smoke"). Nothing in the plain look.
+ */
+export const glassSurface: ViewStyle =
+  glass && Platform.OS === "web"
+    ? ({
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.16)",
+        backdropFilter: "blur(22px) saturate(150%)",
+      } as ViewStyle)
+    : {};
 export const s = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center" },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -230,7 +242,7 @@ export function InfoTip({ term, text }: { term: string; text: string }) {
   );
 }
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
-  return <View style={[s.card, style]}>{children}</View>;
+  return <View style={[s.card, glassSurface, style]}>{children}</View>;
 }
 export function Chip({ children, tint }: { children: ReactNode; tint?: string }) {
   return (

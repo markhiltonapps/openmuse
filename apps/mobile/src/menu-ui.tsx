@@ -4,6 +4,7 @@ import {
   ClipboardPlus,
   FolderOpen,
   Globe2,
+  House,
   LifeBuoy,
   type LucideIcon,
   MessageCircle,
@@ -129,7 +130,7 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
   const room = (width < 600 ? height * 0.94 : Math.min(height * 0.9, 860)) - 140;
   const [fits, setFits] = useState<boolean>();
   const say = fits !== false;
-  const go = (section: "calendar" | "spaces" | "files" | "apps") => {
+  const go = (section: "home" | "calendar" | "spaces" | "files" | "apps") => {
     onClose();
     navigate(section);
   };
@@ -147,6 +148,13 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
         // Unseen until measured, so the lines never show and then jump away.
         style={{ gap: 2, opacity: fits === undefined ? 0 : 1 }}
       >
+        <MenuRow
+          icon={House}
+          title="Home"
+          detail={`What needs you, your day and what ${agent} is doing. Or tap ${agent} at the top.`}
+          say={say ? "take me home" : undefined}
+          onPress={() => go("home")}
+        />
         <MenuRow
           icon={MessageCircle}
           title="Chats"

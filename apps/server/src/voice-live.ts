@@ -1,4 +1,4 @@
-import type { CallDetail } from "../../../packages/domain/src/voice.ts";
+import { type CallDetail, LIVE_UNAVAILABLE } from "../../../packages/domain/src/voice.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 import type { UsageMeter } from "./usage.ts";
@@ -768,10 +768,8 @@ async function failure(response: Response, model: string) {
       502,
     );
   if (response.status === 429)
-    return new AppError(
-      "OpenAI is busy or the voice account is out of credit. Try again soon.",
-      503,
-    );
+    // The reason (busy, or out of credit) is in the log line above, for the admin.
+    return new AppError(LIVE_UNAVAILABLE, 503);
   return new AppError(
     `OpenAI couldn’t start live voice (${response.status}).${detail ? ` ${detail}` : ""}`,
     502,

@@ -15,6 +15,7 @@ import type { CallDetail } from "../../../packages/domain/src/voice";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AgentAvatar } from "./avatar";
 import { HIDDEN } from "./job-working-ui";
+import { liveVoiceTurnedAway, turnedAway } from "./live-talk-ui";
 import { type LiveCall, type LiveState, startLive } from "./live-voice";
 import { tipProps } from "./tips";
 import { colors } from "./ui";
@@ -339,6 +340,8 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         setState("ended");
         setPhase("over");
         setError(startFailure(e, nameNow.current));
+        // Turned away by the voice service: Talk goes to the chat until the app reopens.
+        if (e instanceof Error && turnedAway(e.message)) liveVoiceTurnedAway(api);
       });
     return () => {
       if (current.current === me) current.current++;

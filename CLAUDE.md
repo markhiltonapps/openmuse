@@ -323,3 +323,18 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Opening a chat:** history replays piece by piece from CopilotKit's cloud (not in Railway's
   logs). Show the device copy or a loading line until the replay is done (`historyDone`), and
   don't count the replay as replying.
+- **SVG gradient ids:** an id with spaces or other odd characters silently fails (tiles drew
+  black); clean ids with `replace(/[^A-Za-z0-9_-]/g, "-")`. An absolutely placed `GlossFill`
+  covers what's drawn before it, so wrap the icon in `OnGloss`.
+- **Fades past the 760px column:** extend the existing fade with negative `left`/`right`
+  (`-sideRoom`) rather than adding a second full-width layer; an extra layer dims the header's
+  buttons.
+- **The app opens on Home:** `scripts/help-shots.mjs` taps the Chat tab first unless a shot
+  passes `start: "home"`. Home draws nothing below the greeting until the jobs are in.
+- **Live talk turned away:** the server answers `LIVE_UNAVAILABLE` (503); the app marks live talk
+  off for the session (`liveVoiceTurnedAway`) so Talk goes to the chat instead of failing again.
+- **CopilotKit Intelligence's saved history isn't the chat's format:** `getThreadMessages` gives
+  tool calls as `{id, name, args}`, while the chat reads `{function: {name, arguments}}`. Convert
+  anything saved from it (`asChatMessage` in main-pages.ts / chat-rows.tsx) before the app draws
+  it; one unconverted card once blanked the whole app. Each chat row has an error boundary now.
+

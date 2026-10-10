@@ -10,6 +10,12 @@ import { z } from "zod";
  * people learn where it lives; `about` tells the agent what's there.
  */
 export const APP_PLACES = {
+  home: {
+    name: "Home",
+    where: "Tap the picture at the top",
+    about:
+      "the first screen: a greeting, what needs them (approvals and jobs with a question), today's weather and calendar, the job the agent is on, and buttons to talk or type",
+  },
   feed: {
     name: "Feed",
     where: "Bottom bar",

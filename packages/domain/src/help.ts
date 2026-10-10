@@ -147,6 +147,37 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["notifications", "fix-look"],
   },
   {
+    id: "home",
+    group: "start",
+    title: "Home: what needs you and your day",
+    summary:
+      "The app opens on a greeting with what needs you, your day, and what {agent} is doing.",
+    shot: "greet",
+    place: "home",
+    steps: [
+      "**Needs you:** anything waiting for your OK, and jobs with a question for you. Tap **Review** to see the whole thing before you approve it, or **Answer** to reply.",
+      "**Today:** the weather and what’s left on your calendar. Tap it for your day in Feed.",
+      "**Working on:** the job {agent} is doing now. Tap it to see how it’s going, or, when {agent} is free, to give it a job.",
+      "**Talk to {agent}:** tap it and just talk. The keyboard button next to it opens the chat so you can type instead.",
+    ],
+    body: [
+      "To come back here from anywhere, tap {agent} at the top of the screen, choose **Home** in the ☰ Menu, or say “Take me home”.",
+    ],
+    say: [{ text: "Take me home.", send: true }],
+    keywords: [
+      "home",
+      "start",
+      "first screen",
+      "greeting",
+      "dashboard",
+      "needs you",
+      "today",
+      "main screen",
+      "start screen",
+    ],
+    related: ["find-your-way", "live-call", "approvals"],
+  },
+  {
     id: "find-your-way",
     group: "start",
     title: "Find your way around",
@@ -154,10 +185,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       "The bottom bar has the main screens; the top has the Menu, {agent}, New job and Updates.",
     shot: "home",
     steps: [
-      "**☰ Menu (top left):** Chats, New job, Calendar, Spaces, Files, {agent}’s browser, Apps & settings and Help & how-to, each with a line saying what it’s for.",
-      "**{agent}’s picture:** what it’s working on now. Tap it to open that job, or Activity when it’s free. On the chat screen, the button under it says which chat you’re in and opens your chats.",
+      "**☰ Menu (top left):** Home, Chats, New job, Calendar, Spaces, Files, {agent}’s browser, Apps & settings and Help & how-to, each with a line saying what it’s for.",
+      "**{agent}’s picture:** what it’s working on now. Tap it to go back to Home. On the chat screen, the button under it says which chat you’re in and opens your chats.",
       "**The clipboard button (top right):** hand {agent} a new job. The **bell** next to it has your updates.",
-      "**The bottom bar:** Chat, Feed, Spaces, Activity, Ideas, Goals, Files and Apps.",
+      "**The bottom bar:** Chat, Feed, Spaces, Activity, Ideas, Goals, Files and Apps. A red number on Activity is how many things need you.",
     ],
     body: [
       "You don’t have to find anything: ask {agent} “Take me to my food log” or “Where are my reminders?” and it shows a button that takes you there.",
@@ -674,7 +705,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "When a job needs you",
     summary: "A job stops to ask a question or to get your OK, then carries on.",
     steps: [
-      "{agent}’s picture says **Needs your answer** or **Ready to review**, and you get an update.",
+      "{agent}’s picture says **Needs your answer** or **Waiting for your OK**, and you get an update.",
       "Open the job. Type under **Your answer** and tap **Send answer**, or tap **Approve** on its card (**See details** shows all of it first).",
       "The job carries on from where it stopped.",
     ],

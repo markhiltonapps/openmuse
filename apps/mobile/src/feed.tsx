@@ -15,7 +15,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AreaPrompt, AreaRow, areaPromptDismissed, homeCountry, LOCAL_TOPIC } from "./area-ui";
 import { AssistantResponse } from "./assistant-response";
-import { type AppDay, calendarName } from "./calendar-apps";
+import { type AppDay, calendarName, localDay, todaysEvents } from "./calendar-apps";
 import { Emoji } from "./emoji";
 import { todayLine, useHealth } from "./health-ui";
 import { MealsToday } from "./meal-checkins-ui";
@@ -78,8 +78,6 @@ const COVERS: [string, string][] = dark
       ["#FFD9E6", "#FFF0F5"],
       ["#DCE4FF", "#F0F3FF"],
     ];
-const localDay = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 function dayHeading(day: string) {
   const today = new Date();
   const yesterday = new Date(today.getTime() - 86400000);
@@ -254,26 +252,7 @@ export function FeedScreen() {
   }
 
   const now = new Date();
-  const today = localDay(now);
-  const seen = new Set<string>();
-  const events = [...w.events, ...(appDay?.events ?? [])]
-    // The same meeting from two connections shows once.
-    .filter((e) => {
-      const key = `${e.title.trim().toLowerCase()}|${e.allDay ? e.start.slice(0, 10) : new Date(e.start).getTime()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .filter((e) =>
-      e.allDay ? e.start.slice(0, 10) === today : localDay(new Date(e.start)) === today,
-    )
-    .filter((e) => e.allDay || new Date(e.end) > now)
-    // By time, whatever each calendar's way of writing it; all-day ones first.
-    .sort(
-      (a, b) =>
-        (a.allDay ? 0 : Date.parse(a.start)) - (b.allDay ? 0 : Date.parse(b.start)) ||
-        a.title.localeCompare(b.title),
-    );
+  const events = todaysEvents([...w.events, ...(appDay?.events ?? [])], now);
   const unread = (appDay?.failed ?? []).map(calendarName);
   const approvals = w.actions.filter((a) => a.status === "awaiting_review").length;
   const working = (data?.tasks ?? []).filter((t) =>
@@ -450,7 +429,7 @@ export function FeedScreen() {
             </Pressable>
           ) : (
             <Text style={[s.muted, { color: colors.mutedStrong }]}>
-              Nothing else on your calendar today.
+              Nothing left on your calendar today.
             </Text>
           )}
         </DayRow>

@@ -19,7 +19,11 @@ import {
   View,
 } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { type CallDetail, SHOWN_HEADING } from "../../../packages/domain/src/voice";
+import {
+  type CallDetail,
+  LIVE_UNAVAILABLE,
+  SHOWN_HEADING,
+} from "../../../packages/domain/src/voice";
 import { useAgentWorkspace } from "./agent-workspace";
 import { API_URL, type MuseApi } from "./api";
 import { AssistantResponse } from "./assistant-response";
@@ -69,6 +73,15 @@ export async function checkLiveVoice(api: MuseApi): Promise<LiveStatus> {
   for (const listener of listeners) listener();
   return status;
 }
+/**
+ * The voice service turned a call away (busy, or out of credit): until the app reopens, Talk goes
+ * to the chat instead of a call that can't start.
+ */
+export function liveVoiceTurnedAway(api: MuseApi) {
+  cache.set(api, "off");
+  for (const listener of listeners) listener();
+}
+export const turnedAway = (message: string) => message === LIVE_UNAVAILABLE;
 /** Whether live voice is on for this person (and this browser can do it). */
 export function useLiveVoice(): LiveStatus {
   const { api } = useWorkspace();
@@ -104,6 +117,7 @@ export function LiveTalkSheet() {
   const name = data?.identity.name || "Neddy";
   // The call itself lives with the app, so it carries on when this screen closes.
   const call = useLiveCall();
+  const { draft } = useWorkspace();
   const { state, muted, lines, error, lookingUp, details, view, setView, target, clearTarget } =
     call;
   const detailsScroller = useRef<ScrollView>(null);
@@ -253,6 +267,19 @@ export function LiveTalkSheet() {
           <Button strong style={{ minWidth: 112 }} onPress={start}>
             Talk again
           </Button>
+          {/* A call that couldn't start: typing still works. */}
+          {!!call.error && (
+            <Button
+              style={{ minWidth: 112 }}
+              onPress={() => {
+                call.dismiss();
+                hide();
+                draft("");
+              }}
+            >
+              Type instead
+            </Button>
+          )}
           <Button style={{ minWidth: 112 }} onPress={hide}>
             Close
           </Button>

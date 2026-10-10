@@ -74,3 +74,72 @@ Known issues / pending
 - Messages typed in a second, still-open tab on the old part after a turn stay in that part.
 - Neddy's first reply right after a new part starts may come before that part's summary is
   written (it uses the previous summary and search meanwhile).
+
+----------------------------------------------------------------------------------------------
+Greeting home and the glossy look (owner's mockup: "I thought we were going to have this look")
+----------------------------------------------------------------------------------------------
+Owner's choices: all of it in one release; the app opens on a greeting Home; the keyboard button
+opens the chat to type; the plain look gets the glossy bar too; tapping Neddy at the top goes Home
+(the bar keeps its 8 tiles, no Home tile); Review opens the full Approve card first.
+
+What changed
+- New Home screen (apps/mobile/src/home.tsx), now the first screen:
+  - "Good morning, <name>." (name remembered on the device so it doesn't change as the app opens)
+    and one line: what needs you, or "Nothing needs you right now."
+  - Needs you: up to 3 approvals and waiting jobs with Review / Answer, "N more in Activity".
+    The same count (waitingOnYou) drives the red number on Activity, without double counting a
+    job and its approval.
+  - Today: weather, the next 3 events, "And N more"; says "Couldn’t load your calendar." when a
+    calendar couldn't be read, never that the day is clear. Opens Feed.
+  - Working on: the running job and what it's doing, or "Tap to give Neddy a job."
+  - Nothing below the greeting until the jobs are in, so no card moves under a thumb.
+  - Talk bar (glossy, full-body Neddy) starts a call, goes back to it, or opens the chat when
+    live talk is off; the keyboard button opens the chat with the message box focused.
+- Glossy bottom bar: coloured gradient tiles with a highlight and shade (gloss.tsx), smoke glass
+  behind them, a red gradient number on Activity, a dot under the open tab. Plain look keeps the
+  same tiles on the normal surface. 8px margins from 375px wide, tighter below.
+- Glass cards (glassSurface: blur + light edge) over a backdrop; Card uses it.
+- Neddy at the top opens Home; ☰ Menu has Home first; voice "take me home" (place "home").
+- Live talk turned away (no OpenAI credit, 429): the server says "Live talk isn’t available right
+  now. You can type instead."; the call screen offers "Type instead", and Talk goes to the chat
+  for the rest of the session.
+- Help: new topic "Home: what needs you and your day" with a new shot (greet); find-your-way
+  updated; app-guide and app-places know Home. All shots retaken (the app now opens on Home).
+
+- Desktop (owner: "make sure you also do the desktop version too"): tall windows keep the big
+  52px greeting; 760–819px tall gets 40px; shorter windows (1280×720, 1024×700) get the phone
+  header and greeting so the cards clear the Talk bar, and Home's scroll area fades at its bottom
+  edge instead of cutting through text. Checked at 1440×900, 1366×768, 1280×800, 1280×720,
+  1024×700 and 390×844.
+- If the jobs list can't load, Home still shows its cards ("Couldn’t load your jobs. Tap to give
+  Neddy a job.").
+- The status under Neddy for a job waiting on approval now says "Waiting for your OK" (was "Ready
+  to review"), matching Needs you and Activity; Feed's empty day says "Nothing left on your
+  calendar today." like Home.
+
+Design division: visual (4 rounds), usability (3 rounds) and copy (4 rounds), all signed off.
+
+Tests
+- Biome clean; app, server and worker tsc clean; pnpm test 515/515.
+- All Help screenshots retaken (the app opens on Home; the status line changed).
+
+Known issues / pending
+- iPhone: check that the keyboard button brings up the keyboard (focus after navigation).
+- With live talk off, Talk opens the chat without starting dictation.
+- The call screen can still show admin-worded voice errors (bad key) next to "Type instead";
+  only the out-of-credit case is reworded for people.
+- OpenAI voice still needs credits added before calls work.
+
+----------------------------------------------------------------------------------------------
+Black screen after the main chat started a new part (fixed and deployed, c052c1a)
+----------------------------------------------------------------------------------------------
+- Oct 10 01:07 UTC the owner's main chat (510 messages, 1.8 MB) started its first new part.
+  From then on the app went black on opening: the saved earlier part came from CopilotKit
+  Intelligence's history, whose tool calls are {id, name, args}; the chat reads
+  {function: {name, arguments}}, so the first message with a card threw and, with no error
+  boundary, took the whole app down.
+- Fix: the server converts saved parts to the chat's form when saving and serving them (which
+  also repairs the part already saved) and for the agent's search; the app converts any earlier
+  part it loads; a message that still can't be drawn says "This message can’t be shown."
+- Test added (tests/main-pages.test.ts); local check with an Intelligence-shaped part. Pushed on
+  the owner's "Push it" (no live call at the time); deployed 01:56 UTC.

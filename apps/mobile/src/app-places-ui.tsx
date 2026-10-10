@@ -64,6 +64,7 @@ import { useWorkspace } from "./workspace";
  */
 
 const ICONS: Record<AppPlaceId, LucideIcon> = {
+  home: House,
   feed: Newspaper,
   plans: ClipboardList,
   reminders: AlarmClock,
@@ -127,6 +128,7 @@ const APPS_TABS: Partial<Record<AppPlaceId, AppsTab>> = {
 };
 /** Places that are a screen, or a part of one the page scrolls to. */
 const SCREENS: Partial<Record<AppPlaceId, { section: Section; anchor?: string }>> = {
+  home: { section: "home" },
   feed: { section: "feed" },
   calendar: { section: "calendar" },
   mail: { section: "mail" },
