@@ -247,3 +247,13 @@ Known issues / pending
 - Push waits for the owner's "push it".
 - The owner's request for a self-hosted voice stack (LiveKit, Whisper, Llama, Kokoro): plan
   only, in docs/LOCAL-VOICE-PLAN.md.
+
+Voice costs (questions from the owner, no code)
+- OpenAI GPT-Live-1 costs $0.05/min ($3/hour), silence included; hand-offs to the chat agent
+  add roughly $0.01-0.02/min. No monthly minute cap per person exists yet (offered).
+- Compared cheaper voices; a deep-research report (reports/Cheaper realtime voice AI
+  providers.md, kept out of git with its notes in research_notes/) found nothing proven both
+  cheaper and as good. Best saving: a three-part pipeline (Deepgram listening, a small fast
+  model, Inworld/Cartesia voice) on LiveKit at about $0.02-0.04/min; runner-up Amazon Nova 2
+  Sonic. Gemini 3.8 Live re-bills the whole conversation each turn, so long calls cost more.
+- Offered (waiting on the owner): a trial of the pipeline against GPT-Live-1 on real iPhones.
