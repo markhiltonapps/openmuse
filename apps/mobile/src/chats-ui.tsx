@@ -281,6 +281,7 @@ export function ChatsSheet({ onClose }: { onClose: () => void }) {
     selection,
     visited,
     mainId,
+    isMain,
     list,
     saved,
     select,
@@ -346,13 +347,13 @@ export function ChatsSheet({ onClose }: { onClose: () => void }) {
   }
 
   const spaceIds = new Set((spaces ?? []).map((space) => space.threadId));
-  const ours = list.threads.filter((thread) => thread.id !== mainId && !spaceIds.has(thread.id));
+  const ours = list.threads.filter((thread) => !isMain(thread.id) && !spaceIds.has(thread.id));
   const archived = ours.filter((thread) => thread.archived);
   // A new chat with nothing in it yet is listed only while you're in it.
   const fresh = visited.find(
     (item) =>
       item.id === selection.id &&
-      item.id !== mainId &&
+      !isMain(item.id) &&
       !spaceIds.has(item.id) &&
       !list.threads.some((thread) => thread.id === item.id) &&
       !saved.some((chat) => chat.threadId === item.id),
@@ -372,7 +373,7 @@ export function ChatsSheet({ onClose }: { onClose: () => void }) {
       : saved
           .filter(
             (chat) =>
-              chat.threadId !== mainId &&
+              !isMain(chat.threadId) &&
               !spaceIds.has(chat.threadId) &&
               !list.threads.some((thread) => thread.id === chat.threadId),
           )
@@ -811,7 +812,7 @@ export function ChatsSheet({ onClose }: { onClose: () => void }) {
  * are hidden), so the agent can open or tidy them by name, on a call too (manage_chats).
  */
 export function ChatReporter() {
-  const { enabled, selection, mainId, list, saved, othersHidden } = useMuseThread();
+  const { enabled, selection, mainId, isMain, list, saved, othersHidden } = useMuseThread();
   const { spaces } = useSpaces();
   const { api } = useWorkspace();
   const sent = useRef("");
@@ -827,7 +828,7 @@ export function ChatReporter() {
         lastUsed: space.updatedAt,
       })),
       ...list.threads
-        .filter((thread) => thread.id !== mainId && !spaceIds.has(thread.id))
+        .filter((thread) => !isMain(thread.id) && !spaceIds.has(thread.id))
         .map((thread) => ({
           id: thread.id,
           name: threadTitle(thread),
@@ -838,7 +839,7 @@ export function ChatReporter() {
       ...saved
         .filter(
           (chat) =>
-            chat.threadId !== mainId &&
+            !isMain(chat.threadId) &&
             !spaceIds.has(chat.threadId) &&
             !list.threads.some((thread) => thread.id === chat.threadId),
         )
@@ -859,7 +860,7 @@ export function ChatReporter() {
       });
     }, 800);
     return () => clearTimeout(timer);
-  }, [api, enabled, mainId, selection.id, spaces, list.threads, saved, othersHidden]);
+  }, [api, enabled, mainId, isMain, selection.id, spaces, list.threads, saved, othersHidden]);
   return null;
 }
 

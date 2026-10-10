@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Linking, Platform, Text, type TextStyle, View, type ViewStyle } from "react-native";
 import Markdown, {
   type ASTNode,
@@ -119,7 +119,11 @@ const rules: RenderRules = {
   fence: renderCodeBlock,
 };
 
-export function AssistantResponse({ content }: { content: string }) {
+// A fixed list: the renderer's default makes a new one each time, which re-parses every reply on
+// every redraw of the chat.
+const NO_PLUGINS: never[] = [];
+/** A reply in Markdown; drawn again only when its words change. */
+export const AssistantResponse = memo(function AssistantResponse({ content }: { content: string }) {
   const [linkError, setLinkError] = useState("");
   // The level of the biggest heading in this result ("# comments" in code don't count).
   const top = Math.min(
@@ -147,10 +151,11 @@ export function AssistantResponse({ content }: { content: string }) {
         style={style}
         rules={withHeadings}
         onLinkPress={onLinkPress}
+        plugins={NO_PLUGINS}
       >
         {content}
       </Markdown>
       <ErrorNotice error={linkError} />
     </>
   );
-}
+});

@@ -12,8 +12,6 @@ import {
   ArrowUp,
   AudioLines,
   Camera,
-  Check,
-  Copy,
   FileText,
   Headset,
   Image as ImageIcon,
@@ -21,11 +19,9 @@ import {
   Paperclip,
   RotateCcw,
   Square,
-  Trash2,
-  Volume2,
   X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -44,25 +40,32 @@ import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { PlaceButtons, setVoiceAway, usePlace } from "./app-places-ui";
 import { ToolApprovals } from "./approval-card";
-import { AssistantResponse } from "./assistant-response";
 import { setChatActivity } from "./avatar";
 import { BackdropToolCard } from "./backdrop-ui";
 import { BackgroundUpdates } from "./background-updates";
-import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
+import { BrowserToolCard } from "./browser-tool-card";
 import { ToolCalendar } from "./calendar-card";
 import { ToolFile } from "./call-details";
+import {
+  EarlierDivider,
+  MessageRow,
+  type MessageRowProps,
+  readChatCache,
+  rowSignature,
+  SceneLabel,
+  writeChatCache,
+} from "./chat-rows";
 import { ChatActionCard } from "./chats-ui";
 import { BrowserThreadCard } from "./computer";
 import { ToolConnect, ToolOwnApp } from "./connect-card";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { replyFailure, runConversationTurn } from "./conversation-run";
-import { plainText } from "./copy-text";
 import { ToolAppResult } from "./email-cards";
 import { isPicture } from "./file-kinds";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { HelpAnswerCard } from "./help-ui";
 import { useCallControls } from "./live-call";
-import { onCallSaved, SpokenCall, useLiveVoice } from "./live-talk-ui";
+import { onCallSaved, useLiveVoice } from "./live-talk-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
@@ -71,6 +74,7 @@ import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { SandboxCard } from "./sandbox-ui";
 import { useSpaces } from "./spaces";
 import { replyText } from "./speakable";
+import { glass } from "./theme";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { tipProps } from "./tips";
@@ -94,6 +98,13 @@ type ToolCall = NonNullable<Extract<Message, { role: "assistant" }>["toolCalls"]
 let lastActiveChat = "";
 /** Messages sent from this screen, so their replies' cards know they're new. */
 const sentHere = new Set<string>();
+/** Messages drawn when a chat opens, and how many more each "Show earlier messages" adds. */
+const DRAW_START = 40;
+const DRAW_MORE = 40;
+const shownRole = (m: Message) => m.role === "user" || m.role === "assistant";
+type ListItem =
+  | { kind: "message"; message: Message; row: MessageRowProps }
+  | { kind: "divider"; key: string; label: string };
 /** What the message box says when pasted pictures couldn't be added. */
 const failedText = (count: number) =>
   count === 1
@@ -464,6 +475,7 @@ export function ChatScreen({
   const {
     enabled: richThreads,
     mainId,
+    pages,
     claimPrompt,
     resets,
     queued,
@@ -617,19 +629,30 @@ export function ChatScreen({
       () => undefined,
     );
   }, [api, hiddenPath]);
-  async function deleteMessage(id: string) {
-    setConfirmingDelete(undefined);
-    if (speakingId === id) stopSpeaking();
-    try {
-      const result = await api.request<{ messageIds: string[] }>(
-        `${hiddenPath}/messages/${encodeURIComponent(id)}/delete`,
-        {},
-      );
-      setHidden(new Set(result.messageIds));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
+  const speakingRef = useRef(speakingId);
+  speakingRef.current = speakingId;
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const deleteMessage = useCallback(
+    async (id: string) => {
+      setConfirmingDelete(undefined);
+      if (speakingRef.current === id) stopSpeaking();
+      try {
+        const result = await api.request<{ messageIds: string[] }>(
+          `${hiddenPath}/messages/${encodeURIComponent(id)}/delete`,
+          {},
+        );
+        setHidden(new Set(result.messageIds));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [api, hiddenPath],
+  );
+  const stopReading = useCallback(() => {
+    stopSpeaking();
+    setSpeakingId(undefined);
+  }, []);
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState<"photos" | "any">();
@@ -735,11 +758,44 @@ export function ChatScreen({
   const [saveError, setSaveError] = useState("");
   const [historyError, setHistoryError] = useState("");
   const [historyAttempt, setHistoryAttempt] = useState(0);
+  // The whole history is in (CopilotKit replays it piece by piece); until then this device's
+  // copy of the chat's end is shown, or a loading line.
+  const [historyDone, setHistoryDone] = useState(false);
+  const cached = useMemo(
+    () => (richThreads && selection.existing ? readChatCache(threadId) : []),
+    [richThreads, selection.existing, threadId],
+  );
+  // Only the latest messages are drawn; "Show earlier messages" adds more.
+  const [drawn, setDrawn] = useState(DRAW_START);
+  // The main chat's earlier pages, loaded on request (newest last), and the line above them.
+  const [earlier, setEarlier] = useState<
+    { threadId: string; endedAt: string; messages: Message[] }[]
+  >([]);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [earlierTried, setEarlierTried] = useState(false);
+  const [earlierError, setEarlierError] = useState("");
+  // Where the list was before more appeared above, so the messages on screen stay put.
+  const keepPlace = useRef<number | null>(null);
+  const firstDrawn = useRef<string | undefined>(undefined);
+  // What the always-there status line says (screen readers hear it change).
+  const [announce, setAnnounce] = useState("");
+  const [autoEarlier, setAutoEarlier] = useState(false);
+  const contentHeight = useRef(0);
+  useEffect(() => {
+    setDrawn(DRAW_START);
+    setEarlier([]);
+    setEarlierTried(false);
+    setEarlierError("");
+    setAnnounce("");
+    setAutoEarlier(false);
+    firstDrawn.current = undefined;
+  }, [threadId, resets]);
   useEffect(() => {
     if (!isReady) return;
     let active = true;
     setHistoryError("");
     setLoaded(false);
+    setHistoryDone(false);
     const replay = agent.subscribe({
       onMessagesChanged: ({ messages }) => {
         if (active && richThreads && messages.length) setLoaded(true);
@@ -777,7 +833,11 @@ export function ChatScreen({
           const { messages } = await api.request<{ messages: Message[] }>("/api/conversation");
           if (active) agent.setMessages(messages);
         }
-        if (active) setLoaded(true);
+        if (active) {
+          setLoaded(true);
+          setHistoryDone(true);
+          if (richThreads) writeChatCache(threadId, agent.messages, hiddenRef.current);
+        }
       } catch (e) {
         if (active) {
           setLoaded(false);
@@ -808,7 +868,8 @@ export function ChatScreen({
   const saveHistory = useCallback(async () => {
     if (!richThreads) await api.request("/api/conversation", { messages: agent.messages }, "PUT");
     // A copy the app keeps, since CopilotKit deletes chats after its retention period.
-    else if (agent.messages.length)
+    else if (agent.messages.length) {
+      writeChatCache(threadId, agent.messages, hiddenRef.current);
       await api
         .request(
           `/api/threads/${encodeURIComponent(threadId)}/archive`,
@@ -816,6 +877,7 @@ export function ChatScreen({
           "PUT",
         )
         .catch(() => undefined);
+    }
     setSaveError("");
   }, [agent, api, richThreads, threadId]);
   const run = useCallback(
@@ -1030,9 +1092,21 @@ export function ChatScreen({
     (last, message, index) => (message.role === "user" ? index : last),
     -1,
   );
-  const visible = messages.filter(
-    (m) => (m.role === "user" || m.role === "assistant") && !hidden.has(m.id),
-  );
+  // While the history replays, this device's copy is drawn instead of the half-loaded list, and
+  // the replay doesn't count as the agent replying.
+  const showingCopy = richThreads && selection.existing && !historyDone;
+  const replying = busy || (agent.isRunning && !showingCopy);
+  const isMainChat = richThreads && selection.id === mainId;
+  const current = showingCopy ? cached : messages;
+  const visible = current.filter((m) => shownRole(m) && !hidden.has(m.id));
+  const earlierVisible = earlier.map((page) => page.messages.filter(shownRole));
+  const nextPage = isMainChat ? pages[pages.length - 1 - earlier.length] : undefined;
+  // Each card's result, and where each live message sits (for the cards of the latest reply).
+  const results = new Map<string, ToolMessage>();
+  for (const message of [...earlier.flatMap((page) => page.messages), ...current])
+    if (message.role === "tool") results.set(message.toolCallId, message);
+  const liveIndex = new Map(messages.map((message, index) => [message.id, index]));
+  const freshTurn = sentHere.has(messages[latestUserIndex]?.id ?? "");
   // Take-me-there buttons go under the finished reply: after the last message of its turn, even
   // when the agent asked for them before writing its answer.
   const placesAfter = new Map<string, ToolCall[]>();
@@ -1044,7 +1118,7 @@ export function ChatScreen({
       pending = [];
       last = undefined;
     };
-    for (const message of visible) {
+    for (const message of [...earlierVisible.flat(), ...visible]) {
       if (message.role === "user") settle();
       else {
         last = message.id;
@@ -1054,7 +1128,147 @@ export function ChatScreen({
     }
     settle();
   }
-  const replying = busy || agent.isRunning;
+  const rowFor = (message: Message, readOnly: boolean): ListItem => {
+    const text = typeof message.content === "string" ? message.content : "";
+    // Its cards, with the turn's take-me-there buttons moved under the last message.
+    const toolCalls = [
+      ...("toolCalls" in message ? message.toolCalls || [] : []).filter(
+        (call) => call.function.name !== "show_in_app",
+      ),
+      ...(placesAfter.get(message.id) ?? []),
+    ];
+    const found = toolCalls.map((call) => results.get(call.id));
+    const index = readOnly ? -1 : (liveIndex.get(message.id) ?? -1);
+    const latestTurn = index > latestUserIndex;
+    return {
+      kind: "message",
+      message,
+      row: {
+        message,
+        text,
+        toolCalls,
+        results: found,
+        signature: rowSignature(text, toolCalls, found),
+        running: !readOnly && replying,
+        active: replying && latestTurn,
+        fresh: latestTurn && freshTurn,
+        shown: active,
+        speaking: speakingId === message.id,
+        copied: copiedId === message.id,
+        confirming: confirmingDelete === message.id,
+        canCopy,
+        readOnly,
+        renderToolCall,
+        onListen: readAloud,
+        onStop: stopReading,
+        onCopy: copyMessage,
+        onAskDelete: setConfirmingDelete,
+        onDelete: deleteMessage,
+      },
+    };
+  };
+  const items: ListItem[] = [];
+  const thisYear = new Date().getFullYear();
+  earlier.forEach((page, index) => {
+    for (const message of earlierVisible[index] ?? []) items.push(rowFor(message, true));
+    const ended = new Date(page.endedAt);
+    items.push({
+      kind: "divider",
+      key: `continued-${page.threadId}`,
+      label: `Continued ${ended.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        ...(ended.getFullYear() !== thisYear ? { year: "numeric" } : {}),
+      })}`,
+    });
+  });
+  for (const message of visible) items.push(rowFor(message, showingCopy));
+  // Only the latest messages are drawn. While the person is scrolled up reading, new ones arriving
+  // below don't take any away from the top: the first one drawn stays drawn.
+  let cut = items.length;
+  for (let count = 0; cut > 0 && count < drawn; ) if (items[--cut]?.kind === "message") count++;
+  if (!followLatest.current && firstDrawn.current) {
+    const at = items.findIndex(
+      (item) => item.kind === "message" && item.message.id === firstDrawn.current,
+    );
+    if (at >= 0 && at < cut) cut = at;
+  }
+  const shownItems = items.slice(cut);
+  const firstShown = shownItems.find((item) => item.kind === "message");
+  firstDrawn.current = firstShown?.kind === "message" ? firstShown.message.id : undefined;
+  const hiddenAbove = items.slice(0, cut).filter((item) => item.kind === "message").length;
+  // A short current part (just after the main chat started a new one) waits for the end of the
+  // part before it, so the two appear together instead of one pushing the other down.
+  const copyShown = cached.filter(shownRole).length;
+  const shortPart = historyDone ? visible.length < 10 : copyShown < 10;
+  const needEarlier = isMainChat && !!nextPage && !earlier.length && !earlierTried && shortPart;
+  // Said again on every tap: the line is cleared first, so screen readers hear it each time.
+  const sayShown = () => {
+    setAnnounce("");
+    setTimeout(() => setAnnounce("Earlier messages shown"), 60);
+  };
+  const showLoading =
+    !historyError &&
+    // An earlier part loaded on its own waits for this one, so both appear in order.
+    ((autoEarlier && showingCopy) ||
+      (showingCopy && (!cached.length || needEarlier)) || needEarlier ||
+      (loadingEarlier && !items.length));
+  // The top button only once the whole history is in, so it never changes under a thumb.
+  const canShowEarlier = historyDone && (hiddenAbove > 0 || !!nextPage);
+  async function loadEarlier(tapped: boolean) {
+    if (!nextPage || loadingEarlier) return;
+    const page = nextPage;
+    setLoadingEarlier(true);
+    setEarlierError("");
+    try {
+      const result = await api.request<{ messages: Message[] }>(
+        `/api/main-thread/pages/${encodeURIComponent(page.threadId)}`,
+      );
+      // The messages on screen stay where they are as the older ones appear above.
+      if (tapped) {
+        keepPlace.current = contentHeight.current;
+        followLatest.current = false;
+        setDrawn((count) => count + DRAW_MORE);
+        sayShown();
+      } else setAutoEarlier(true);
+      setEarlier((loaded) => [{ ...page, messages: result.messages }, ...loaded]);
+    } catch {
+      setEarlierError("Couldn’t load earlier messages. Try again.");
+    } finally {
+      setLoadingEarlier(false);
+      setEarlierTried(true);
+    }
+  }
+  useEffect(() => {
+    if (needEarlier && !loadingEarlier) void loadEarlier(false);
+  });
+  const earlierControls = (
+    <>
+      <ErrorNotice error={earlierError} />
+      {canShowEarlier ? (
+        <Button
+          small
+          busy={loadingEarlier}
+          style={{ alignSelf: "center" }}
+          onPress={() => {
+            if (hiddenAbove > 0) {
+              keepPlace.current = contentHeight.current;
+              followLatest.current = false;
+              setDrawn((count) => count + DRAW_MORE);
+              sayShown();
+            } else void loadEarlier(true);
+          }}
+        >
+          Show earlier messages
+        </Button>
+      ) : (
+        historyDone &&
+        (drawn > DRAW_START || earlier.length > 0) && (
+          <SceneLabel text="Start of your conversation" />
+        )
+      )}
+    </>
+  );
   const activity = chatActivity(messages, replying);
   // The chat on screen says what the agent is doing; so does the last one open while another
   // screen is showing (a button in its reply may have opened that screen mid-reply).
@@ -1165,11 +1379,19 @@ export function ChatScreen({
           lastOffset.current = contentOffset.y;
           if (nearEnd) followLatest.current = true;
           else if (scrolledUp) followLatest.current = false;
-          setAwayFromLatest(visible.length > 0 && !nearEnd && !followLatest.current);
+          setAwayFromLatest(items.length > 0 && !nearEnd && !followLatest.current);
         }}
         scrollEventThrottle={100}
-        onContentSizeChange={() => {
-          if (active && visible.length > 0 && followLatest.current)
+        onContentSizeChange={(_width, height) => {
+          const before = keepPlace.current;
+          contentHeight.current = height;
+          // More appeared above: the same messages stay under the person's eyes.
+          if (before !== null) {
+            keepPlace.current = null;
+            list.current?.scrollTo({ y: lastOffset.current + height - before, animated: false });
+            return;
+          }
+          if (active && items.length > 0 && followLatest.current)
             list.current?.scrollToEnd({ animated: false });
         }}
         keyboardShouldPersistTaps="handled"
@@ -1182,7 +1404,51 @@ export function ChatScreen({
             </Button>
           </>
         )}
-        {!visible.length ? (
+        {/* Always there, so screen readers hear it change. */}
+        <Text
+          role="status"
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            opacity: 0,
+            overflow: "hidden",
+            pointerEvents: "none",
+          }}
+        >
+          {showLoading ? "Loading your conversation…" : announce}
+        </Text>
+        {showLoading ? (
+          <View
+            style={{
+              flexGrow: 1,
+              flexShrink: 0,
+              justifyContent: "center",
+              alignItems: "center",
+              paddingVertical: 34,
+            }}
+          >
+            <View
+              style={[
+                s.row,
+                {
+                  gap: 10,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 999,
+                  backgroundColor: glass ? colors.card : "transparent",
+                },
+              ]}
+            >
+              <ActivityIndicator size="small" color={colors.text} />
+              <Text style={[s.muted, glass && { color: colors.mutedStrong }]}>
+                Loading your conversation…
+              </Text>
+            </View>
+          </View>
+        ) : !items.length && (nextPage || earlierError) ? (
+          earlierControls
+        ) : !items.length ? (
           <View
             style={{
               flexGrow: 1,
@@ -1231,160 +1497,16 @@ export function ChatScreen({
             </View>
           </View>
         ) : (
-          visible.map((message) => {
-            const user = message.role === "user";
-            const text = typeof message.content === "string" ? message.content : "";
-            // A live voice call, added once it was over.
-            const spokenCall = !user && message.id.startsWith("spoken-");
-            // Its cards, with the turn's take-me-there buttons moved under the last message.
-            const toolCalls = [
-              ...("toolCalls" in message ? message.toolCalls || [] : []).filter(
-                (call) => call.function.name !== "show_in_app",
+          <>
+            {earlierControls}
+            {shownItems.map((item) =>
+              item.kind === "divider" ? (
+                <EarlierDivider key={item.key} label={item.label} />
+              ) : (
+                <MessageRow key={item.message.id} {...item.row} />
               ),
-              ...(placesAfter.get(message.id) ?? []),
-            ];
-            return (
-              <View
-                key={message.id}
-                style={{
-                  alignSelf: user ? "flex-end" : "flex-start",
-                  maxWidth: user ? "85%" : "95%",
-                  width: toolCalls.length ? "95%" : undefined,
-                  gap: 8,
-                }}
-              >
-                {!!text && (
-                  <View
-                    style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 13,
-                      borderRadius: 22,
-                      borderBottomRightRadius: user ? 7 : 22,
-                      borderBottomLeftRadius: user ? 22 : 7,
-                      backgroundColor: user ? colors.blue : colors.bubble,
-                    }}
-                  >
-                    {user ? (
-                      <Text selectable style={[s.text, { fontSize: 16, lineHeight: 24 }]}>
-                        {text}
-                      </Text>
-                    ) : spokenCall ? (
-                      <SpokenCall text={text} id={message.id.slice("spoken-".length)} />
-                    ) : (
-                      <AssistantResponse content={text} />
-                    )}
-                  </View>
-                )}
-                {!!text && (
-                  <View
-                    style={[
-                      s.row,
-                      {
-                        gap: 12,
-                        alignSelf: user ? "flex-end" : "flex-start",
-                        paddingHorizontal: 6,
-                      },
-                    ]}
-                  >
-                    {!user && !spokenCall && speechAvailable() && (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          speakingId === message.id ? "Stop reading" : "Read aloud"
-                        }
-                        hitSlop={8}
-                        onPress={() => {
-                          if (speakingId === message.id) {
-                            stopSpeaking();
-                            setSpeakingId(undefined);
-                          } else void readAloud(message.id, text);
-                        }}
-                        style={[s.row, { gap: 5 }]}
-                      >
-                        {speakingId === message.id ? (
-                          <Square size={12} fill={colors.muted} strokeWidth={0} />
-                        ) : (
-                          <Volume2 size={14} color={colors.muted} />
-                        )}
-                        <Text style={s.small}>{speakingId === message.id ? "Stop" : "Listen"}</Text>
-                      </Pressable>
-                    )}
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        copiedId === message.id
-                          ? "Copied"
-                          : `${canCopy ? "Copy" : "Share"} ${user ? "message" : "reply"}`
-                      }
-                      hitSlop={8}
-                      onPress={() => void copyMessage(message.id, user ? text : plainText(text))}
-                      style={[s.row, { gap: 5 }]}
-                    >
-                      {copiedId === message.id ? (
-                        <Check size={14} color={colors.greenDark} />
-                      ) : (
-                        <Copy size={14} color={colors.muted} />
-                      )}
-                      <Text style={s.small} accessibilityLiveRegion="polite">
-                        {copiedId === message.id ? "Copied" : canCopy ? "Copy" : "Share"}
-                      </Text>
-                    </Pressable>
-                    {confirmingDelete === message.id ? (
-                      <>
-                        <Pressable
-                          accessibilityRole="button"
-                          hitSlop={8}
-                          onPress={() => void deleteMessage(message.id)}
-                        >
-                          <Text style={[s.small, { color: colors.danger, fontWeight: "600" }]}>
-                            Delete message
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          hitSlop={8}
-                          onPress={() => setConfirmingDelete(undefined)}
-                        >
-                          <Text style={s.small}>Keep</Text>
-                        </Pressable>
-                      </>
-                    ) : (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Delete this message"
-                        hitSlop={8}
-                        onPress={() => setConfirmingDelete(message.id)}
-                        style={{ opacity: 0.55 }}
-                      >
-                        <Trash2 size={13} color={colors.muted} />
-                      </Pressable>
-                    )}
-                  </View>
-                )}
-                <BrowserRunContext
-                  value={{
-                    running: busy || agent.isRunning,
-                    active:
-                      (busy || agent.isRunning) && messages.indexOf(message) > latestUserIndex,
-                    fresh:
-                      messages.indexOf(message) > latestUserIndex &&
-                      sentHere.has(messages[latestUserIndex]?.id ?? ""),
-                    shown: active,
-                  }}
-                >
-                  {toolCalls.map((toolCall) => {
-                    const toolMessage = messages.find(
-                      (candidate): candidate is ToolMessage =>
-                        candidate.role === "tool" && candidate.toolCallId === toolCall.id,
-                    );
-                    return (
-                      <View key={toolCall.id}>{renderToolCall({ toolCall, toolMessage })}</View>
-                    );
-                  })}
-                </BrowserRunContext>
-              </View>
-            );
-          })
+            )}
+          </>
         )}
         {!richThreads && (
           <>
@@ -1431,7 +1553,7 @@ export function ChatScreen({
           </>
         )}
         {(!richThreads || selection.id === mainId) && <BackgroundUpdates />}
-        {(busy || agent.isRunning) && (
+        {replying && (
           <View
             accessibilityLabel={activity?.label ?? "Agent is working"}
             accessibilityLiveRegion="polite"

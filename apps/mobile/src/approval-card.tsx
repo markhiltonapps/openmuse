@@ -8,6 +8,8 @@ import { codeReady } from "./sign-in-ui";
 import { Button, CheckRow, colors, ErrorNotice, resultSummary, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
+/** One workspace reload shared by every card looking for an action it doesn't have yet. */
+let lookingUp: Promise<unknown> | undefined;
 const list = (value: unknown) => (Array.isArray(value) ? value.map(String).join(", ") : "");
 const appName = (app: unknown) => (app ? appLabel(String(app)) : "");
 const short = (value: unknown) => {
@@ -163,13 +165,19 @@ export function ApprovalCard({
   const stored = w.actions.find((action) => action.id === actionId);
   // The server's copy once it has moved on (another device, a job); this card's result until then.
   const action = stored && stored.status !== "awaiting_review" ? stored : (local ?? stored);
-  // Just made: the app may not have it yet, so look once.
+  // Just made: the app may not have it yet, so look once (one look shared by every card
+  // missing its action, so an old chat's cards don't each reload the workspace).
   useEffect(() => {
     if (stored || looked.current) return;
     looked.current = true;
-    void refresh()
+    lookingUp ??= refresh()
       .catch(() => undefined)
-      .finally(() => setMissing(true));
+      .finally(() => {
+        setTimeout(() => {
+          lookingUp = undefined;
+        }, 5000);
+      });
+    void lookingUp.finally(() => setMissing(true));
   }, [stored, refresh]);
   // When it expires, the button goes.
   const expiresAt = action ? Date.parse(action.expiresAt) : 0;

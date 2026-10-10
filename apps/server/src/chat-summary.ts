@@ -126,6 +126,14 @@ export class ChatSummaries {
     }
     return { messages: messages.slice(cut), summary: previous || undefined, earlier };
   }
+  /** A chat's saved summary and the last message it covers, if one was made. */
+  saved(owner: string, threadId: string) {
+    return this.db.get<Saved>(owner, "chat-summaries", threadId);
+  }
+  /** Merges more conversation into a summary (used when the main chat turns a page). */
+  merge(owner: string, previous: string, messages: ChatMessage[]) {
+    return this.summarize(owner, previous, transcript(messages));
+  }
   /** Forget a chat's summary, so the next one is written without deleted messages. */
   forget(owner: string, threadId: string) {
     return this.db.remove(owner, "chat-summaries", threadId);

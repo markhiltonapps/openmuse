@@ -30,8 +30,16 @@ export async function saveSession(token: string) {
 }
 export async function clearSession() {
   try {
-    if (Platform.OS === "web") globalThis.localStorage?.removeItem(KEY);
-    else {
+    if (Platform.OS === "web") {
+      globalThis.localStorage?.removeItem(KEY);
+      // This device's copies of the ends of chats (chat-rows.tsx) go with the sign-in.
+      const storage = globalThis.localStorage;
+      for (let i = (storage?.length ?? 0) - 1; i >= 0; i--) {
+        const key = storage?.key(i);
+        if (key?.startsWith("openmuse.chat.") || key === "openmuse.chat-copies")
+          storage?.removeItem(key);
+      }
+    } else {
       const path = file();
       if (path) await FileSystem.deleteAsync(path, { idempotent: true });
     }

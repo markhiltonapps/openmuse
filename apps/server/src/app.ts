@@ -48,6 +48,7 @@ import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
 import { backgroundFailure } from "./log.ts";
 import { MAIL_APPS, MailAlerts } from "./mail-alerts.ts";
+import { MainPages, mainSettings } from "./main-pages.ts";
 import { CombinedApps, McpApps, signedInPage, signInFailedPage } from "./mcp-apps.ts";
 import { MealCheckIns } from "./meal-checkins.ts";
 import {
@@ -314,8 +315,14 @@ export async function createApp(
     reminders: async (owner) => (await reminders.list(owner)).upcoming,
     // The main chat as the app last saved it (or the older single conversation).
     chat: async (owner) => {
-      const main = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
-      if (main?.threadId) return archive.messages(owner, main.threadId);
+      const main = await mainSettings(db, owner);
+      if (main?.threadId) {
+        const current = await archive.messages(owner, main.threadId);
+        // Just after a new page starts, the end of the last one is still "recent".
+        const before = main.pages?.at(-1);
+        if (current.length >= 20 || !before) return current;
+        return [...((await mainPages.page(owner, before.threadId)) ?? []).slice(-40), ...current];
+      }
       return (
         (await db.get<{ messages?: unknown[] }>(owner, "conversations", "default"))?.messages ?? []
       );
@@ -1228,7 +1235,9 @@ export async function createApp(
       const { messages } = await threads.getThreadMessages({ threadId, userId: owner });
       const list = messages as { role?: string }[];
       const count = (role: string) => list.filter((message) => message.role === role).length;
-      const kb = Math.round(Buffer.byteLength(JSON.stringify(list)) / 1024);
+      const bytes = Buffer.byteLength(JSON.stringify(list));
+      const kb = Math.round(bytes / 1024);
+      await mainPages.noteSize(owner, threadId, bytes);
       const summary = await db.get(owner, "chat-summaries", threadId);
       const backup = await db.get<{ messages?: unknown[] }>(owner, "chat-archive", threadId);
       console.info(
@@ -1245,12 +1254,8 @@ export async function createApp(
   };
   app.get("/api/main-thread", async (c) => {
     const owner = c.get("owner");
-    await db.insertIfAbsent(owner, "conversation-settings", {
-      id: "main",
-      threadId: randomUUID(),
-      existing: false,
-    });
-    const main = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
+    // A new page starts here when the last one grew past its size (main-pages.ts).
+    const main = await mainPages.open(owner).catch(() => undefined);
     if (!main) throw new AppError("Main conversation could not be loaded", 503);
     try {
       await threads.getOrCreateThread({
@@ -1265,7 +1270,19 @@ export async function createApp(
       );
     }
     void logMainChatSize(owner, main.threadId);
-    return c.json({ threadId: main.threadId, existing: true });
+    return c.json({ threadId: main.threadId, existing: true, pages: main.pages ?? [] });
+  });
+  // One of the main chat's earlier pages, for "Show earlier conversation".
+  app.get("/api/main-thread/pages/:threadId", async (c) => {
+    const owner = c.get("owner");
+    const threadId = c.req.param("threadId");
+    const messages = await mainPages.page(owner, threadId);
+    if (!messages) throw new AppError("That part of the chat isn't here", 404);
+    // Messages the person deleted stay deleted.
+    const hidden = new Set(await data.hidden(owner, threadId));
+    return c.json({
+      messages: messages.filter((message) => !hidden.has((message as { id?: string }).id ?? "")),
+    });
   });
   // The chats the app has (names, kinds, which is open), so the agent can open or tidy them by
   // name, on a call too (manage_chats). The app sends them whenever they change.
@@ -1314,29 +1331,45 @@ export async function createApp(
   // Starts the main chat over; the old conversation is deleted.
   app.post("/api/main-thread/reset", async (c) => {
     const owner = c.get("owner");
-    const old = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
+    const old = await mainSettings(db, owner);
     await db.put(owner, "conversation-settings", {
       id: "main",
       threadId: randomUUID(),
       existing: false,
     });
     await db.put(owner, "conversations", { id: "default", messages: [] });
-    if (old) await db.remove(owner, "chat-archive", old.threadId);
-    if (old)
+    // Every page of it: the current one and the earlier ones.
+    for (const threadId of [old?.threadId, ...(old?.pages ?? []).map((page) => page.threadId)]) {
+      if (!threadId) continue;
+      await db.remove(owner, "chat-archive", threadId);
       await threads
-        .deleteThread({ threadId: old.threadId, userId: owner, agentId: "default" })
+        .deleteThread({ threadId, userId: owner, agentId: "default" })
         .catch(() => console.warn("[OpenMuse] Could not delete the previous main conversation"));
+    }
+    await mainPages.clear(owner, old?.pages);
     return c.json({ ok: true });
   });
   const data = new DataControls(db, files, threads);
   const archive = new ChatArchive(db);
+  const mainPages = new MainPages(db, threads, agent.chats, (owner, threadId) =>
+    archive.messages(owner, threadId),
+  );
   app.get("/api/threads/archive", async (c) => c.json(await archive.list(c.get("owner"))));
   app.get("/api/threads/:threadId/archive", async (c) =>
     c.json({ messages: await archive.messages(c.get("owner"), c.req.param("threadId")) }),
   );
-  app.put("/api/threads/:threadId/archive", async (c) =>
-    c.json(await archive.save(c.get("owner"), c.req.param("threadId"), await c.req.json())),
-  );
+  app.put("/api/threads/:threadId/archive", async (c) => {
+    const owner = c.get("owner");
+    const threadId = c.req.param("threadId");
+    const body = await c.req.json();
+    // The app sends the whole chat each time, so this is where the main chat's size is known.
+    const sent = (body as { messages?: unknown } | null)?.messages;
+    if (Array.isArray(sent))
+      await mainPages
+        .noteSize(owner, threadId, Buffer.byteLength(JSON.stringify(sent)))
+        .catch(() => undefined);
+    return c.json(await archive.save(owner, threadId, body));
+  });
   app.post("/api/threads/:threadId/archive/delete", async (c) =>
     c.json(await archive.remove(c.get("owner"), c.req.param("threadId"))),
   );

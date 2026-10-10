@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { forgetChatCopies } from "./chat-rows";
 import { useWorkspace } from "./workspace";
 
 function newThreadId() {
@@ -20,6 +21,8 @@ function newThreadId() {
 export type Selection = { id: string; existing: boolean };
 /** The app's own copy of an older chat, which outlives CopilotKit's retention period. */
 export type SavedChat = { threadId: string; name: string; updatedAt: string };
+/** One of the main chat's earlier pages (the server starts a new one once a page is big). */
+export type MainPage = { threadId: string; endedAt: string; count: number };
 
 // Whether "Other chats" is folded away in the Chats list, remembered on this device.
 const OTHERS_KEY = "neato.otherChatsHidden";
@@ -36,6 +39,10 @@ const ThreadContext = createContext<{
   selection: Selection;
   visited: Selection[];
   mainId: string;
+  /** The main chat's earlier pages, oldest first. */
+  pages: MainPage[];
+  /** Whether a chat is the main chat or one of its earlier pages (never listed as its own). */
+  isMain: (id: string) => boolean;
   loading: boolean;
   error: string;
   retry: () => void;
@@ -74,6 +81,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
   const [selection, setSelection] = useState<Selection>({ id: "local", existing: false });
   const [visited, setVisited] = useState<Selection[]>([]);
   const [mainId, setMainId] = useState("local");
+  const [pages, setPages] = useState<MainPage[]>([]);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -101,11 +109,14 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError("");
     void api
-      .request<{ threadId: string; existing: boolean }>("/api/main-thread")
+      .request<{ threadId: string; existing: boolean; pages?: MainPage[] }>("/api/main-thread")
       .then((main) => {
         if (!active) return;
         const next = { id: main.threadId, existing: main.existing };
         setMainId(next.id);
+        setPages(main.pages ?? []);
+        // An earlier part never opens on its own, so this device's copy of it can go.
+        forgetChatCopies((main.pages ?? []).map((page) => page.threadId));
         setSelection(next);
         setVisited([next]);
         setLoading(false);
@@ -117,6 +128,10 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [api, enabled, attempt]);
+  const isMain = useCallback(
+    (id: string) => id === mainId || pages.some((page) => page.threadId === id),
+    [mainId, pages],
+  );
   function forget(id: string) {
     setVisited((items) => items.filter((item) => item.id !== id));
     if (selection.id === id) setSelection({ id: mainId, existing: true });
@@ -136,6 +151,8 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         },
         enabled,
         mainId,
+        pages,
+        isMain,
         visited,
         loading,
         error,

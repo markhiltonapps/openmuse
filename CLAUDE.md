@@ -313,3 +313,13 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Base images come from `mirror.gcr.io`:** Docker Hub turns Railway's shared builders away
   with 429 Too Many Requests, and retrying doesn't help. `infra/*.Dockerfile` take Node and Caddy
   from Google's mirror (`mirror.gcr.io/library/<image>`); do the same for any new image.
+- **The main chat is kept in parts (main-pages.ts):** past ~1 MB it starts a new CopilotKit thread on
+  the next open; earlier parts are saved whole in "main-pages", hidden from the Chats list
+  (`isMain`), summarized for the agent and searched by search_earlier_chat. Anything that walks
+  "the main chat" (export, reset, a call's snapshot) must include the parts.
+- **Chat rows redraw by signature:** CopilotKit may update a message object in place while it
+  streams, so `MessageRow` (chat-rows.tsx) compares a text signature (words, tool-call argument
+  lengths, result lengths), not the object. Pass it stable callbacks, or every row redraws.
+- **Opening a chat:** history replays piece by piece from CopilotKit's cloud (not in Railway's
+  logs). Show the device copy or a loading line until the replay is done (`historyDone`), and
+  don't count the replay as replying.

@@ -1,0 +1,76 @@
+Claude working session — 2026-10-10 (started late on Oct 9)
+
+Owner's question: on opening the app, the chat "fills up" for a few seconds and looks
+unfinished; will a long main chat cause problems?
+
+What we found
+- The app's server answers in about a second; the wait is the chat service (CopilotKit
+  Intelligence) replaying the whole chat to the browser piece by piece, straight from its cloud
+  (not in Railway's logs), with the app redrawing every message for every piece, showing the
+  new-chat welcome screen meanwhile, and old cards each fetching data.
+- Measured (new log line "Main chat size …", once an hour per person): the owner's main chat was
+  505 messages (59 theirs, 139 replies, 196 tool results), 1.8 MB, already summarized; backup
+  copy 400. Neddy's own context stays small (summaries), but every open downloads and every send
+  uploads the whole chat; sends would fail at the 12 MB body limit (~350 more of their
+  messages at that pace) and the backup copy stops at 5,000 messages.
+
+Owner's decisions
+- Both fixes. Main chat turns a new part by size (~1 MB); earlier parts via a button at the top.
+
+Built (committed locally, not pushed)
+- Server, apps/server/src/main-pages.ts:
+  - The archive save (the app sends the whole chat after each turn) and the size log mark the main
+    chat once it passes 1 MB; the next GET /api/main-thread saves the finished part whole
+    ("main-pages"), starts a fresh CopilotKit thread and returns {pages}.
+  - A summary of everything up to the end of the part is written in the background (the chat's own
+    summary + its unsummarized tail + the previous part's summary; falls back to the newest part
+    that has one).
+  - The chat turn gets that summary ("the main chat's older parts"), and search_earlier_chat
+    searches every earlier part, newest first, one at a time.
+  - GET /api/main-thread/pages/:id returns a part (deleted messages left out).
+  - Resetting the main chat deletes every part.
+  - A call's snapshot includes the end of the last part when the current one is short.
+- App:
+  - chat-rows.tsx: MessageRow (each message drawn again only when its words, cards or buttons
+    change; compares a text signature since CopilotKit may update messages in place), SceneLabel,
+    EarlierDivider, and this device's copy of each chat's last ~30 messages (≤400 KB, 5 most recent
+    chats; dropped for earlier parts and on sign-out).
+  - chat.tsx:
+    - Opens on the device copy (read-only) or a "Loading your conversation…" pill while the
+      history replays; the replay no longer counts as replying (no "Thinking…" bubble or stop
+      button).
+    - Only the latest 40 messages are drawn; "Show earlier messages" adds 40 (and, once all are
+      drawn, loads the previous part), keeping the messages on screen in place.
+    - "Continued Oct 8" between parts; "Start of your conversation" when nothing is older.
+    - A short new part waits for the end of the previous one, so they appear together.
+    - An always-mounted hidden status line announces loading and each tap.
+  - assistant-response.tsx: memoized; a fixed plugins list stops every reply being re-parsed on
+    each redraw.
+  - Sandbox and approval cards from history no longer each reload the whole workspace.
+  - threads.tsx/chats-ui.tsx: earlier parts never show as separate chats.
+- Help: topic "past-chats" explains Show earlier messages and the parts ("Continued Oct 8").
+
+Design division: visual (2 rounds + 1 fix), usability (2 rounds), copy (2 rounds), all signed off.
+
+Tests
+- New tests/main-pages.test.ts (turning a part, keeping it whole, summary chain, search, clear).
+- Full suite 514/514; Biome clean; app, server and worker tsc clean.
+- Local browser checks (mocked chat, 390×844, plain, city and sunset looks):
+  - loading line, then the latest 40 messages;
+  - "Show earlier messages" keeps the place (0 px shift);
+  - the device copy shows at once on reload;
+  - a short part and its earlier part appear in the same frame.
+
+Also seen
+- Oct 9, 22:48: a live call failed with OpenAI "insufficient_quota / no credits remaining"; voice
+  calls need credits added in the OpenAI billing settings (owner told).
+- Oct 9: Docker Hub 429s broke builds; base images now come from mirror.gcr.io (deployed).
+
+Known issues / pending
+- The owner's current main chat (1.8 MB) will start its first new part on the second open after
+  this deploy (the first open measures it).
+- WebKit (iPhone): when the live list replaces the device copy while someone is scrolled up, up
+  to 10 messages can appear above them; check on an iPhone after deploy.
+- Messages typed in a second, still-open tab on the old part after a turn stay in that part.
+- Neddy's first reply right after a new part starts may come before that part's summary is
+  written (it uses the previous summary and search meanwhile).

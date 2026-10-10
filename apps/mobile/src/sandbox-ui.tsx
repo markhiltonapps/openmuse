@@ -1,7 +1,8 @@
 import { FileText, SquareTerminal } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { z } from "zod";
+import { BrowserRunContext } from "./browser-tool-card";
 import { Button, colors, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -30,10 +31,11 @@ export function SandboxCard({ result, loading }: { result: unknown; loading: boo
   const [cleared, setCleared] = useState(false);
   const run = parsed(result);
   const made = run?.files.length ?? 0;
-  // Files it saved appear in Files straight away.
+  // Files it saved appear in Files straight away (a run drawn again from history already did).
+  const { fresh } = useContext(BrowserRunContext);
   useEffect(() => {
-    if (made) void refresh().catch(() => undefined);
-  }, [made, refresh]);
+    if (made && fresh) void refresh().catch(() => undefined);
+  }, [made, fresh, refresh]);
   if (!loading && !run) return null;
   return (
     <View

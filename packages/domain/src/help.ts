@@ -415,9 +415,22 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "Just ask: {agent} searches your past conversations and long chats it summed up.",
+      "A chat opens on its latest messages. To read further back, scroll to the top and tap **Show earlier messages**. Keep tapping to go as far back as you like.",
+      "The main chat never runs out of room. As it grows, it quietly starts a fresh part so it stays quick to open, and a line like “Continued Oct 8” shows where each part began. {agent} remembers what came before, and nothing is lost.",
       "To bring in ChatGPT or Claude chats, see “Bring your ChatGPT or Claude history”.",
     ],
-    keywords: ["search", "history", "earlier", "old chat", "remember", "chatgpt", "claude"],
+    keywords: [
+      "search",
+      "history",
+      "earlier",
+      "old chat",
+      "remember",
+      "chatgpt",
+      "claude",
+      "scroll back",
+      "show earlier",
+      "older messages",
+    ],
     related: ["import-chatgpt"],
   },
   {
