@@ -4,8 +4,10 @@ import {
   CalendarDays,
   Check,
   CheckCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   FileText,
   Globe2,
@@ -1367,6 +1369,14 @@ export function ActivityScreen() {
   const [filter, setFilter] = useState("all");
   const pending = w.actions.filter((a) => a.status === "awaiting_review");
   // Archived receipts (cleared, or a week old) stay out of the list; they're kept on the server.
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  /** How many entries older than two weeks are shown (30 more each tap). */
+  const [showOlder, setShowOlder] = useState(0);
+  // Newest first; the last two weeks unless they ask for older ones.
+  const timeline = [...w.activity].sort((a, b) => b.date.localeCompare(a.date));
+  const twoWeeksAgo = Date.now() - 14 * 86_400_000;
+  const recent = timeline.filter((a) => Date.parse(a.date) >= twoWeeksAgo);
+  const shownTimeline = timeline.slice(0, recent.length + showOlder);
   const actions = w.actions.filter(
     (a) => !a.archivedAt && (filter === "all" || a.status === "awaiting_review"),
   );
@@ -1428,45 +1438,78 @@ export function ActivityScreen() {
         </Card>
       )}
       {filter === "all" && (
+        // The full record of what was done is kept; only the last two weeks are shown, and the
+        // card is folded until opened.
         <Card>
-          <SectionHeading title="Workspace timeline" />
-          {w.activity.length ? (
-            w.activity.map((a, i) => (
-              <View
-                key={a.id}
-                style={[
-                  s.row,
-                  {
-                    alignItems: "flex-start",
-                    gap: 17,
-                    paddingVertical: 18,
-                    borderTopWidth: i ? 1 : 0,
-                    borderTopColor: colors.line,
-                  },
-                ]}
-              >
-                <View
-                  style={[s.iconBox, { height: 34, width: 34, backgroundColor: colors.canvas }]}
-                >
-                  <Clock3 size={16} color={colors.muted} />
-                </View>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={s.text}>{a.title}</Text>
-                  <Text style={s.muted}>{resultSummary(a.detail)}</Text>
-                  <Text style={s.small}>
-                    {dateLabel(a.date)} · {timeLabel(a.date)}
-                  </Text>
-                </View>
-                <Chip>{a.status}</Chip>
-              </View>
-            ))
-          ) : (
-            <Empty
-              icon={Clock3}
-              title="The beginning of something lighter"
-              detail="Your actions and their results will be recorded here."
-            />
-          )}
+          <Pressable
+            accessibilityRole="button"
+            aria-expanded={timelineOpen}
+            onPress={() => setTimelineOpen((open) => !open)}
+            style={[s.row, { gap: 10, minHeight: 44, alignItems: "center" }]}
+          >
+            <Text style={[s.heading, { flex: 1 }]}>
+              Workspace timeline
+              {w.activity.length ? ` · ${w.activity.length}` : ""}
+            </Text>
+            {/* Down when folded, up when open: it opens here, not on another page. */}
+            {timelineOpen ? (
+              <ChevronUp size={18} color={colors.muted} />
+            ) : (
+              <ChevronDown size={18} color={colors.muted} />
+            )}
+          </Pressable>
+          {timelineOpen &&
+            (timeline.length ? (
+              <>
+                {shownTimeline.map((a, i) => (
+                  <View
+                    key={a.id}
+                    style={[
+                      s.row,
+                      {
+                        alignItems: "flex-start",
+                        gap: 17,
+                        paddingVertical: 18,
+                        borderTopWidth: i ? 1 : 0,
+                        borderTopColor: colors.line,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[s.iconBox, { height: 34, width: 34, backgroundColor: colors.canvas }]}
+                    >
+                      <Clock3 size={16} color={colors.muted} />
+                    </View>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <Text style={s.text}>{a.title}</Text>
+                      <Text style={s.muted}>{resultSummary(a.detail)}</Text>
+                      <Text style={s.small}>
+                        {dateLabel(a.date)} · {timeLabel(a.date)}
+                      </Text>
+                    </View>
+                    <Chip>{a.status.replace(/_/g, " ")}</Chip>
+                  </View>
+                ))}
+                {!recent.length && !showOlder && (
+                  <Text style={s.muted}>Nothing in the last 2 weeks.</Text>
+                )}
+                {shownTimeline.length < timeline.length && (
+                  <Button
+                    small
+                    style={{ alignSelf: "flex-start" }}
+                    onPress={() => setShowOlder((n) => n + 30)}
+                  >
+                    {`Show older · ${timeline.length - shownTimeline.length}`}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Empty
+                icon={Clock3}
+                title="The beginning of something lighter"
+                detail="Your actions and their results will be recorded here."
+              />
+            ))}
         </Card>
       )}
       {filter === "review" && !actions.length && (

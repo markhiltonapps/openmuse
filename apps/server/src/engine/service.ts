@@ -594,6 +594,37 @@ export class AgentService {
       }
     return { jobs: batch.jobs, receipts: batch.receipts, stopped: batch.stopped, routinesOn };
   }
+  /**
+   * Deletes archived jobs for good (all of them, or chosen ones), with their run history. A job a
+   * Space still shows as a routine's latest result is kept. Can't be undone.
+   */
+  async deleteArchived(owner: string, ids?: string[]) {
+    const shown = new Set(
+      (await this.db.list<Routine>(owner, "routines")).map((routine) => routine.lastTaskId),
+    );
+    const doomed: string[] = [];
+    const kept: string[] = [];
+    for (const task of await this.db.list<AgentTask>(owner, "tasks")) {
+      if (!task.archivedAt || (ids && !ids.includes(task.id))) continue;
+      if (shown.has(task.id)) kept.push(task.id);
+      else doomed.push(task.id);
+    }
+    if (doomed.length) {
+      const gone = new Set(doomed);
+      for (const event of await this.db.list<RunEvent>(owner, "run-events"))
+        if (gone.has(event.taskId)) await this.db.remove(owner, "run-events", event.id);
+      for (const id of doomed) await this.db.remove(owner, "tasks", id);
+      // Undo can't bring back what's gone.
+      const batch = await this.db.get<TidyBatch>(owner, "agent-settings", "last-tidy");
+      if (batch)
+        await this.db.put(owner, "agent-settings", {
+          ...batch,
+          jobs: batch.jobs.filter((id) => !gone.has(id)),
+          stopped: batch.stopped.filter((id) => !gone.has(id)),
+        });
+    }
+    return { deleted: doomed, kept };
+  }
   /** A job they no longer want: stopped if unfinished, then archived. */
   async letGo(owner: string, id: string) {
     await this.getTask(owner, id);
@@ -613,7 +644,8 @@ export class AgentService {
       | "let_go_waiting"
       | "restore"
       | "undo"
-      | "turn_off_routine",
+      | "turn_off_routine"
+      | "delete_archived",
     name?: string,
     all = false,
   ) {
@@ -663,6 +695,18 @@ export class AgentService {
           : {}),
       };
     }
+    if (what === "delete_archived" && !name?.trim()) {
+      // The whole archive only when they clearly said so: a dropped name must never empty it.
+      if (!all) return { error: "Ask which job, or whether they mean the whole archive." };
+      const { deleted, kept } = await this.deleteArchived(owner);
+      if (!deleted.length && !kept.length) return { error: "Nothing is archived." };
+      return {
+        deletedForGood: deleted.length,
+        ...(kept.length
+          ? { kept: titles(kept), note: "Kept because a Space still shows them." }
+          : {}),
+      };
+    }
     if (what === "let_go_waiting") {
       const waiting = tasks.filter(
         (task) => !task.archivedAt && ["waiting_input", "waiting_approval"].includes(task.status),
@@ -695,7 +739,7 @@ export class AgentService {
       };
     }
     const pool = tasks.filter((task) =>
-      what === "restore"
+      what === "restore" || what === "delete_archived"
         ? task.archivedAt
         : !task.archivedAt && (what === "let_go" || terminal.has(task.status)),
     );
@@ -714,7 +758,7 @@ export class AgentService {
             note: "Not finished, so it can’t just be archived. Ask whether to stop it (let_go).",
           }
         : {
-            error: `No ${what === "restore" ? "archived " : what === "archive" ? "finished " : ""}job matches “${name}”.`,
+            error: `No ${what === "restore" || what === "delete_archived" ? "archived " : what === "archive" ? "finished " : ""}job matches “${name}”.`,
           };
     }
     if (matches.length > 1 && !all)
@@ -724,6 +768,15 @@ export class AgentService {
         note: "Several jobs match. Ask which one (the latest?), or whether they mean all of them.",
       };
     const ids = matches.map((task) => task.id);
+    if (what === "delete_archived") {
+      const { deleted, kept } = await this.deleteArchived(owner, ids);
+      return {
+        deletedForGood: titles(deleted),
+        ...(kept.length
+          ? { kept: titles(kept), note: "Kept because a Space still shows them." }
+          : {}),
+      };
+    }
     if (what === "restore") {
       await this.restore(owner, ids);
       return { restored: titles(ids) };

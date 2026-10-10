@@ -211,4 +211,39 @@ Also today
 Known issues / pending
 - Undo covers the last tidy only (one level).
 - "Show more · N left" counts a job whose card became an Undo line.
-- Push waits for the owner's "push it" (both this and the phone-calls plan commit).
+- Pushed after the owner's "push it" (deployed 16:17 UTC); owner: "the list is way shorter now".
+
+Deleting archived jobs and a shorter Workspace timeline (follow-up, committed locally)
+Owner asked whether the workspace archive is needed. Answers: it's the Workspace timeline; keep
+it but shorten it; archived jobs can be deleted for good, each with a confirm.
+- Server (engine/service.ts deleteArchived): deletes archived jobs and their run events; keeps a
+  job a Space still shows (a routine's latest run, lastTaskId); drops deleted ids from the Undo
+  batch; returns {deleted, kept}.
+  - POST /tasks/delete-archived needs a list of ids (422 without), so the app deletes exactly
+    the jobs its confirm counted.
+  - tidy_activity gains delete_archived: a named job, or the whole archive only with all:true;
+    a vague request gets "Ask which job, or whether they mean the whole archive."
+- App (agent-ui.tsx, Archived view): Empty archive (asks first, inside a card) and Delete under
+  each archived job (asks first, focus on "Keep it"). A job a Space still shows has no Delete
+  and says why. Wording counts: "Delete for good" / "Delete N for good" / "Delete all for good",
+  "Keep it" / "Keep them"; never "Deleted 0 jobs".
+- Activity (screens.tsx): Workspace timeline is folded (a header with a count, opens on tap),
+  shows the last 2 weeks, "Show older · N" adds 30 at a time; status chips read "awaiting
+  review" rather than "awaiting_review".
+- Help: Clear out Activity says how to delete for good; Activity topic mentions the timeline.
+  App guide line updated. Help pictures unchanged (the Activity shot ends above the timeline).
+
+Design division: visual (2 rounds), usability (2 rounds), copy (3 rounds), all signed off.
+
+Tests
+- New test: archived jobs deleted for good, except one a Space shows; Undo after a delete;
+  delete by name; the vague voice request; the route refusing a request without ids.
+- Biome clean; app, server and worker tsc clean; pnpm test 519/519.
+- Local browser checks (city, plain light, plain dark, desktop): folded and open timeline,
+  per-job delete confirm and focus, Empty archive confirm, deleted message.
+
+Known issues / pending
+- Deleting can't be undone (by design; the confirm says so).
+- Push waits for the owner's "push it".
+- The owner's request for a self-hosted voice stack (LiveKit, Whisper, Llama, Kokoro): plan
+  only, in docs/LOCAL-VOICE-PLAN.md.

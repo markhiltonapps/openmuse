@@ -57,6 +57,13 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     return c.json(await service.archive(c.get("owner"), ids, stop ?? false, routinesOff));
   });
   app.post("/tasks/undo", async (c) => c.json(await service.undoTidy(c.get("owner"))));
+  // For good: archived jobs only, and only the ones named (the app sends what it showed).
+  app.post("/tasks/delete-archived", async (c) => {
+    const { ids } = z
+      .object({ ids: z.array(z.string().max(200)).min(1).max(2000) })
+      .parse(await c.req.json());
+    return c.json(await service.deleteArchived(c.get("owner"), ids));
+  });
   app.post("/tasks/restore", async (c) => {
     const { jobs, receipts } = z
       .object({

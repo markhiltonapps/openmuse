@@ -24,6 +24,7 @@ import {
   Plus,
   RefreshCw,
   Target,
+  Trash2,
   UserRound,
   Users,
   X,
@@ -424,6 +425,8 @@ function ActivityJobs() {
   }>();
   /** A Let go waiting for "yes" on one job. */
   const [confirming, setConfirming] = useState<string>();
+  /** A "delete for good" waiting for "yes": one archived job, or the whole archive. */
+  const [deleting, setDeleting] = useState<string>();
   /** Said to screen readers only, when what happened is already plain to see. */
   const [announce, setAnnounce] = useState("");
   const agent = data?.identity.name || "Neddy";
@@ -432,6 +435,14 @@ function ActivityJobs() {
   const live = all.filter((task) => !task.archivedAt);
   const finished = live.filter((task) => !activeTask(task));
   const archivedView = filter === "Archived";
+  /** Jobs a Space shows as a routine's latest result: they stay until its next run. */
+  const shownBy = new Map(
+    routines
+      .filter((routine) => routine.lastTaskId)
+      .map((routine) => [routine.lastTaskId, routine]),
+  );
+  const deletable = all.filter((task) => task.archivedAt && !shownBy.has(task.id));
+  const keptInArchive = all.filter((task) => task.archivedAt && shownBy.has(task.id)).length;
   const tasks = archivedView
     ? all
         .filter((task) => task.archivedAt)
@@ -454,6 +465,7 @@ function ActivityJobs() {
 
   function choose(next: JobFilter) {
     setFilter(next);
+    setDeleting(undefined);
     setSelecting(false);
     setAnnounce("");
     setChosen([]);
@@ -524,6 +536,25 @@ function ActivityJobs() {
           : `Stopped “${task.title}”. It’s under Archived.`,
         true,
       );
+    });
+  /** Deletes archived jobs for good: one, or exactly the ones counted in the confirm. */
+  const deleteForGood = (task?: AgentTask) =>
+    run(task ? `one-${task.id}` : "delete-all", async () => {
+      const ids = task ? [task.id] : deletable.map((item) => item.id);
+      const result = await mutate<{ deleted: string[]; kept: string[] }>("/tasks/delete-archived", {
+        ids,
+      });
+      setDeleting(undefined);
+      const done = result.deleted.length;
+      if (task && done) sayHere(task, `Deleted “${task.title}” for good.`, false);
+      else if (task) sayTop(`Kept “${task.title}”: a Space still shows it.`, false);
+      else
+        sayTop(
+          done
+            ? `Deleted ${jobs(done)} for good.`
+            : "Nothing was deleted: a Space still shows these.",
+          false,
+        );
     });
   const restoreOne = (task: AgentTask) =>
     run(`one-${task.id}`, async () => {
@@ -644,6 +675,20 @@ function ActivityJobs() {
             </>
           ) : (
             <>
+              {archivedView && (
+                <Button
+                  small
+                  danger
+                  icon={Trash2}
+                  disabled={!deletable.length}
+                  onPress={() => {
+                    setDeleting("all");
+                    focusLater("keep-archive");
+                  }}
+                >
+                  Empty archive
+                </Button>
+              )}
               {!archivedView && filter !== "In progress" && (
                 <Button
                   small
@@ -661,6 +706,7 @@ function ActivityJobs() {
                 onPress={() => {
                   setSelecting(true);
                   setConfirming(undefined);
+                  setDeleting(undefined);
                   setPlaced(undefined);
                   setSaid("");
                   setCanUndo(false);
@@ -671,6 +717,49 @@ function ActivityJobs() {
             </>
           )}
         </View>
+      )}
+      {deleting === "all" && archivedView && (
+        // In a card of its own, like the per-job confirm, so it reads as one thing in every look.
+        <Card style={{ gap: 10, borderRadius: 22, padding: 16, backgroundColor: colors.subtle }}>
+          <Text style={line}>
+            {`${
+              deletable.length === 1
+                ? keptInArchive
+                  ? "Delete 1 archived job for good? It can’t be brought back."
+                  : "Delete the archived job for good? It can’t be brought back."
+                : `Delete ${deletable.length} archived jobs for good? They can’t be brought back.`
+            }${
+              keptInArchive
+                ? keptInArchive === 1
+                  ? " One that a Space still shows will stay."
+                  : ` ${keptInArchive} that a Space still shows will stay.`
+                : ""
+            }`}
+          </Text>
+          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+            <Button
+              small
+              danger
+              style={{ minHeight: 44, backgroundColor: colors.surface }}
+              busy={busy === "delete-all"}
+              onPress={() => void deleteForGood()}
+            >
+              {deletable.length === 1
+                ? "Delete for good"
+                : keptInArchive
+                  ? `Delete ${deletable.length} for good`
+                  : "Delete all for good"}
+            </Button>
+            <Button
+              small
+              nativeID="keep-archive"
+              style={{ minHeight: 44, backgroundColor: colors.surface }}
+              onPress={() => setDeleting(undefined)}
+            >
+              {deletable.length === 1 ? "Keep it" : "Keep them"}
+            </Button>
+          </View>
+        </Card>
       )}
       {selecting && (
         // Kept the same height the whole time, so ticking a job never moves the list.
@@ -829,47 +918,94 @@ function ActivityJobs() {
                     </Button>
                   </View>
                 </View>
+              ) : deleting === task.id ? (
+                <View style={{ gap: 10 }}>
+                  <Text style={line}>Delete this job for good? It can’t be brought back.</Text>
+                  <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                    <Button
+                      small
+                      danger
+                      style={footerButton}
+                      busy={busy === `one-${task.id}`}
+                      onPress={() => void deleteForGood(task)}
+                    >
+                      Delete for good
+                    </Button>
+                    <Button
+                      small
+                      nativeID={`keep-${task.id}`}
+                      style={footerButton}
+                      onPress={() => setDeleting(undefined)}
+                    >
+                      Keep it
+                    </Button>
+                  </View>
+                </View>
               ) : (
-                <View style={[s.row, { gap: 8 }]}>
-                  {archivedView ? (
-                    <Button
-                      small
-                      icon={ArchiveRestore}
-                      style={footerButton}
-                      busy={busy === `one-${task.id}`}
-                      nativeID={`act-${task.id}`}
-                      accessibilityLabel={`Restore ${task.title}`}
-                      onPress={() => void restoreOne(task)}
-                    >
-                      Restore
-                    </Button>
-                  ) : unfinished ? (
-                    <Button
-                      small
-                      icon={X}
-                      style={footerButton}
-                      nativeID={`act-${task.id}`}
-                      accessibilityLabel={`Let go of ${task.title}`}
-                      onPress={() => {
-                        setConfirming(task.id);
-                        focusLater(`keep-${task.id}`);
-                      }}
-                    >
-                      Let go
-                    </Button>
-                  ) : (
-                    <Button
-                      small
-                      icon={Archive}
-                      style={footerButton}
-                      busy={busy === `one-${task.id}`}
-                      nativeID={`act-${task.id}`}
-                      accessibilityLabel={`Archive ${task.title}`}
-                      onPress={() => void archiveOne(task)}
-                    >
-                      Archive
-                    </Button>
+                <View style={{ gap: 8 }}>
+                  {archivedView && shownBy.has(task.id) && (
+                    <Text style={[line, { color: colors.mutedStrong }]}>
+                      {`A Space shows this as the latest “${shownBy.get(task.id)?.title}” run, so it stays until the next one.`}
+                    </Text>
                   )}
+                  <View style={[s.row, { gap: 8 }]}>
+                    {archivedView ? (
+                      <>
+                        <Button
+                          small
+                          icon={ArchiveRestore}
+                          style={footerButton}
+                          busy={busy === `one-${task.id}`}
+                          nativeID={`act-${task.id}`}
+                          accessibilityLabel={`Restore ${task.title}`}
+                          onPress={() => void restoreOne(task)}
+                        >
+                          Restore
+                        </Button>
+                        {shownBy.has(task.id) ? null : (
+                          <Button
+                            small
+                            danger
+                            icon={Trash2}
+                            style={footerButton}
+                            accessibilityLabel={`Delete ${task.title}`}
+                            onPress={() => {
+                              setDeleting(task.id);
+                              focusLater(`keep-${task.id}`);
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </>
+                    ) : unfinished ? (
+                      <Button
+                        small
+                        icon={X}
+                        style={footerButton}
+                        nativeID={`act-${task.id}`}
+                        accessibilityLabel={`Let go of ${task.title}`}
+                        onPress={() => {
+                          setConfirming(task.id);
+                          focusLater(`keep-${task.id}`);
+                        }}
+                      >
+                        Let go
+                      </Button>
+                    ) : (
+                      <Button
+                        small
+                        icon={Archive}
+                        style={footerButton}
+                        busy={busy === `one-${task.id}`}
+                        nativeID={`act-${task.id}`}
+                        accessibilityLabel={`Archive ${task.title}`}
+                        onPress={() => void archiveOne(task)}
+                      >
+                        Archive
+                      </Button>
+                    )}
+                  </View>
                 </View>
               )
             }

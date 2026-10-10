@@ -804,7 +804,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Open **Activity** in the bottom bar.",
       "Anything waiting for your OK is at the top.",
       "Then your jobs, newest first.",
-      "**Reviews & receipts** lists what was recently approved and done.",
+      "**Reviews & receipts** lists what was recently approved and done. Tap **Workspace timeline** to open the record of everything done in your accounts (the last 2 weeks, with **Show older**).",
       "To clear the list, tap **Clear finished**, or **Archive** under a job (see Clear out Activity).",
     ],
     keywords: ["activity", "jobs", "receipts", "history", "log", "approvals"],
@@ -821,9 +821,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       "To clear one job, tap **Archive** under it. A job that isn’t finished has **Let go** instead: {agent} stops it, and nothing more is done or sent. For a routine’s run, like a daily check-in, you can turn the routine off too.",
       "To clear several, tap **Select**, tap the jobs (or **Select all**), then **Archive** (**Stop and archive** if one isn’t finished).",
       "Archived jobs are under **Archived**, next to Finished. Tap **Restore** to bring one back, or **Select** there to bring back several.",
+      "To delete archived jobs for good, tap **Delete** under one, or **Empty archive** for all of them. Each asks first, and deleting can’t be undone. A job a Space still shows stays until that routine runs again.",
     ],
     body: [
-      "Nothing archived is lost: you can still open it from the chat or a Space, and {agent} can still find it. Finished jobs archive themselves after 7 days, so the list stays short on its own.",
+      "Nothing archived is lost unless you delete it for good: you can still open it from the chat or a Space, and {agent} can still find it. Finished jobs archive themselves after 7 days, so the list stays short on its own.",
     ],
     say: [
       "Clear my finished jobs.",

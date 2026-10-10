@@ -511,3 +511,51 @@ test("Activity tidy: Undo brings back the whole batch, restored jobs stay, routi
   };
   assert.deepEqual(waitingAll.stoppedAndArchived, ["Price watch"]);
 });
+
+test("Archived jobs can be deleted for good, except one a Space still shows", async () => {
+  const owner = "tidy-owner-3";
+  const agent = server.agent;
+  const make = async (title: string) => {
+    const task = await agent.createTask(owner, { prompt: title });
+    await db.compareAndSwap(owner, "tasks", task.id, {}, { title, status: "succeeded" });
+    return task.id;
+  };
+  const old = await make("Old brief");
+  const live = await make("Today's brief");
+  const digest = await make("Social media digest · Oct 9");
+  const routine = await agent.createRoutine(owner, {
+    title: "Social media digest",
+    prompt: "Sum up my social media",
+    time: "09:00",
+    days: [1],
+    enabled: true,
+  });
+  await db.compareAndSwap(owner, "routines", routine.id, {}, { lastTaskId: digest });
+  await agent.archive(owner, [old, digest]);
+  // Only archived jobs go; the digest a Space shows stays.
+  const result = await agent.deleteArchived(owner);
+  assert.deepEqual(result.deleted, [old]);
+  assert.deepEqual(result.kept, [digest]);
+  assert.equal(await db.get(owner, "tasks", old), null);
+  assert.ok(await db.get(owner, "tasks", live));
+  assert.ok(await db.get(owner, "tasks", digest));
+  // Undo can't bring back what's gone.
+  assert.deepEqual((await agent.undoTidy(owner)).jobs, [digest]);
+  // By name, from the chat or a call.
+  await agent.archive(owner, [live]);
+  const byName = (await agent.tidyByName(owner, "delete_archived", "today's brief")) as {
+    deletedForGood?: string[];
+  };
+  assert.deepEqual(byName.deletedForGood, ["Today's brief"]);
+  // By voice, no name and no "all" deletes nothing.
+  await agent.archive(owner, [await make("Another brief")]);
+  const vague = (await agent.tidyByName(owner, "delete_archived")) as { error?: string };
+  assert.match(String(vague.error), /whole archive/);
+  // The route only deletes this person's archived jobs, and only ones it's told about.
+  assert.equal((await request("/tasks/delete-archived", {})).status, 422);
+  const mine = await read<AgentTask>("/tasks", { prompt: "Mine" }, 201);
+  assert.deepEqual(
+    (await read<{ deleted: string[] }>("/tasks/delete-archived", { ids: [mine.id] })).deleted,
+    [],
+  );
+});

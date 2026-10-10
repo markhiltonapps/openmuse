@@ -348,4 +348,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   ages things (the weekly Activity tidy) is off there. A test run that archives or stops sample
   jobs changes `${DATA_DIR}`; copy it before such runs and put it back (while the server is
   stopped), or the Help shots lose their jobs.
-
+- **Deleting for good:** a destructive route takes the exact ids the confirm counted (422
+  without), never "everything archived" at the time the request lands, so a job that arrived
+  between the count and the tap isn't deleted unseen. By voice, the whole lot only with an
+  explicit "all"; otherwise the agent asks which.
