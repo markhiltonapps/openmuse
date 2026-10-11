@@ -155,3 +155,15 @@ Pending
   searches (Inworld's descriptions say male/female). The start log prints "Inworld describes X
   as: …" for each new pick, to write our own line for any empty one (Sarah first: she's on
   everyone's card). Design division: visual, usability and copy all signed off. pnpm test 538.
+
+9. After the deploy (cc364dc), checked the voice service's start-up log on Railway
+   - "usual voice Sarah"; Inworld has 152 English voices; 12 of ours offered.
+   - Not found at Inworld: Brook and Elizabeth (both hidden from the list automatically).
+     Brook may be spelled differently there; the owner can search the admin's All Inworld
+     voices browser for it.
+   - No "Listening sounds … made plainly" warning: the TTS-2 steered murmurs were made.
+   - A call on Piper worked (hand-offs too). aioice logs "STUN transaction failed (401)" on
+     TURN channel binds during calls; the call still carried audio, so noted, not fixed.
+   - Inworld's own descriptions for Mia and Riley talk about "adolescent characters" and
+     "animated storytelling", so we wrote our own short ones for Sarah, Piper, Mia, Riley and
+     Jessica (held locally until "push it"). Voice tests pass.

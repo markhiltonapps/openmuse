@@ -25,13 +25,13 @@ from .config import Config
 # and whether it's a man's or a woman's voice, so "a man's voice" can be matched when said); an
 # empty one is filled from Inworld's own description.
 CHOICES: tuple[dict[str, str], ...] = (
-    {"id": "Sarah", "description": ""},
+    {"id": "Sarah", "description": "A woman’s voice, quick and curious"},
     {"id": "Olivia", "description": "A woman’s voice, bright and British"},
-    {"id": "Piper", "description": ""},
+    {"id": "Piper", "description": "A woman’s voice, bright and upbeat"},
     {"id": "Brook", "description": ""},
-    {"id": "Mia", "description": ""},
-    {"id": "Riley", "description": ""},
-    {"id": "Jessica", "description": ""},
+    {"id": "Mia", "description": "A young woman’s voice, lively and expressive"},
+    {"id": "Riley", "description": "A young woman’s voice, light and playful"},
+    {"id": "Jessica", "description": "A woman’s voice, warm and encouraging"},
     {"id": "Ashley", "description": "A woman’s voice, warm and natural"},
     {"id": "Deborah", "description": "A woman’s voice, gentle and elegant"},
     {"id": "Elizabeth", "description": "A woman’s voice, clear and steady"},
