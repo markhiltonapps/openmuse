@@ -83,7 +83,10 @@ def make_stt(config: Config):
         return FakeSTT()
     from pipecat.services.soniox.stt import SonioxSTTService
 
-    return SonioxSTTService(api_key=config.soniox_key, model=config.soniox_model)
+    return SonioxSTTService(
+        api_key=config.soniox_key,
+        settings=SonioxSTTService.Settings(model=config.soniox_model),
+    )
 
 
 def make_llm(config: Config, instructions: str):

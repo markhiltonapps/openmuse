@@ -4,6 +4,8 @@ It takes any Pipecat transport, so the browser's WebRTC today and a phone line (
 stream) later run the same pipeline; only the transport and how it's started differ.
 """
 
+import asyncio
+
 import aiohttp
 from loguru import logger
 from pipecat.adapters.schemas.function_schema import FunctionSchema
@@ -212,6 +214,23 @@ async def run_call(call: Call, transport: BaseTransport, config: Config) -> None
             await worker.cancel()
 
         call.speak, call.note, call.stop = speak, note, stop
+
+        # A service that can't do its job (out of credit, a key turned down) would leave the
+        # call deaf or silent: say so and hang up, so they aren't talking to no one.
+        @worker.event_handler("on_pipeline_error")
+        async def on_error(_worker, frame):
+            processor = getattr(frame, "processor", None)
+            if processor is None or processor.is_usable or call.ended:
+                return
+            logger.error(f"Voice call {call.id}: {processor} stopped working: {frame.error}")
+            try:
+                await speak(
+                    "Sorry, something's gone wrong on my side, so I have to hang up. "
+                    "Try again in a bit, or type to me."
+                )
+                await asyncio.sleep(4)
+            finally:
+                await call.end("unavailable")
 
         @transport.event_handler("on_client_connected")
         async def on_connected(_transport, _client):

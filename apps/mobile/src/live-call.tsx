@@ -57,6 +57,7 @@ export const ENDED = (name: string): Record<string, string> => ({
   replaced: `You started talking with ${name} somewhere else, so this call ended.`,
   server_restart: `${name} had to restart, so the call ended. Talk again to carry on.`,
   limit: `This month’s live talk minutes are used up. You can still type to ${name}.`,
+  unavailable: `Something went wrong on ${name}’s side, so the call ended. Try again in a bit, or type instead.`,
 });
 /** A browser's reason a call couldn't start, as what to do about it. */
 export function startFailure(error: unknown, name: string) {
