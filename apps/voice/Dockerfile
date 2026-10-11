@@ -7,8 +7,9 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
 COPY openmuse_voice ./openmuse_voice
-RUN useradd --create-home voice && chown -R voice /app
-USER voice
+# "voice" is already a system group in Debian, so the user has its own name.
+RUN useradd --create-home --uid 10001 openmuse && chown -R openmuse /app
+USER openmuse
 # "::" so Railway's private network (IPv6) reaches it; no public domain is needed.
 ENV HOST=:: PORT=8080 VOICE_WORKERS=2 VOICE_CALLS_PER_WORKER=4
 EXPOSE 8080

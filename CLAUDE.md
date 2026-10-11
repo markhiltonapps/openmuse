@@ -352,6 +352,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   without), never "everything archived" at the time the request lands, so a job that arrived
   between the count and the tap isn't deleted unseen. By voice, the whole lot only with an
   explicit "all"; otherwise the agent asks which.
+- **Container users:** Debian images already have system groups such as `voice` and `audio`;
+  `useradd <name>` fails (exit 9) when a group has that name. Give a container's user its own
+  name (`openmuse`, uid 10001).
 - **Two live voices (OpenAI's and our own, apps/voice):** ours speaks OpenAI's live protocol, so
   the api runs it as a second `LiveVoice` (pointed at VOICE_SERVICE_URL); never change OpenAI's
   request to suit ours (a test checks it's unchanged). Extras for ours go in `openmuse` in the
