@@ -355,6 +355,12 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Container users:** Debian images already have system groups such as `voice` and `audio`;
   `useradd <name>` fails (exit 9) when a group has that name. Give a container's user its own
   name (`openmuse`, uid 10001).
+- **Claude Haiku 4.5 caches only prompts of 4,096 tokens or more** (others: 512-2,048). Below that,
+  `cache_creation_input_tokens` is silently 0. Pipecat 1.12 also counts Anthropic's input tokens
+  twice (message_start + cumulative message_delta); `_CountOnce` in apps/voice fixes it. Check
+  real usage in Railway's logs before trusting a cost estimate.
+- **The voice service's logs:** Pipecat's DEBUG lines print the whole prompt (personal details)
+  and every word said; keep VOICE_LOG_LEVEL at INFO on Railway.
 - **Two live voices (OpenAI's and our own, apps/voice):** ours speaks OpenAI's live protocol, so
   the api runs it as a second `LiveVoice` (pointed at VOICE_SERVICE_URL); never change OpenAI's
   request to suit ours (a test checks it's unchanged). Extras for ours go in `openmuse` in the

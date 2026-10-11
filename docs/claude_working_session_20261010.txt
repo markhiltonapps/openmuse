@@ -323,3 +323,21 @@ Known issues / pending
   banner for both. No keys were read.
 - The People card doesn't refresh when the admin changes a voice by voice while it's open.
 - Push waits for the owner's "push it".
+
+New voice on Railway (Oct 11, after midnight)
+- Set up on Railway with the owner: a "voice" service (root apps/voice, Inworld, 2 workers),
+  the api's VOICE_SERVICE_URL / VOICE_INTERNAL_TOKEN (a reference to the voice service's),
+  Cloudflare Realtime subscribed ($0 up front, 1,000 GB/month free) and its TURN key. The
+  owner added the four provider keys; I never read them.
+- First build failed: Debian already has a "voice" group; the container user is "openmuse".
+- First call: heard Neddy, Neddy couldn't hear them. Soniox answered 402 "Organization
+  balance exhausted"; the owner topped it up and calls work.
+- Fixes: the voice service logged the whole prompt (address, phone, meals) at DEBUG, now INFO
+  to stdout (VOICE_LOG_LEVEL); a provider that stops working ends the call as "unavailable"
+  with a spoken line and an app message (copy reviewed); Soniox model via its settings.
+- Caching: Pipecat 1.12 counted the prompt twice (message_start + message_delta), so the
+  prompt was really ~2,500 tokens, under Claude Haiku 4.5's 4,096-token caching minimum, and
+  nothing cached. Now: the count is fixed (metering was doubled too), and the voice gets
+  "How this app works" (the app guide + one line per Help topic, ~3,200 tokens) first in its
+  prompt, so it caches and can answer how-to questions itself. Real cost before the fix:
+  thinking ~1.5 c/min (not 3); expected after: ~0.4 c/min. To verify on Railway.

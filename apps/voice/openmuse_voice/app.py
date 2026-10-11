@@ -96,10 +96,12 @@ async def create_session(request: Request):
         return _refused(400, "bad_offer", "No WebRTC offer.")
     max_seconds = extra.get("maxSeconds")
     limit_minutes = extra.get("limitMinutes")
+    reference = extra.get("reference")
     call = Call(
         instructions=str(session.get("instructions") or ""),
         max_seconds=float(max_seconds) if isinstance(max_seconds, (int, float)) else None,
         limit_minutes=float(limit_minutes) if isinstance(limit_minutes, (int, float)) else None,
+        reference=reference if isinstance(reference, str) else "",
         on_end=_forget,
     )
     connection = SmallWebRTCConnection(ice_servers=_ice_servers(extra.get("iceServers")) or None)

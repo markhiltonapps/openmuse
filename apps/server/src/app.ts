@@ -89,6 +89,7 @@ import {
   VoiceComparison,
   voiceAllowance,
   voiceProviderFor,
+  voiceReference,
 } from "./voice-pipecat.ts";
 import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
@@ -404,9 +405,10 @@ export async function createApp(
         socket: voiceComparison.socket(),
         // The audio relay, and the end of their month's minutes.
         extras: async (owner) => {
-          const [iceServers, allowance] = await Promise.all([
+          const [iceServers, allowance, identity] = await Promise.all([
             turnServers(config),
             voiceAllowance(usage, config, owner),
+            db.get<{ name?: string }>(owner, "agent-settings", "identity").catch(() => null),
           ]);
           if (
             allowance.limitMinutes &&
@@ -420,6 +422,7 @@ export async function createApp(
           return {
             openmuse: {
               iceServers,
+              reference: voiceReference(identity?.name?.trim() || "Neddy"),
               ...(allowance.leftSeconds !== undefined && allowance.limitMinutes
                 ? { maxSeconds: allowance.leftSeconds, limitMinutes: allowance.limitMinutes }
                 : {}),

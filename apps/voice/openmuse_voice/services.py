@@ -89,12 +89,39 @@ def make_stt(config: Config):
     )
 
 
+class _CountOnce:
+    """Anthropic's stream gives the input token count twice: in message_start, and again
+    (cumulative) in message_delta. Pipecat 1.12 adds both, doubling the prompt's size and cost;
+    the second is zeroed so it's counted once."""
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        event = await self._stream.__anext__()
+        usage = getattr(event, "usage", None) if event.type == "message_delta" else None
+        if usage is not None and getattr(usage, "input_tokens", None):
+            usage.input_tokens = 0
+        return event
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+class _AnthropicLLM(AnthropicLLMService):
+    async def _create_message_stream(self, api_call, params):
+        return _CountOnce(await super()._create_message_stream(api_call, params))
+
+
 def make_llm(config: Config, instructions: str):
     """Claude, with the instructions cached: they're the same for every turn of a call.
 
     A local mock of Anthropic's API can stand in through ANTHROPIC_BASE_URL (the SDK reads it).
     """
-    return AnthropicLLMService(
+    return _AnthropicLLM(
         api_key=config.anthropic_key or "local-mock",
         settings=AnthropicLLMService.Settings(
             model=config.llm_model,

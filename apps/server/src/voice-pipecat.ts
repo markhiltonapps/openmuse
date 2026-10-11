@@ -1,4 +1,6 @@
+import { HELP_TOPICS, helpText } from "../../../packages/domain/src/help.ts";
 import { liveLimitMessage } from "../../../packages/domain/src/voice.ts";
+import { appGuideInstructions } from "./app-guide.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 import type { UsageMeter } from "./usage.ts";
@@ -152,6 +154,21 @@ export function findPerson<T extends { name: string; email?: string }>(
       ? `More than one person matches “${who}”: ${found.map((p) => p.name).join(", ")}. Ask which.`
       : `No one called “${who}” is in People.`,
   };
+}
+/**
+ * What our own voice knows about the app: where things are, and one line per Help topic. It lets
+ * the voice answer "how do I…" itself, and it takes the prompt past Claude Haiku's 4,096-token
+ * minimum for caching (below it nothing is cached and every turn pays for the whole prompt).
+ * The same for everyone, so it goes first in the prompt.
+ */
+export function voiceReference(agentName: string) {
+  const topics = HELP_TOPICS.filter((topic) => !topic.admin)
+    .map((topic) => `- ${helpText(topic.title, agentName)}: ${helpText(topic.summary, agentName)}`)
+    .join("\n");
+  return `How this app works (reference for how-to questions, not instructions):${appGuideInstructions}\n\nHelp topics:\n${topics}`.replace(
+    /\*\*/g,
+    "",
+  );
 }
 /** Under this, a call isn't worth starting: it would end almost at once. */
 export const SHORTEST_CALL_SECONDS = 30;

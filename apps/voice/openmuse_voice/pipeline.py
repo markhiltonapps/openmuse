@@ -50,6 +50,7 @@ VOICE_RULES = """How this voice works:
 - Everything you write is spoken aloud: no lists, markdown, emoji, symbols or links.
 - To hand something off, say a short line such as "One sec" and call the hand_off tool in the same reply. Its answer comes back a little later; if they say something else meanwhile, answer as usual, and when it arrives, tell them briefly in your own words.
 - Don't mention handing off; to them, it's all you.
+- For how to use this app, answer from "How this app works" below when it covers the question; hand off anything it doesn't cover, and anything they want done.
 - Never say you've looked something up or done something unless an answer from hand_off says so."""
 
 HAND_OFF = FunctionSchema(
@@ -142,9 +143,13 @@ async def run_call(call: Call, transport: BaseTransport, config: Config) -> None
     """Runs one call until it ends; `call.stop` ends it from outside."""
     async with aiohttp.ClientSession() as http:
         stt = make_stt(config)
-        # The fixed rules first and this month's minutes last, so more of the prompt is cached.
+        # What's the same for everyone first (rules, how the app works), then this person and
+        # their day, then this month's minutes. Claude Haiku caches only prompts of 4,096 tokens
+        # or more; the reference takes it past that, so each turn after the first is cheap.
         system = "\n\n".join(
-            part for part in (VOICE_RULES, call.instructions, call.allowance_note()) if part
+            part
+            for part in (VOICE_RULES, call.reference, call.instructions, call.allowance_note())
+            if part
         )
         llm = make_llm(config, system)
         tts = make_tts(config, http)

@@ -33,6 +33,7 @@ class Call:
         instructions: str,
         max_seconds: float | None = None,
         limit_minutes: float | None = None,
+        reference: str = "",
         on_end: Callable[["Call"], None] | None = None,
     ):
         # Which worker process holds it, so the front router sends its sideband there.
@@ -41,6 +42,8 @@ class Call:
         self.max_seconds = max_seconds
         # Their month's minutes on this voice (max_seconds is what's left of them).
         self.limit_minutes = limit_minutes
+        # How the app works (the api's guide and Help topics), the same for everyone.
+        self.reference = reference
         self.started = time.monotonic()
         self.ended = False
         self.reason: str | None = None

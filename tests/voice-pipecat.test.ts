@@ -12,6 +12,7 @@ import {
   VoiceComparison,
   voiceAllowance,
   voiceProviderFor,
+  voiceReference,
 } from "../apps/server/src/voice-pipecat.ts";
 import { isLiveLimit } from "../packages/domain/src/voice.ts";
 
@@ -273,4 +274,15 @@ test("the admin names a person for the voice: by full name, email, or a first na
   assert.ok("error" in both && /Ann Lee, Bob Lee/.test(both.error));
   const none = findPerson(people, "Cat");
   assert.ok("error" in none && /No one called “Cat”/.test(none.error));
+});
+
+test("our voice is told how the app works, enough to pass Claude Haiku's caching minimum", () => {
+  const reference = voiceReference("Sam");
+  assert.match(reference, /^How this app works/);
+  assert.match(reference, /Talk live with Sam/);
+  assert.doesNotMatch(reference, /\{agent\}|\*\*/);
+  // Admin setup isn't for everyone's calls.
+  assert.doesNotMatch(reference, /Try the new, cheaper voice for live talk/);
+  // Haiku caches only prompts of 4,096 tokens or more; this is most of the way there by itself.
+  assert.ok(reference.length > 12_000);
 });
