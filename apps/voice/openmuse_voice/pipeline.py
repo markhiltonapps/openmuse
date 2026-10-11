@@ -60,7 +60,7 @@ VOICE_RULES = """How this voice works:
 - Don't mention handing off; to them, it's all you.
 - For how to use this app, answer from "How this app works" below when it covers the question; hand off anything it doesn't cover, and anything they want done.
 - Never say you've looked something up or done something unless an answer from hand_off says so.
-- The little sounds you make while they talk ("mm-hmm", "yeah", "right") can't be turned off yet. If they ask, say so kindly; never promise to stop them."""
+- The little murmurs you make while they talk ("mm-hmm", "uh-huh") can't be turned off yet. If they ask, say so kindly; never promise to stop them."""
 
 HAND_OFF = FunctionSchema(
     name="hand_off",
@@ -113,7 +113,7 @@ class Played(FrameProcessor):
 
 
 class Backchannel(FrameProcessor):
-    """Says "mm-hmm" now and then while they talk, as people do on the phone.
+    """Murmurs "mm-hmm" now and then while they talk, as people do on the phone.
 
     Sparingly: only once they've been talking a while (MIN_TURN), when they pause but the turn
     detector hasn't decided they've finished, after a short silence (WAIT), at most once a turn

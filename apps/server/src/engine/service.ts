@@ -1415,6 +1415,38 @@ export class AgentService {
       owner: string,
       voice: string | null,
     ) => Promise<{ voice: string; sounds: string; onCallNow: boolean } | { error: string }>;
+    /** The admin's: all of Inworld's voices matching the words, each with whether it's listed. */
+    browse: (
+      owner: string,
+      query?: string,
+    ) => Promise<
+      | {
+          usual: string;
+          voices: { id: string; description: string; onList: boolean }[];
+        }
+      | { error: string }
+    >;
+    /** The admin's: add a voice to the list everyone chooses from, or take one off. */
+    edit: (
+      owner: string,
+      change: { add?: string; remove?: string; confirm?: boolean },
+    ) => Promise<
+      | {
+          voice: string;
+          description: string;
+          added: boolean;
+          voices: { id: string; description: string }[];
+          movedBack?: number;
+          usual?: string;
+        }
+      | { needsConfirm: true; voice: string; users: number; usual: string }
+      | { error: string }
+    >;
+    /** The admin's: the murmurs calls make while listening, in a voice (theirs unless named). */
+    listening: (
+      owner: string,
+      voice?: string,
+    ) => Promise<{ listening: true; voice: string } | { error: string }>;
   };
   /** What a call for this job uses: the Models card's choice, or the server's own model. */
   modelFor(job: ModelJob): CallPlan {

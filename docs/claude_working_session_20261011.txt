@@ -99,3 +99,59 @@ Pending after this
 - Owner to approve the 8 voices. After deploy, the voice service's log shows which ones Inworld
   has. Hearing the samples on Railway is the real check (the sandbox can't reach Inworld).
 - The "mm-hmm" timing can only be judged on a real call; it may need tuning (MIN_TURN, WAIT, GAP).
+
+6. Pushed and deployed 4416248 (voice picker). The voice service's log says Inworld has 152
+   English voices, and 7 of our 8 exist (Elizabeth doesn't, so she isn't offered).
+
+7. The admin's voice browser and softer murmurs (owner: "add the voice browser and try the
+   better mm-hmm"; chose "listen, and add or remove voices" and "just murmurs")
+- Owner's feedback: the new voice is very good but not quite as human as OpenAI's; its
+  "mm-hmm" didn't sound as natural. Our voice reads text (STT → Claude → TTS), so some of
+  the gap is structural; OpenAI's speech-to-speech model hears tone and makes its own sounds.
+- Voice service:
+  - Keeps Inworld's whole English catalog (id + a short description from Inworld's own words).
+  - /v1/voices/all, samples for any catalog voice, and /v1/voices/{id}/listening (the murmurs
+    as a WAV).
+  - Calls accept any catalog voice (workers load the catalog at start).
+  - Murmurs are "Mm-hmm." / "Mhm." / "Uh-huh." (no real words), made once per voice with
+    Inworld's top model (INWORLD_LISTEN_MODEL, default inworld-tts-2) and the direction
+    "[softly and briefly, like someone quietly listening on the phone]", at 60% volume. If
+    the top model or its direction is refused, they're made plainly with the calls' model and
+    the log says so.
+- Api:
+  - CallVoices keeps the admin's list in the admin's agent-settings ("call-voice-list") once
+    they change it, minus voices Inworld no longer has. add/remove (the usual voice stays),
+    browse(words), and sample(any) for the admin.
+  - Routes: GET /api/call-voices/all?q=, POST /api/call-voices/list {add|remove}, and
+    GET /api/call-voices/:voice/listening (admin).
+  - call_voice gains browse / add / remove (admin), with a chat card "Inworld voices".
+- App: "All Inworld voices" (admin only) on the Voice on live calls card opens a sheet with
+  Listening sounds (Play), Find a voice, and each voice with Add/Added and Play.
+- Help: admin-voice-choice has a step and a say ("Find me a British man's voice"); the
+  call-voice line now says "a soft mm-hmm or uh-huh".
+- Tests: call-voices (8), voice sounds_test (4); pnpm test 538 pass.
+- Local fix found while testing: after Add, the row flipped back when the card refreshed (a
+  new search array reset the rows). Rows now reset only when the server's answer changes.
+
+Pending
+- Hear the new murmurs on Railway (the sandbox can't reach Inworld). If inworld-tts-2 refuses
+  the direction, the log says "Listening sounds for X made plainly".
+- Options if more realism is wanted: TTS-2 (not Flash) for replies (about 1.7× the TTS cost,
+  still under a cent a minute by Inworld's list prices), delivery directions on replies, or a
+  more expressive provider (would need pricing research).
+
+8. The owner's voice picks (from Inworld's playground): Sarah, Olivia, Piper, Brook, Mia, Riley,
+   Jessica, added to the list (owner: "add them"); Sarah is the usual voice (code default
+   INWORLD_VOICE=Sarah; a value set on Railway would override it; the voice service's start log
+   now says "usual voice X", and warns if Inworld doesn't have it). Their descriptions come
+   from Inworld's own words until we write ours. "Brook" spelling is checked by the start log
+   ("not found: …").
+- Review round 1 fixes: on-list voices get a green "On the list" pill and a Remove button;
+  the status line with Undo sits above the rows. Removing a voice people use says how many
+  ("1 person used it; they’re back on Sarah from their next call."); by voice the agent asks
+  first (needsConfirm, then confirm true). The chat card after add/remove shows just that
+  voice, and call_voice's "listening" draws a Listening sounds card (admin).
+- Review round 2-3: "woman"/"female" and "man"/"male" now match each other in both
+  searches (Inworld's descriptions say male/female). The start log prints "Inworld describes X
+  as: …" for each new pick, to write our own line for any empty one (Sarah first: she's on
+  everyone's card). Design division: visual, usability and copy all signed off. pnpm test 538.

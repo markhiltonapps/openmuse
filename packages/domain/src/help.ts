@@ -319,7 +319,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "Choosing is for the new voice. If your calls use OpenAI’s voice, the card isn’t there; the admin can move you to the new voice under **Apps › Account › People**.",
-      "On the new voice, when you’ve been talking a while and pause mid-thought, {agent} now and then says “mm-hmm” or “right”, like people do on the phone. When a look-up takes a while, it tells you it’s still on it.",
+      "On the new voice, when you’ve been talking a while and pause mid-thought, {agent} now and then murmurs a soft “mm-hmm” or “uh-huh”, like people do on the phone. When a look-up takes a while, it tells you it’s still on it.",
     ],
     say: [
       { text: "What voices can you use on calls?", send: true },
@@ -2001,13 +2001,19 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Calls look the same with either voice. **Back to OpenAI’s voice** (or saying so) moves someone back.",
       "To compare them, say “Compare the voices”, or tap **Compare the voices** on the same card: calls, minutes, the usual wait for a reply and the slowest wait (1 in 10), and the cost per minute of each voice. **Last 7 days** and **Last 30 days** switch between the two.",
     ],
-    say: [{ text: "Compare the voices", send: true }, "Put me on the new voice"],
+    say: [
+      { text: "Compare the voices", send: true },
+      "Put me on the new voice",
+      { text: "Find me a British man’s voice", send: true },
+      { text: "Let me hear the listening sounds", send: true },
+    ],
     body: [
       "The new voice is our own: Soniox listens, Claude Haiku thinks, and Inworld or Speechify speaks. It costs about 1 to 2 cents a minute against OpenAI’s 5 cents. Looking things up for you costs the same on both.",
       "It runs as its own **voice** service in Railway, and its sound travels through Cloudflare’s relay. It needs keys from Soniox, Inworld or Speechify, and Cloudflare (Realtime › TURN Server). They go under **Variables** on the voice and api services, then **Deploy** on the banner. The README’s “Live voice” section lists each one.",
       "Each person gets 200 minutes a month on the new voice (**VOICE_MONTHLY_MINUTES** on the api; 0 means no limit). {agent} mentions it when 10 or fewer minutes are left, and warns just before a call runs out. A quiet call hangs up after 45 seconds.",
       "The full report, with each call’s turn times, is at **/api/voice/compare** on the api (admin only; add **?days=7** for a week). The README says how to open it.",
       "People on the new voice choose how it sounds under **Apps › Agent › Voice on live calls** (or by saying it). The voice service offers only the voices Inworld really has; when it starts, its log says how many it found and any it didn’t.",
+      "To hear any of Inworld’s voices, tap **All Inworld voices** on that card (only you see it). Search by name or by words like “british man”, tap **Play** to hear one, and **Add** to put it on the list everyone chooses from; **Remove** takes it off (anyone who chose it goes back to the usual voice, and **Undo** puts it back). **Listening sounds** plays the soft “mm-hmm” calls make. Or say “Find me a British man’s voice”, or “Add Hades to the voices”.",
       "When you’re happy with it, set **VOICE_PROVIDER** to **pipecat** on the api and Deploy, and everyone uses it.",
     ],
     keywords: [

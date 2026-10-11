@@ -387,3 +387,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Sounds while listening (Backchannel in pipeline.py):** play them only in a pause the turn
   detector hasn't ended (VAD stopped, no UserStoppedSpeakingFrame yet), and cancel on any new
   speech. Recordings are made once per process per voice, never per call.
+- **The admin's voice list:** once the admin adds or removes a voice, their list (admin's
+  agent-settings "call-voice-list") replaces our hand-picked one, minus voices Inworld no longer
+  has. The voice service accepts any voice in Inworld's catalog, so its workers load the catalog
+  at start. Murmurs are made with INWORLD_LISTEN_MODEL (TTS-2 follows "[directions]"; Flash may
+  not) and fall back to plain.
+- **Rows whose state the server can change:** reset local row state only when the server's
+  answer changes (compare a key built from it), not on every new array; a filtered list is a new
+  array each render and silently undid an Add.

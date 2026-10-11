@@ -394,7 +394,7 @@ export async function createApp(
   // The voices people choose from for their calls on our own voice (Apps › Agent).
   const callVoices =
     config.voiceServiceUrl && config.voiceServiceToken
-      ? new CallVoices(db, config.voiceServiceUrl, config.voiceServiceToken)
+      ? new CallVoices(db, config.voiceServiceUrl, config.voiceServiceToken, ADMIN_OWNER)
       : undefined;
   const pipecatVoice = pipecatConfigured(config)
     ? new LiveVoice(db, liveContext, async () => true, usage, {
@@ -472,7 +472,82 @@ export async function createApp(
     const onCall = pipecatVoice?.update(owner, { audio: { output: { voice: result.voice.id } } });
     return { voice: result.voice.id, sounds: result.voice.description, onCallNow: !!onCall };
   };
-  agent.callVoices = { list: callVoiceView, choose: chooseCallVoice };
+  // The admin's browser of all of Inworld's voices: hear any, add or remove them from the list.
+  // Taking off a voice people use asks first (unless confirmed), and says how many it moves back.
+  const editCallVoices = async (
+    owner: string,
+    change: { add?: string; remove?: string; confirm?: boolean },
+  ): Promise<
+    | {
+        voice: string;
+        description: string;
+        added: boolean;
+        voices: { id: string; description: string }[];
+        movedBack?: number;
+        usual?: string;
+      }
+    | { needsConfirm: true; voice: string; users: number; usual: string }
+    | { error: string }
+  > => {
+    if (!callVoices) return { error: "The new voice isn’t set up on this server." };
+    if (!(await accounts.isAdmin(owner).catch(() => false)))
+      return { error: "Only the admin can change which voices everyone chooses from." };
+    if (change.add) {
+      const result = await callVoices.add(change.add);
+      if ("error" in result) return { error: result.error };
+      return {
+        ...result,
+        voice: result.voice.id,
+        description: result.voice.description,
+        added: true,
+      };
+    }
+    if (!change.remove) return { error: "Say which voice to add or remove." };
+    const voice = await callVoices.find(change.remove);
+    if (!voice) return { error: `“${change.remove}” isn’t on the list.` };
+    const { default: usual } = await callVoices.offered();
+    const owners = [...new Set([ADMIN_OWNER, ...(await accounts.list()).map((a) => a.id)])];
+    const choices = await Promise.all(
+      owners.map((id) =>
+        db.get<{ value?: string }>(id, "agent-settings", "call-voice").catch(() => null),
+      ),
+    );
+    const users = choices.filter((c) => c?.value === voice.id).length;
+    if (users && !change.confirm && voice.id !== usual)
+      return { needsConfirm: true, voice: voice.id, users, usual };
+    const result = await callVoices.remove(voice.id);
+    if ("error" in result) return { error: result.error };
+    return {
+      voice: voice.id,
+      description: voice.description,
+      added: false,
+      voices: result.voices,
+      movedBack: users,
+      usual,
+    };
+  };
+  // The murmurs calls make while listening, in a voice (the admin's own unless named).
+  const listeningSounds = async (owner: string, name?: string) => {
+    if (!callVoices) return { error: "The new voice isn’t set up on this server." };
+    if (!(await accounts.isAdmin(owner).catch(() => false)))
+      return { error: "Only the admin can play the listening sounds." };
+    const voice = name ? (await callVoices.findAny(name))?.id : await callVoices.chosen(owner);
+    if (!voice) return { error: `Inworld has no voice called “${name}”.` };
+    return { listening: true as const, voice };
+  };
+  const browseCallVoices = async (owner: string, query?: string) => {
+    if (!callVoices) return { error: "The new voice isn’t set up on this server." };
+    if (!(await accounts.isAdmin(owner).catch(() => false)))
+      return { error: "Only the admin can browse all of Inworld’s voices." };
+    return callVoices.browse(query);
+  };
+  agent.callVoices = {
+    list: callVoiceView,
+    choose: chooseCallVoice,
+    browse: browseCallVoices,
+    edit: editCallVoices,
+    listening: listeningSounds,
+  };
   // The admin moves people between the voices, or compares them, by voice or in the chat.
   if (pipecatVoice)
     agent.liveTalkVoices = {
@@ -1756,8 +1831,38 @@ export async function createApp(
       );
     return c.json(result);
   });
+  // The admin's browser: all of Inworld's voices, and adding or removing one from the list.
+  app.get("/api/call-voices/all", async (c) => {
+    const result = await browseCallVoices(c.get("owner"), c.req.query("q") ?? "");
+    if ("error" in result) throw new AppError(result.error, 403);
+    return c.json(result);
+  });
+  app.post("/api/call-voices/list", async (c) => {
+    const body = z
+      .object({
+        add: z.string().max(60).optional(),
+        remove: z.string().max(60).optional(),
+        confirm: z.boolean().optional(),
+      })
+      .parse(await c.req.json());
+    const result = await editCallVoices(c.get("owner"), body);
+    if ("error" in result) throw new AppError(result.error, 409);
+    return c.json(result);
+  });
+  app.get("/api/call-voices/:voice/listening", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner")).catch(() => false)))
+      throw new AppError("Only the admin can play the listening sounds.", 403);
+    const audio = await callVoices?.listening(c.req.param("voice") ?? "");
+    if (!audio) throw new AppError("There’s no voice by that name.", 404);
+    return c.body(audio.body, 200, {
+      "content-type": audio.type,
+      "cache-control": "private, max-age=86400",
+    });
+  });
   app.get("/api/call-voices/:voice/sample", async (c) => {
-    const sample = await callVoices?.sample(c.req.param("voice") ?? "");
+    // People hear the voices on the list; the admin, any of Inworld's.
+    const any = await accounts.isAdmin(c.get("owner")).catch(() => false);
+    const sample = await callVoices?.sample(c.req.param("voice") ?? "", any);
     if (!sample) throw new AppError("There’s no voice by that name.", 404);
     return c.body(sample.body, 200, {
       "content-type": sample.type,

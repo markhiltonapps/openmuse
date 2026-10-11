@@ -326,9 +326,18 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "call_voice",
         description:
-          "The voice you speak with on their live calls (the new voice; OpenAI’s can’t be changed here). list gives the voices, each with how it sounds, and which one they use; names narrows it to the ones they asked about (“let me hear Theodore”). choose switches to one by its name: when they describe one (“a deeper voice”, “a man’s voice”), list first and pick the closest; voice null goes back to the usual one. On a live call the new voice is used from your next words, so they can try one and switch again. Then say which voice it is now, in a few words; never read out the whole list unless they ask. When the result says it’s on their screen, they can play each voice there; say so in a sentence. The listening sounds (“mm-hmm”) can’t be turned off yet: never promise to stop them.",
+          "The voice you speak with on their live calls (the new voice; OpenAI’s can’t be changed here). list gives the voices, each with how it sounds, and which one they use; names narrows it to the ones they asked about (“let me hear Theodore”). choose switches to one by its name: when they describe one (“a deeper voice”, “a man’s voice”), list first and pick the closest; voice null goes back to the usual one. On a live call the new voice is used from your next words, so they can try one and switch again. Then say which voice it is now, in a few words; never read out the whole list unless they ask. When the result says it’s on their screen, they can play each voice there; say so in a sentence. The listening sounds (“mm-hmm”) can’t be turned off yet: never promise to stop them. Admin only: browse searches all of Inworld’s voices by words (“british man”; up to 8 shown), and add or remove puts a voice on the list everyone chooses from, or takes it off. When a remove result says people use that voice, tell them how many, that they’d go back to the usual voice, and ask; only if they say yes, call remove again with confirm true. listening plays the soft murmurs calls make while listening (in their voice, or the one named): in the chat they’re on their screen to play; on a call, say they’ll hear them as they talk.",
         parameters: z.object({
-          do: z.enum(["list", "choose"]),
+          do: z.enum(["list", "choose", "browse", "add", "remove", "listening"]),
+          confirm: z
+            .boolean()
+            .optional()
+            .describe("For remove: true once they’ve agreed, after being told who uses it"),
+          query: z
+            .string()
+            .max(80)
+            .optional()
+            .describe("For browse: words to look for, such as “british man”; leave out for all"),
           names: z
             .array(z.string().max(40))
             .max(8)
@@ -339,9 +348,11 @@ export class ConversationAgent extends AbstractAgent {
             .max(40)
             .nullable()
             .optional()
-            .describe("For choose: the voice’s name, or null for the usual one"),
+            .describe(
+              "For choose: the voice’s name, or null for the usual one. For add or remove: the voice’s name",
+            ),
         }),
-        execute: async ({ do: what, names, voice }) => {
+        execute: async ({ do: what, names, voice, query, confirm }) => {
           const voices = this.service.callVoices;
           if (!voices) return { error: "Choosing a voice isn’t set up on this server." };
           // In the chat the app draws a card with Play for each voice; on a call they hear it.
@@ -358,6 +369,30 @@ export class ConversationAgent extends AbstractAgent {
               ? view.voices.filter((v) => wanted.includes(v.id.toLowerCase()))
               : view.voices;
             return { ...view, voices: listed, ...(listed.length ? shown : {}) };
+          }
+          if (what === "browse") {
+            const found = await voices.browse(this.owner, query);
+            if ("error" in found) return found;
+            const some = found.voices.slice(0, 8);
+            return {
+              browse: true,
+              usual: found.usual,
+              voices: some,
+              matched: found.voices.length,
+              ...(some.length ? shown : {}),
+            };
+          }
+          if (what === "listening") {
+            const result = await voices.listening(this.owner, voice ?? undefined);
+            return "error" in result ? result : { ...result, ...shown };
+          }
+          if (what === "add" || what === "remove") {
+            if (!voice) return { error: "Say which voice." };
+            const result = await voices.edit(
+              this.owner,
+              what === "add" ? { add: voice } : { remove: voice, confirm },
+            );
+            return "error" in result || "needsConfirm" in result ? result : { ...result, ...shown };
           }
           if (voice === undefined) return { error: "Say which voice, or null for the usual one." };
           const result = await voices.choose(this.owner, voice);

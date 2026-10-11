@@ -21,7 +21,7 @@ os.environ.update(VOICE_TTS="fake", VOICE_STT="fake", VOICE_LLM_MODEL="fake")
 from openmuse_voice.call import STILL_CHECKING, Call  # noqa: E402
 from openmuse_voice.config import load  # noqa: E402
 from openmuse_voice.pipeline import Backchannel  # noqa: E402
-from openmuse_voice.voices import CHOICES, Voices  # noqa: E402
+from openmuse_voice.voices import CHOICES, LISTENING, Voices  # noqa: E402
 
 
 class Fast(Backchannel):
@@ -155,9 +155,17 @@ async def voice_list():
         audio, kind = await voices.sample(http, "Dennis")
         assert kind == "audio/wav" and audio.startswith(b"RIFF")
         clips = await voices.clips(http, "Dennis")
-        assert len(clips) == 3 and all(clips)
+        assert len(clips) == len(LISTENING) and all(clips)
+        assert all("yeah" not in m.lower() and "right" not in m.lower() for m in LISTENING)
         assert await voices.clips(http, "Dennis") is clips, "made once"
-    assert voices.accepts("Theodore") and not voices.accepts("Nobody") and not voices.accepts(3)
+        everyone = await voices.catalog(http)
+        assert {"Hades", "Theodore"} <= {v["id"] for v in everyone}, "the whole catalog"
+        hades, _ = await voices.sample(http, "Hades")
+        assert hades.startswith(b"RIFF"), "samples for any catalog voice"
+        murmurs = await voices.listening(http, "Dennis")
+        assert murmurs.startswith(b"RIFF") and len(murmurs) > 3 * 0.35 * 24000 * 2
+    assert voices.accepts("Theodore") and voices.accepts("Hades"), "ours and the catalog's"
+    assert not voices.accepts("Nobody") and not voices.accepts(3)
 
 
 async def main():

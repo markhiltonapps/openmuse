@@ -174,8 +174,9 @@ async def voice_sample(request: web.Request):
     if not _signed(request.headers.get("authorization")):
         return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
     voice = request.match_info["voice"]
-    if not any(choice["id"] == voice for choice in await voices.offered(http)):
-        return _refused(404, "no_voice", "That voice isn't offered.")
+    # Any of Inworld's voices: the admin's browser plays ones not offered yet.
+    if not any(entry["id"] == voice for entry in await voices.catalog(http)):
+        return _refused(404, "no_voice", "That voice isn't one of Inworld's.")
     try:
         audio, kind = await voices.sample(http, voice)
     except Exception as error:
@@ -184,6 +185,30 @@ async def voice_sample(request: web.Request):
     return web.Response(
         body=audio, content_type=kind, headers={"cache-control": "private, max-age=86400"}
     )
+
+
+async def all_voices(request: web.Request):
+    """All of Inworld's English voices, for the admin's browser."""
+    assert http
+    if not _signed(request.headers.get("authorization")):
+        return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
+    return web.json_response({"voices": await voices.catalog(http), "default": voices.default})
+
+
+async def listening_sample(request: web.Request):
+    """The murmurs a call makes while listening, in one voice, for the admin to hear."""
+    assert http
+    if not _signed(request.headers.get("authorization")):
+        return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
+    voice = request.match_info["voice"]
+    if not any(entry["id"] == voice for entry in await voices.catalog(http)):
+        return _refused(404, "no_voice", "That voice isn't one of Inworld's.")
+    try:
+        audio = await voices.listening(http, voice)
+    except Exception as error:
+        logger.warning(f"Listening sounds for {voice} couldn't be made: {error}")
+        return _refused(502, "no_sample", "The sounds couldn't be made just now.")
+    return web.Response(body=audio, content_type="audio/wav")
 
 
 async def on_startup(_app: web.Application):
@@ -208,7 +233,7 @@ def main():
     missing = config.problems()
     logger.info(
         f"Voice service: {config.stt_model} -> {config.llm_model} -> {config.tts_model}, "
-        f"{WORKERS} workers x {PER_WORKER} calls"
+        f"{WORKERS} workers x {PER_WORKER} calls, usual voice {voices.default}"
         + (f" (missing: {', '.join(missing)})" if missing else "")
     )
     app = web.Application()
@@ -216,7 +241,9 @@ def main():
     app.router.add_post("/v1/live/sessions", create_session)
     app.router.add_get("/v1/live/sessions/{call_id}/attach", attach)
     app.router.add_get("/v1/voices", list_voices)
+    app.router.add_get("/v1/voices/all", all_voices)
     app.router.add_get("/v1/voices/{voice}/sample", voice_sample)
+    app.router.add_get("/v1/voices/{voice}/listening", listening_sample)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
     web.run_app(app, host=config.host, port=config.port, print=None)

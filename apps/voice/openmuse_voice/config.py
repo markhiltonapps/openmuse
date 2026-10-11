@@ -35,6 +35,9 @@ class Config:
     inworld_key: str
     inworld_model: str
     inworld_voice: str
+    # The model the listening sounds are made with (once per voice): Inworld's top model, which
+    # follows directions such as "[softly]"; the calls themselves keep inworld_model.
+    inworld_listen_model: str
     speechify_key: str
     speechify_model: str
     speechify_voice: str
@@ -85,7 +88,9 @@ def load() -> Config:
         tts=_env("VOICE_TTS", "inworld").lower(),
         inworld_key=_env("INWORLD_API_KEY"),
         inworld_model=_env("INWORLD_TTS_MODEL", "inworld-tts-2-flash"),
-        inworld_voice=_env("INWORLD_VOICE", "Ashley"),
+        # The usual voice (owner's pick, 2026-10-11); INWORLD_VOICE on Railway overrides it.
+        inworld_voice=_env("INWORLD_VOICE", "Sarah"),
+        inworld_listen_model=_env("INWORLD_LISTEN_MODEL", "inworld-tts-2"),
         speechify_key=_env("SPEECHIFY_API_KEY"),
         speechify_model=_env("SPEECHIFY_TTS_MODEL", "simba-3.2"),
         speechify_voice=_env("SPEECHIFY_VOICE", "geffen_32"),

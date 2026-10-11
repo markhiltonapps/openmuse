@@ -10,6 +10,7 @@ import json
 import os
 from typing import Any
 
+import aiohttp
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -74,6 +75,18 @@ def _ice_servers(raw: Any) -> list[IceServer]:
 def _forget(call: Call):
     # Kept a little while after it ends, so a late listener still gets "session.closed".
     asyncio.get_running_loop().call_later(30, lambda: calls.pop(call.id, None))
+
+
+@app.on_event("startup")
+async def load_catalog():
+    # Inworld's voice list, so a call can use any voice the admin added (not only ours).
+    async def load():
+        async with aiohttp.ClientSession() as http:
+            await voices.catalog(http)
+
+    task = asyncio.get_running_loop().create_task(load())
+    running.add(task)
+    task.add_done_callback(running.discard)
 
 
 @app.get("/health")

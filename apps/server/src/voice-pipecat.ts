@@ -433,27 +433,30 @@ interface Offered {
 
 /**
  * The voices of our own voice service, each person's choice of them, and samples to play. The
- * list and samples come from the voice service (which checks them against Inworld) and are kept
- * a while: they rarely change, and a sample costs a little to make.
+ * hand-picked list comes from the voice service (which checks it against Inworld); once the admin
+ * adds or removes a voice, their list (kept with the admin's settings) is offered instead, minus
+ * any Inworld no longer has. Lists and samples are kept a while: they rarely change, and a sample
+ * costs a little to make.
  */
 export class CallVoices {
   private offer?: { at: number; value: Offered };
+  private everyone?: { at: number; value: Offered };
   private readonly samples = new Map<string, { body: ArrayBuffer; type: string }>();
   constructor(
     private readonly db: Store,
     private readonly url: string,
     private readonly token: string,
+    /** Whose settings hold the admin's list (the admin's own). */
+    private readonly listOwner: string,
     private readonly fetcher: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
   ) {}
-  async offered(): Promise<Offered> {
-    const fresh =
-      this.offer &&
-      this.now() - this.offer.at < (this.offer.value.voices.length ? 600_000 : 30_000);
-    if (this.offer && fresh) return this.offer.value;
+  /** A voice list from the voice service, kept 10 minutes (30 seconds when it was empty). */
+  private async read(path: string, kept: { at: number; value: Offered } | undefined) {
+    if (kept && this.now() - kept.at < (kept.value.voices.length ? 600_000 : 30_000)) return kept;
     let value: Offered = { voices: [], default: "" };
     try {
-      const response = await this.fetcher(`${this.url}/v1/voices`, {
+      const response = await this.fetcher(`${this.url}${path}`, {
         headers: { Authorization: `Bearer ${this.token}` },
         signal: AbortSignal.timeout(10_000),
       });
@@ -469,8 +472,30 @@ export class CallVoices {
     } catch (error) {
       console.warn(`The voice service's voice list couldn't be read: ${(error as Error).message}`);
     }
-    this.offer = { at: this.now(), value };
-    return value;
+    return { at: this.now(), value };
+  }
+  /** All of Inworld's English voices (the admin's browser). */
+  async catalog(): Promise<Offered> {
+    this.everyone = await this.read("/v1/voices/all", this.everyone);
+    return this.everyone.value;
+  }
+  private async savedList() {
+    const saved = await this.db
+      .get<{ voices?: CallVoice[] }>(this.listOwner, "agent-settings", "call-voice-list")
+      .catch(() => null);
+    return Array.isArray(saved?.voices) ? saved.voices : undefined;
+  }
+  /** The voices people choose from: the admin's list once they've changed it, else ours. */
+  async offered(): Promise<Offered> {
+    this.offer = await this.read("/v1/voices", this.offer);
+    const ours = this.offer.value;
+    const list = await this.savedList();
+    if (!list || !ours.voices.length) return ours;
+    const { voices: all } = await this.catalog();
+    // Only voices Inworld still has; if its list can't be read, ours stand in.
+    if (!all.length) return ours;
+    const real = new Set(all.map((v) => v.id));
+    return { voices: list.filter((v) => real.has(v.id)), default: ours.default };
   }
   /** The voice this person's calls use: their choice while it's offered, else the usual one. */
   async chosen(owner: string) {
@@ -480,13 +505,24 @@ export class CallVoices {
     ]);
     return voices.some((v) => v.id === saved?.value) ? (saved?.value as string) : usual;
   }
-  /** One of the offered voices, by its name as said or typed ("dennis", "Dennis's"). */
-  async find(name: string) {
-    const wanted = name
+  private static wanted(name: string) {
+    return name
       .trim()
       .toLowerCase()
       .replace(/[’']s$/, "");
+  }
+  /** One of the offered voices, by its name as said or typed ("dennis", "Dennis's"). */
+  async find(name: string) {
+    const wanted = CallVoices.wanted(name);
     return (await this.offered()).voices.find((v) => v.id.toLowerCase() === wanted);
+  }
+  /** Any of Inworld's voices, by name. */
+  async findAny(name: string) {
+    const wanted = CallVoices.wanted(name);
+    return (
+      (await this.find(name)) ??
+      (await this.catalog()).voices.find((v) => v.id.toLowerCase() === wanted)
+    );
   }
   /** Saves their choice; null goes back to the usual voice. */
   async choose(
@@ -503,22 +539,88 @@ export class CallVoices {
     await this.db.put(owner, "agent-settings", { id: "call-voice", value: voice.id });
     return { voice };
   }
-  /** A short hello in that voice, made by the voice service once and kept. */
-  async sample(name: string) {
+  /**
+   * Inworld's voices whose name or description has every word asked for ("british man"), with
+   * whether each is on the list; all of them without words.
+   */
+  async browse(query = "") {
+    const [{ voices: all, default: usual }, { voices: listed }] = await Promise.all([
+      this.catalog(),
+      this.offered(),
+    ]);
+    const on = new Set(listed.map((v) => v.id));
+    const words = query
+      .toLowerCase()
+      .replace(/[’']s\b/g, "")
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w && !["a", "an", "the", "voice", "voices", "with"].includes(w));
+    const matches = (v: CallVoice) => {
+      const text = ` ${v.id} ${v.description} `.toLowerCase();
+      return words.every((w) => {
+        // Ours say "a man's/woman's voice", Inworld's "male/female": either finds both.
+        if (["woman", "women", "female", "girl"].includes(w))
+          return /\bwom[ae]n\b|\bfemale\b|\bgirl\b/.test(text);
+        // "man" mustn't find every "woman" or "female".
+        if (["man", "men", "male", "guy"].includes(w))
+          return /[^o]man\b|\bmale\b|\bmen\b/.test(text);
+        return text.includes(w);
+      });
+    };
+    return {
+      usual,
+      voices: all.filter(matches).map((v) => ({ ...v, onList: on.has(v.id) })),
+    };
+  }
+  /** The admin adds one of Inworld's voices to the list everyone chooses from. */
+  async add(name: string): Promise<{ voice: CallVoice; voices: CallVoice[] } | { error: string }> {
+    const { voices: all } = await this.catalog();
+    if (!all.length) return { error: "Inworld’s voices can’t be read just now. Try again soon." };
+    const wanted = CallVoices.wanted(name);
+    const voice = all.find((v) => v.id.toLowerCase() === wanted);
+    if (!voice) return { error: `Inworld has no voice called “${name}”.` };
+    const { voices } = await this.offered();
+    const list = voices.some((v) => v.id === voice.id) ? voices : [...voices, voice];
+    await this.db.put(this.listOwner, "agent-settings", { id: "call-voice-list", voices: list });
+    return { voice, voices: list };
+  }
+  /** The admin takes a voice off the list (the usual voice stays). */
+  async remove(
+    name: string,
+  ): Promise<{ voice: CallVoice; voices: CallVoice[] } | { error: string }> {
+    const { voices, default: usual } = await this.offered();
     const voice = await this.find(name);
-    if (!voice) return undefined;
-    const kept = this.samples.get(voice.id);
+    if (!voice) return { error: `“${name}” isn’t on the list.` };
+    if (voice.id === usual)
+      return { error: `${voice.id} is the usual voice, so it stays on the list.` };
+    const list = voices.filter((v) => v.id !== voice.id);
+    await this.db.put(this.listOwner, "agent-settings", { id: "call-voice-list", voices: list });
+    return { voice, voices: list };
+  }
+  /** Audio made by the voice service once and kept: a hello, or the listening murmurs. */
+  private async audio(voice: string, kind: "sample" | "listening") {
+    const key = `${kind}:${voice}`;
+    const kept = this.samples.get(key);
     if (kept) return kept;
     const response = await this.fetcher(
-      `${this.url}/v1/voices/${encodeURIComponent(voice.id)}/sample`,
-      { headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(20_000) },
+      `${this.url}/v1/voices/${encodeURIComponent(voice)}/${kind}`,
+      { headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(30_000) },
     );
     if (!response.ok) throw new AppError("That sample couldn’t be played just now.", 502);
-    const sample = {
+    const audio = {
       body: await response.arrayBuffer(),
       type: response.headers.get("content-type") ?? "audio/mpeg",
     };
-    this.samples.set(voice.id, sample);
-    return sample;
+    this.samples.set(key, audio);
+    return audio;
+  }
+  /** A short hello in that voice; any of Inworld's when `any` (the admin's browser). */
+  async sample(name: string, any = false) {
+    const voice = any ? await this.findAny(name) : await this.find(name);
+    return voice ? this.audio(voice.id, "sample") : undefined;
+  }
+  /** The murmurs calls make while listening, in that voice (the admin's browser). */
+  async listening(name: string) {
+    const voice = await this.findAny(name);
+    return voice ? this.audio(voice.id, "listening") : undefined;
   }
 }
