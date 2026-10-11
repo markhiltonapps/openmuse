@@ -11,3 +11,6 @@ apps/mobile/android/
 .DS_Store
 *.tsbuildinfo
 artifacts/
+__pycache__/
+*.pyc
+.venv/

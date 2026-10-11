@@ -18,8 +18,28 @@ await moveFromVolume(db, config.dataDir, blobs, {
   log: (line) => console.log(line),
 });
 await db.recoverInterruptedActions();
-const { app, agent, liveVoice } = await createApp(db, config, { blobs });
+const { app, agent, liveVoice, pipecatVoice } = await createApp(db, config, { blobs });
 console.log(liveVoice.describe());
+console.log(
+  pipecatVoice
+    ? `Our own voice on (${config.voiceServiceUrl}; default voice ${config.voiceProvider ?? "openai"}${config.turnKeyId ? "" : "; no TURN relay: set CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN"})`
+    : "Our own voice off: VOICE_SERVICE_URL or VOICE_INTERNAL_TOKEN isn't set",
+);
+if (config.taskWorkerEnabled && pipecatVoice)
+  void fetch(`${config.voiceServiceUrl}/health`, { signal: AbortSignal.timeout(10000) }).then(
+    async (response) => {
+      const health = (await response.json().catch(() => ({}))) as { missing?: string[] };
+      console.log(
+        response.ok
+          ? "Voice service reachable"
+          : `Voice service health check ${response.status}${health.missing?.length ? ` (missing: ${health.missing.join(", ")})` : ""}`,
+      );
+    },
+    (error) =>
+      console.warn(
+        `Voice service unreachable: ${error instanceof Error ? error.message : "no response"}`,
+      ),
+  );
 if (config.taskWorkerEnabled) agent.start();
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, () =>
   console.log(`OpenMuse ${config.mode} API ready at ${config.publicUrl}`),
@@ -39,7 +59,7 @@ if (config.workerUrl)
 // finishes the requests it has (a reply being written), then exits.
 const shutdown = () => {
   const closed = new Promise<void>((resolve) => server.close(() => resolve()));
-  void Promise.all([agent.stop(), liveVoice.stop(), closed])
+  void Promise.all([agent.stop(), liveVoice.stop(), pipecatVoice?.stop(), closed])
     .then(() => db.close())
     .then(() => process.exit(0));
 };

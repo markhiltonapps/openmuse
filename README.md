@@ -114,6 +114,54 @@ pnpm dev:browser
 
 Or use `docker compose --env-file .env -f infra/compose.yaml up --build -d`. The same token must reach the API and worker. Sessions have persistent Chromium profiles; the app can open a live screenshot console and import PDF downloads. Agent tools can read public pages and hand interactive work to the person. [Worker setup and boundaries](apps/worker/README.md).
 
+## Live voice: OpenAI's and our own, side by side
+
+Talking live runs on one of two voices, chosen per person:
+
+- **OpenAI** (`gpt-live-1`): the browser connects to OpenAI over WebRTC; the api makes the session (`OPENAI_VOICE_API_KEY`) and listens in on a sideband for transcripts, minutes and hand-offs.
+- **Our own** (`apps/voice`): Pipecat with Soniox (listening), Claude Haiku 4.5 with prompt caching (thinking), and Inworld TTS-2 Flash or Speechify Simba 3.2 (speaking), with Silero plus the smart-turn model deciding when someone has finished and stopping the voice the moment they talk over it. The voice service speaks the same small protocol as OpenAI's live voice, so the api's call handling is shared: hand-offs to the chat agent ("one sec"), cards on the call screen, approving by voice, urgent alerts, saved calls and the call screen itself are the same. The browser's audio reaches the service through Cloudflare's TURN relay, because Railway takes no UDP from outside; the service has no public address.
+
+**Set it up (Railway).**
+
+1. In Cloudflare, open **Realtime → TURN Server → Create** and keep its key ID and API token.
+2. Add a service from this repository with root directory `apps/voice` (it builds `apps/voice/Dockerfile`). Give it the variables in `apps/voice/.env.example`: the same `VOICE_INTERNAL_TOKEN` as the api, `SONIOX_API_KEY`, `ANTHROPIC_API_KEY` (a reference to the api's: `${{api.ANTHROPIC_API_KEY}}`), `VOICE_TTS=inworld` with `INWORLD_API_KEY` (or `speechify` with `SPEECHIFY_API_KEY`), and `VOICE_WORKERS` (about one per CPU core). It needs no public domain.
+3. On the api service add `VOICE_SERVICE_URL=http://<voice service name>.railway.internal:8080`, `VOICE_INTERNAL_TOKEN`, `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN`. Leave `VOICE_PROVIDER` unset (OpenAI stays everyone's default).
+4. Choose **Deploy** on Railway's banner for both services (variables do nothing until then). The api's log then says `Our own voice on (…)` and `Voice service reachable`.
+
+**Switch who uses which.** The admin's **People** card (Apps › Account › People) has **Live talk voice**: *Try the new voice* for yourself, and for each person. `VOICE_PROVIDER=pipecat` makes ours everyone's default; anyone set to OpenAI stays there. The app needs no change: it asks the api which voice to use.
+
+**Limits.** On our own voice each person gets `VOICE_MONTHLY_MINUTES` a month (200 by default). When 10 or fewer are left the voice says so in its hello; under 30 seconds left a call can't start, a running call is warned 20 seconds before it ends, and Talk goes to the chat until the 1st (in the person's time zone). `0` means no limit. A quiet call hangs up after `VOICE_PIPECAT_IDLE_SECONDS` (45); OpenAI's keep `VOICE_IDLE_SECONDS` (90).
+
+**Run a side-by-side test.** Put yourself (and a few testers) on the new voice, make the same kinds of calls on both voices, then tap **Compare the voices** on the People card for the summary. The full report, with each call's turn times, comes from the api (admin only). `$TOKEN` is your sign-in token: in the app on the web, open the browser's developer tools › Application › Local Storage and copy `openmuse.session`. Keep it private; anyone with it is signed in as you.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" "$PUBLIC_API_URL/api/voice/compare?days=7"
+```
+
+For each voice it gives the number of calls and minutes, turn times (median, 90th percentile and average, measured in the app the same way for both: from the end of the person's words to the first sound back; ours also has the server's own measure), and the cost of a minute broken into its parts (OpenAI's flat rate; our listening, thinking and speaking). Hand-offs to the chat agent cost the same on both and are left out. Each call's transcript is in the chat, as before.
+
+**Capacity.** One worker process carries about four calls (WebRTC's audio is handled in Python by aiortc, at roughly 0.4 of a CPU core a call); the service's front sends each new call to the least busy worker. For 50 calls at once, give the service about 24 vCPU and 8 GB with `VOICE_WORKERS=12`. Beyond what one Railway service can hold, run a second voice service and split people between them, or move the transport to a WebRTC media server (Pipecat's Daily or LiveKit transports) so the audio leaves Python.
+
+**Run it locally (no keys).** Stand-ins replace Soniox and the voice (`VOICE_STT=fake VOICE_TTS=fake`) and a mock of Anthropic's API replaces Claude:
+
+```sh
+cd apps/voice && python -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python tests/mock_anthropic.py 8799 &
+HOST=127.0.0.1 PORT=8085 VOICE_INTERNAL_TOKEN=dev VOICE_STT=fake VOICE_TTS=fake \
+  ANTHROPIC_BASE_URL=http://127.0.0.1:8799 .venv/bin/python -m openmuse_voice &
+.venv/bin/python tests/call_test.py --url http://127.0.0.1:8085 --token dev --audio question.wav --calls 2
+```
+
+Then point the api at it (`VOICE_SERVICE_URL=http://127.0.0.1:8085 VOICE_INTERNAL_TOKEN=dev VOICE_PROVIDER=pipecat`). The test caller plays a recorded question as a browser would and reports each turn's time and the service's CPU.
+
+**A phone line later.** `run_call` in `apps/voice/openmuse_voice/pipeline.py` takes any Pipecat transport. A Twilio dial-in is a new route that accepts Twilio's media stream with Pipecat's `FastAPIWebsocketTransport` and Twilio serializer, then runs the same pipeline and `Call`.
+
+**Retire OpenAI's voice** once the comparison says so:
+
+1. Set `VOICE_PROVIDER=pipecat` on the api and Deploy; in People, tap *Try the new voice* for anyone still on OpenAI.
+2. After a while with no OpenAI calls (the comparison shows none), remove `OPENAI_VOICE_API_KEY`.
+3. In code: drop the OpenAI `LiveVoice` instance in `apps/server/src/app.ts` (keep the class; it drives our voice), make `voiceFor` and `liveVoiceOf` always return ours, drop the `provider === "openai"` branches in `voice-pipecat.ts`, and remove the OpenAI path in `apps/mobile/src/live-voice.ts` (the `ours` checks).
+
 ## Persistence and operation
 
 ### Linux terminal and workspace

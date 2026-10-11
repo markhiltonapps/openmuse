@@ -60,7 +60,12 @@ const SEARCH_PRICE = 0.01;
  * Live voice, in dollars per minute of session time (silence counts), matched like PRICES.
  * VOICE_PRICES adds or corrects them: "gpt-live-1=0.05".
  */
-export const MINUTE_PRICES: Record<string, number> = { "gpt-live-1": 0.05 };
+export const MINUTE_PRICES: Record<string, number> = {
+  "gpt-live-1": 0.05,
+  // Our own voice (Pipecat): connected minutes are what Soniox bills for listening; the relay
+  // (Cloudflare TURN) and the voice service's CPU add a fraction of a cent an hour.
+  "pipecat-voice": 0.002,
+};
 export function parseMinutePrices(value = process.env.VOICE_PRICES ?? "") {
   const prices: Record<string, number> = {};
   for (const pair of value.split(",")) {
@@ -68,6 +73,18 @@ export function parseMinutePrices(value = process.env.VOICE_PRICES ?? "") {
     if (model && Number.isFinite(Number(rate))) prices[modelName(model)] = Number(rate);
   }
   return prices;
+}
+/**
+ * Text-to-speech, in dollars per million characters spoken, matched like PRICES.
+ * VOICE_CHARACTER_PRICES adds or corrects them: "inworld-tts-2-flash=15".
+ */
+export const CHARACTER_PRICES: Record<string, number> = {
+  "inworld-tts-2-flash": 15,
+  "inworld-tts-2": 25,
+  "simba-3.2": 6.58,
+};
+export function parseCharacterPrices(value = process.env.VOICE_CHARACTER_PRICES ?? "") {
+  return parseMinutePrices(value);
 }
 
 export function parsePrices(value = process.env.MODEL_PRICES ?? ""): Record<string, Price> {
@@ -169,6 +186,8 @@ interface UsageLine extends Tokens {
   calls: number;
   /** Seconds of live voice; each call is one conversation. */
   seconds?: number;
+  /** Characters spoken by a text-to-speech voice. */
+  characters?: number;
 }
 interface UsageMonth {
   /** The month in UTC, "2026-09". */
@@ -212,6 +231,10 @@ export class UsageMeter {
       ...MINUTE_PRICES,
       ...parseMinutePrices(),
     },
+    private readonly characterPrices: Record<string, number> = {
+      ...CHARACTER_PRICES,
+      ...parseCharacterPrices(),
+    },
   ) {}
   /** A model's price from OpenRouter, unless a list price or MODEL_PRICES already has it. */
   addPrice(model: string, price: Price) {
@@ -220,6 +243,11 @@ export class UsageMeter {
   }
   /** What a line cost: live voice by the minute, models by the token. */
   private lineCost(line: UsageLine) {
+    if (line.characters !== undefined) {
+      const name = modelName(line.model);
+      const key = Object.keys(this.characterPrices).find((k) => name.startsWith(k));
+      return key ? ((this.characterPrices[key] ?? 0) * line.characters) / 1_000_000 : undefined;
+    }
     if (line.seconds === undefined) return costOf(line.model, line, this.prices);
     const name = modelName(line.model);
     const key = Object.keys(this.minutePrices).find((k) => name.startsWith(k));
@@ -231,6 +259,28 @@ export class UsageMeter {
       if (call) line.calls++;
       line.seconds = (line.seconds ?? 0) + Math.max(0, Math.round(seconds));
     });
+  }
+  /** Adds characters a text-to-speech voice spoke (not a call of its own). */
+  recordCharacters(owner: string, model: string, characters: number): Promise<void> {
+    return this.update(owner, "voice", model, (line) => {
+      line.characters = (line.characters ?? 0) + Math.max(0, Math.round(characters));
+    });
+  }
+  /** What one line of usage would cost, in dollars; undefined without a known price. */
+  priceOf(model: string, amounts: { seconds?: number; characters?: number; tokens?: Tokens }) {
+    const line: UsageLine = {
+      kind: "voice",
+      model: modelName(model),
+      calls: 0,
+      input: amounts.tokens?.input ?? 0,
+      cacheRead: amounts.tokens?.cacheRead ?? 0,
+      cacheWrite: amounts.tokens?.cacheWrite ?? 0,
+      output: amounts.tokens?.output ?? 0,
+      searches: 0,
+      ...(amounts.seconds !== undefined ? { seconds: amounts.seconds } : {}),
+      ...(amounts.characters !== undefined ? { characters: amounts.characters } : {}),
+    };
+    return this.lineCost(line);
   }
   /** Adds one call; calls for one person are saved one at a time so none are lost. */
   record(owner: string, kind: UsageKind, model: string, tokens: Tokens): Promise<void> {

@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
-import type { CallDetail } from "../../../packages/domain/src/voice";
+import { type CallDetail, isLiveLimit } from "../../../packages/domain/src/voice";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AgentAvatar } from "./avatar";
 import { HIDDEN } from "./job-working-ui";
@@ -56,6 +56,7 @@ export const ENDED = (name: string): Record<string, string> => ({
   idle: `It went quiet, so ${name} hung up. Talk again when you’re ready.`,
   replaced: `You started talking with ${name} somewhere else, so this call ended.`,
   server_restart: `${name} had to restart, so the call ended. Talk again to carry on.`,
+  limit: `This month’s live talk minutes are used up. You can still type to ${name}.`,
 });
 /** A browser's reason a call couldn't start, as what to do about it. */
 export function startFailure(error: unknown, name: string) {
@@ -118,6 +119,8 @@ export interface LiveCallValue extends CallControls {
   /** Why it couldn't start, or why it ended on its own, in plain words. */
   error: string;
   ended: string;
+  /** This month's live talk minutes are used up: Talk again can't work until the 1st. */
+  limited: boolean;
   /** When the agent first answered (for the call's time). */
   startedAt?: number;
 }
@@ -217,6 +220,7 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   const [lookingUp, setLookingUp] = useState(false);
   const [error, setError] = useState("");
   const [ended, setEnded] = useState("");
+  const [limited, setLimited] = useState(false);
   const [startedAt, setStartedAt] = useState<number>();
   const [news, setNews] = useState("");
   const newsTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -248,6 +252,7 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     setState("connecting");
     setError("");
     setEnded("");
+    setLimited(false);
     setLines([]);
     setMuted(false);
     mutedNow.current = false;
@@ -311,6 +316,11 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         if (!live()) return;
         const endings = ENDED(nameNow.current);
         setEnded(endings[reason ?? ""] ?? "The call ended.");
+        // Out of minutes: Talk goes to the chat until the app reopens.
+        if (reason === "limit") {
+          setLimited(true);
+          liveVoiceTurnedAway(api);
+        }
         // When the server ended it (quiet, the hour, another call), ask it why once it has
         // saved this call.
         if (reason === "close_requested")
@@ -340,8 +350,11 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         setState("ended");
         setPhase("over");
         setError(startFailure(e, nameNow.current));
-        // Turned away by the voice service: Talk goes to the chat until the app reopens.
-        if (e instanceof Error && turnedAway(e.message)) liveVoiceTurnedAway(api);
+        // Turned away by the voice service, or out of minutes: Talk goes to the chat until the
+        // app reopens.
+        const limit = e instanceof Error && isLiveLimit(e.message);
+        if (limit) setLimited(true);
+        if (e instanceof Error && (limit || turnedAway(e.message))) liveVoiceTurnedAway(api);
       });
     return () => {
       if (current.current === me) current.current++;
@@ -481,6 +494,7 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       lookingUp,
       error,
       ended,
+      limited,
       startedAt,
       target,
       clearTarget,
@@ -496,6 +510,7 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       lookingUp,
       error,
       ended,
+      limited,
       startedAt,
       target,
       clearTarget,
@@ -579,7 +594,9 @@ const rowWords = (row: NewsRow) =>
 /** What the call is doing, in a few words. */
 export function callStatus(call: LiveCallValue, name: string) {
   return call.phase === "over"
-    ? call.ended || (call.error ? "The call couldn’t start." : "The call ended.")
+    ? call.limited && call.error
+      ? call.error
+      : call.ended || (call.error ? "The call couldn’t start." : "The call ended.")
     : call.state === "connecting"
       ? "Connecting…"
       : call.muted
@@ -631,6 +648,7 @@ const asElement = (node: unknown) =>
  */
 export function CallBar() {
   const call = useLiveCall();
+  const { draft } = useWorkspace();
   const { data } = useAgentWorkspace();
   const name = data?.identity.name || "Neddy";
   const time = useCallTime(call.phase === "on" ? call.startedAt : undefined);
@@ -819,6 +837,12 @@ export function CallBar() {
               role="button"
               onPress={() => {
                 if (Date.now() - overAt.current < 600) return;
+                // Out of this month's minutes: the chat, ready to type.
+                if (call.limited) {
+                  call.dismiss();
+                  draft("");
+                  return;
+                }
                 call.start();
                 call.expand();
               }}
@@ -839,7 +863,7 @@ export function CallBar() {
                   fontWeight: "700",
                 }}
               >
-                Talk again
+                {call.limited ? "Type instead" : "Talk again"}
               </Text>
             </Pressable>
             <Pressable

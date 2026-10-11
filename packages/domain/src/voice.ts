@@ -39,3 +39,11 @@ export const SHOWN_HEADING = "Shown on screen during the call:";
  * The admin's reason goes to the server's log; the app also stops offering calls until it reopens.
  */
 export const LIVE_UNAVAILABLE = "Live talk isn’t available right now. You can type instead.";
+/** How the server's answer starts when someone has used this month's live talk minutes. */
+export const LIVE_LIMIT = "You’ve used this month’s";
+/** What people see when a call can't start because this month's minutes are used up. */
+export function liveLimitMessage(limitMinutes: number, nextMonth: string) {
+  const minutes = limitMinutes === 1 ? "minute" : "minutes";
+  return `${LIVE_LIMIT} ${limitMinutes} ${minutes} of live talk. You’ll get more on ${nextMonth}. Until then, type instead, and tap Listen to hear a reply.`;
+}
+export const isLiveLimit = (message: string) => message.startsWith(LIVE_LIMIT);

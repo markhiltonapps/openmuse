@@ -352,3 +352,15 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   without), never "everything archived" at the time the request lands, so a job that arrived
   between the count and the tap isn't deleted unseen. By voice, the whole lot only with an
   explicit "all"; otherwise the agent asks which.
+- **Two live voices (OpenAI's and our own, apps/voice):** ours speaks OpenAI's live protocol, so
+  the api runs it as a second `LiveVoice` (pointed at VOICE_SERVICE_URL); never change OpenAI's
+  request to suit ours (a test checks it's unchanged). Extras for ours go in `openmuse` in the
+  body. Call ids `pc_w{worker}_…` route to ours (`voiceFor`).
+- **Railway has no public UDP:** WebRTC to the voice service goes through Cloudflare's TURN relay
+  (credentials minted per call; drop `:53` URLs). aiortc uses only one STUN and one TURN server.
+- **aiortc is CPU-heavy (~0.44 core a call):** one Python process carries ~4 calls; scale with
+  VOICE_WORKERS behind the front router, not by packing more calls into one process.
+- **Say why before closing a data channel:** send `session.closed` with its reason, wait a beat,
+  then close, or the app never learns why the call ended.
+- **Running out is not an error:** a monthly limit shows as the headline with Type instead as the
+  main button, not a red box with Talk again (`isLiveLimit`, `limited`).

@@ -43,6 +43,13 @@ export interface LiveVoiceOptions {
   answerSeconds?: number;
   /** Tells the person something (a bell entry and a push): a hand-over finished after the call. */
   tell?: (owner: string, title: string, body: string, key: string) => Promise<unknown>;
+  /**
+   * Fields added to the session request for this person (the Pipecat service's relay and the
+   * minutes left in their month). OpenAI's request is unchanged without it.
+   */
+  extras?: (owner: string) => Promise<Record<string, unknown>>;
+  /** The voice's name and key variable in messages: OpenAI and OPENAI_VOICE_API_KEY by default. */
+  provider?: { name: string; keyVariable: string };
 }
 /** What the voice handed over, with the conversation so far, for the agent to answer. */
 export interface LiveQuestion {
@@ -217,6 +224,9 @@ export class LiveVoice {
     for (const live of this.sessions.values())
       if (live.owner === owner) await this.end(owner, live.id, "replaced");
     const { instructions } = await this.context(owner);
+    const extras = (await this.options.extras?.(owner)) ?? {};
+    const name = this.options.provider?.name ?? "OpenAI";
+    const Name = capitalized(name);
     let response: Response;
     try {
       response = await this.fetcher(`${this.baseUrl}/live/sessions`, {
@@ -257,18 +267,19 @@ export class LiveVoice {
             },
           },
           transport: { type: "webrtc", sdp: offer },
+          ...extras,
         }),
         signal: AbortSignal.timeout(20000),
       });
     } catch (error) {
       throw new AppError(
         error instanceof Error && error.name === "TimeoutError"
-          ? "OpenAI took too long to answer. Try again."
-          : "Couldn’t reach OpenAI. Try again.",
+          ? `${Name} took too long to answer. Try again.`
+          : `Couldn’t reach ${name}. Try again.`,
         503,
       );
     }
-    if (!response.ok) throw await failure(response, this.model);
+    if (!response.ok) throw await failure(response, this.model, this.options.provider);
     const created = (await response.json()) as {
       session?: { id?: string };
       transport?: { sdp?: string };
@@ -278,9 +289,9 @@ export class LiveVoice {
     if (!id || !sdp) {
       // Its shape, not its values, so the log never holds a session's details.
       console.warn(
-        `[OpenMuse] Live voice: OpenAI answered without a session or SDP (keys: ${shape(created)})`,
+        `[OpenMuse] Live voice: ${Name} answered without a session or SDP (keys: ${shape(created)})`,
       );
-      throw new AppError("OpenAI didn’t start the call. Try again.", 502);
+      throw new AppError(`${Name} didn’t start the call. Try again.`, 502);
     }
     const live: Live = {
       id,
@@ -746,14 +757,20 @@ function shape(value: unknown, depth = 0): string {
 }
 
 /** OpenAI's refusal in plain words, without anything secret. */
-async function failure(response: Response, model: string) {
+/** A provider's name at the start of a sentence ("the voice service" → "The voice service"). */
+const capitalized = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+async function failure(
+  response: Response,
+  model: string,
+  { name, keyVariable } = { name: "OpenAI", keyVariable: "OPENAI_VOICE_API_KEY" },
+) {
   const body = (await response.json().catch(() => ({}))) as {
     error?: { message?: string; type?: string; code?: string; param?: string };
   };
   const detail = body.error?.message?.slice(0, 300);
   // OpenAI's own reason, for the server log (it never contains the key).
   console.warn(
-    `[OpenMuse] Live voice: OpenAI said ${response.status}${[
+    `[OpenMuse] Live voice: ${capitalized(name)} said ${response.status}${[
       body.error?.type,
       body.error?.code,
       body.error?.param,
@@ -764,14 +781,16 @@ async function failure(response: Response, model: string) {
   );
   if (response.status === 401 || response.status === 403)
     return new AppError(
-      `OpenAI turned down the voice key (${response.status}). Check OPENAI_VOICE_API_KEY and that the account can use ${model}.${detail ? ` ${detail}` : ""}`,
+      keyVariable === "VOICE_INTERNAL_TOKEN"
+        ? `${capitalized(name)} turned down the api’s token (${response.status}). Check that VOICE_INTERNAL_TOKEN is the same on the api and voice services, then choose Deploy.`
+        : `${capitalized(name)} turned down the voice key (${response.status}). Check ${keyVariable} and that the account can use ${model}.${detail ? ` ${detail}` : ""}`,
       502,
     );
   if (response.status === 429)
     // The reason (busy, or out of credit) is in the log line above, for the admin.
     return new AppError(LIVE_UNAVAILABLE, 503);
   return new AppError(
-    `OpenAI couldn’t start live voice (${response.status}).${detail ? ` ${detail}` : ""}`,
+    `${capitalized(name)} couldn’t start live voice (${response.status}).${detail ? ` ${detail}` : ""}`,
     502,
   );
 }

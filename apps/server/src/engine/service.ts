@@ -1357,6 +1357,18 @@ export class AgentService {
   everyoneCosts?: () => Promise<Record<"today" | "week" | "all", UsageTotals>>;
   /** Which model does which job (the Models card); the server's models when unset. */
   models?: ModelChoices;
+  /**
+   * The admin's live-talk voices (People › Live talk voice): move someone to the new voice or
+   * OpenAI's, and compare the two. Unset until our own voice service is set up.
+   */
+  liveTalkVoices?: {
+    set: (
+      admin: string,
+      who: string,
+      voice: "new" | "openai",
+    ) => Promise<{ who: string; voice: string } | { error: string }>;
+    compare: (days: number) => Promise<unknown>;
+  };
   /** What a call for this job uses: the Models card's choice, or the server's own model. */
   modelFor(job: ModelJob): CallPlan {
     return (

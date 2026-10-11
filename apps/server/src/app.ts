@@ -77,6 +77,19 @@ import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
 import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
 import { LiveVoice, liveInstructions } from "./voice-live.ts";
+import {
+  findPerson,
+  isPipecatCall,
+  limitReached,
+  PIPECAT_MODEL,
+  pipecatConfigured,
+  SHORTEST_CALL_SECONDS,
+  setVoiceProvider,
+  turnServers,
+  VoiceComparison,
+  voiceAllowance,
+  voiceProviderFor,
+} from "./voice-pipecat.ts";
 import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
@@ -332,30 +345,32 @@ export async function createApp(
   };
   // Urgent alerts said on a live call (time to leave, security, money, people they chose).
   let urgentAlerts: UrgentAlerts | undefined;
+  // Who the voice is and what it knows: the same for OpenAI's voice and our own.
+  const liveContext = async (owner: string) => {
+    const [identity, timeZone, about, memories, today] = await Promise.all([
+      db
+        .get<{ name?: string; tone?: string }>(owner, "agent-settings", "identity")
+        .catch(() => null),
+      agent.timeZone(owner).catch(() => "UTC"),
+      agent.persona.context(owner).catch(() => ""),
+      agent.memoryContext(owner).catch(() => [] as string[]),
+      voiceToday(voiceBrain, owner).catch(() => ""),
+    ]);
+    return {
+      instructions: liveInstructions({
+        name: identity?.name?.trim() || "Neddy",
+        tone: identity?.tone?.trim() || "warm",
+        now: localNow(timeZone),
+        about,
+        memories: memories.slice(0, 30),
+        today,
+        canLookUp,
+      }),
+    };
+  };
   const liveVoice = new LiveVoice(
     db,
-    async (owner) => {
-      const [identity, timeZone, about, memories, today] = await Promise.all([
-        db
-          .get<{ name?: string; tone?: string }>(owner, "agent-settings", "identity")
-          .catch(() => null),
-        agent.timeZone(owner).catch(() => "UTC"),
-        agent.persona.context(owner).catch(() => ""),
-        agent.memoryContext(owner).catch(() => [] as string[]),
-        voiceToday(voiceBrain, owner).catch(() => ""),
-      ]);
-      return {
-        instructions: liveInstructions({
-          name: identity?.name?.trim() || "Neddy",
-          tone: identity?.tone?.trim() || "warm",
-          now: localNow(timeZone),
-          about,
-          memories: memories.slice(0, 30),
-          today,
-          canLookUp,
-        }),
-      };
-    },
+    liveContext,
     // Everyone can talk live (owner's choice, 2026-10-01); only the owner is shown a missing key.
     async () => true,
     usage,
@@ -371,8 +386,89 @@ export async function createApp(
       onCallMinute: (owner) => urgentAlerts?.checkLeave(owner),
     },
   );
+  // Our own voice (apps/voice, Pipecat), side by side with OpenAI's: the same call handling,
+  // pointed at the voice service, which speaks OpenAI's live protocol.
+  const voiceComparison = new VoiceComparison(db, usage);
+  const pipecatVoice = pipecatConfigured(config)
+    ? new LiveVoice(db, liveContext, async () => true, usage, {
+        apiKey: config.voiceServiceToken,
+        baseUrl: `${config.voiceServiceUrl}/v1`,
+        model: PIPECAT_MODEL,
+        provider: { name: "the voice service", keyVariable: "VOICE_INTERNAL_TOKEN" },
+        canSetUp: (owner) => accounts.isAdmin(owner),
+        idleSeconds: config.voicePipecatIdleSeconds ?? 45,
+        setupUrl: config.railwayVariablesUrl,
+        ...(canLookUp ? { answer: voiceAnswer(voiceBrain) } : {}),
+        tell: (owner, title, body, key) => agent.notify(owner, title, body, undefined, key),
+        onCallMinute: (owner) => urgentAlerts?.checkLeave(owner),
+        socket: voiceComparison.socket(),
+        // The audio relay, and the end of their month's minutes.
+        extras: async (owner) => {
+          const [iceServers, allowance] = await Promise.all([
+            turnServers(config),
+            voiceAllowance(usage, config, owner),
+          ]);
+          if (
+            allowance.limitMinutes &&
+            allowance.leftSeconds !== undefined &&
+            allowance.leftSeconds < SHORTEST_CALL_SECONDS
+          )
+            throw limitReached(
+              allowance.limitMinutes,
+              await agent.timeZone(owner).catch(() => "UTC"),
+            );
+          return {
+            openmuse: {
+              iceServers,
+              ...(allowance.leftSeconds !== undefined && allowance.limitMinutes
+                ? { maxSeconds: allowance.leftSeconds, limitMinutes: allowance.limitMinutes }
+                : {}),
+            },
+          };
+        },
+      })
+    : undefined;
+  /** The voice holding a call: ours for "pc_…" ids, else OpenAI's. */
+  const voiceFor = (id: string) => (pipecatVoice && isPipecatCall(id) ? pipecatVoice : liveVoice);
+  /** Both voices side by side, for everyone's calls over the last few days (the admin's). */
+  const compareVoices = async (days: number) =>
+    voiceComparison.report(
+      [...new Set([ADMIN_OWNER, ...(await accounts.list()).map((account) => account.id)])],
+      new Date(Date.now() - days * 86_400_000).toISOString(),
+    );
+  // The admin moves people between the voices, or compares them, by voice or in the chat.
+  if (pipecatVoice)
+    agent.liveTalkVoices = {
+      compare: compareVoices,
+      set: async (admin, who, voice) => {
+        const provider = voice === "new" ? "pipecat" : "openai";
+        const saved = provider === (config.voiceProvider ?? "openai") ? "default" : provider;
+        const named = voice === "new" ? "the new voice" : "OpenAI’s voice";
+        // The admin may name themself ("put Mark on the new voice").
+        const me = await accounts.me(admin).catch(() => undefined);
+        const isMe =
+          /^(me|myself|i)$/i.test(who) ||
+          (!!me &&
+            "person" in
+              findPerson([{ name: me.name, email: "email" in me ? me.email : undefined }], who));
+        if (isMe) {
+          await setVoiceProvider(db, admin, saved);
+          return { who: "you", voice: named };
+        }
+        const people = (await accounts.list()).filter((account) => account.role === "member");
+        const found = findPerson(people, who);
+        if ("error" in found) return found;
+        const person = found.person;
+        await setVoiceProvider(db, person.id, saved);
+        return { who: person.name, voice: named };
+      },
+    };
   urgentAlerts = new UrgentAlerts(db, {
-    speak: (owner, line, key) => liveVoice.speakUp(owner, line, key),
+    speak: (owner, line, key) => {
+      const onOpenAI = liveVoice.speakUp(owner, line, key);
+      const onOurs = pipecatVoice?.speakUp(owner, line, key) ?? false;
+      return onOpenAI || onOurs;
+    },
     events: async (owner, from, to) => (await agent.calendarRange?.(owner, from, to))?.events ?? [],
     timeZone: (owner) => agent.timeZone(owner),
   });
@@ -380,7 +476,7 @@ export async function createApp(
   if (mailAlerts)
     mailAlerts.urgent = (owner, item) => urgentAlerts?.consider(owner, item) ?? Promise.resolve();
   appEvents.urgent = (owner, item) => urgentAlerts?.consider(owner, item) ?? Promise.resolve();
-  agent.voiceEar = (owner, sessionId) => liveVoice.ear(owner, sessionId);
+  agent.voiceEar = (owner, sessionId) => voiceFor(sessionId).ear(owner, sessionId);
   // Where they are right now (only while the app is open and it's on; kept in memory, an hour).
   const whereabouts = new Whereabouts(
     db,
@@ -872,10 +968,37 @@ export async function createApp(
   app.get("/api/accounts", async (c) => {
     if (!(await accounts.isAdmin(c.get("owner"))))
       throw new AppError("Only the admin can manage people", 403);
+    const voiceOf = async (id: string) =>
+      (await db.get<{ value?: string }>(id, "agent-settings", "voice-provider").catch(() => null))
+        ?.value ?? "default";
+    const listed = await accounts.list();
+    const usesOurs = (choice: string) =>
+      choice === "pipecat" || (choice === "default" && config.voiceProvider === "pipecat");
     return c.json({
       emailSignIn: accounts.emailSignIn,
-      accounts: await accounts.list(),
+      accounts: await Promise.all(
+        listed.map(async (account) => {
+          const voice = await voiceOf(account.id);
+          // Minutes on the new voice this month, for the people trying it.
+          const voiceMinutes =
+            pipecatVoice && usesOurs(voice)
+              ? (await voiceAllowance(usage, config, account.id)).usedMinutes
+              : undefined;
+          return { ...account, voice, ...(voiceMinutes !== undefined ? { voiceMinutes } : {}) };
+        }),
+      ),
       requests: await accessRequests.list(c.get("owner")),
+      // Which live-talk voice each person uses, once our own voice is set up.
+      ...(pipecatVoice
+        ? {
+            voice: {
+              default: config.voiceProvider ?? "openai",
+              mine: await voiceOf(c.get("owner")),
+              limitMinutes: config.voiceMonthlyMinutes ?? 200,
+              idleSeconds: config.voicePipecatIdleSeconds ?? 45,
+            },
+          }
+        : {}),
     });
   });
   app.post("/api/accounts", async (c) =>
@@ -1575,27 +1698,92 @@ export async function createApp(
   app.post("/api/logins/:id/delete", async (c) =>
     c.json(await logins.remove(c.get("owner"), c.req.param("id"))),
   );
-  // Live voice: talk with the agent in real time (the browser connects to OpenAI over WebRTC).
+  // Live voice: talk with the agent in real time. The browser connects over WebRTC to OpenAI, or
+  // to our own voice service (through Cloudflare's relay), whichever this person uses.
+  const liveVoiceOf = async (owner: string) => {
+    const provider = await voiceProviderFor(db, config, owner);
+    return { provider, voice: provider === "pipecat" && pipecatVoice ? pipecatVoice : liveVoice };
+  };
   app.get("/api/voice/live", async (c) => {
     const owner = c.get("owner");
+    const { provider, voice } = await liveVoiceOf(owner);
+    const status = await voice.status(owner);
+    const allowance =
+      provider === "pipecat" ? await voiceAllowance(usage, config, owner) : undefined;
+    // This month's minutes used up: Talk goes to the chat until the 1st.
+    const limited =
+      allowance?.leftSeconds !== undefined && allowance.leftSeconds < SHORTEST_CALL_SECONDS;
     return c.json({
-      ...(await liveVoice.status(owner)),
+      ...status,
+      ...(limited ? { available: false, limited: true } : {}),
+      provider,
       minutesThisMonth: (await usage.month(owner)).voiceMinutes,
+      ...(allowance ? { allowance } : {}),
     });
   });
+  // The relay's short-lived credentials, fetched just before a call on our own voice.
+  app.get("/api/voice/live/ice", async (c) => {
+    const { provider } = await liveVoiceOf(c.get("owner"));
+    return c.json({ iceServers: provider === "pipecat" ? await turnServers(config) : [] });
+  });
   app.post("/api/voice/live", async (c) => {
-    const { sdp } = z.object({ sdp: z.string().min(10).max(100_000) }).parse(await c.req.json());
-    return c.json(await liveVoice.start(c.get("owner"), sdp));
+    const owner = c.get("owner");
+    const body = z
+      .object({
+        sdp: z.string().min(10).max(100_000),
+        provider: z.enum(["openai", "pipecat"]).optional(),
+      })
+      .parse(await c.req.json());
+    const { provider, voice } = await liveVoiceOf(owner);
+    // The browser made its offer for the other voice (it hadn't heard of a change): it asks again.
+    if (body.provider && body.provider !== provider)
+      throw new AppError("VOICE_PROVIDER_CHANGED", 409);
+    const { sdp } = body;
+    const started = await voice.start(owner, sdp);
+    await voiceComparison.started(owner, started.sessionId, provider);
+    return c.json({ ...started, provider });
   });
   app.post("/api/voice/live/:id/end", async (c) => {
-    await liveVoice.end(c.get("owner"), c.req.param("id"));
+    await voiceFor(c.req.param("id")).end(c.get("owner"), c.req.param("id"));
     return c.json({ ok: true });
   });
   // Where the call is in the app (its screen, or shrunk to the bar), so the voice says where to look.
   app.post("/api/voice/live/:id/view", async (c) => {
     const { shrunk } = z.object({ shrunk: z.boolean() }).parse(await c.req.json());
-    liveVoice.view(c.get("owner"), c.req.param("id"), shrunk);
+    voiceFor(c.req.param("id")).view(c.get("owner"), c.req.param("id"), shrunk);
     return c.json({ ok: true });
+  });
+  // How long each turn took, as the app heard it (end of their words to the first sound back).
+  app.post("/api/voice/live/:id/turns", async (c) => {
+    const { ms } = z
+      .object({ ms: z.array(z.number().min(0).max(60_000)).max(300) })
+      .parse(await c.req.json());
+    await voiceComparison.clientTurns(c.get("owner"), c.req.param("id"), ms);
+    return c.json({ ok: true });
+  });
+  // OpenAI's voice and our own side by side (the admin's): calls, turn times, cost per minute.
+  app.get("/api/voice/compare", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can see this", 403);
+    const days = Math.min(365, Math.max(1, Number(c.req.query("days")) || 30));
+    return c.json(await compareVoices(days));
+  });
+  // Which voice one person uses (the admin's choice), for trying our own voice on some people.
+  app.post("/api/accounts/:id/voice", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can manage people", 403);
+    const { provider } = z
+      .object({ provider: z.enum(["openai", "pipecat", "default"]) })
+      .parse(await c.req.json());
+    if (provider === "pipecat" && !pipecatConfigured(config))
+      throw new AppError(
+        "The new voice isn’t set up yet. On Railway, add VOICE_SERVICE_URL and VOICE_INTERNAL_TOKEN to the api service, then choose Deploy.",
+        409,
+      );
+    // "me" is the admin themself (who may not be in the accounts list).
+    const id = c.req.param("id") === "me" ? c.get("owner") : c.req.param("id");
+    await setVoiceProvider(db, id, provider);
+    return c.json({ ok: true, provider });
   });
   app.get("/api/voice/live/recent", async (c) =>
     c.json({ sessions: await liveVoice.recent(c.get("owner")) }),
@@ -1612,7 +1800,9 @@ export async function createApp(
   });
   // What a call showed on screen instead of reading it out (during the call and after).
   app.get("/api/voice/live/:id/details", async (c) =>
-    c.json({ details: await liveVoice.details(c.get("owner"), c.req.param("id")) }),
+    c.json({
+      details: await voiceFor(c.req.param("id")).details(c.get("owner"), c.req.param("id")),
+    }),
   );
   app.get("/api/persona", async (c) => c.json({ facts: await agent.persona.list(c.get("owner")) }));
   app.post("/api/persona/:key", async (c) =>
@@ -1750,5 +1940,16 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, accounts, files, actions, workspace, agent, computer, liveVoice };
+  return {
+    app,
+    auth,
+    accounts,
+    files,
+    actions,
+    workspace,
+    agent,
+    computer,
+    liveVoice,
+    pipecatVoice,
+  };
 }

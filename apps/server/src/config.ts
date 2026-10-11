@@ -83,6 +83,18 @@ export interface Config {
   voiceModel?: string;
   voiceName?: string;
   voiceIdleSeconds?: number;
+  /** Which voice live talk uses by default: "openai" (GPT-Live-1) or "pipecat" (our own). */
+  voiceProvider?: "openai" | "pipecat";
+  /** Our own voice service (apps/voice) on Railway's private network, and its shared token. */
+  voiceServiceUrl?: string;
+  voiceServiceToken?: string;
+  /** Quiet seconds before our own voice hangs up (OpenAI's calls keep voiceIdleSeconds). */
+  voicePipecatIdleSeconds?: number;
+  /** Minutes a month each person may talk on our own voice; 0 for no limit. */
+  voiceMonthlyMinutes?: number;
+  /** Cloudflare's TURN relay, which carries the audio (Railway takes no UDP from outside). */
+  turnKeyId?: string;
+  turnKeyToken?: string;
   /** This service's Variables page in Railway, from the ids Railway sets (not secrets). */
   railwayVariablesUrl?: string;
   composioUserId?: string;
@@ -176,6 +188,17 @@ export function readConfig(): Config {
     voiceModel: process.env.VOICE_LIVE_MODEL?.trim() || undefined,
     voiceName: process.env.VOICE_LIVE_VOICE?.trim() || undefined,
     voiceIdleSeconds: Number(process.env.VOICE_IDLE_SECONDS) || undefined,
+    voiceProvider:
+      process.env.VOICE_PROVIDER?.trim().toLowerCase() === "pipecat" ? "pipecat" : "openai",
+    voiceServiceUrl: process.env.VOICE_SERVICE_URL?.trim().replace(/\/$/, "") || undefined,
+    voiceServiceToken: process.env.VOICE_INTERNAL_TOKEN?.trim() || undefined,
+    voicePipecatIdleSeconds: Number(process.env.VOICE_PIPECAT_IDLE_SECONDS) || 45,
+    voiceMonthlyMinutes:
+      process.env.VOICE_MONTHLY_MINUTES === undefined
+        ? 200
+        : Math.max(0, Number(process.env.VOICE_MONTHLY_MINUTES) || 0),
+    turnKeyId: process.env.CLOUDFLARE_TURN_KEY_ID?.trim() || undefined,
+    turnKeyToken: process.env.CLOUDFLARE_TURN_API_TOKEN?.trim() || undefined,
     railwayVariablesUrl:
       process.env.RAILWAY_PROJECT_ID &&
       process.env.RAILWAY_SERVICE_ID &&

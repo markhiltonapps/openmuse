@@ -8,7 +8,85 @@ import { setLiveSpeaking, voiceSettings } from "./voice";
  * Live voice in the browser: the microphone goes straight to OpenAI over WebRTC and the agent's
  * voice comes straight back. Our server only makes the session (it holds the key) and listens in
  * to count minutes and keep what was said.
+ *
+ * Some people use our own voice instead (apps/voice, set by the admin): the same call, the same
+ * events, but the audio goes through Cloudflare's relay to our voice service, so the browser asks
+ * for the relay's credentials first and sends its offer once it knows its relay address.
  */
+export type LiveProvider = "openai" | "pipecat";
+// Which voice this person uses, from the server's status (per signed-in session).
+const providers = new WeakMap<object, LiveProvider>();
+export function setLiveProvider(api: MuseApi, provider: LiveProvider | undefined) {
+  if (provider) providers.set(api, provider);
+}
+/** Said by the server when the voice this browser expected isn't this person's any more. */
+export const PROVIDER_CHANGED = "VOICE_PROVIDER_CHANGED";
+/** Waits until the browser has found its addresses (the relay's too), at most a few seconds. */
+function gathered(peer: RTCPeerConnection, ms = 3000) {
+  return new Promise<void>((resolve) => {
+    if (peer.iceGatheringState === "complete") return resolve();
+    const done = () => {
+      if (peer.iceGatheringState !== "complete") return;
+      peer.removeEventListener("icegatheringstatechange", done);
+      resolve();
+    };
+    peer.addEventListener("icegatheringstatechange", done);
+    setTimeout(resolve, ms);
+  });
+}
+/**
+ * How long each turn takes, as the person hears it: from the end of their words to the first
+ * sound back. Measured the same way for both voices, for comparing them; it only reads levels
+ * the browser already has (the microphone's from the connection's stats), a few times a second.
+ */
+function turnTimer(peer: RTCPeerConnection, mic: MediaStreamTrack | undefined) {
+  const turns: number[] = [];
+  let talking = false;
+  let lastWord = 0;
+  let waiting = 0;
+  let agentLoud = false;
+  let agentQuietSince = 0;
+  const poll = setInterval(() => {
+    if (!mic || document.visibilityState !== "visible") return;
+    void peer
+      .getStats(mic)
+      .then((stats) => {
+        let level: number | undefined;
+        stats.forEach((report: { type?: string; kind?: string; audioLevel?: number }) => {
+          if (report.type === "media-source" && report.kind === "audio") level = report.audioLevel;
+        });
+        if (level === undefined) return;
+        const now = Date.now();
+        // The agent's own voice in the microphone (echo) doesn't count as them talking.
+        const echo = agentLoud || now - agentQuietSince < 300;
+        if (level > 0.03 && !echo) {
+          talking = true;
+          lastWord = now;
+          waiting = 0;
+        } else if (talking && now - lastWord > 400) {
+          talking = false;
+          waiting = lastWord;
+        }
+      })
+      .catch(() => undefined);
+  }, 200);
+  return {
+    /** The agent's loudness, from the call's own meter. */
+    agent(loud: boolean) {
+      if (loud && !agentLoud && waiting) {
+        const ms = Date.now() - waiting;
+        if (ms > 0 && ms < 15_000) turns.push(ms);
+        waiting = 0;
+      }
+      if (!loud && agentLoud) agentQuietSince = Date.now();
+      agentLoud = loud;
+    },
+    stop() {
+      clearInterval(poll);
+      return turns;
+    },
+  };
+}
 export type LiveState = "connecting" | "listening" | "speaking" | "ended";
 export interface LiveHandlers {
   onState: (state: LiveState) => void;
@@ -61,7 +139,20 @@ export function useLiveCallOn() {
     () => false,
   );
 }
-export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<LiveCall> {
+export async function startLive(
+  api: MuseApi,
+  handlers: LiveHandlers,
+  retried = false,
+): Promise<LiveCall> {
+  const provider = providers.get(api) ?? "openai";
+  const ours = provider === "pipecat";
+  // Our own voice: the relay's credentials, asked for while the microphone starts.
+  const relay = ours
+    ? api
+        .request<{ iceServers: RTCIceServer[] }>("/api/voice/live/ice")
+        .then(({ iceServers }) => iceServers)
+        .catch(() => [] as RTCIceServer[])
+    : undefined;
   const micId = voiceSettings().microphone;
   const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
   const stream = await navigator.mediaDevices
@@ -77,7 +168,8 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
       throw error;
     });
   countCall(1);
-  const peer = new RTCPeerConnection();
+  const peer = ours ? new RTCPeerConnection({ iceServers: await relay }) : new RTCPeerConnection();
+  const timer = turnTimer(peer, stream.getAudioTracks()[0]);
   const player = new Audio();
   player.autoplay = true;
   let context: AudioContext | undefined;
@@ -118,6 +210,12 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
     }
     for (const track of stream.getTracks()) track.stop();
     peer.close();
+    // The turn times, for comparing the voices (only when the call got going).
+    const turns = timer.stop();
+    if (sessionId && turns.length)
+      void api
+        .request(`/api/voice/live/${encodeURIComponent(sessionId)}/turns`, { ms: turns })
+        .catch(() => undefined);
     player.srcObject = null;
     void context?.close().catch(() => undefined);
     void wakeLock?.release().catch(() => undefined);
@@ -182,6 +280,7 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
     let said: LiveState | undefined;
     meter = setInterval(() => {
       const loud = (level?.() ?? 0) > 0.02;
+      timer.agent(loud);
       if (loud) quietSince = 0;
       else quietSince ||= Date.now();
       const quiet = quietSince > 0 ? Date.now() - quietSince : 0;
@@ -267,13 +366,22 @@ export async function startLive(api: MuseApi, handlers: LiveHandlers): Promise<L
   try {
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
+    // Our voice service takes the offer whole, with the browser's addresses in it.
+    if (ours) await gathered(peer);
     const answer = await api.request<{ sdp: string; sessionId: string }>("/api/voice/live", {
-      sdp: offer.sdp,
+      sdp: ours ? (peer.localDescription?.sdp ?? offer.sdp) : offer.sdp,
+      provider,
     });
     sessionId = answer.sessionId;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
   } catch (error) {
     await stop(undefined, false);
+    // The admin moved this person to the other voice since the app last asked: once more, on it.
+    if (!retried && error instanceof Error && error.message === PROVIDER_CHANGED) {
+      const status = await api.request<{ provider?: LiveProvider }>("/api/voice/live");
+      setLiveProvider(api, status.provider ?? "openai");
+      return startLive(api, handlers, true);
+    }
     throw error;
   }
   // Keep the screen on while talking; a locked phone stops the microphone.

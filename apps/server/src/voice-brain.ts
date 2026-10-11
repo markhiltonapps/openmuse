@@ -193,6 +193,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Adding up what the AI has cost";
     case "change_ai_models":
       return "Changing the AI models";
+    case "live_talk_voice":
+      return "Checking the live-talk voices";
     case "get_weather":
       return "Checking the weather";
     case "delegate_task":

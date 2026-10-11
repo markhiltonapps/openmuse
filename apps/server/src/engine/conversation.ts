@@ -286,6 +286,37 @@ export class ConversationAgent extends AbstractAgent {
         execute: async () => this.service.aiCosts(this.owner),
       }),
       defineTool({
+        name: "live_talk_voice",
+        description:
+          'Admin only. Live talk has two voices: OpenAI’s and the new, cheaper one. set moves one person (or the admin, who: "me") to the new voice or back to OpenAI’s; compare gives both voices side by side for everyone’s calls over the last 7 or 30 days (calls, minutes, the usual and slowest wait for a reply, cost per minute). Use it only when the admin asks; then say what changed. For a comparison, lead with the difference in plain words (“the new voice answered about 0.3 seconds slower and cost 1 cent a minute against 5”), and give the rest only if asked.',
+        parameters: z.object({
+          do: z.enum(["set", "compare"]),
+          who: z
+            .string()
+            .max(120)
+            .optional()
+            .describe('For set: "me", or the person’s name or email as they said it'),
+          voice: z.enum(["new", "openai"]).optional().describe("For set"),
+          days: z
+            .union([z.literal(7), z.literal(30)])
+            .optional()
+            .describe("For compare; 30 if unsaid"),
+        }),
+        execute: async ({ do: what, who, voice, days }) => {
+          const voices = this.service.liveTalkVoices;
+          if (!voices)
+            return {
+              error:
+                "The new voice isn’t set up yet. On Railway, add VOICE_SERVICE_URL and VOICE_INTERNAL_TOKEN to the api service, then choose Deploy.",
+            };
+          if (!(await (this.service.isAdmin?.(this.owner) ?? Promise.resolve(false))))
+            return { error: "Only the admin can change or compare the live-talk voices." };
+          if (what === "compare") return voices.compare(days ?? 30);
+          if (!voice) return { error: "Say which voice: the new one or OpenAI’s." };
+          return voices.set(this.owner, who?.trim() || "me", voice);
+        },
+      }),
+      defineTool({
         name: "change_ai_models",
         description:
           "Admin only. Change which AI model does a kind of work: chat (which also looks things up during voice calls), background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed, with the model’s plain name (GPT-6.1 Sol), never its ID. If OpenRouter isn’t set up yet, say the change only starts once it is. Live voice calls keep their own voice model.",

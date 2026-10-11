@@ -32,7 +32,7 @@ import { CallDetails, detailNode } from "./call-details";
 import { Segmented } from "./charts";
 import { HIDDEN } from "./job-working-ui";
 import { callStatus, useLiveCall } from "./live-call";
-import { liveVoiceSupported } from "./live-voice";
+import { type LiveProvider, liveVoiceSupported, setLiveProvider } from "./live-voice";
 import { Button, colors, ErrorNotice, Sheet, SheetTop, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -59,9 +59,14 @@ const setupLinks = new WeakMap<object, string>();
 const listeners = new Set<() => void>();
 /** Asks the server (again, after the key is added) and updates every headset. */
 export async function checkLiveVoice(api: MuseApi): Promise<LiveStatus> {
-  const result = await api.request<{ available: boolean; needsKey?: boolean; setupUrl?: string }>(
-    "/api/voice/live",
-  );
+  const result = await api.request<{
+    available: boolean;
+    needsKey?: boolean;
+    setupUrl?: string;
+    provider?: LiveProvider;
+  }>("/api/voice/live");
+  // Which voice they use (OpenAI's or our own), so a call connects the right way.
+  setLiveProvider(api, result.provider);
   const status: LiveStatus = result.available ? "on" : result.needsKey ? "setup" : "off";
   cache.set(api, status);
   try {
@@ -247,7 +252,8 @@ export function LiveTalkSheet() {
   const showingDetails = view === "details" && details.length > 0;
   // The details take the avatar's room as well as the words'.
   const detailsHeight = captionHeight + (short ? 0 : avatar + 12);
-  const note = (
+  // Out of minutes, a hint that invites a call would mislead.
+  const note = call.limited ? null : (
     <Text
       style={[
         s.small,
@@ -264,12 +270,16 @@ export function LiveTalkSheet() {
     >
       {over ? (
         <>
-          <Button strong style={{ minWidth: 112 }} onPress={start}>
-            Talk again
-          </Button>
-          {/* A call that couldn't start: typing still works. */}
-          {!!call.error && (
+          {/* Out of this month's minutes: a call can't start again until the 1st. */}
+          {!call.limited && (
+            <Button strong style={{ minWidth: 112 }} onPress={start}>
+              Talk again
+            </Button>
+          )}
+          {/* A call that couldn't start, or no minutes left: typing still works. */}
+          {(!!call.error || call.limited) && (
             <Button
+              strong={call.limited}
               style={{ minWidth: 112 }}
               onPress={() => {
                 call.dismiss();
@@ -402,7 +412,7 @@ export function LiveTalkSheet() {
             </View>
             {/* Read out when the call starts, mutes or ends; not at every pause, over the voice. */}
             <Text role="status" style={HIDDEN}>
-              {error
+              {error && !call.limited
                 ? `${status} ${error}`
                 : state === "connecting" && switchedOn
                   ? `Live talk is on. ${status}`
@@ -410,7 +420,8 @@ export function LiveTalkSheet() {
                     ? status
                     : `Live. ${name} can hear you. Just speak, and cut in any time.`}
             </Text>
-            <ErrorNotice error={error} />
+            {/* Running out of minutes isn't a fault: it's said as the headline instead. */}
+            <ErrorNotice error={call.limited ? "" : error} />
             {showingDetails ? (
               // The sheet's whole width, so three product cards fit on a computer.
               <View
