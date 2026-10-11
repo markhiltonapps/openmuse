@@ -379,6 +379,13 @@ function withFallback(primary: Adapter, plan: CallPlan, current: { model: string
 
 /** Anthropic prompt caching: a cache read costs a tenth of the normal input price. */
 const CACHE = { type: "ephemeral" } as const;
+/**
+ * The instructions and tools are the same for everyone and every chat, so they're kept for an
+ * hour (written at 2× instead of 1.25×): a call's first look-up, or the first chat after a quiet
+ * spell, then reads them at a tenth of the price instead of writing them again. An hour-long
+ * entry must come before the 5-minute one (the conversation), as it does here.
+ */
+const CACHE_HOUR = { type: "ephemeral", ttl: "1h" } as const;
 export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
 
 /** A BuiltInAgent in TanStack factory mode with the options of the classic AI SDK mode. */
@@ -430,7 +437,7 @@ export function tanstackAgent(options: {
           ...(options.prompt
             ? [
                 cached
-                  ? { content: options.prompt, metadata: { cache_control: CACHE } }
+                  ? { content: options.prompt, metadata: { cache_control: CACHE_HOUR } }
                   : options.prompt,
               ]
             : []),

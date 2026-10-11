@@ -189,6 +189,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Checking what's waiting";
     case "approve_by_voice":
       return "Approving";
+    case "mark_updates_read":
+      return "Clearing your updates";
     case "ai_costs":
       return "Adding up what the AI has cost";
     case "change_ai_models":
@@ -406,7 +408,8 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
         { description: "Where what you put on screen appears", value: whereShown(shrunk) },
       ],
       state: {},
-      forwardedProps: {},
+      // A call's look-ups use their own model (the Models card's "Look-ups during calls").
+      forwardedProps: { voiceLookup: true },
     };
     return await new Promise<string>((resolve, reject) => {
       let words = "";

@@ -891,6 +891,7 @@ export async function createApp(
         chat: agent.modelFor("chat").model,
         background: agent.modelFor("background").model,
         simple: agent.modelFor("simple").model,
+        voice: agent.modelFor("voice").model,
       },
     });
   });

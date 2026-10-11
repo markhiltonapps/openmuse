@@ -495,6 +495,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "Below that: what’s waiting for your OK, jobs in progress, **Add a reminder**, then **Plans & bookings** and **Reminders** (each with **See all**) and your news. React to a story to see more or fewer like it.",
+      "News is from the last two days, so the Feed stays current; older stories drop off.",
     ],
     say: ["Make me a feed about local news and the Warriors."],
     keywords: ["today", "dashboard", "home", "news", "weather", "glance"],
@@ -597,14 +598,20 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "updates",
     group: "day",
     title: "Updates and the bell",
-    summary: "The bell keeps every update; small cards pop up under it as things happen.",
+    summary:
+      "The bell keeps the last week’s updates; small cards pop up under it as things happen.",
     place: "updates",
     steps: [
       "Tap the **bell** at the top right. A dot means something new.",
-      "Results, changes {agent} noticed and anything needing you are listed there.",
+      "Results, changes {agent} noticed and anything needing you are listed there, from the last 7 days. Something older that still needs you stays until it’s done.",
+      "**Mark all read** clears the count. Or say “Mark all my updates read.”",
       "Choose where updates show under **Apps › Agent › Where updates show**.",
     ],
-    keywords: ["notifications", "bell", "alerts", "inbox", "pop-up", "toast"],
+    body: [
+      "Email only shows up here when you’ve asked to hear about it: an email rule, or **Every new email** under **Email alerts**.",
+    ],
+    say: ["Mark all my updates read."],
+    keywords: ["notifications", "bell", "alerts", "inbox", "pop-up", "toast", "mark read", "clear"],
     related: ["notifications", "job-alerts"],
   },
   {
@@ -1237,8 +1244,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Open **Apps › Alerts › Email alerts** and turn them on (Gmail or Outlook must be connected).",
       "Add a rule, or just say: “When Dana emails me, sum it up and draft a reply.”",
+      "Choose what reaches the bell: **Only email that matches a rule** (the default), or **Every new email**.",
     ],
-    say: ["Tell me when new email comes in.", "When my boss emails, sum it up for me."],
+    say: ["When my boss emails, sum it up for me.", "Tell me when Dana emails me."],
     keywords: ["email alerts", "rules", "new mail", "inbox", "automation"],
     related: ["app-alerts", "plans"],
   },
@@ -1886,21 +1894,22 @@ export const HELP_TOPICS: HelpTopic[] = [
     admin: true,
     title: "Choose which AI model does which job",
     summary:
-      "Chat, background jobs and simple jobs can each use a different model, to keep costs down.",
+      "Chat, background jobs, simple jobs and look-ups during calls can each use a different model, to keep costs down.",
     shot: "models",
     place: "money",
     steps: [
       "Open **Apps › Money › AI models**.",
       "Tap **Change** next to a kind of work, pick a model and how hard it thinks, then tap **Save**. It applies to everyone: from the next message, and to jobs that start after it.",
-      "**Claude, as before** puts that work back on the Claude model the server was using before. The **Back to … (recommended)** button under a kind of work returns it to the recommended pick. **Put everything back on Claude** and **Use the recommended picks** change all three at once.",
+      "**Claude, as before** puts that work back on the Claude model the server was using before. The **Back to … (recommended)** button under a kind of work returns it to the recommended pick. **Put everything back on Claude** and **Use the recommended picks** change them all at once.",
+      "**Look-ups during calls** is what {agent} looks up or does while you talk live (your calendar, email, reminders). Its recommended pick is the server’s quick Claude model: these are short, need a fast answer, and it costs much less than the chat’s model.",
       "Or say it: “Put all the AI back on Claude”, or “Use DeepSeek for simple jobs”.",
     ],
     body: [
       "A model is the AI that does the work. Different models cost different amounts, and any model costs more the harder it thinks.",
-      "Recommended: **GPT-6.1 Sol** thinking hard for chat, **GPT-6.1 Sol** with some thinking for background jobs, and the cheap, fast **DeepSeek V4.1 Flash** for simple jobs (summaries of long chats, Ideas, bookings found in emails). They’re picked for the best results per dollar.",
+      "Recommended: **GPT-6.1 Sol** thinking hard for chat, **GPT-6.1 Sol** with some thinking for background jobs, the cheap, fast **DeepSeek V4.1 Flash** for simple jobs (summaries of long chats, Ideas, bookings found in emails), and the server’s quick Claude for look-ups during calls. They’re picked for the best results per dollar.",
       "These run through OpenRouter, one account and one bill for models from many companies. Create a key at openrouter.ai and add some credit there. Then add the key as **OPENROUTER_API_KEY** under **Variables** on the api service in Railway, and choose **Deploy** on the banner. Until then everything uses Claude.",
       "**Another OpenRouter model** takes a model ID from its page at openrouter.ai. It’s checked with OpenRouter before it’s saved, and one that can’t use the app’s tools can’t do chat or background jobs.",
-      "If OpenRouter can’t answer (no credit left, or it’s down), Claude answers instead, and the card says so under that kind of work. Live voice calls use their own voice model, which isn’t changed here. See what it all costs under **Usage**.",
+      "If OpenRouter can’t answer (no credit left, or it’s down), Claude answers instead, and the card says so under that kind of work. The live talk voice each person hears is set under **People**, not here; what it looks up or does uses **Look-ups during calls**. See what it all costs under **Usage**.",
     ],
     say: [{ text: "Which AI model is doing what?", send: true }, "Put all the AI back on Claude"],
     keywords: [

@@ -373,3 +373,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   then close, or the app never learns why the call ended.
 - **Running out is not an error:** a monthly limit shows as the headline with Type instead as the
   main button, not a red box with Talk again (`isLiveLimit`, `limited`).
+- **Updates age out, they aren't deleted:** jobs re-post their outcome every minute
+  (`insertIfAbsent`), so a deleted update comes back. Hide old ones instead (`recentUpdates`,
+  7 days) but keep anything whose job still waits on the person. Email reaches the bell only for
+  a rule or "Every new email"; the old "important" default let almost every email through.
+- **Hand-offs during calls run on their own model:** `forwardedProps.voiceLookup` makes the chat
+  agent use `modelFor("voice")` (the server's quick Claude by default). The chat's fixed
+  instructions use a 1-hour cache (`ttl: "1h"` must come before any 5-minute breakpoint).

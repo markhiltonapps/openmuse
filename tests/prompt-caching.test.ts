@@ -103,11 +103,12 @@ test("Claude reuses the fixed instructions and the conversation from its cache",
     system: { text: string; cache_control?: unknown }[];
     cache_control?: unknown;
   };
-  // The instructions are one cached block; the changing context comes after it, uncached.
+  // The instructions are one cached block, kept for an hour (they're the same for every chat);
+  // the changing context comes after it, uncached.
   assert.deepEqual(body.system[0], {
     type: "text",
     text: "You are a helpful agent. These instructions never change.",
-    cache_control: { type: "ephemeral" },
+    cache_control: { type: "ephemeral", ttl: "1h" },
   });
   assert.match(body.system[1]?.text ?? "", /Current date and time:\nSunday, 8:45 PM/);
   assert.equal(body.system[1]?.cache_control, undefined);

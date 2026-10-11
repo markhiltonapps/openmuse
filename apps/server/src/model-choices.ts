@@ -4,15 +4,16 @@ import type { Price } from "./usage.ts";
 
 /**
  * Which model does which job (owner, 2026-10-06): the chat (hard, important work), background
- * jobs and routines (many steps), and simple jobs (summaries, Ideas, bookings from emails).
+ * jobs and routines (many steps), simple jobs (summaries, Ideas, bookings from emails), and
+ * look-ups during live calls (owner, 2026-10-11: the server's quick Claude, to keep calls cheap).
  *
  * With OPENROUTER_API_KEY set, each job uses the pick below unless the admin chose another on the
  * Models card. Without it, or for "the server's model", the job keeps MODEL / WORKER_MODEL, the
  * Claude setup that was there before, so switching back is one tap. A call OpenRouter can't start
  * (no credit, an outage) is answered by that Claude model too.
  */
-export type ModelJob = "chat" | "background" | "simple";
-export const MODEL_JOBS: ModelJob[] = ["chat", "background", "simple"];
+export type ModelJob = "chat" | "background" | "simple" | "voice";
+export const MODEL_JOBS: ModelJob[] = ["chat", "background", "simple", "voice"];
 export type Effort = "low" | "medium" | "high";
 
 /** The server's own model (MODEL, or WORKER_MODEL for background and simple jobs). */
@@ -37,6 +38,9 @@ export const RECOMMENDED: Record<ModelJob, { model: string; effort: Effort }> = 
   chat: { model: "openrouter/openai/gpt-6.1-sol", effort: "high" },
   background: { model: "openrouter/openai/gpt-6.1-sol", effort: "medium" },
   simple: { model: "openrouter/deepseek/deepseek-v4.1-flash", effort: "low" },
+  // A call's look-ups are short and need answering fast; the chat's 45,000-token setup costs
+  // about half as much on Claude Haiku as on the chat's model.
+  voice: { model: SERVER_MODEL, effort: "low" },
 };
 
 /** Most each call may write (reasoning included): room for big jobs, little for simple ones. */
@@ -44,6 +48,7 @@ export const OUTPUT_LIMITS: Record<ModelJob, number> = {
   chat: 16_000,
   background: 32_000,
   simple: 4_000,
+  voice: 8_000,
 };
 /** A simple job that thinks harder gets room for its thinking, or its answer would be cut off. */
 export const outputLimit = (job: ModelJob, effort: Effort) =>

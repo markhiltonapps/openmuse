@@ -62,6 +62,9 @@ test("the Feed searches each followed topic once each morning", async () => {
   await settled();
   assert.equal(searched.length, 6);
 
+  // Stories older than two days aren't shown, even before the next refresh clears them.
+  now = Date.parse("2026-09-29T13:00:00Z");
+  assert.equal((await feed.get(owner)).items.length, 0);
   // A week later old items are cleared out.
   now = Date.parse("2026-10-05T13:00:00Z");
   await feed.refreshDue();

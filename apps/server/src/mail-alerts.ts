@@ -232,7 +232,7 @@ export class MailAlerts {
     return (
       (await this.db.get<MailAlertSettings>(owner, "agent-settings", "mail-alerts")) ?? {
         id: "mail-alerts",
-        notify: "important",
+        notify: "rules",
         watching: {},
       }
     );
@@ -249,7 +249,7 @@ export class MailAlerts {
     return {
       available,
       ...(available || !this.setupError ? {} : { problem: this.setupError }),
-      notify: settings.notify,
+      notify: settings.notify === "all" ? "all" : "rules",
       apps: MAIL_APPS.map((app) => ({
         app,
         name: LABELS[app],
@@ -380,10 +380,10 @@ export class MailAlerts {
         },
         `mail-rule:${rule.id}:${key}`,
       );
-    const notify =
-      matched.length > 0 ||
-      settings.notify === "all" ||
-      (settings.notify === "important" && email.important !== false);
+    // Only email they asked to hear about (owner, 2026-10-11): a matching rule, or every email
+    // when they chose that. "Important email" was the old default and flooded the bell (most
+    // email has no importance flag), so it now means the same as rules only.
+    const notify = matched.length > 0 || settings.notify === "all";
     if (notify)
       await this.agent.notify(
         watch.owner,
@@ -413,17 +413,31 @@ export class MailAlerts {
 }
 
 export const mailAlertInstructions =
-  ' New email: watch_inbox turns on instant alerts for new Gmail or Outlook email. For "when X emails me, do Y", call create_email_rule with the sender and what to do; it runs as a background task each time a matching email arrives and watches the connected inbox if needed. list_email_rules and delete_email_rule manage them.';
+  ' New email: watch_inbox watches their Gmail or Outlook for new email. Email reaches the bell (Updates) only when it matches a rule, or every email when they choose notify: "all"; when they ask to hear about new email without saying from whom, ask whether they want every email or only from certain people (a rule). For "when X emails me, do Y", call create_email_rule with the sender and what to do; it runs as a background task each time a matching email arrives and watches the connected inbox if needed. list_email_rules and delete_email_rule manage them.';
 
 export function mailAlertToolSpecs(alerts: MailAlerts, owner: string) {
   return [
     {
       name: "watch_inbox",
       description:
-        "Turn instant new-email alerts on or off for the person's connected Gmail or Outlook.",
-      parameters: z.object({ app: z.enum(MAIL_APPS), enabled: z.boolean().default(true) }),
-      execute: async ({ app, enabled }: { app: MailApp; enabled: boolean }) =>
-        alerts.watch(owner, app, enabled),
+        'Turn watching for new email on or off for the person\'s connected Gmail or Outlook. notify: "all" puts every new email in the bell; "rules" (the default) only email matching one of their rules.',
+      parameters: z.object({
+        app: z.enum(MAIL_APPS),
+        enabled: z.boolean().default(true),
+        notify: z.enum(["all", "rules"]).optional(),
+      }),
+      execute: async ({
+        app,
+        enabled,
+        notify,
+      }: {
+        app: MailApp;
+        enabled: boolean;
+        notify?: "all" | "rules";
+      }) => {
+        if (notify) await alerts.setNotify(owner, notify);
+        return alerts.watch(owner, app, enabled);
+      },
     },
     {
       name: "create_email_rule",

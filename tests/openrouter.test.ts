@@ -437,3 +437,16 @@ test("a background job runs on OpenRouter with its tools, at medium effort, the 
   const system = body.messages.find((m) => m.role === "system")?.content ?? "";
   assert.ok(system.indexOf("It's ") > system.indexOf("Email and calendar:"));
 });
+
+test("look-ups during calls use the server's quick Claude, not the chat's model", async () => {
+  const db = await createStore();
+  const choices = await new ModelChoices(
+    db,
+    { model: "anthropic/claude-sonnet-5", workerModel: "anthropic/claude-haiku-4-5-20251001" },
+    { hasKey: () => true },
+  ).load();
+  assert.equal(choices.plan("chat").model, RECOMMENDED.chat.model);
+  assert.deepEqual(choices.plan("voice"), { model: "anthropic/claude-haiku-4-5-20251001" });
+  assert.ok(choices.view().jobs.some((row) => row.job === "voice"));
+  await db.close();
+});

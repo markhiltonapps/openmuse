@@ -3689,11 +3689,25 @@ export function NotificationsSheet() {
       setError(errorText(e));
     }
   }
+  const unread = (data?.notifications ?? []).filter((item) => !item.read).length;
+  const [clearing, setClearing] = useState(false);
+  async function readAll() {
+    setClearing(true);
+    setError("");
+    try {
+      await mutate("/notifications/read-all", {});
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setClearing(false);
+    }
+  }
   // Unread reminders and decisions come first; the rest stays newest first.
   const items = (data?.notifications ?? [])
     .map((item) => ({
       item,
-      needsYou: !item.read && updateKind(item, data?.tasks) !== "update",
+      // Still waiting on them even once read (after Mark all read, say).
+      needsYou: updateKind(item, data?.tasks) !== "update",
       // A reminder's title is only "Reminder": what it's about leads.
       reminder: !!item.reminderId && !item.taskId,
     }))
@@ -3701,10 +3715,19 @@ export function NotificationsSheet() {
   return (
     <Sheet
       title="Updates"
-      subtitle="Results and decisions that need your attention."
+      subtitle="Results and decisions from the last 7 days, plus anything still waiting on you."
       onClose={close}
     >
       <View style={{ gap: 14 }}>
+        {unread > 0 && (
+          <Button
+            busy={clearing}
+            style={{ alignSelf: "flex-start" }}
+            onPress={() => void readAll()}
+          >
+            Mark all read
+          </Button>
+        )}
         <ErrorNotice error={error} />
         {items.map(({ item, needsYou, reminder }) => (
           <Card
@@ -3715,7 +3738,7 @@ export function NotificationsSheet() {
               <Text style={[s.heading, { flexShrink: 1 }]}>
                 {reminder ? item.body : item.title}
               </Text>
-              {!item.read && (
+              {(needsYou || !item.read) && (
                 <Chip tint={needsYou ? colors.lavender : undefined}>
                   {needsYou ? "Needs you" : "New"}
                 </Chip>

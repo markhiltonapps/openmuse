@@ -1,0 +1,53 @@
+Claude working session — 2026-10-11
+
+1. Our own live-talk voice (Pipecat) is live
+- Pushed and deployed earlier today: 7c4a8d2, 8ee417e, 1029150, 471c33d. The voice service is on
+  Railway (b4f4c35a), with Cloudflare TURN for WebRTC. The owner made calls and both directions
+  work.
+- Prompt caching on the voice's Claude Haiku turns works after the fix. Haiku 4.5 caches only
+  prompts of 4,096 tokens or more, so the voice prompt now carries the app guide (~6.2k tokens).
+  Pipecat counted input tokens twice; `_CountOnce` fixes that. Cached turns cost about
+  $0.0008–0.0011 each on Railway.
+
+2. Cheaper hand-offs during calls (owner chose "Both")
+- When the voice hands a question to the chat agent (calendar, email, reminders), that look-up
+  was a full chat-agent run on the chat's model (~45k tokens of tools and prompt; a cold Sonnet
+  write was about $0.115).
+- Look-ups now have their own row on the admin's AI models card: "Look-ups during calls"
+  (ModelJob "voice", model-choices.ts). It defaults to the server's quick Claude (Haiku, low
+  effort, 8k output cap). voice-brain.ts sends `forwardedProps.voiceLookup`, and
+  ConversationAgent then picks `modelFor("voice")`. change_ai_models, /api/usage, Usage's models
+  line and aiCosts all know the new job.
+- The chat agent's fixed instructions now use a 1-hour cache (`ttl: "1h"` on system[0], in
+  tanstack-agent.ts). The rest of the prompt keeps the 5-minute cache.
+
+3. The bell, the Feed and the dock (owner's requests)
+- The bell showed "353 new". Every email made an update, and nothing ever aged out. The owner
+  chose "Only what needs you":
+  - Email reaches the bell only when it matches a rule, or when the person picks "Every new
+    email". "Important email" is gone; it used to count email with no flag as important.
+    watch_inbox takes `notify` ("rules"/"all"), and the agent asks which one the person wants.
+  - Updates older than 7 days stop showing, unless their job is still waiting on the person
+    (`recentUpdates` in service.ts). Nothing is deleted: jobs re-post their outcome every minute,
+    so a deleted update would come back.
+  - "Mark all read" is in the Updates sheet (POST /api/notifications/read-all). It can also be
+    said: "Mark all my updates read" (tool mark_updates_read). The "Needs you" chip and the order
+    come from updateKind.
+- Feed: news only from the last 48 hours (`KEEP_HOURS`, feed.ts). Older items are pruned on
+  refresh.
+- Dock: every bottom-bar icon has a tip on hover (long press on phones) with its name and what's
+  there, e.g. "Chat: talk or type to Neddy".
+- Help: the updates, email-alerts, feed and admin-models topics are updated. The models shot was
+  retaken with the new row; the shot script now mocks it and closes the corner pop-up.
+- Design division: visual, usability and copy all signed off (round 2; copy in round 3).
+
+Tests: Biome clean, typecheck, worker tsc, pnpm test 530 pass / 0 fail. New tests:
+tests/updates.test.ts; feed, mail-alerts, openrouter and prompt-caching tests extended.
+
+Known issues / pending
+- One job can post several identical "Needs your answer" updates (seen in local sample data).
+  This needs its own fix.
+- The "Needs you" chip has low contrast in dark mode (visual reviewer, pre-existing).
+- Owner's open questions to answer: more natural sounds ("mm-hmm", "still checking…") on our
+  voice without adding cost; how many voices there are, and a per-person voice choice.
+- Committed locally, not pushed: wait for "push it", and check for a live call first.

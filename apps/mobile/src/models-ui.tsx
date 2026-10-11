@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { EFFORT_LABELS, modelLabel } from "../../../packages/domain/src/model-names";
+import { useAgentWorkspace } from "./agent-workspace";
 import { HIDDEN } from "./job-working-ui";
 import { Button, Card, CheckRow, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-type Job = "chat" | "background" | "simple";
+type Job = "chat" | "background" | "simple" | "voice";
 type Effort = "low" | "medium" | "high";
 interface Choice {
   model: string;
@@ -32,7 +33,7 @@ const FLASH = "openrouter/deepseek/deepseek-v4.1-flash";
 const JOBS: Record<Job, { title: string; detail: string }> = {
   chat: {
     title: "Chat",
-    detail: "Talking with you in chat, and looking things up during voice calls",
+    detail: "Talking with you in chat",
   },
   background: {
     title: "Background jobs and routines",
@@ -41,6 +42,10 @@ const JOBS: Record<Job, { title: string; detail: string }> = {
   simple: {
     title: "Simple jobs",
     detail: "Summaries of long chats, Ideas, and bookings found in emails",
+  },
+  voice: {
+    title: "Look-ups during calls",
+    detail: "What {agent} looks up or does for you on a live call",
   },
 };
 const EFFORT_DETAILS: Record<Effort, string> = {
@@ -67,6 +72,9 @@ const named = (choice: Choice, fallback: Effort) =>
 const onRecommended = (row: Row) =>
   row.choice.model === row.recommended.model &&
   (row.choice.effort ?? row.recommended.effort) === row.recommended.effort;
+/** The server's Claude, by name: "as before" only where it was what the job used before. */
+const claudeChoice = (row: Row) =>
+  row.recommended.model === SERVER ? "Claude" : "Claude, as before";
 /** "2:14 PM". */
 const timeOf = (at: string) =>
   new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -78,6 +86,7 @@ const timeOf = (at: string) =>
  */
 export function ModelsCard() {
   const { api } = useWorkspace();
+  const agent = useAgentWorkspace().data?.identity.name || "Neddy";
   const [view, setView] = useState<ModelsView>();
   const [editing, setEditing] = useState<Job>();
   const [news, setNews] = useState("");
@@ -114,8 +123,8 @@ export function ModelsCard() {
       setView(next);
       setNews(
         all === "claude"
-          ? "Saved. All three kinds of work use Claude, as before."
-          : `Saved. All three are back on the recommended picks.${next.ready ? "" : " They start once OpenRouter is set up."}`,
+          ? "Saved. Every kind of work uses Claude."
+          : `Saved. Every kind of work is back on its recommended pick.${next.ready ? "" : " The picks start once OpenRouter is set up."}`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -177,7 +186,7 @@ export function ModelsCard() {
                 <Text role="heading" aria-level={4} style={[s.text, { fontWeight: "600" }]}>
                   {JOBS[row.job].title}
                 </Text>
-                <Text style={s.muted}>{JOBS[row.job].detail}</Text>
+                <Text style={s.muted}>{JOBS[row.job].detail.replace("{agent}", agent)}</Text>
                 <View style={[s.row, { gap: 10, marginTop: 4 }]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Text style={[s.text, { fontWeight: "600" }]}>{line.name}</Text>
@@ -227,7 +236,8 @@ export function ModelsCard() {
       )}
       <ErrorNotice error={error} />
       <Text style={s.small}>
-        Live voice calls use their own voice model, which isn’t changed here.
+        The live talk voice each person hears is set under People. What it looks up or does uses
+        Look-ups during calls.
       </Text>
       {/* Always mounted, so a screen reader hears when a choice is saved. */}
       <Text role="status" style={news ? [s.muted, { color: colors.greenText }] : HIDDEN}>
@@ -243,15 +253,17 @@ export function ModelsCard() {
  */
 function usingLine(row: Row, ready: boolean): { name: string; note: string; hint?: string } {
   const { choice, recommended } = row;
-  const pick = named(recommended, recommended.effort);
   const claude = modelLabel(row.serverModel) || "No model set";
+  const pick = recommended.model === SERVER ? claude : named(recommended, recommended.effort);
   if (choice.model === SERVER)
-    return { name: "Claude, as before", note: claude, hint: `Recommended: ${pick}` };
+    return recommended.model === SERVER
+      ? { name: claude, note: "Recommended" }
+      : { name: "Claude, as before", note: claude, hint: `Recommended: ${pick}` };
   const effort = choice.effort ?? recommended.effort;
   const hint = onRecommended(row) ? undefined : `Recommended: ${pick}`;
   if (!ready)
     return {
-      name: `Claude, as before (${claude})`,
+      name: `${claudeChoice(row)} (${claude})`,
       note: `Switches to ${named(choice, effort)} once OpenRouter is set up`,
       hint,
     };
@@ -263,13 +275,13 @@ function usingLine(row: Row, ready: boolean): { name: string; note: string; hint
 }
 
 /** A saved choice said back: "Saved. Chat: GPT-6.1 Sol, Thinks hard." */
-function savedMessage(title: string, choice: Choice, ready: boolean, reset: boolean) {
-  if (choice.model === SERVER) return `Saved. ${title} now uses Claude, as before.`;
+function savedMessage(row: Row, title: string, choice: Choice, ready: boolean, reset: boolean) {
+  if (choice.model === SERVER) return `Saved. ${title}: ${claudeChoice(row)}.`;
   const name = named(choice, "medium");
   const later = ready ? "" : " It starts once OpenRouter is set up.";
   return reset
-    ? `Saved. ${title} is back on the recommended pick, ${name}.${later}`
-    : `Saved. ${title} now uses ${name}.${later}`;
+    ? `Saved. ${title}: back on the recommended pick, ${name}.${later}`
+    : `Saved. ${title}: ${name}.${later}`;
 }
 
 function ModelEditor({
@@ -284,6 +296,7 @@ function ModelEditor({
   onSaved: (view: ModelsView, message: string) => void;
 }) {
   const { api } = useWorkspace();
+  const agent = useAgentWorkspace().data?.identity.name || "Neddy";
   const known = [SOL, FLASH, SERVER].includes(row.choice.model);
   const first = {
     model: known ? row.choice.model : "other",
@@ -302,7 +315,7 @@ function ModelEditor({
     try {
       const next = await api.request<ModelsView>("/api/models", { job: row.job, choice });
       const saved = next.jobs.find((j) => j.job === row.job)?.choice ?? row.recommended;
-      onSaved(next, savedMessage(title, saved, next.ready, !choice));
+      onSaved(next, savedMessage(row, title, saved, next.ready, !choice));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -329,7 +342,9 @@ function ModelEditor({
         >
           {title}
         </Text>
-        <Text style={[s.muted, { color: colors.mutedStrong }]}>{JOBS[row.job].detail}</Text>
+        <Text style={[s.muted, { color: colors.mutedStrong }]}>
+          {JOBS[row.job].detail.replace("{agent}", agent)}
+        </Text>
       </View>
       <Text role="heading" aria-level={5} style={groupLabel}>
         Model
@@ -353,8 +368,12 @@ function ModelEditor({
         />
         <CheckRow
           radio
-          label="Claude, as before"
-          detail={`The Claude model the server was using before: ${modelLabel(row.serverModel) || "none set"}.`}
+          label={row.recommended.model === SERVER ? "Claude (recommended)" : "Claude, as before"}
+          detail={
+            row.recommended.model === SERVER
+              ? `The server’s quick Claude model: ${modelLabel(row.serverModel) || "none set"}. Fast and cheap for short look-ups.`
+              : `The Claude model the server was using before: ${modelLabel(row.serverModel) || "none set"}.`
+          }
           checked={model === SERVER}
           onPress={() => setModel(SERVER)}
         />
@@ -428,7 +447,7 @@ function ModelEditor({
           style={{ backgroundColor: colors.surface, alignSelf: "flex-start" }}
           onPress={() => void save(null)}
         >
-          {`Back to ${named(row.recommended, row.recommended.effort)} (recommended)`}
+          {`Back to ${row.recommended.model === SERVER ? modelLabel(row.serverModel) || "Claude" : named(row.recommended, row.recommended.effort)} (recommended)`}
         </Button>
       )}
     </View>

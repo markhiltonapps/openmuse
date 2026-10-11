@@ -112,16 +112,30 @@ import {
 } from "./src/web-app";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
-/** The bottom bar. `short` is the word under the icon when the full name is too long for it. */
-const nav: { id: Section; label: string; short?: string; icon: LucideIcon }[] = [
-  { id: "chat", label: "Chat", icon: MessageCircle },
-  { id: "feed", label: "Feed", icon: Newspaper },
-  { id: "spaces", label: "Spaces", icon: UsersRound },
-  { id: "activity", label: "Activity", icon: PanelsTopLeft },
-  { id: "ideas", label: "Ideas", icon: Lightbulb },
-  { id: "goals", label: "Goals", icon: SquareCheck },
-  { id: "files", label: "Files & media", short: "Files", icon: FolderOpen },
-  { id: "apps", label: "Apps", icon: Shapes },
+/**
+ * The bottom bar. `short` is the word under the icon when the full name is too long for it;
+ * `tip` says what's there, on hover (and a long press on phones).
+ */
+const nav: { id: Section; label: string; short?: string; tip: string; icon: LucideIcon }[] = [
+  { id: "chat", label: "Chat", tip: "Chat: talk or type to {agent}", icon: MessageCircle },
+  { id: "feed", label: "Feed", tip: "Feed: news and your day", icon: Newspaper },
+  { id: "spaces", label: "Spaces", tip: "Spaces: family, health and more", icon: UsersRound },
+  {
+    id: "activity",
+    label: "Activity",
+    tip: "Activity: jobs and what needs you",
+    icon: PanelsTopLeft,
+  },
+  { id: "ideas", label: "Ideas", tip: "Ideas: suggestions for you", icon: Lightbulb },
+  { id: "goals", label: "Goals", tip: "Goals: what you’re working toward", icon: SquareCheck },
+  {
+    id: "files",
+    label: "Files & media",
+    short: "Files",
+    tip: "Files & media: your documents and photos",
+    icon: FolderOpen,
+  },
+  { id: "apps", label: "Apps", tip: "Apps: connections and settings", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   activity: { title: "Activity", subtitle: "Plans, progress, decisions and results." },
@@ -854,6 +868,7 @@ function WorkspaceShell({
                         : item.label
                     }
                     aria-selected={active}
+                    {...tipProps(item.tip.replace("{agent}", agentName))}
                     onPress={() => navigate(item.id)}
                     style={({ pressed }) => ({
                       flex: 1,

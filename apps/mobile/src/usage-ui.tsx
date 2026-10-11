@@ -36,7 +36,7 @@ interface Usage {
   history: { month: string; cost: number; calls: number }[];
   /** Today and the last 7 days are counted from `since` (the day this started). */
   periods?: Periods & { since: string };
-  models: { chat?: string; background?: string; simple?: string };
+  models: { chat?: string; background?: string; simple?: string; voice?: string };
 }
 interface PeopleUsage {
   people: {
@@ -300,7 +300,8 @@ export function UsageCard() {
       <Text style={s.muted}>
         Chat uses {modelLabel(usage.models.chat) || "no model yet"}. Background jobs and routines
         use {modelLabel(usage.models.background) || "no model yet"}. Simple jobs use{" "}
-        {modelLabel(usage.models.simple) || "no model yet"}.
+        {modelLabel(usage.models.simple) || "no model yet"}. Look-ups during calls use{" "}
+        {modelLabel(usage.models.voice) || "no model yet"}.
       </Text>
       {everyone && (
         <View

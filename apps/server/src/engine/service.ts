@@ -129,6 +129,29 @@ export const TIDY_AFTER = 7 * 24 * 60 * 60_000;
 const receiptDone = (action: ActionProposal) =>
   ["succeeded", "failed", "denied", "cancelled", "expired"].includes(action.status) ||
   (action.status === "awaiting_review" && Date.parse(action.expiresAt) < Date.now());
+/** How long the bell keeps an update, unless it still needs the person. */
+export const UPDATE_DAYS = 7;
+/**
+ * The bell's updates: the last week's, plus older ones still waiting on the person (a job with
+ * a question or an approval). Older updates are kept, not deleted: jobs re-post their outcome
+ * every minute, and a deleted update would come back as new.
+ */
+export function recentUpdates(
+  notifications: AgentNotification[],
+  tasks: Pick<AgentTask, "id" | "status">[],
+  now = Date.now(),
+) {
+  const since = now - UPDATE_DAYS * 86_400_000;
+  const waiting = new Set(
+    tasks
+      .filter((task) => task.status === "waiting_input" || task.status === "waiting_approval")
+      .map((task) => task.id),
+  );
+  return notifications.filter(
+    (item) => Date.parse(item.createdAt) >= since || (!!item.taskId && waiting.has(item.taskId)),
+  );
+}
+
 export class AgentService {
   readonly worker: TaskWorker;
   /** Summaries of the older part of long chats, written by the background model. */
@@ -320,7 +343,7 @@ export class AgentService {
       memorySuggestions: suggestions.filter((s) => s.status === "pending"),
       routines: routines.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       artifacts,
-      notifications,
+      notifications: recentUpdates(notifications, tasks),
       identity: identity ?? { name: "Neddy", tone: "warm", character: "neddy" },
       worker: {
         running:
@@ -426,6 +449,15 @@ export class AgentService {
     return (await this.db.get<AgentTask>(owner, "tasks", id)) ?? task;
   }
   /** Marks every unread update about a task as read; returns how many there were. */
+  /** "Mark all read": every update in the bell, said or tapped. Returns how many were unread. */
+  async readAllNotifications(owner: string) {
+    const unread = (await this.db.list<AgentNotification>(owner, "notifications")).filter(
+      (item) => !item.read,
+    );
+    for (const item of unread)
+      await this.db.compareAndSwap(owner, "notifications", item.id, {}, { read: true });
+    return unread.length;
+  }
   async readTaskNotifications(owner: string, taskId: string) {
     const unread = (await this.db.list<AgentNotification>(owner, "notifications")).filter(
       (item) => item.taskId === taskId && !item.read,
@@ -1409,9 +1441,10 @@ export class AgentService {
         chat: modelLabel(this.modelFor("chat").model),
         backgroundJobsAndRoutines: modelLabel(this.modelFor("background").model),
         simpleJobs: modelLabel(this.modelFor("simple").model),
+        lookUpsDuringCalls: modelLabel(this.modelFor("voice").model),
       },
       modelsNote:
-        "Live voice calls use their own voice model, which isn’t changed with these. Only the admin can change the models, with change_ai_models or on the AI models card (Apps › Money).",
+        "Live voice calls talk with their own voice model, which isn’t changed with these; what they look up or do is “look-ups during calls”. Only the admin can change the models, with change_ai_models or on the AI models card (Apps › Money).",
       ...(admin && this.everyoneCosts
         ? { everyoneTogether: named(await this.everyoneCosts()) }
         : {}),

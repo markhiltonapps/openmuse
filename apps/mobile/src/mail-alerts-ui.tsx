@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { Button, Card, CheckRow, ErrorNotice, Field, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-type Notify = "all" | "important" | "rules";
+type Notify = "all" | "rules";
 interface MailRule {
   id: string;
   from: string;
@@ -20,9 +20,8 @@ interface MailAlerts {
   rules: MailRule[];
 }
 const NOTIFY: { value: Notify; label: string }[] = [
-  { value: "important", label: "Important email" },
-  { value: "all", label: "Every new email" },
   { value: "rules", label: "Only email that matches a rule" },
+  { value: "all", label: "Every new email" },
 ];
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 

@@ -571,12 +571,16 @@ const SHOTS = [
               row("chat", pick(sol, "high"), "anthropic/claude-sonnet-5"),
               row("background", pick(sol, "medium"), "anthropic/claude-haiku-4-5-20251001"),
               row("simple", pick(flash, "low"), "anthropic/claude-haiku-4-5-20251001"),
+              row("voice", pick("server", "low"), "anthropic/claude-haiku-4-5-20251001"),
             ],
           },
         }),
       );
       await p.reload();
       await p.waitForTimeout(3500);
+      // A job waiting on the sample person pops up in the corner; it would cover the card.
+      const close = p.getByRole("button", { name: "Close. It stays under Updates." });
+      if (await close.count()) await close.first().click();
       await appsTab(p, /Money/);
       await reveal(p.getByText("AI models", { exact: true }).first());
     },

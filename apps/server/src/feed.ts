@@ -49,7 +49,8 @@ export interface FeedItem {
   day: string;
   createdAt: string;
 }
-const KEEP_DAYS = 7;
+/** The Feed stays current (owner, 2026-10-11): today's and yesterday's news, nothing older. */
+export const KEEP_HOURS = 48;
 const sameSite = (a: string, b: string) => {
   try {
     const host = (url: string) => new URL(url).hostname.replace(/^www\./, "");
@@ -128,7 +129,9 @@ export class FeedService {
   }
   async get(owner: string) {
     const settings = await this.settings(owner);
+    const since = this.now() - KEEP_HOURS * 60 * 60 * 1000;
     const items = (await this.db.list<FeedItem>(owner, "feed-items"))
+      .filter((item) => Date.parse(item.createdAt) >= since)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       // Stories saved before citation tags were removed read cleanly too.
       .map((item) => ({
@@ -193,7 +196,7 @@ export class FeedService {
         ...(only ? {} : { refreshedOn: day, format: FORMAT }),
         refreshedAt: new Date(this.now()).toISOString(),
       });
-      const cutoff = this.now() - KEEP_DAYS * 24 * 60 * 60 * 1000;
+      const cutoff = this.now() - KEEP_HOURS * 60 * 60 * 1000;
       for (const item of await this.db.list<FeedItem>(owner, "feed-items"))
         if (Date.parse(item.createdAt) < cutoff) await this.db.remove(owner, "feed-items", item.id);
     } finally {

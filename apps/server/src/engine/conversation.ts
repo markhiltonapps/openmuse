@@ -279,6 +279,13 @@ export class ConversationAgent extends AbstractAgent {
           this.service.tidyByName(this.owner, what, job, all ?? false),
       }),
       defineTool({
+        name: "mark_updates_read",
+        description:
+          "Marks every update in the bell (Updates, top right) as read, so its count goes back to zero. Use it when the person asks to clear, dismiss or mark read their updates or notifications. Things waiting for their OK or a job's question stay where they are, on their cards. Then say how many were marked read.",
+        parameters: z.object({}),
+        execute: async () => ({ markedRead: await this.service.readAllNotifications(this.owner) }),
+      }),
+      defineTool({
         name: "ai_costs",
         description:
           "What the AI behind this app has cost the person: today, the last 7 days and all time (dollars, tokens, AI calls), this month by kind of work, and which model does which work. The admin also gets everyone’s totals together. Use it when they ask what the AI costs, how much they’ve spent on it, or which model is used. Lead with the dollar figure for the period they asked about and say it’s an estimate. Say “AI calls” or “requests”, never just “calls”. This only reads; the admin changes models with change_ai_models.",
@@ -319,9 +326,9 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "change_ai_models",
         description:
-          "Admin only. Change which AI model does a kind of work: chat (which also looks things up during voice calls), background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed, with the model’s plain name (GPT-6.1 Sol), never its ID. If OpenRouter isn’t set up yet, say the change only starts once it is. Live voice calls keep their own voice model.",
+          "Admin only. Change which AI model does a kind of work: chat, background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), voice (looking things up and doing things during live calls), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed, with the model’s plain name (GPT-6.1 Sol), never its ID. If OpenRouter isn’t set up yet, say the change only starts once it is. Live voice calls keep their own voice model.",
         parameters: z.object({
-          work: z.enum(["chat", "background", "simple", "all"]),
+          work: z.enum(["chat", "background", "simple", "voice", "all"]),
           model: z
             .enum(["recommended", "claude", "gpt-6.1-sol", "deepseek-v4.1-flash"])
             .describe(
@@ -933,8 +940,10 @@ export class ConversationAgent extends AbstractAgent {
         },
       }),
     );
-    // The Models card's choice for the chat, or the server's MODEL.
-    const plan = this.service.modelFor("chat");
+    // The Models card's choice for the chat, or the server's MODEL; a live call's look-ups have
+    // their own (the server's quick Claude unless the admin chose otherwise).
+    const lookup = (input.forwardedProps as { voiceLookup?: boolean } | undefined)?.voiceLookup;
+    const plan = this.service.modelFor(lookup ? "voice" : "chat");
     const agent = tanstackAgent({
       ...plan,
       model: plan.model || "openai/unconfigured",

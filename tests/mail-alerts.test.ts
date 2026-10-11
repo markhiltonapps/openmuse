@@ -97,11 +97,18 @@ test("new email notifies the person and runs their rules once", async () => {
   assert.match(task?.input.prompt ?? "", /untrusted data/);
   assert.equal(notices[0]?.title, "New email from Dana Lee");
   assert.match(notices[0]?.body ?? "", /Contract — Can you sign by Friday\?/);
-  // Unimportant email without a rule is quiet; important email notifies.
+  // Email without a rule is quiet, important or not: the bell is for what they asked about.
   const newsletter = event({ message_id: "m2", sender: "news@shop.test", label_ids: ["INBOX"] });
   assert.equal((await alerts.receive(newsletter, signed(newsletter))).notified, false);
   const boss = event({ message_id: "m3", sender: "boss@acme.com", label_ids: ["IMPORTANT"] });
-  assert.equal((await alerts.receive(boss, signed(boss))).notified, true);
+  assert.equal((await alerts.receive(boss, signed(boss))).notified, false);
+  // Unless they chose every email.
+  await alerts.setNotify("sam", "all");
+  const any = event({ message_id: "m6", sender: "anyone@acme.com", label_ids: ["INBOX"] });
+  assert.equal((await alerts.receive(any, signed(any))).notified, true);
+  // The old "important" setting reads as rules only.
+  await alerts.setNotify("sam", "important");
+  assert.equal((await alerts.status("sam")).notify, "rules");
   // Other triggers on the same Composio project are ignored, and bad signatures refused.
   const stranger = event({ message_id: "m4" }, "ti_someone_else");
   assert.deepEqual(await alerts.receive(stranger, signed(stranger)), { ignored: true });
