@@ -1401,6 +1401,21 @@ export class AgentService {
     ) => Promise<{ who: string; voice: string } | { error: string }>;
     compare: (days: number) => Promise<unknown>;
   };
+  /**
+   * The voice each person hears on calls with our own voice (Apps › Agent › Voice on live calls):
+   * the choices, and changing it (straight away on a call). Unset in tests.
+   */
+  callVoices?: {
+    list: (owner: string) => Promise<{
+      onNewVoice: boolean;
+      voices: { id: string; description: string }[];
+      chosen: string;
+    }>;
+    choose: (
+      owner: string,
+      voice: string | null,
+    ) => Promise<{ voice: string; sounds: string; onCallNow: boolean } | { error: string }>;
+  };
   /** What a call for this job uses: the Models card's choice, or the server's own model. */
   modelFor(job: ModelJob): CallPlan {
     return (

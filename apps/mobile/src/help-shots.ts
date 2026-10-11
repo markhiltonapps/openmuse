@@ -8,6 +8,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   backdrop: { width: 720, height: 4246 },
   call: { width: 720, height: 1558 },
   callbar: { width: 720, height: 1558 },
+  callvoice: { width: 720, height: 2123 },
   chat: { width: 720, height: 1558 },
   chats: { width: 720, height: 1558 },
   family: { width: 720, height: 1558 },

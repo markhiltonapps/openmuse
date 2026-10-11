@@ -17,8 +17,10 @@ from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 from loguru import logger
 
 from .config import load
+from .voices import Voices
 
 config = load()
+voices = Voices(config)
 WORKERS = max(1, int(os.environ.get("VOICE_WORKERS", "2")))
 PER_WORKER = max(1, int(os.environ.get("VOICE_CALLS_PER_WORKER", "4")))
 BASE_PORT = int(os.environ.get("VOICE_WORKER_BASE_PORT", "8100"))
@@ -158,12 +160,40 @@ async def attach(request: web.Request):
     return downstream
 
 
+async def list_voices(request: web.Request):
+    """The voices people can choose for live calls (empty when the voice can't be chosen)."""
+    assert http
+    if not _signed(request.headers.get("authorization")):
+        return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
+    return web.json_response({"voices": await voices.offered(http), "default": voices.default})
+
+
+async def voice_sample(request: web.Request):
+    """A short hello in one voice, for the app's Play button."""
+    assert http
+    if not _signed(request.headers.get("authorization")):
+        return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
+    voice = request.match_info["voice"]
+    if not any(choice["id"] == voice for choice in await voices.offered(http)):
+        return _refused(404, "no_voice", "That voice isn't offered.")
+    try:
+        audio, kind = await voices.sample(http, voice)
+    except Exception as error:
+        logger.warning(f"Voice sample for {voice} couldn't be made: {error}")
+        return _refused(502, "no_sample", "The sample couldn't be made just now.")
+    return web.Response(
+        body=audio, content_type=kind, headers={"cache-control": "private, max-age=86400"}
+    )
+
+
 async def on_startup(_app: web.Application):
     global http
     http = ClientSession()
     for worker in workers:
         await worker.start()
     asyncio.get_running_loop().create_task(watch())
+    # Checks the offered voices against Inworld's list now, so the log says which exist.
+    asyncio.get_running_loop().create_task(voices.offered(http))
 
 
 async def on_cleanup(_app: web.Application):
@@ -185,6 +215,8 @@ def main():
     app.router.add_get("/health", health)
     app.router.add_post("/v1/live/sessions", create_session)
     app.router.add_get("/v1/live/sessions/{call_id}/attach", attach)
+    app.router.add_get("/v1/voices", list_voices)
+    app.router.add_get("/v1/voices/{voice}/sample", voice_sample)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
     web.run_app(app, host=config.host, port=config.port, print=None)

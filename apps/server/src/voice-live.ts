@@ -381,6 +381,16 @@ export class LiveVoice {
     }
     return calls.length > 0;
   }
+  /**
+   * Changes the person's live call as it goes (a voice chosen mid-call). Only our own voice
+   * service reads it; true when they're on a call.
+   */
+  update(owner: string, session: Record<string, unknown>) {
+    const calls = [...this.sessions.values()].filter((live) => live.owner === owner && !live.over);
+    for (const live of calls)
+      live.socket?.send(JSON.stringify({ type: "session.update", session }));
+    return calls.length > 0;
+  }
   /** Urgent things still to be said, taken for the next answer. */
   private takeUrgent(live: Live) {
     const lines = live.urgent ?? [];

@@ -20,8 +20,10 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from .call import Call
 from .config import Config, load
 from .pipeline import run_call
+from .voices import Voices
 
 config: Config = load()
+voices = Voices(config)
 app = FastAPI(title="OpenMuse voice")
 calls: dict[str, Call] = {}
 # Running calls, held so the event loop doesn't drop them.
@@ -97,11 +99,14 @@ async def create_session(request: Request):
     max_seconds = extra.get("maxSeconds")
     limit_minutes = extra.get("limitMinutes")
     reference = extra.get("reference")
+    voice = extra.get("voice")
     call = Call(
         instructions=str(session.get("instructions") or ""),
         max_seconds=float(max_seconds) if isinstance(max_seconds, (int, float)) else None,
         limit_minutes=float(limit_minutes) if isinstance(limit_minutes, (int, float)) else None,
         reference=reference if isinstance(reference, str) else "",
+        voice=voice if voices.accepts(voice) else voices.default,
+        accepts=voices.accepts,
         on_end=_forget,
     )
     connection = SmallWebRTCConnection(ice_servers=_ice_servers(extra.get("iceServers")) or None)
@@ -124,10 +129,10 @@ async def create_session(request: Request):
         await call.from_browser(message)
 
     calls[call.id] = call
-    task = asyncio.create_task(run_call(call, transport, config))
+    task = asyncio.create_task(run_call(call, transport, config, voices))
     running.add(task)
     task.add_done_callback(running.discard)
-    logger.info(f"Voice call {call.id} started ({len(calls)} on this service)")
+    logger.info(f"Voice call {call.id} started ({len(calls)} on this service, voice {call.voice})")
     return {"session": {"id": call.id}, "transport": {"type": "webrtc", "sdp": answer["sdp"]}}
 
 

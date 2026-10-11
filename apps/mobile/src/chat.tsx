@@ -46,6 +46,7 @@ import { BackgroundUpdates } from "./background-updates";
 import { BrowserToolCard } from "./browser-tool-card";
 import { ToolCalendar } from "./calendar-card";
 import { ToolFile } from "./call-details";
+import { CallVoiceToolCard } from "./call-voice-ui";
 import {
   asChatMessage,
   EarlierDivider,
@@ -302,6 +303,15 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <ToolCalendar result={result} loading={status !== "complete"} />
+    ),
+  });
+  // "Let me hear Theodore": the voices asked about, each with Play and a choice.
+  useRenderTool({
+    name: "call_voice",
+    description: "Show the voices for live calls",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <CallVoiceToolCard result={result} loading={status !== "complete"} />
     ),
   });
   // "How do I…?": the help topic's steps, with a button to it in Help.

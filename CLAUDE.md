@@ -380,3 +380,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Hand-offs during calls run on their own model:** `forwardedProps.voiceLookup` makes the chat
   agent use `modelFor("voice")` (the server's quick Claude by default). The chat's fixed
   instructions use a 1-hour cache (`ttl: "1h"` must come before any 5-minute breakpoint).
+- **Voices people choose (apps/voice/openmuse_voice/voices.py):** offer only what the provider
+  really has: the service checks its hand-picked list against Inworld's voice list and offers only
+  those found (only the usual voice if the list can't be read), so a choice can't break a call.
+  A voice changed mid-call goes to the service as `session.update` (`LiveVoice.update`).
+- **Sounds while listening (Backchannel in pipeline.py):** play them only in a pause the turn
+  detector hasn't ended (VAD stopped, no UserStoppedSpeakingFrame yet), and cancel on any new
+  speech. Recordings are made once per process per voice, never per call.

@@ -324,6 +324,47 @@ export class ConversationAgent extends AbstractAgent {
         },
       }),
       defineTool({
+        name: "call_voice",
+        description:
+          "The voice you speak with on their live calls (the new voice; OpenAI’s can’t be changed here). list gives the voices, each with how it sounds, and which one they use; names narrows it to the ones they asked about (“let me hear Theodore”). choose switches to one by its name: when they describe one (“a deeper voice”, “a man’s voice”), list first and pick the closest; voice null goes back to the usual one. On a live call the new voice is used from your next words, so they can try one and switch again. Then say which voice it is now, in a few words; never read out the whole list unless they ask. When the result says it’s on their screen, they can play each voice there; say so in a sentence. The listening sounds (“mm-hmm”) can’t be turned off yet: never promise to stop them.",
+        parameters: z.object({
+          do: z.enum(["list", "choose"]),
+          names: z
+            .array(z.string().max(40))
+            .max(8)
+            .optional()
+            .describe("For list: only these voices, by name; leave out for all"),
+          voice: z
+            .string()
+            .max(40)
+            .nullable()
+            .optional()
+            .describe("For choose: the voice’s name, or null for the usual one"),
+        }),
+        execute: async ({ do: what, names, voice }) => {
+          const voices = this.service.callVoices;
+          if (!voices) return { error: "Choosing a voice isn’t set up on this server." };
+          // In the chat the app draws a card with Play for each voice; on a call they hear it.
+          const shown = onCall ? {} : { shown: "On their screen, with a Play button for each." };
+          if (what === "list") {
+            const view = await voices.list(this.owner);
+            const wanted = names?.map((n) =>
+              n
+                .trim()
+                .toLowerCase()
+                .replace(/[’']s$/, ""),
+            );
+            const listed = wanted?.length
+              ? view.voices.filter((v) => wanted.includes(v.id.toLowerCase()))
+              : view.voices;
+            return { ...view, voices: listed, ...(listed.length ? shown : {}) };
+          }
+          if (voice === undefined) return { error: "Say which voice, or null for the usual one." };
+          const result = await voices.choose(this.owner, voice);
+          return "error" in result ? result : { ...result, ...shown };
+        },
+      }),
+      defineTool({
         name: "change_ai_models",
         description:
           "Admin only. Change which AI model does a kind of work: chat, background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), voice (looking things up and doing things during live calls), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed, with the model’s plain name (GPT-6.1 Sol), never its ID. If OpenRouter isn’t set up yet, say the change only starts once it is. Live voice calls keep their own voice model.",

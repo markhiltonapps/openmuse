@@ -78,6 +78,7 @@ import { lookAtImage } from "./vision.ts";
 import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
 import { LiveVoice, liveInstructions } from "./voice-live.ts";
 import {
+  CallVoices,
   findPerson,
   isPipecatCall,
   limitReached,
@@ -390,6 +391,11 @@ export async function createApp(
   // Our own voice (apps/voice, Pipecat), side by side with OpenAI's: the same call handling,
   // pointed at the voice service, which speaks OpenAI's live protocol.
   const voiceComparison = new VoiceComparison(db, usage);
+  // The voices people choose from for their calls on our own voice (Apps › Agent).
+  const callVoices =
+    config.voiceServiceUrl && config.voiceServiceToken
+      ? new CallVoices(db, config.voiceServiceUrl, config.voiceServiceToken)
+      : undefined;
   const pipecatVoice = pipecatConfigured(config)
     ? new LiveVoice(db, liveContext, async () => true, usage, {
         apiKey: config.voiceServiceToken,
@@ -405,10 +411,11 @@ export async function createApp(
         socket: voiceComparison.socket(),
         // The audio relay, and the end of their month's minutes.
         extras: async (owner) => {
-          const [iceServers, allowance, identity] = await Promise.all([
+          const [iceServers, allowance, identity, voice] = await Promise.all([
             turnServers(config),
             voiceAllowance(usage, config, owner),
             db.get<{ name?: string }>(owner, "agent-settings", "identity").catch(() => null),
+            callVoices?.chosen(owner).catch(() => ""),
           ]);
           if (
             allowance.limitMinutes &&
@@ -423,6 +430,7 @@ export async function createApp(
             openmuse: {
               iceServers,
               reference: voiceReference(identity?.name?.trim() || "Neddy"),
+              ...(voice ? { voice } : {}),
               ...(allowance.leftSeconds !== undefined && allowance.limitMinutes
                 ? { maxSeconds: allowance.leftSeconds, limitMinutes: allowance.limitMinutes }
                 : {}),
@@ -439,6 +447,32 @@ export async function createApp(
       [...new Set([ADMIN_OWNER, ...(await accounts.list()).map((account) => account.id)])],
       new Date(Date.now() - days * 86_400_000).toISOString(),
     );
+  // Each person's choice of voice for their calls on our own voice, by tap or by saying it.
+  const callVoiceView = async (owner: string) => {
+    const provider = await voiceProviderFor(db, config, owner);
+    if (provider !== "pipecat" || !callVoices) return { onNewVoice: false, voices: [], chosen: "" };
+    const [{ voices }, chosen] = await Promise.all([
+      callVoices.offered(),
+      callVoices.chosen(owner),
+    ]);
+    return { onNewVoice: true, voices, chosen };
+  };
+  const chooseCallVoice = async (
+    owner: string,
+    name: string | null,
+  ): Promise<{ voice: string; sounds: string; onCallNow: boolean } | { error: string }> => {
+    if (!callVoices || (await voiceProviderFor(db, config, owner)) !== "pipecat")
+      return {
+        error:
+          "This account’s live calls use OpenAI’s voice, which can’t be changed here. An admin can switch it to the new voice under Apps › Account › People, which has voices to choose from.",
+      };
+    const result = await callVoices.choose(owner, name);
+    if ("error" in result) return { error: result.error };
+    // On a call now: the new voice speaks from the next thing said.
+    const onCall = pipecatVoice?.update(owner, { audio: { output: { voice: result.voice.id } } });
+    return { voice: result.voice.id, sounds: result.voice.description, onCallNow: !!onCall };
+  };
+  agent.callVoices = { list: callVoiceView, choose: chooseCallVoice };
   // The admin moves people between the voices, or compares them, by voice or in the chat.
   if (pipecatVoice)
     agent.liveTalkVoices = {
@@ -1708,6 +1742,28 @@ export async function createApp(
     const provider = await voiceProviderFor(db, config, owner);
     return { provider, voice: provider === "pipecat" && pipecatVoice ? pipecatVoice : liveVoice };
   };
+  // The voices to choose from for calls on our own voice, a sample of each, and the choice.
+  app.get("/api/call-voices", async (c) => c.json(await callVoiceView(c.get("owner"))));
+  app.put("/api/call-voices", async (c) => {
+    const body = z.object({ voice: z.string().max(40).nullable() }).parse(await c.req.json());
+    const result = await chooseCallVoice(c.get("owner"), body.voice);
+    if ("error" in result)
+      throw new AppError(
+        (await voiceProviderFor(db, config, c.get("owner"))) === "pipecat"
+          ? result.error
+          : "Your calls now use OpenAI’s voice, which can’t be changed here. An admin can move you to the new voice under Apps › Account › People.",
+        409,
+      );
+    return c.json(result);
+  });
+  app.get("/api/call-voices/:voice/sample", async (c) => {
+    const sample = await callVoices?.sample(c.req.param("voice") ?? "");
+    if (!sample) throw new AppError("There’s no voice by that name.", 404);
+    return c.body(sample.body, 200, {
+      "content-type": sample.type,
+      "cache-control": "private, max-age=86400",
+    });
+  });
   app.get("/api/voice/live", async (c) => {
     const owner = c.get("owner");
     const { provider, voice } = await liveVoiceOf(owner);

@@ -132,7 +132,7 @@ def make_llm(config: Config, instructions: str):
     )
 
 
-def make_tts(config: Config, session: aiohttp.ClientSession):
+def make_tts(config: Config, session: aiohttp.ClientSession, voice: str = ""):
     if config.tts == "fake":
         return FakeTTS()
     if config.tts == "speechify":
@@ -151,7 +151,7 @@ def make_tts(config: Config, session: aiohttp.ClientSession):
         return InworldTTSService(
             api_key=config.inworld_key,
             settings=InworldTTSService.Settings(
-                model=config.inworld_model, voice=config.inworld_voice
+                model=config.inworld_model, voice=voice or config.inworld_voice
             ),
         )
     raise ValueError(f"VOICE_TTS must be inworld, speechify or fake (not {config.tts!r})")

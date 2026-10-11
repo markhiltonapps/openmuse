@@ -590,6 +590,39 @@ const SHOTS = [
     },
   },
   {
+    id: "callvoice",
+    height: 1150,
+    go: async (p) => {
+      // Shown as for someone on the new voice, with the voice service's choices.
+      const voice = (id, description) => ({ id, description });
+      await p.route(/\/api\/call-voices$/, (route) =>
+        route.fulfill({
+          json: {
+            onNewVoice: true,
+            chosen: "Ashley",
+            voices: [
+              voice("Ashley", "A woman’s voice, warm and natural"),
+              voice("Deborah", "A woman’s voice, gentle and elegant"),
+              voice("Olivia", "A woman’s voice, bright and British"),
+              voice("Elizabeth", "A woman’s voice, clear and steady"),
+              voice("Dennis", "A man’s voice, calm and friendly"),
+              voice("Alex", "A man’s voice, lively and expressive"),
+              voice("Theodore", "A man’s voice, deep and unhurried"),
+              voice("Ronald", "A man’s voice, confident and British"),
+            ],
+          },
+        }),
+      );
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await appsTab(p, /Agent/);
+      await reveal(p.getByText("Voice on live calls", { exact: true }).first());
+    },
+    marks: {
+      2: (p) => button(p, "Play Theodore"),
+    },
+  },
+  {
     id: "agent",
     height: 1640,
     go: (p) => appsTab(p, /Agent/),

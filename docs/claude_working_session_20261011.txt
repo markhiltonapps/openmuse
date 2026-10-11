@@ -51,3 +51,51 @@ Known issues / pending
 - Owner's open questions to answer: more natural sounds ("mm-hmm", "still checking…") on our
   voice without adding cost; how many voices there are, and a per-person voice choice.
 - Committed locally, not pushed: wait for "push it", and check for a live call first.
+
+4. Pushed and deployed: e2a4060 (bell, Feed, dock tips, look-ups). Railway: api and web
+   SUCCESS; voice and worker SKIPPED (no changes). "Live voice on" in the api's log.
+
+5. Voice picker and natural sounds (owner's choices: each person picks their own; a short
+   hand-picked list; only the new voice; "mm-hmm" sparingly)
+- Voice service (apps/voice):
+  - voices.py: 8 hand-picked Inworld voices with our own short descriptions (Ashley, Deborah,
+    Olivia, Elizabeth, Dennis, Alex, Theodore, Ronald). They're checked against Inworld's list
+    (GET /tts/v1/voices); only real ones are offered. The log says "Inworld has N English voices;
+    offering M of ours (not found: …)". If the list can't be read, only the usual voice is offered.
+  - Front routes GET /v1/voices and /v1/voices/{id}/sample (a short MP3 hello, made once per
+    process).
+  - Each call takes `openmuse.voice`, and a mid-call `session.update` switches it at once (Pipecat
+    TTSUpdateSettingsFrame).
+  - Backchannel (pipeline.py) says "Mm-hmm" / "Yeah" / "Right" in the call's voice: once they've
+    talked 5 s, in a pause the turn detector hasn't called the end of, after 0.45 s more silence,
+    once a turn, at most every 15 s, never while the voice talks. The clips are made once per
+    process per voice (a few characters of Inworld).
+  - "Still checking" now has 5 lines, never the same twice in a row.
+  - The log line "Voice call … started (…, voice X)" shows which voice a call used.
+- Api: CallVoices (voice-pipecat.ts) keeps the list for 10 minutes, each person's choice
+  (agent-settings "call-voice") and the samples. GET/PUT /api/call-voices and
+  /api/call-voices/:voice/sample. Tool call_voice (list / choose; null = the usual voice).
+  LiveVoice.update() sends the change to a call in progress.
+- In the chat, "Let me hear Theodore" draws a card (CallVoiceToolCard): one voice gets Choose and
+  Play, several get radios. call_voice's `names` narrows the list, and its result says `shown`
+  only in the chat, never on a call.
+- Each voice's description says whether it's a man's or a woman's voice (copy review), so "use a
+  man's voice" can be matched. The genders follow Inworld's own descriptions; check them against
+  the samples.
+- "Mm-hmm" has no off switch (the owner's choice: "Sparingly"). The voice and the chat agent are
+  told never to promise to stop it. An off switch is an open question for the owner.
+- IconButton takes `tinted` (a filled circle on a card).
+- Design division: visual, usability and copy all signed off (three rounds).
+- App: "Voice on live calls" card in Apps › Agent (CallVoiceCard). Radio list with a Play/Stop
+  for each voice; choosing plays the hello. Only for people on the new voice; remembered on the
+  device so it doesn't pop in.
+- Help: new topic "Choose {agent}'s voice on calls" with a shot (callvoice), plus lines in
+  speak-and-listen and admin-voice-choice. The app guide mentions the card and call_voice.
+- Tests: tests/call-voices.test.ts (5) and apps/voice/tests/sounds_test.py (backchannel timing,
+  still-checking, mid-call switch, voice list). A local call through the api started with the
+  chosen voice (Dennis), and a mid-call switch to Theodore worked. pnpm test 535 pass.
+
+Pending after this
+- Owner to approve the 8 voices. After deploy, the voice service's log shows which ones Inworld
+  has. Hearing the samples on Railway is the real check (the sandbox can't reach Inworld).
+- The "mm-hmm" timing can only be judged on a real call; it may need tuning (MIN_TURN, WAIT, GAP).

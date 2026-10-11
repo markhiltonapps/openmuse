@@ -7,12 +7,14 @@ The events have the same names and shapes as OpenAI's live voice, so the api's c
   session.started, session.input_transcript.delta, session.output_transcript.delta,
   session.delegation.created, session.commentary.appended, session.closed
 - to the api only: session.usage.updated, and session.metrics (ours: tokens, characters, latency)
-- from the api: session.commentary.append, session.thinking.append, session.close
+- from the api: session.commentary.append, session.thinking.append, session.close, and
+  session.update (ours: a new voice chosen during the call)
 - from the browser: session.close
 """
 
 import asyncio
 import os
+import random
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -22,8 +24,15 @@ from loguru import logger
 
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 
-# Said by the voice when a hand-off has been quiet for a while and nobody is talking.
-STILL_CHECKING = "Still on it, one moment."
+# Said by the voice when a hand-off has been quiet for a while and nobody is talking; never the
+# same line twice in a row.
+STILL_CHECKING = (
+    "Still on it, one moment.",
+    "Bear with me, nearly there.",
+    "Still checking, one sec.",
+    "Just a moment more.",
+    "Hang on, still looking.",
+)
 
 
 class Call:
@@ -34,6 +43,8 @@ class Call:
         max_seconds: float | None = None,
         limit_minutes: float | None = None,
         reference: str = "",
+        voice: str = "",
+        accepts: Callable[[Any], bool] | None = None,
         on_end: Callable[["Call"], None] | None = None,
     ):
         # Which worker process holds it, so the front router sends its sideband there.
@@ -44,6 +55,10 @@ class Call:
         self.limit_minutes = limit_minutes
         # How the app works (the api's guide and Help topics), the same for everyone.
         self.reference = reference
+        # The voice it speaks with, and which voices it may switch to during the call.
+        self.voice = voice
+        self._accepts = accepts or (lambda _voice: False)
+        self._last_still = ""
         self.started = time.monotonic()
         self.ended = False
         self.reason: str | None = None
@@ -57,6 +72,7 @@ class Call:
         self.speak: Callable[[str], Awaitable[None]] | None = None
         self.note: Callable[[str], Awaitable[None]] | None = None
         self.stop: Callable[[], Awaitable[None]] | None = None
+        self.set_voice: Callable[[str], Awaitable[None]] | None = None
         self.bot_speaking = False
         self.user_speaking = False
         self._ticker: asyncio.Task | None = None
@@ -143,7 +159,20 @@ class Call:
                 and not self.bot_speaking
                 and not self.user_speaking
             ):
-                await self.speak(STILL_CHECKING)
+                await self.speak(self.still_checking())
+        elif kind == "session.update":
+            # A voice chosen during the call: used from the next thing said.
+            voice = (((event.get("session") or {}).get("audio") or {}).get("output") or {}).get(
+                "voice"
+            )
+            if voice != self.voice and self._accepts(voice) and self.set_voice:
+                self.voice = voice
+                await self.set_voice(voice)
+
+    def still_checking(self) -> str:
+        line = random.choice([line for line in STILL_CHECKING if line != self._last_still])
+        self._last_still = line
+        return line
 
     async def from_browser(self, message: Any):
         if isinstance(message, dict) and message.get("type") == "session.close":

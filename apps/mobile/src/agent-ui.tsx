@@ -63,6 +63,7 @@ import { AlwaysAllowedCard, AppPermissionsCard } from "./approvals-ui";
 import { AppsTabs, useAppsTab } from "./apps-tabs";
 import { AssistantResponse } from "./assistant-response";
 import { AvatarPicker } from "./avatar-settings";
+import { CallVoiceCard } from "./call-voice-ui";
 import { BarChart, DataTable, Meter } from "./charts";
 import { LineChart } from "./charts-extra";
 import { ChatgptImport, YourDataCard } from "./data-ui";
@@ -4072,6 +4073,7 @@ export function AppsScreen() {
             />
           </Card>
           <PeopleNotesCard />
+          <CallVoiceCard name={data?.identity.name || "Neddy"} />
           <VoiceCard name={data?.identity.name || "Neddy"} />
           <AgentEmailCard />
         </>

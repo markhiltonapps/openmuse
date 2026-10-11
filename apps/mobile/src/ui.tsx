@@ -190,10 +190,13 @@ export function IconButton({
   icon: Icon,
   label,
   onPress,
+  tinted = false,
 }: {
   icon: LucideIcon;
   label: string;
   onPress: () => void;
+  /** A filled circle, for a button that sits on a card (the card is the surface colour). */
+  tinted?: boolean;
 }) {
   return (
     <Pressable
@@ -208,7 +211,7 @@ export function IconButton({
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 22,
-          backgroundColor: pressed ? colors.line : colors.surface,
+          backgroundColor: pressed ? colors.line : tinted ? colors.subtle : colors.surface,
         },
       ]}
     >

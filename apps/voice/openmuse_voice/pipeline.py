@@ -5,6 +5,8 @@ stream) later run the same pipeline; only the transport and how it's started dif
 """
 
 import asyncio
+import random
+import time
 
 import aiohttp
 from loguru import logger
@@ -19,11 +21,15 @@ from pipecat.frames.frames import (
     LLMMessagesAppendFrame,
     LLMRunFrame,
     MetricsFrame,
+    OutputAudioRawFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
     TTSTextFrame,
+    TTSUpdateSettingsFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
+    VADUserStartedSpeakingFrame,
+    VADUserStoppedSpeakingFrame,
 )
 from pipecat.metrics.metrics import LLMUsageMetricsData, TTSUsageMetricsData
 from pipecat.observers.base_observer import BaseObserver, FramePushed
@@ -37,12 +43,14 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.services.llm_service import FunctionCallParams
+from pipecat.services.settings import TTSSettings
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.workers.runner import WorkerRunner
 
 from .call import Call
 from .config import Config
 from .services import make_llm, make_stt, make_tts
+from .voices import RATE, Voices
 
 # Put before the instructions the api sends (the same ones OpenAI's voice gets).
 VOICE_RULES = """How this voice works:
@@ -51,7 +59,8 @@ VOICE_RULES = """How this voice works:
 - To hand something off, say a short line such as "One sec" and call the hand_off tool in the same reply. Its answer comes back a little later; if they say something else meanwhile, answer as usual, and when it arrives, tell them briefly in your own words.
 - Don't mention handing off; to them, it's all you.
 - For how to use this app, answer from "How this app works" below when it covers the question; hand off anything it doesn't cover, and anything they want done.
-- Never say you've looked something up or done something unless an answer from hand_off says so."""
+- Never say you've looked something up or done something unless an answer from hand_off says so.
+- The little sounds you make while they talk ("mm-hmm", "yeah", "right") can't be turned off yet. If they ask, say so kindly; never promise to stop them."""
 
 HAND_OFF = FunctionSchema(
     name="hand_off",
@@ -103,6 +112,77 @@ class Played(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class Backchannel(FrameProcessor):
+    """Says "mm-hmm" now and then while they talk, as people do on the phone.
+
+    Sparingly: only once they've been talking a while (MIN_TURN), when they pause but the turn
+    detector hasn't decided they've finished, after a short silence (WAIT), at most once a turn
+    and never within GAP of the last one. If they start talking again first, nothing is said.
+    The sounds are short recordings in the call's voice, made once (no cost per call).
+    """
+
+    MIN_TURN = 5.0
+    WAIT = 0.45
+    GAP = 15.0
+
+    def __init__(self, call: Call):
+        super().__init__()
+        self._call = call
+        self.clips: list[bytes] = []
+        self._turn_started: float | None = None
+        self._said_this_turn = False
+        # So the first one of a call doesn't wait for GAP.
+        self._last = -self.GAP
+        self._last_clip = -1
+        self._pending: asyncio.Task | None = None
+
+    def _cancel(self):
+        if self._pending and not self._pending.done():
+            self._pending.cancel()
+        self._pending = None
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, UserStartedSpeakingFrame):
+            self._turn_started = time.monotonic()
+            self._said_this_turn = False
+        elif isinstance(frame, UserStoppedSpeakingFrame):
+            self._turn_started = None
+            self._cancel()
+        elif isinstance(frame, VADUserStartedSpeakingFrame):
+            self._cancel()
+        elif isinstance(frame, VADUserStoppedSpeakingFrame) and self._due():
+            self._cancel()
+            self._pending = asyncio.create_task(self._after_pause())
+        await self.push_frame(frame, direction)
+
+    def _due(self) -> bool:
+        now = time.monotonic()
+        return (
+            bool(self.clips)
+            and self._turn_started is not None
+            and not self._said_this_turn
+            and now - self._turn_started >= self.MIN_TURN
+            and now - self._last >= self.GAP
+            and not self._call.bot_speaking
+        )
+
+    async def _after_pause(self):
+        await asyncio.sleep(self.WAIT)
+        # Still in their turn, still quiet, and nothing else being said.
+        if not self._due():
+            return
+        index = random.choice([i for i in range(len(self.clips)) if i != self._last_clip] or [0])
+        self._last_clip, self._said_this_turn, self._last = index, True, time.monotonic()
+        await self.push_frame(
+            OutputAudioRawFrame(audio=self.clips[index], sample_rate=RATE, num_channels=1)
+        )
+
+    async def cleanup(self):
+        self._cancel()
+        await super().cleanup()
+
+
 class Usage(BaseObserver):
     """Tokens and characters used, and whether the person is talking (each frame seen once)."""
 
@@ -139,7 +219,9 @@ class Usage(BaseObserver):
                     )
 
 
-async def run_call(call: Call, transport: BaseTransport, config: Config) -> None:
+async def run_call(
+    call: Call, transport: BaseTransport, config: Config, voices: Voices | None = None
+) -> None:
     """Runs one call until it ends; `call.stop` ends it from outside."""
     async with aiohttp.ClientSession() as http:
         stt = make_stt(config)
@@ -152,7 +234,22 @@ async def run_call(call: Call, transport: BaseTransport, config: Config) -> None
             if part
         )
         llm = make_llm(config, system)
-        tts = make_tts(config, http)
+        tts = make_tts(config, http, call.voice)
+        listening = Backchannel(call)
+
+        async def load_clips(voice: str):
+            if not voices:
+                return
+            try:
+                clips = await voices.clips(http, voice)
+            except Exception as error:
+                logger.warning(f"Voice call {call.id}: no listening sounds for {voice}: {error}")
+                return
+            if call.voice == voice:
+                listening.clips = clips
+
+        if voices and voices.choosable:
+            asyncio.create_task(load_clips(call.voice))
 
         async def on_hand_off(params: FunctionCallParams):
             logger.info(f"Voice call {call.id}: hand-off")
@@ -183,6 +280,7 @@ async def run_call(call: Call, transport: BaseTransport, config: Config) -> None
                 user,
                 llm,
                 tts,
+                listening,
                 transport.output(),
                 Played(call),
                 assistant,
@@ -218,7 +316,13 @@ async def run_call(call: Call, transport: BaseTransport, config: Config) -> None
         async def stop():
             await worker.cancel()
 
-        call.speak, call.note, call.stop = speak, note, stop
+        async def set_voice(voice: str):
+            logger.info(f"Voice call {call.id}: voice changed to {voice}")
+            listening.clips = []
+            await worker.queue_frames([TTSUpdateSettingsFrame(delta=TTSSettings(voice=voice))])
+            asyncio.create_task(load_clips(voice))
+
+        call.speak, call.note, call.stop, call.set_voice = speak, note, stop, set_voice
 
         # A service that can't do its job (out of credit, a key turned down) would leave the
         # call deaf or silent: say so and hang up, so they aren't talking to no one.

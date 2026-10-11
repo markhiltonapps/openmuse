@@ -419,3 +419,106 @@ export class VoiceComparison {
     return settled;
   }
 }
+
+/** A voice people can pick for their calls on our own voice. */
+export interface CallVoice {
+  id: string;
+  description: string;
+}
+/** What the voice service offers; an empty list when the voice can't be chosen there. */
+interface Offered {
+  voices: CallVoice[];
+  default: string;
+}
+
+/**
+ * The voices of our own voice service, each person's choice of them, and samples to play. The
+ * list and samples come from the voice service (which checks them against Inworld) and are kept
+ * a while: they rarely change, and a sample costs a little to make.
+ */
+export class CallVoices {
+  private offer?: { at: number; value: Offered };
+  private readonly samples = new Map<string, { body: ArrayBuffer; type: string }>();
+  constructor(
+    private readonly db: Store,
+    private readonly url: string,
+    private readonly token: string,
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly now: () => number = Date.now,
+  ) {}
+  async offered(): Promise<Offered> {
+    const fresh =
+      this.offer &&
+      this.now() - this.offer.at < (this.offer.value.voices.length ? 600_000 : 30_000);
+    if (this.offer && fresh) return this.offer.value;
+    let value: Offered = { voices: [], default: "" };
+    try {
+      const response = await this.fetcher(`${this.url}/v1/voices`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) {
+        const body = (await response.json()) as Partial<Offered>;
+        value = {
+          voices: (body.voices ?? []).filter(
+            (v): v is CallVoice => typeof v?.id === "string" && typeof v.description === "string",
+          ),
+          default: typeof body.default === "string" ? body.default : "",
+        };
+      } else console.warn(`The voice service's voice list: ${response.status}`);
+    } catch (error) {
+      console.warn(`The voice service's voice list couldn't be read: ${(error as Error).message}`);
+    }
+    this.offer = { at: this.now(), value };
+    return value;
+  }
+  /** The voice this person's calls use: their choice while it's offered, else the usual one. */
+  async chosen(owner: string) {
+    const [{ voices, default: usual }, saved] = await Promise.all([
+      this.offered(),
+      this.db.get<{ value?: string }>(owner, "agent-settings", "call-voice").catch(() => null),
+    ]);
+    return voices.some((v) => v.id === saved?.value) ? (saved?.value as string) : usual;
+  }
+  /** One of the offered voices, by its name as said or typed ("dennis", "Dennis's"). */
+  async find(name: string) {
+    const wanted = name
+      .trim()
+      .toLowerCase()
+      .replace(/[’']s$/, "");
+    return (await this.offered()).voices.find((v) => v.id.toLowerCase() === wanted);
+  }
+  /** Saves their choice; null goes back to the usual voice. */
+  async choose(
+    owner: string,
+    name: string | null,
+  ): Promise<{ voice: CallVoice } | { error: string }> {
+    const { voices, default: usual } = await this.offered();
+    if (!voices.length) return { error: "Voices can’t be chosen just now." };
+    const voice = name === null ? voices.find((v) => v.id === usual) : await this.find(name);
+    if (!voice)
+      return {
+        error: `There’s no voice called “${name}”. The voices are ${voices.map((v) => v.id).join(", ")}.`,
+      };
+    await this.db.put(owner, "agent-settings", { id: "call-voice", value: voice.id });
+    return { voice };
+  }
+  /** A short hello in that voice, made by the voice service once and kept. */
+  async sample(name: string) {
+    const voice = await this.find(name);
+    if (!voice) return undefined;
+    const kept = this.samples.get(voice.id);
+    if (kept) return kept;
+    const response = await this.fetcher(
+      `${this.url}/v1/voices/${encodeURIComponent(voice.id)}/sample`,
+      { headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(20_000) },
+    );
+    if (!response.ok) throw new AppError("That sample couldn’t be played just now.", 502);
+    const sample = {
+      body: await response.arrayBuffer(),
+      type: response.headers.get("content-type") ?? "audio/mpeg",
+    };
+    this.samples.set(voice.id, sample);
+    return sample;
+  }
+}
