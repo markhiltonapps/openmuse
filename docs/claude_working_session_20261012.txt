@@ -1,0 +1,21 @@
+Claude working session — 2026-10-12
+===================================
+
+Weekly upstream check (Oct 12, routine)
+- CopilotKit/OpenMuse main has 71 commits we don't have (62 new since Oct 5; newest Oct 6).
+  A full merge (git merge-tree) conflicts in 26 files: our chat, chat agent, job engine,
+  computer screens, app.ts, config.ts, package.json/lockfile and some tests.
+- Recommended, by hand: cef3378 (resource IDs and file paths checked), c911000 (api rate
+  limit; check it doesn't throttle calls), hono 4.13.13 via pnpm, job fixes that apply cleanly
+  (cd687d9, de8c232, 6d8a084, 6155452, 695e998), browser worker fixes (7fd044a, 3281bc0,
+  4c8b5e0), small app fixes (c36c903, e9d2490, 23552f5), and small ports (010d3a0 Android
+  keyboard, f760f71 DST day view, 69bd9f6, 0e00e66, 2ca0ffc).
+- Recommended skipping: 73a7149 (sends usage to CopilotKit's analytics), built-in Gmail and
+  Google Calendar fixes (not used on Railway), 9835422 (we have our own OpenRouter setup),
+  345ed67 and 76a4678 (our chat already handles these its own way), CI/Renovate/docs/test-only.
+- Hold: agent computer, goals/ideas, watches, 01236ed (idempotent file retries, 7 files).
+- Nothing merged or pushed; only the local upstream/main ref was updated by the fetch.
+
+Open question to the owner (from Oct 11): the agent said it can't write to calendars.
+Waiting on what it said and whose invite it was; the likely fix is a line in the chat's
+instructions (its jobs already say calendars can be changed through the calendar app).
