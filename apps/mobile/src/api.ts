@@ -35,6 +35,24 @@ export class MuseApi {
       );
     return payload;
   }
+  /** Sends raw bytes (a piece of a recording) with PUT. */
+  async upload(path: string, body: Blob) {
+    const response = await fetch(`${API_URL}${path}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": body.type || "application/octet-stream",
+      },
+      body,
+    });
+    if (response.status === 401) signedOut();
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: unknown };
+      throw new Error(
+        typeof payload.error === "string" ? payload.error : `Request failed (${response.status})`,
+      );
+    }
+  }
   url(path: string) {
     return path.startsWith("http") ? path : `${API_URL}${path}`;
   }

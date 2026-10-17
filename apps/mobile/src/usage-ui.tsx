@@ -266,7 +266,9 @@ export function UsageCard() {
         <View key={kind} style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
           <Text style={[s.muted, { flex: 1 }]}>
             {USAGE_KINDS[kind] ?? kind} ·{" "}
-            {kind === "voice" ? minutesLabel(entry.seconds / 60) : entry.calls}
+            {kind === "voice" || kind === "meetings"
+              ? minutesLabel(entry.seconds / 60)
+              : entry.calls}
           </Text>
           <Text style={s.muted}>{entry.priced ? dollars(entry.cost) : "price unknown"}</Text>
         </View>

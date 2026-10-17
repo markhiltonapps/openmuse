@@ -55,6 +55,7 @@ import { AppEmailSheet } from "./email-cards";
 import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import { HelpSheet } from "./help-ui";
 import { FoodLogSheet } from "./meal-checkins-ui";
+import { MeetingSheet } from "./meetings-ui";
 import PdfReader from "./PdfReader";
 import { artifactKind, savedDate } from "./plans";
 import { CommitmentsSheet, RemindersSheet } from "./plans-ui";
@@ -90,6 +91,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "commitments") return <CommitmentsSheet tab={detail.tab} />;
   if (detail.type === "reminders") return <RemindersSheet />;
   if (detail.type === "saved") return <SavedResultSheet artifact={detail.artifact} />;
+  if (detail.type === "meeting") return <MeetingSheet id={detail.id} />;
   if (detail.type === "mail") return <MailDetail mail={detail.mail} />;
   if (detail.type === "email") return <EmailEditor draft={detail.draft} />;
   if (detail.type === "event")

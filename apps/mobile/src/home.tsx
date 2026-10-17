@@ -17,6 +17,7 @@ import { appLabel } from "./details";
 import { GlossFill, OnGloss } from "./gloss";
 import { useCallControls } from "./live-call";
 import { useLiveVoice } from "./live-talk-ui";
+import { HomeRecordButton, useRecording } from "./meetings-ui";
 import { dark, glass } from "./theme";
 import { tipProps } from "./tips";
 import { colors, glassSurface, s } from "./ui";
@@ -499,7 +500,9 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
   const agent = data?.identity.name || "Neddy";
   const live = useLiveVoice();
   const call = useCallControls();
-  const calling = live === "on";
+  // While a meeting records, the microphone is the recorder's: Talk goes to the chat.
+  const recording = useRecording();
+  const calling = live === "on" && !recording;
   const label =
     call.phase === "on"
       ? `Back to the call with ${agent}`
@@ -513,11 +516,17 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
       call.expand();
     } else navigate("chat");
   };
+  // Three buttons on a phone: the round ones get a little smaller and Talk drops its icon, so
+  // "Talk to Neddy" still fits whole. The row's own width, not the window's (the column is capped).
+  const [rowWidth, setRowWidth] = useState(0);
+  const tight = rowWidth > 0 && rowWidth < 440;
+  const round = tight ? 56 : 62;
   return (
     <View
+      onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
       style={{
         flexDirection: "row",
-        gap: 10,
+        gap: tight ? 8 : 10,
         alignItems: "center",
         alignSelf: "center",
         width: "100%",
@@ -535,8 +544,8 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
           height: 62,
           borderRadius: 31,
           justifyContent: "center",
-          paddingLeft: 78,
-          paddingRight: 20,
+          paddingLeft: tight ? 70 : 78,
+          paddingRight: tight ? 16 : 20,
           transform: [{ scale: pressed ? 0.98 : 1 }],
           shadowColor: "#1E46BE",
           shadowOpacity: 0.45,
@@ -579,7 +588,7 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
             Talk to {agent}
           </Text>
           {/* A headset for a call; a microphone where talking happens in the chat. */}
-          {calling || call.phase === "on" ? (
+          {tight ? null : calling || call.phase === "on" ? (
             <Headset size={26} color="#FFFFFF" />
           ) : (
             <Mic size={26} color="#FFFFFF" />
@@ -593,9 +602,9 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
         onPress={() => draft("")}
         style={({ pressed }) => [
           {
-            width: 62,
-            height: 62,
-            borderRadius: 31,
+            width: round,
+            height: round,
+            borderRadius: round / 2,
             alignItems: "center",
             justifyContent: "center",
             backgroundColor: glass ? "rgba(30, 24, 44, 0.66)" : colors.card,
@@ -614,6 +623,7 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
       >
         <Keyboard size={26} color={ink()} />
       </Pressable>
+      <HomeRecordButton glass={glass} ink={ink()} size={round} />
     </View>
   );
 }

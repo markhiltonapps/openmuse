@@ -3661,10 +3661,17 @@ export function NotificationsSheet() {
   const { data, mutate } = useAgentWorkspace();
   const { close, open, navigate, workspace, api, refresh } = useWorkspace();
   const [error, setError] = useState("");
-  async function read(id: string, taskId?: string, checkInId?: string, actionId?: string) {
+  async function read(
+    id: string,
+    taskId?: string,
+    checkInId?: string,
+    actionId?: string,
+    meetingId?: string,
+  ) {
     try {
       await mutate(`/notifications/${id}/read`, {});
       if (taskId) open({ type: "task", taskId });
+      else if (meetingId) open({ type: "meeting", id: meetingId });
       else if (checkInId) {
         close();
         navigate("chat");
@@ -3751,19 +3758,23 @@ export function NotificationsSheet() {
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
             <Button
               small
-              onPress={() => void read(item.id, item.taskId, item.checkInId, item.actionId)}
+              onPress={() =>
+                void read(item.id, item.taskId, item.checkInId, item.actionId, item.meetingId)
+              }
             >
               {item.taskId
                 ? "Open job"
-                : item.checkInId
-                  ? "Answer in chat"
-                  : item.actionId
-                    ? "Review"
-                    : item.read
-                      ? "Read"
-                      : item.reminderId
-                        ? "Done"
-                        : "Mark read"}
+                : item.meetingId
+                  ? "Open the notes"
+                  : item.checkInId
+                    ? "Answer in chat"
+                    : item.actionId
+                      ? "Review"
+                      : item.read
+                        ? "Read"
+                        : item.reminderId
+                          ? "Done"
+                          : "Mark read"}
             </Button>
           </Card>
         ))}

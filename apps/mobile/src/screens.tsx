@@ -44,6 +44,7 @@ import { Mascot } from "./avatar";
 import { type AppCalendarEvent, type AppDay, calendarName } from "./calendar-apps";
 import { localDateTime, zonedInstant } from "./date-time";
 import { fileLabel, fileSummary, isPdf, isPicture } from "./file-kinds";
+import { MeetingsCard } from "./meetings-ui";
 import { MiniAppsCard } from "./mini-apps-ui";
 import { SavedResults } from "./saved-results-ui";
 import {
@@ -1260,6 +1261,7 @@ export function FilesScreen() {
       </View>
       <ErrorNotice error={error} />
       <MiniAppsCard />
+      <MeetingsCard />
       <SavedResults />
       {w.files.length > 0 && (
         <View style={[s.between, { gap: 12 }]}>

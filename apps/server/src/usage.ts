@@ -27,7 +27,9 @@ export type UsageKind =
   | "summary"
   | "code"
   | "recipes"
-  | "voice";
+  | "voice"
+  /** Meetings recorded in the app, transcribed by the minute. */
+  | "meetings";
 
 /** Dollars per million tokens. */
 export interface Price {
@@ -65,6 +67,8 @@ export const MINUTE_PRICES: Record<string, number> = {
   // Our own voice (Pipecat): connected minutes are what Soniox bills for listening; the relay
   // (Cloudflare TURN) and the voice service's CPU add a fraction of a cent an hour.
   "pipecat-voice": 0.002,
+  // Recorded meetings, transcribed by Soniox: $0.10 an hour of audio (soniox.com/pricing).
+  "soniox-stt-async": 0.1 / 60,
 };
 export function parseMinutePrices(value = process.env.VOICE_PRICES ?? "") {
   const prices: Record<string, number> = {};
@@ -260,6 +264,13 @@ export class UsageMeter {
       line.seconds = (line.seconds ?? 0) + Math.max(0, Math.round(seconds));
     });
   }
+  /** Adds a recorded meeting's minutes of transcription (one meeting is one call). */
+  recordTranscription(owner: string, model: string, seconds: number): Promise<void> {
+    return this.update(owner, "meetings", model, (line) => {
+      line.calls++;
+      line.seconds = (line.seconds ?? 0) + Math.max(0, Math.round(seconds));
+    });
+  }
   /** Adds characters a text-to-speech voice spoke (not a call of its own). */
   recordCharacters(owner: string, model: string, characters: number): Promise<void> {
     return this.update(owner, "voice", model, (line) => {
@@ -366,7 +377,12 @@ export class UsageMeter {
       cost: lines.reduce((sum, line) => sum + (line.cost ?? 0), 0),
       calls: lines.reduce((sum, line) => sum + line.calls, 0),
       /** Minutes of live voice this month. */
-      voiceMinutes: Math.round(lines.reduce((sum, line) => sum + (line.seconds ?? 0), 0) / 6) / 10,
+      voiceMinutes:
+        Math.round(
+          lines
+            .filter((line) => line.kind === "voice")
+            .reduce((sum, line) => sum + (line.seconds ?? 0), 0) / 6,
+        ) / 10,
       /** Models without a price, whose cost is left out. */
       unpriced: [...new Set(lines.filter((l) => l.cost === undefined).map((l) => l.model))],
       lines: lines.sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0)),

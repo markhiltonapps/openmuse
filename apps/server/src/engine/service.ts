@@ -60,6 +60,7 @@ import { jobEmail } from "../job-email.ts";
 import { backgroundFailure } from "../log.ts";
 import type { MailAlerts } from "../mail-alerts.ts";
 import type { MealCheckIns } from "../meal-checkins.ts";
+import type { Meetings } from "../meetings.ts";
 import { MiniApps } from "../mini-apps.ts";
 import type { ModelChoices, ModelJob } from "../model-choices.ts";
 import { People } from "../people.ts";
@@ -213,6 +214,7 @@ export class AgentService {
   async stop() {
     if (this.maintenance) clearInterval(this.maintenance);
     this.maintenance = undefined;
+    this.meetings?.stop();
     await this.worker.stop();
     while (this.refreshing) await new Promise((resolve) => setTimeout(resolve, 10));
     // Hands background work to the next copy straight away instead of when the lease runs out.
@@ -250,6 +252,9 @@ export class AgentService {
           ?.followEvents(async (owner, from, to) => (await calendarRange(owner, from, to)).events)
           .catch((error) => backgroundFailure("reminders following events", error));
       }
+      await this.meetings
+        ?.maintain()
+        .catch((error) => backgroundFailure("recorded meetings", error));
       await this.spacePosts
         ?.publishDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("scheduled posts", error));
@@ -1357,6 +1362,8 @@ export class AgentService {
   feed?: { refreshDue(): Promise<void> };
   /** One-off reminders; delivered from the maintenance loop. */
   reminders?: ReminderService;
+  /** Meetings recorded in the app: their words and notes. */
+  meetings?: Meetings;
   /** Social posts approved ahead of time; published from the maintenance loop. */
   spacePosts?: ScheduledPosts;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
@@ -1529,7 +1536,7 @@ export class AgentService {
     body: string,
     taskId?: string,
     key?: string,
-    extra: Pick<AgentNotification, "reminderId" | "checkInId" | "actionId"> = {},
+    extra: Pick<AgentNotification, "reminderId" | "checkInId" | "actionId" | "meetingId"> = {},
   ) {
     const value: AgentNotification = {
       id: key ? hash(key) : randomUUID(),
@@ -1555,7 +1562,9 @@ export class AgentService {
               ? { url: `/?task=${encodeURIComponent(taskId)}` }
               : extra.actionId
                 ? { url: `/?review=${encodeURIComponent(extra.actionId)}` }
-                : {}),
+                : extra.meetingId
+                  ? { url: `/?meeting=${encodeURIComponent(extra.meetingId)}` }
+                  : {}),
         })
         .catch((error) => backgroundFailure("push notification", error));
     return inserted;

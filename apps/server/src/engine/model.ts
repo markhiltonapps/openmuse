@@ -25,6 +25,7 @@ import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { healthTargets, healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
+import { meetingJobToolSpecs } from "../meetings.ts";
 import { miniAppJobInstructions, miniAppToolSpecs } from "../mini-apps.ts";
 import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
@@ -410,6 +411,7 @@ export async function executeModelTask(
     ...[
       ...fileToolSpecs(service.files, owner, service.look),
       ...pastChatToolSpecs(new PastChats(service.db), owner),
+      ...meetingJobToolSpecs(service.meetings, owner),
       ...spaceToolSpecs(new Spaces(service.db), owner, {
         readOnly: true,
         posts: service.spacePosts,

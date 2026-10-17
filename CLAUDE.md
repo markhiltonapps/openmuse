@@ -193,6 +193,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   (`env -u` in package.json). With the key present, every test that builds the app sends its
   chat to the real OpenRouter (it spent about $0.05 once). Real-call tests are run by hand, with
   the owner's OK.
+  Local api runs too: the sandbox's shell has a real key, so start the server with
+  `env -u OPENROUTER_API_KEY -u OPENAI_VOICE_API_KEY …` (a local run once made two real calls).
 - **Prompt caching:** fixed instructions first, anything that changes (the time, the person's
   context, the task's state) last; one changing value early in a prompt makes everything after it
   full price.
@@ -395,3 +397,16 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Rows whose state the server can change:** reset local row state only when the server's
   answer changes (compare a key built from it), not on every new array; a filtered list is a new
   array each render and silently undid an Add.
+- **The meeting recorder is its own layer, above the call:** `MeetingRecorderProvider` wraps
+  `LiveCallProvider` (App.tsx), so the call screen's cards can reach it; a Record button ends a
+  live call itself (`useStartRecording`), because the phone can't do both.
+- **Background work that two callers can start:** claim it in an in-process map of running
+  promises before awaiting the store lease, so a second ask waits for the same run instead of
+  starting another (meetings.ts `process`).
+- **Waiting inside a service:** a long wait that a test awaits needs a ref'd timer plus a
+  `stopped` flag that `stop()` sets; an `unref()`'d sleep let the test process end early.
+- **Web audio:** an `AudioContext` made after an `await` starts suspended; call `resume()` or the
+  level meter stays flat. MediaRecorder's timesliced pieces only play joined in order from the
+  first, so each part (a new start after a lock) is joined and transcribed on its own.
+- **Restart local servers after server changes:** `tsx` doesn't reload, so a server started
+  earlier runs old code. A reviewer once chased a "bug" that was only a stale local api.

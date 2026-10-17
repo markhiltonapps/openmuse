@@ -1317,6 +1317,49 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["make-documents", "saved-results", "share-files"],
   },
   {
+    id: "record-meeting",
+    group: "files",
+    title: "Record a meeting",
+    summary:
+      "Record a meeting in the room; {agent} writes down every word with who said it, plus a summary, decisions and action items.",
+    shot: "meetings",
+    place: "meetings",
+    more: ["home"],
+    steps: [
+      "Tap the round red **Record** button on **Home** (next to Talk and Type). Or tap **+** in the chat and **Record a meeting**, or just say “Record a meeting”.",
+      "Let everyone know they’re being recorded. A red bar with the time stays at the top of every screen while it records; tap it to see the recorder.",
+      "Tap **Stop** when you’re done. A minute or two later the notes are ready, with a notification: **Files › Meetings** has them all.",
+      "Open a meeting for its summary, decisions, action items and every word. Tap a speaker’s name to say who it is.",
+    ],
+    body: [
+      "Afterwards, just ask: “What did we decide about the budget?” or “What did Dana say she’d do?” {agent} reads your meetings to answer, and can turn the action items into reminders (**Make reminders**).",
+      "On a phone, keep the app open and the screen on (it tries to keep the screen awake). If the phone locks, recording pauses and carries on when you’re back; nothing already recorded is lost. Recording works in the web app in Chrome, Edge or Safari.",
+      "On a call, saying “Record a meeting” shows a button that ends the call and starts recording, because the phone can’t do both at once.",
+      "Each person can record a set number of hours a month (10 unless your admin changed it); **Files › Meetings** shows how much you’ve used. The audio is kept for 30 days so you can listen again; the words and notes stay until you delete the meeting.",
+    ],
+    say: [
+      "Record a meeting",
+      { text: "What did we decide in today’s meeting?", send: true },
+      { text: "Which meetings have I recorded?", send: true },
+      { text: "Speaker 2 was Dana", where: "after a meeting" },
+    ],
+    keywords: [
+      "record",
+      "recording",
+      "meeting",
+      "meetings",
+      "transcript",
+      "transcribe",
+      "minutes",
+      "notes",
+      "dictaphone",
+      "voice memo",
+      "who said",
+      "action items",
+    ],
+    related: ["files", "reminders", "live-call"],
+  },
+  {
     id: "make-documents",
     group: "files",
     title: "Make documents, spreadsheets and slides",
@@ -2031,6 +2074,27 @@ export const HELP_TOPICS: HelpTopic[] = [
       "live talk",
     ],
     related: ["admin-voice-key", "admin-people"],
+  },
+  {
+    id: "admin-meetings",
+    group: "admin",
+    admin: true,
+    title: "Set up meeting recording",
+    summary:
+      "Recording meetings needs a Soniox key on the api; each person gets 10 hours a month by default.",
+    place: "meetings",
+    steps: [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Railway's own reference syntax
+      "In Railway, open the **api** service › **Variables** and add **SONIOX_API_KEY** (the same key the voice service uses; you can set it to ${{voice.SONIOX_API_KEY}}).",
+      "Choose **Deploy** on the banner Railway shows; the variable does nothing until then.",
+      "The **Record** buttons appear on Home, in the chat’s **+** menu and in **Files › Meetings**.",
+    ],
+    body: [
+      "Soniox writes down the words, with who said them, for about 10 cents an hour of audio; the notes are written by the model for simple jobs (the AI models card). Both show in Usage as **Recorded meetings**.",
+      "**MEETING_MONTHLY_HOURS** on the api sets each person’s hours a month (10 if it’s not set; 0 means no limit). The audio is kept 30 days, then only the words and notes stay. Nothing is kept at Soniox once the words are back.",
+    ],
+    keywords: ["soniox", "meeting recording", "transcription", "setup", "hours"],
+    related: ["record-meeting"],
   },
   {
     id: "admin-railway",

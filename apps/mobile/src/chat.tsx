@@ -12,6 +12,7 @@ import {
   ArrowUp,
   AudioLines,
   Camera,
+  CircleDot,
   FileText,
   Headset,
   Image as ImageIcon,
@@ -70,6 +71,7 @@ import { useCallControls } from "./live-call";
 import { onCallSaved, useLiveVoice } from "./live-talk-ui";
 import { MailToolCard } from "./mail-tool-card";
 import { MealCheckInCard } from "./meal-checkins-ui";
+import { MeetingsToolCard, useRecorder, useStartRecording } from "./meetings-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
@@ -312,6 +314,15 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <CallVoiceToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  // "Record this meeting": the recorder's Start; a meeting's notes; meetings found.
+  useRenderTool({
+    name: "meetings",
+    description: "Show the recorder or the meetings the agent found",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <MeetingsToolCard result={result} loading={status !== "complete"} />
     ),
   });
   // "How do I…?": the help topic's steps, with a button to it in Help.
@@ -666,6 +677,8 @@ export function ChatScreen({
   }, []);
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const recorder = useRecorder();
+  const startRecording = useStartRecording();
   const [uploading, setUploading] = useState<"photos" | "any">();
   // Pictures pasted into the message box (a screenshot, an image copied from a page) are added
   // to Files and attached, like choosing a photo. Pasted text still pastes as text.
@@ -1747,6 +1760,18 @@ export function ChatScreen({
               >
                 Upload a file
               </Button>
+              {recorder.supported && (
+                <Button
+                  small
+                  icon={CircleDot}
+                  onPress={() => {
+                    setPicking(false);
+                    startRecording();
+                  }}
+                >
+                  Record a meeting
+                </Button>
+              )}
             </View>
             <Text style={s.small}>Or pick something already in Files:</Text>
             <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">

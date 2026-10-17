@@ -91,6 +91,7 @@ const ICONS: Record<AppPlaceId, LucideIcon> = {
   tracking: Radar,
   files: FolderOpen,
   saved: FileText,
+  meetings: AudioLines,
   "agent-computer": Monitor,
   delegate: Send,
   apps: Shapes,
@@ -140,6 +141,7 @@ const SCREENS: Partial<Record<AppPlaceId, { section: Section; anchor?: string }>
   tracking: { section: "goals", anchor: "tracking" },
   files: { section: "files" },
   saved: { section: "files", anchor: "saved" },
+  meetings: { section: "files", anchor: "meetings" },
 };
 
 // "Back to chat": the screen a button took the person to from the chat, while they're still on it.

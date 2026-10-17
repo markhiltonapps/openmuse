@@ -115,6 +115,12 @@ export const APP_PLACES = {
     about: "routines and watched pages, with a price chart for a price watch",
   },
   files: { name: "Files & media", where: "Bottom bar", about: "files, photos and documents" },
+  meetings: {
+    name: "Meetings",
+    where: "Files & media",
+    about:
+      "meetings they recorded: each with its summary, decisions, action items, the words with who said them, and the audio for 30 days",
+  },
   saved: {
     name: "Saved by your agent",
     where: "Files & media",

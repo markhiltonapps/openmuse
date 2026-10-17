@@ -1,0 +1,100 @@
+Claude working session — 2026-10-17
+===================================
+
+Meeting recorder (owner, Oct 17: "put the recording capability on the mobile device"; the desktop
+helper for Zoom/Webex/Meet audio is set aside). Mostly in-person meetings of about an hour.
+Owner's choices: start from Home, the chat and by voice; keep audio 30 days, then words only;
+summary, decisions and action items afterwards; everyone gets 10 hours a month.
+
+What changed
+- Server (apps/server/src/meetings.ts, new):
+  - Recording arrives in 30-second pieces per part (PUT /api/meetings/:id/chunks/:part/:n).
+    A phone lock ends a part; the next part starts on return. Each part is joined and sent
+    to Soniox's async API (stt-async-v5, speakers on). Later parts' speakers are kept apart
+    ("2:1").
+  - The "simple" model writes a title, summary, decisions and action items. Naming a speaker
+    ("Speaker 2 was Dana") changes the words, the action items and what search finds.
+  - Audio is kept 30 days (signed links, Range support). Words and notes stay until deleted.
+  - Each person gets MEETING_MONTHLY_HOURS (default 10) a month, and a part runs 4 hours at most.
+    Usage kind "meetings" costs $0.10 an hour.
+  - Recordings left open close themselves after 45 minutes without a piece, and are written
+    up. On failure, a notification and Try again. Only one write-up runs at a time per
+    meeting (a lease plus a map of running ones).
+  - Routes:
+    - GET/POST /api/meetings
+    - PUT .../chunks
+    - POST .../finish, /discard, /retry
+    - GET/PATCH/DELETE /api/meetings/:id
+    - GET .../audio/:part
+  - The notification opens /?meeting=<id>.
+- Agent:
+  - The chat and calls get a "meetings" tool (start, list, read, search, name_speakers,
+    rename). Background jobs can list, read and search.
+  - Recent meetings are in the chat's context.
+  - Saying "Record a meeting" on a call shows a card that ends the call and starts recording.
+- App:
+  - The recorder (meeting-recorder.ts) uses MediaRecorder at 32 kbps Opus (MP4 on Safari),
+    keeps the screen awake and shows a level meter. Pieces upload in order with backoff.
+  - A pause is a lock, a mute of 3 s or more, or the mic ending; "Carry on" resumes.
+  - Plain messages when:
+    - the server closed the recording;
+    - Stop couldn't reach the server;
+    - Throw away was refused or couldn't reach the server.
+  - The recorder layer (MeetingRecorderProvider) sits above the call.
+  - A red bar shows on every screen and sheet while recording.
+  - Entry points:
+    - a round Record button on Home (Talk and Type made room for it on narrow phones);
+    - "Record a meeting" in the chat's + menu;
+    - Files › Meetings.
+  - The meeting page shows the summary, decisions, action items with Make reminders, the
+    audio while it's kept, and every word with who said it (tap a name to say who it is).
+    It also has Rename, Ask about it and Delete.
+  - Usage shows "Recorded meetings" in minutes.
+- Help:
+  - New topic "record-meeting" (Files group, place "meetings"), with a "meetings" screenshot.
+  - New admin topic "admin-meetings".
+  - The app guide mentions Meetings.
+- Setup: .env.example and the README have SONIOX_API_KEY, MEETING_MONTHLY_HOURS and
+  SONIOX_API_BASE_URL.
+
+Design division: three rounds. Visual and copy signed off in round 2; usability signed off in
+round 3, after Throw away was made to say when it didn't work and names in action items were
+checked against current server code.
+
+Tests
+- tests/meetings.test.ts (9 tests, new): two parts with offsets, notes, named speakers,
+  usage, search, 30-day audio expiry, limit/format/discard, auto-close then retry, no notes
+  model, silence, API routes with Range, and no key.
+- Full checks: Biome clean, pnpm typecheck, server and worker tsc, pnpm test 547/547.
+- Checked in Chromium with a fake microphone against local stand-ins for Soniox and Claude:
+  - record, shrink to the bar, move around the app;
+  - stop, write-up, notes, audio playback;
+  - naming a speaker;
+  - delete confirm;
+  - Throw away refused (409) and offline.
+
+Slip (told the owner)
+- An early local api run picked up the sandbox's real OPENROUTER_API_KEY and made two small
+  OpenRouter calls (an Ideas call, about $0.0003, and meeting notes from fake test words).
+  It was stopped, and every local run since unsets the key (env -u OPENROUTER_API_KEY).
+  A CLAUDE.md lesson now says so.
+
+Known issues / later
+- No corner pop-up for meeting notes; the bell and push notification carry them.
+- The native app has no audio player. Recording is web-only (Chrome, Edge, Safari).
+- How a real iPhone behaves when locked mid-recording is untested here; it should pause and
+  carry on as a new part.
+- From the reviewers, for later:
+  - tap a time in the words to play from there;
+  - fold the words of long meetings;
+  - a "Paused N min" marker between parts;
+  - share the notes;
+  - keep the limit note across devices (store it on the meeting);
+  - check the status after a long pause before starting a new part;
+  - retry Throw away quietly if the sheet was closed while offline.
+
+Owner to do on Railway
+- api service › Variables: add SONIOX_API_KEY (it can be ${{voice.SONIOX_API_KEY}}), then
+  choose Deploy on the banner. Optional: MEETING_MONTHLY_HOURS.
+
+Still open from Oct 11: the calendar invite "could not write to calendars".

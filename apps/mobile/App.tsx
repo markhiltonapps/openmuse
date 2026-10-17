@@ -73,6 +73,7 @@ import { HomeScreen, HomeTalkRow, waitingOnYou } from "./src/home";
 import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
 import { LiveTalkSheet } from "./src/live-talk-ui";
 import { LocationReporter } from "./src/location-ui";
+import { MeetingRecorderProvider, useRecordingBar } from "./src/meetings-ui";
 import { MenuSheet } from "./src/menu-ui";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import {
@@ -102,6 +103,7 @@ import {
 import { UpdateToasts } from "./src/update-toasts";
 import {
   listenForCheckIns,
+  listenForMeetingLinks,
   listenForReviewLinks,
   listenForTaskLinks,
   registerServiceWorker,
@@ -309,6 +311,8 @@ function WorkspaceApp({ token }: { token: string }) {
   // A tapped "Ready for your review" notification opens that review once the workspace is in;
   // if it's already been decided or has expired, Activity shows where things stand.
   const [reviewLink, setReviewLink] = useState("");
+  // A meeting's notes are ready: the notification opens the meeting.
+  useEffect(() => listenForMeetingLinks((id) => setDetail({ type: "meeting", id })), []);
   useEffect(() => listenForReviewLinks(setReviewLink), []);
   useEffect(() => {
     if (!reviewLink || !workspace) return;
@@ -385,20 +389,23 @@ function WorkspaceApp({ token }: { token: string }) {
         <ComputerDraftProvider key={token}>
           <ThreadsProvider>
             {/* The live call carries on across screens and sheets, its bar on top of them. */}
-            <LiveCallProvider>
-              <LocationReporter />
-              {glass && <BackdropLayer />}
-              <BackdropSync />
-              <CallBarSlot>
-                <WorkspaceShell
-                  detail={detail}
-                  toast={toast}
-                  clearToast={() => setToast("")}
-                  error={error}
-                  prompt={prompt}
-                />
-              </CallBarSlot>
-            </LiveCallProvider>
+            {/* A meeting being recorded carries on across screens too, with its own red bar. */}
+            <MeetingRecorderProvider>
+              <LiveCallProvider>
+                <LocationReporter />
+                {glass && <BackdropLayer />}
+                <BackdropSync />
+                <CallBarSlot>
+                  <WorkspaceShell
+                    detail={detail}
+                    toast={toast}
+                    clearToast={() => setToast("")}
+                    error={error}
+                    prompt={prompt}
+                  />
+                </CallBarSlot>
+              </LiveCallProvider>
+            </MeetingRecorderProvider>
           </ThreadsProvider>
         </ComputerDraftProvider>
       </AgentWorkspaceProvider>
@@ -414,7 +421,20 @@ function CallBarSlot({ children }: { children: ReactNode }) {
   const news = useCallNews();
   // The same element while the call goes on, so sheets aren't redrawn as words arrive. It stays
   // under the call screen too, so focus can go back to it when the call shrinks.
-  const bar = useMemo(() => (phase !== "idle" ? <CallBar /> : null), [phase]);
+  const callBar = useMemo(() => (phase !== "idle" ? <CallBar /> : null), [phase]);
+  const recordingBar = useRecordingBar();
+  const bar = useMemo(
+    () =>
+      callBar && recordingBar ? (
+        <>
+          {callBar}
+          {recordingBar}
+        </>
+      ) : (
+        (callBar ?? recordingBar)
+      ),
+    [callBar, recordingBar],
+  );
   return (
     <SheetTop.Provider value={bar}>
       <SheetStatus.Provider value={news}>{children}</SheetStatus.Provider>

@@ -37,6 +37,8 @@ export type Detail =
   | { type: "saved"; artifact: AgentArtifact }
   /** The moving backdrop's picker. */
   | { type: "backdrop" }
+  /** A recorded meeting: its notes, audio and words. */
+  | { type: "meeting"; id: string }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

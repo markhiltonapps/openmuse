@@ -162,6 +162,12 @@ Then point the api at it (`VOICE_SERVICE_URL=http://127.0.0.1:8085 VOICE_INTERNA
 2. After a while with no OpenAI calls (the comparison shows none), remove `OPENAI_VOICE_API_KEY`.
 3. In code: drop the OpenAI `LiveVoice` instance in `apps/server/src/app.ts` (keep the class; it drives our voice), make `voiceFor` and `liveVoiceOf` always return ours, drop the `provider === "openai"` branches in `voice-pipecat.ts`, and remove the OpenAI path in `apps/mobile/src/live-voice.ts` (the `ours` checks).
 
+## Recording meetings
+
+People record a meeting in the room from Home, the chat's **+** menu, Files › Meetings, or by saying "Record a meeting". The web app records the microphone in 30-second pieces and uploads them as it goes (a phone lock pauses it; it carries on as a new part). When it stops, the api sends the audio to Soniox's async API (`stt-async-v5`, with speakers), then the "simple" model writes a summary, decisions and action items. The words stay until the meeting is deleted; the audio is kept 30 days. The chat, calls and background jobs can list, read and search meetings.
+
+On Railway, add `SONIOX_API_KEY` to the api service (a reference to the voice service's works: `${{voice.SONIOX_API_KEY}}`) and choose Deploy. `MEETING_MONTHLY_HOURS` (default 10) limits each person; usage shows as "Recorded meetings". Without the key, the Record buttons say it isn't set up.
+
 ## Persistence and operation
 
 ### Linux terminal and workspace

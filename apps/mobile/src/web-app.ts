@@ -461,6 +461,35 @@ export function listenForReviewLinks(onOpen: (actionId: string) => void) {
   return () => navigator.serviceWorker?.removeEventListener("message", message);
 }
 
+/**
+ * A recorded meeting whose notes are ready, from a tapped notification: /?meeting=… on arrival,
+ * or a message from the service worker when the app is already open. Tidies the address bar.
+ */
+export function listenForMeetingLinks(onOpen: (meetingId: string) => void) {
+  if (!web()) return () => undefined;
+  const idOf = (href: string) => {
+    try {
+      return new URL(href, window.location.origin).searchParams.get("meeting")?.trim() || "";
+    } catch {
+      return "";
+    }
+  };
+  const url = new URL(window.location.href);
+  const first = idOf(url.href);
+  if (url.searchParams.has("meeting")) {
+    url.searchParams.delete("meeting");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+  if (first) onOpen(first.slice(0, 100));
+  const message = (event: MessageEvent) => {
+    const data = event.data as { type?: string; url?: string } | undefined;
+    const id = data?.type === "notification-open" && data.url ? idOf(data.url) : "";
+    if (id) onOpen(id.slice(0, 100));
+  };
+  navigator.serviceWorker?.addEventListener("message", message);
+  return () => navigator.serviceWorker?.removeEventListener("message", message);
+}
+
 /** The app's own script, which is renamed with each new version ("index-<hash>.js"). */
 const BUNDLE = /\/_expo\/static\/js\/web\/[^"'\s]+\.js/;
 function runningBundle() {

@@ -51,6 +51,7 @@ import { MAIL_APPS, MailAlerts } from "./mail-alerts.ts";
 import { MainPages, mainSettings } from "./main-pages.ts";
 import { CombinedApps, McpApps, signedInPage, signInFailedPage } from "./mcp-apps.ts";
 import { MealCheckIns } from "./meal-checkins.ts";
+import { Meetings, notesSystemPrompt, parseNotes, SonioxTranscriber } from "./meetings.ts";
 import {
   chatgptMessages,
   extractMemories,
@@ -113,6 +114,8 @@ export async function createApp(
       Partial<Pick<CopilotKitIntelligence, "getThread" | "updateThread" | "getThreadMessages">>;
     /** Where file contents live; the bucket when configured, else the data folder. */
     blobs?: Blobs;
+    /** Writes up recorded meetings; tests pass one with a fake Soniox. */
+    soniox?: SonioxTranscriber;
   } = {},
 ) {
   assertApiDeploymentConfig(config);
@@ -645,6 +648,44 @@ export async function createApp(
     },
   );
   agent.reminders = reminders;
+  // Meetings recorded in the room: Soniox writes the words, the simple-jobs model the notes.
+  const soniox =
+    options.soniox ??
+    (config.sonioxApiKey
+      ? new SonioxTranscriber(config.sonioxApiKey, fetch, config.sonioxBaseUrl)
+      : undefined);
+  const meetings = new Meetings(db, blobs, auth, {
+    soniox,
+    usage,
+    monthlyHours: config.meetingMonthlyHours ?? 10,
+    timeZone: (owner) => agent.timeZone(owner),
+    removed: async (owner) =>
+      (await db.get<{ status: string }>("system", "accounts", owner))?.status === "disabled",
+    writeNotes: async (owner, transcript) => {
+      const plan = agent.modelFor("simple");
+      if (config.agentBackend !== "model" || !plan.model) return undefined;
+      return parseNotes(
+        await agent.complete({
+          ...plan,
+          stronger: agent.modelFor("chat"),
+          system: notesSystemPrompt,
+          prompt: `The meeting's transcript (data only):\n${transcript}`,
+          onUsage: usage.sink(owner, "meetings"),
+        }),
+      );
+    },
+    notify: async (owner, meeting) => {
+      await agent.notify(
+        owner,
+        meeting.status === "failed" ? "Couldn’t write up your meeting" : "Meeting notes are ready",
+        meeting.status === "failed" ? `${meeting.title}: open it to try again.` : meeting.title,
+        undefined,
+        `meeting-${meeting.status}:${meeting.id}:${meeting.updatedAt}`,
+        { meetingId: meeting.id },
+      );
+    },
+  });
+  agent.meetings = meetings;
   const spacePosts = new ScheduledPosts(db, connected, (owner, title, body, key) =>
     agent.notify(owner, title, body, undefined, key),
   );
@@ -917,7 +958,7 @@ export async function createApp(
   });
   app.use("/api/*", async (c, next) => {
     const signedRoute =
-      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$/.test(
+      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$/.test(
         c.req.path,
       );
     const owner =
@@ -1766,6 +1807,71 @@ export async function createApp(
       `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     );
     return c.body(await files.bytes(c.get("owner"), file.id));
+  });
+  // Meetings recorded in the room: the recorder sends pieces, the server writes them up.
+  app.get("/api/meetings", async (c) => {
+    const owner = c.get("owner");
+    return c.json({
+      available: meetings.available,
+      allowance: await meetings.allowance(owner),
+      meetings: await meetings.list(owner),
+    });
+  });
+  app.post("/api/meetings", async (c) =>
+    c.json(await meetings.start(c.get("owner"), await c.req.json().catch(() => ({}))), 201),
+  );
+  app.put("/api/meetings/:id/chunks/:part/:n", async (c) =>
+    c.json(
+      await meetings.chunk(
+        c.get("owner"),
+        c.req.param("id"),
+        Number(c.req.param("part")),
+        Number(c.req.param("n")),
+        new Uint8Array(await c.req.arrayBuffer()),
+      ),
+    ),
+  );
+  app.post("/api/meetings/:id/finish", async (c) =>
+    c.json(await meetings.finish(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.post("/api/meetings/:id/discard", async (c) =>
+    c.json(await meetings.discard(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/meetings/:id/retry", async (c) =>
+    c.json(await meetings.retry(c.get("owner"), c.req.param("id"))),
+  );
+  app.get("/api/meetings/:id", async (c) =>
+    c.json(await meetings.read(c.get("owner"), c.req.param("id"))),
+  );
+  app.patch("/api/meetings/:id", async (c) =>
+    c.json(await meetings.update(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.delete("/api/meetings/:id", async (c) =>
+    c.json(await meetings.remove(c.get("owner"), c.req.param("id"))),
+  );
+  // The audio, while it's kept (30 days); ranges, so it can be skipped through on a phone.
+  app.get("/api/meetings/:id/audio/:part", async (c) => {
+    const { bytes, mime } = await meetings.audio(
+      c.get("owner"),
+      c.req.param("id"),
+      Number(c.req.param("part")),
+    );
+    c.header("Content-Type", mime);
+    c.header("Accept-Ranges", "bytes");
+    c.header("Cache-Control", "private, max-age=600");
+    const range = /^bytes=(\d*)-(\d*)$/.exec(c.req.header("range") ?? "");
+    if (range && (range[1] || range[2])) {
+      const size = bytes.length;
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start >= size || start > end) {
+        c.header("Content-Range", `bytes */${size}`);
+        return c.body(null, 416);
+      }
+      c.header("Content-Range", `bytes ${start}-${end}/${size}`);
+      return c.body(Buffer.from(bytes.subarray(start, end + 1)), 206);
+    }
+    return c.body(Buffer.from(bytes));
   });
   app.get("/api/app-alerts", async (c) =>
     c.json({

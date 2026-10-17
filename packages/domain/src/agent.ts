@@ -176,6 +176,8 @@ export interface AgentNotification {
   checkInId?: string;
   /** Set on something saved for approval outside a job (from a live call): opens its review. */
   actionId?: string;
+  /** Set on a recorded meeting's notes being ready: opens the meeting. */
+  meetingId?: string;
   title: string;
   body: string;
   createdAt: string;

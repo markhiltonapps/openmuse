@@ -644,6 +644,19 @@ const SHOTS = [
       3: words((p) => p.getByText(/^Saved by/).first()),
     },
   },
+  {
+    // Needs meetings on the server (SONIOX_API_KEY set; a few recorded with stand-ins).
+    id: "meetings",
+    go: async (p) => {
+      await tab(p, "Files & media").click();
+      await p.waitForTimeout(2500);
+    },
+    marks: {
+      1: (p) => button(p, "Record a meeting"),
+      3: words((p) => p.getByRole("heading", { name: "Meetings", exact: true })),
+      4: (p) => button(p, /^Open .* Ready|^Open /),
+    },
+  },
 ];
 
 /**

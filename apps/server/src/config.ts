@@ -92,6 +92,12 @@ export interface Config {
   voicePipecatIdleSeconds?: number;
   /** Minutes a month each person may talk on our own voice; 0 for no limit. */
   voiceMonthlyMinutes?: number;
+  /** Soniox, which writes up recorded meetings (the voice service uses the same key). */
+  sonioxApiKey?: string;
+  /** Soniox's address; only changed to test against a stand-in. */
+  sonioxBaseUrl?: string;
+  /** Hours a month each person may record meetings; 0 for no limit. */
+  meetingMonthlyHours?: number;
   /** Cloudflare's TURN relay, which carries the audio (Railway takes no UDP from outside). */
   turnKeyId?: string;
   turnKeyToken?: string;
@@ -197,6 +203,12 @@ export function readConfig(): Config {
       process.env.VOICE_MONTHLY_MINUTES === undefined
         ? 200
         : Math.max(0, Number(process.env.VOICE_MONTHLY_MINUTES) || 0),
+    sonioxApiKey: process.env.SONIOX_API_KEY?.trim() || undefined,
+    sonioxBaseUrl: process.env.SONIOX_API_BASE_URL?.trim().replace(/\/$/, "") || undefined,
+    meetingMonthlyHours:
+      process.env.MEETING_MONTHLY_HOURS === undefined
+        ? 10
+        : Math.max(0, Number(process.env.MEETING_MONTHLY_HOURS) || 0),
     turnKeyId: process.env.CLOUDFLARE_TURN_KEY_ID?.trim() || undefined,
     turnKeyToken: process.env.CLOUDFLARE_TURN_API_TOKEN?.trim() || undefined,
     railwayVariablesUrl:
