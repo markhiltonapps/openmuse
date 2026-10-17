@@ -25,6 +25,11 @@ console.log(
     ? `Our own voice on (${config.voiceServiceUrl}; default voice ${config.voiceProvider ?? "openai"}${config.turnKeyId ? "" : "; no TURN relay: set CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN"})`
     : "Our own voice off: VOICE_SERVICE_URL or VOICE_INTERNAL_TOKEN isn't set",
 );
+console.log(
+  config.sonioxApiKey
+    ? `Recording meetings on (Soniox; ${config.meetingMonthlyHours ? `${config.meetingMonthlyHours} hours a month each` : "no monthly limit"})`
+    : "Recording meetings off: SONIOX_API_KEY isn't set on the api",
+);
 if (config.taskWorkerEnabled && pipecatVoice)
   void fetch(`${config.voiceServiceUrl}/health`, { signal: AbortSignal.timeout(10000) }).then(
     async (response) => {
