@@ -410,3 +410,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   first, so each part (a new start after a lock) is joined and transcribed on its own.
 - **Restart local servers after server changes:** `tsx` doesn't reload, so a server started
   earlier runs old code. A reviewer once chased a "bug" that was only a stale local api.
+- **Locked phones run no timers:** measure a pause (mute, app hidden) from a timestamp taken when
+  it began and settle it when the person is back, never with `setTimeout` while away. An iPhone
+  web app never records in the background and may give no microphone event at all, so time
+  hidden counts as a pause there. Coming back can fire two events (the track's `unmute` and
+  `visibilitychange`): guard the resume so only one new part starts, and send part lists with
+  `Array.from` (a hole from a skipped index becomes `null` in JSON and fails validation).

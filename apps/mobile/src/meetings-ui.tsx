@@ -5,6 +5,7 @@ import {
   ChevronRight,
   CircleStop,
   Mic,
+  MicOff,
   Pencil,
   RotateCcw,
   Sparkles,
@@ -59,9 +60,13 @@ export interface MeetingView {
   audio: boolean;
   audioUntil?: string;
   error?: string;
+  /** Seconds nothing was recorded (the phone locked or the app was away). */
+  missedSeconds?: number;
 }
 interface MeetingRead extends MeetingView {
   segments: { speaker: string; start: number; end: number; text: string }[];
+  /** Where the recording paused, in ms from the start, and for how long. */
+  gaps?: { at: number; seconds: number }[];
   audioParts: { index: number; url: string }[];
 }
 interface MeetingsList {
@@ -95,9 +100,21 @@ export function meetingLine(meeting: Pick<MeetingView, "startedAt" | "seconds">)
   const minutes = Math.max(1, Math.round(meeting.seconds / 60));
   return `${day} · ${time} · ${minutes} min`;
 }
+/** "40 seconds", "about 3 minutes": how long nothing was recorded. */
+export function missedLength(seconds: number) {
+  return seconds < 90
+    ? spokenLength(Math.round(seconds))
+    : `about ${spokenLength(Math.round(seconds / 60) * 60)}`;
+}
 /** "Speaker 2", or the name they were given. */
 export function speakerName(speakers: Record<string, string>, label: string) {
-  return speakers[label]?.trim() || `Speaker ${label.replace(/^\d+:/, "")}`;
+  const named = speakers[label]?.trim();
+  if (named) return named;
+  // "2:1" is a speaker heard after the first pause: maybe someone else, so it says so.
+  const later = label.match(/^(\d+):(.+)$/);
+  if (!later) return `Speaker ${label}`;
+  const pause = Number(later[1]) - 1;
+  return `Speaker ${later[2]} (after pause${pause > 1 ? ` ${pause}` : ""})`;
 }
 
 /**
@@ -124,6 +141,8 @@ function recorderNews(state: RecorderState) {
     case "starting":
       return "Getting the microphone";
     case "recording":
+      if (state.away !== undefined)
+        return `Recording again. Nothing was recorded for ${missedLength(state.away)} while you were away.`;
       return left !== undefined && left < 5 * 60 ? "5 minutes or less left" : "Recording";
     case "paused":
       return "Recording paused. It carries on when you’re back";
@@ -156,6 +175,8 @@ interface RecorderValue {
   finishAgain: () => void;
   /** The meeting this recording made, in its own sheet (the recorder closes). */
   openMeeting: () => void;
+  /** The "paused while you were away" note has been read. */
+  seenAway: () => void;
   /** The recorder's screen, over whatever is open; or shrunk to the red bar. */
   shown: boolean;
   expand: () => void;
@@ -199,10 +220,12 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
   );
   const [shown, setShown] = useState(false);
   const supported = useMemo(() => canRecord(), []);
-  // Closed by the server while the app was away: the recorder comes up to say so.
+  // Closed by the server while the app was away, or minutes missed while it was: the recorder
+  // comes up to say so, so nobody thinks those minutes are in the notes.
   useEffect(() => {
-    if (state.closed) setShown(true);
-  }, [state.closed]);
+    if (state.closed || state.away !== undefined) setShown(true);
+    if (state.away !== undefined) focusLater("seen-away");
+  }, [state.closed, state.away]);
   const start = useCallback(
     (wait = 0) => {
       setShown(true);
@@ -245,6 +268,7 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
       stop,
       discard,
       resume: () => void recorder.resume(),
+      seenAway: () => recorder.seenAway(),
       finishAgain,
       openMeeting,
       shown,
@@ -252,6 +276,7 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
       shrink: () => {
         setShown(false);
         recorder.clear();
+        recorder.seenAway();
       },
     }),
     [state, supported, start, stop, discard, finishAgain, openMeeting, recorder, shown],
@@ -336,6 +361,7 @@ function RecorderSheet() {
           <View style={{ gap: 14, padding: 16, paddingTop: 4 }}>
             <Pressable
               role="button"
+              nativeID="stop-recording"
               aria-label={`Stop recording. ${spokenLength(state.seconds)} so far`}
               onPress={rec.stop}
               style={({ pressed }) => ({
@@ -412,11 +438,40 @@ function RecorderSheet() {
             {recording && <LevelBars level={state.level} color={RECORD_RED} size={1.4} />}
           </>
         )}
-        {recording && (
+        {recording && state.away !== undefined && (
+          <Card style={{ gap: 10, alignSelf: "stretch", backgroundColor: colors.orange }}>
+            <View style={[s.row, { gap: 8, alignItems: "flex-start" }]}>
+              <View style={{ marginTop: 3 }}>
+                <MicOff size={18} color={colors.text} />
+              </View>
+              <Text style={[s.text, { fontWeight: "700", flex: 1 }]}>
+                Recording paused while you were away
+              </Text>
+            </View>
+            <Text style={s.text}>
+              Nothing was recorded for {missedLength(state.away)}. It’s recording again now.
+            </Text>
+            <Text style={[s.muted, { color: colors.mutedStrong }]}>
+              To catch every word, keep this screen open until the meeting ends.
+            </Text>
+            <Button
+              primary
+              nativeID="seen-away"
+              style={{ alignSelf: "flex-start" }}
+              onPress={() => {
+                rec.seenAway();
+                focusLater("stop-recording");
+              }}
+            >
+              Got it
+            </Button>
+          </Card>
+        )}
+        {recording && state.away === undefined && (
           <Text style={[s.muted, { textAlign: "center", maxWidth: 420 }]}>
             Let everyone know they’re being recorded.
             {Platform.OS === "web"
-              ? " Keep this app open; if your phone locks, recording pauses and carries on when you’re back."
+              ? " Keep this screen open: if you switch apps or lock the phone, nothing is recorded until you’re back."
               : ""}
           </Text>
         )}
@@ -791,6 +846,19 @@ export function MeetingsCard() {
   );
 }
 
+/** Where the recording paused, between two turns in the words. */
+function GapLine({ seconds }: { seconds: number }) {
+  return (
+    <View style={[s.row, { gap: 10, marginVertical: 4 }]}>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+      <Text style={[s.small, { textAlign: "center" }]}>
+        Paused · {missedLength(seconds)} not recorded
+      </Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.line }} />
+    </View>
+  );
+}
+
 /** "12:05" from the meeting's start, before each turn in the words. */
 const at = (ms: number) => clock(ms / 1000);
 /** A list item with its wrapped lines kept clear of the bullet. */
@@ -944,6 +1012,20 @@ export function MeetingSheet({ id }: { id: string }) {
         )}
         {stoppedAtLimit.has(meeting.id) && (
           <Text style={s.muted}>Recording stopped by itself at this month’s limit.</Text>
+        )}
+        {!!meeting.missedSeconds && meeting.missedSeconds >= 5 && (
+          <Card style={{ gap: 6, backgroundColor: colors.orange }}>
+            <View style={[s.row, { gap: 8 }]}>
+              <MicOff size={18} color={colors.text} />
+              <Text style={[s.text, { fontWeight: "600", flex: 1 }]}>
+                Nothing was recorded for {missedLength(meeting.missedSeconds)}
+              </Text>
+            </View>
+            <Text style={[s.muted, { color: colors.mutedStrong }]}>
+              The screen was locked or the app was in the background. Each gap is marked in the
+              words below.
+            </Text>
+          </Card>
         )}
         {writing && (
           <Card style={{ gap: 8, backgroundColor: colors.lavender }}>
@@ -1111,11 +1193,19 @@ export function MeetingSheet({ id }: { id: string }) {
               </Text>
               <Text style={s.small}>Tap a name to say who it is.</Text>
             </View>
-            {meeting.segments.map((segment) => {
+            {meeting.segments.map((segment, index) => {
               const who = speakerName(meeting.speakers, segment.speaker);
+              // Pauses that fall between the turn before this one and this one.
+              const before = index ? (meeting.segments[index - 1]?.start ?? 0) : -1;
+              const pauses = (meeting.gaps ?? []).filter(
+                (gap) => gap.at > before && gap.at <= segment.start,
+              );
               const editing = naming?.speaker === segment.speaker && naming.start === segment.start;
               return (
                 <View key={`${segment.start}-${segment.speaker}`} style={{ gap: 2 }}>
+                  {pauses.map((gap) => (
+                    <GapLine key={`gap-${gap.at}`} seconds={gap.seconds} />
+                  ))}
                   <View style={[s.row, { gap: 4 }]}>
                     <Pressable
                       role="button"

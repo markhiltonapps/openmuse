@@ -1333,7 +1333,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "Afterwards, just ask: “What did we decide about the budget?” or “What did Dana say she’d do?” {agent} reads your meetings to answer, and can turn the action items into reminders (**Make reminders**).",
-      "On a phone, keep the app open and the screen on (it tries to keep the screen awake). If the phone locks, recording pauses and carries on when you’re back; nothing already recorded is lost. Recording works in the web app in Chrome, Edge or Safari.",
+      "On a phone, keep the app open on screen while you record (it keeps the screen from turning off). If you switch apps or lock the phone, nothing is recorded until you’re back: the recorder then says how long was missed, and the meeting’s words show where the gap is. After a pause the people are counted again, so **Speaker 1 (after pause)** may be someone else; tap the name to say who. What was already recorded is never lost. Recording works in the web app in Chrome, Edge or Safari.",
       "On a call, saying “Record a meeting” shows a button that ends the call and starts recording, because the phone can’t do both at once.",
       "Each person can record a set number of hours a month (10 unless your admin changed it); **Files › Meetings** shows how much you’ve used. The audio is kept for 30 days so you can listen again; the words and notes stay until you delete the meeting.",
     ],
@@ -1342,6 +1342,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: "What did we decide in today’s meeting?", send: true },
       { text: "Which meetings have I recorded?", send: true },
       { text: "Speaker 2 was Dana", where: "after a meeting" },
+      { text: "Speaker 1 after the pause was Dana too", where: "after a meeting with a pause" },
     ],
     keywords: [
       "record",

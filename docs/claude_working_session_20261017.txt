@@ -93,6 +93,30 @@ Known issues / later
   - check the status after a long pause before starting a new part;
   - retry Throw away quietly if the sheet was closed while offline.
 
+"Paused while you were away" warning (owner, later the same day: phones stop the web app's
+microphone in the background; the owner asked for a clear warning, and may side-load an Android
+APK rather than a store app for now)
+- The recorder times each pause (from when the microphone muted or, on an iPhone, when the app
+  was hidden; timers don't run on a locked phone) and, back in the app after 5 s or more, opens
+  itself with an amber card: "Recording paused while you were away. Nothing was recorded for
+  about 3 minutes. It's recording again now." The clock leaves the time away out, and the
+  server is told how long was missed before each part (`missedBefore`).
+- The meeting page shows the same note at the top and a "Paused · N not recorded" line in Every
+  word where it happened; the notes model and the agent see "[Recording paused here: nothing
+  was recorded for about 3 minutes]" and are told never to guess what was said.
+- Speakers after a pause are "Speaker 1 (after pause)" everywhere (page, notes, agent), since
+  the numbering starts again and may be someone else.
+- Found on the way: coming back fired resume() twice (the mic's event and the screen's), leaving
+  a hole in the parts list and a 422 on finish; fixed with a guard. The agent's read built
+  speaker names its own way; it now uses transcriptText.
+- Design division: three rounds; all signed off. Help's record-meeting topic and the app guide
+  describe the warning.
+- Checked in Chromium with a scripted mute/unmute and with an iPhone user agent that gives no
+  microphone event; both show the card, and the server gets missedBefore. Not yet tried on a
+  real iPhone or Android phone: the owner will test on Android (steps given in chat).
+- Cost report given to the owner (per action, three monthly profiles, fixed costs), from Railway
+  logs and the session notes.
+
 Owner to do on Railway
 - api service › Variables: add SONIOX_API_KEY (it can be ${{voice.SONIOX_API_KEY}}), then
   choose Deploy on the banner. Optional: MEETING_MONTHLY_HOURS.

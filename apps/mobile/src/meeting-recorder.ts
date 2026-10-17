@@ -45,6 +45,13 @@ export interface RecorderState {
    * writing it up (it can be deleted from its page), "offline" when it couldn't be reached.
    */
   notThrownAway?: "written" | "offline";
+  /**
+   * Seconds just missed while the app was away (the phone locked or another app was in front),
+   * for the recorder to say so when it carries on; cleared once read.
+   */
+  away?: number;
+  /** All the seconds missed in this recording so far. */
+  missedSeconds?: number;
 }
 export interface MeetingStarted {
   meeting: { id: string; title: string };
@@ -52,6 +59,15 @@ export interface MeetingStarted {
 }
 
 const PIECE_MS = 30_000;
+/** A pause shorter than this (a blip in the microphone) isn't worth a mention. */
+const AWAY_SECONDS = 5;
+/** iPhones and iPads: a web app's microphone never records while it's in the background. */
+function backgroundStopsRecording() {
+  const agent = navigator.userAgent;
+  return (
+    /iPhone|iPad|iPod/.test(agent) || (/Macintosh/.test(agent) && navigator.maxTouchPoints > 1)
+  );
+}
 /** Meetings that stopped by themselves at the month's hours, for their page to say so. */
 export const stoppedAtLimit = new Set<string>();
 const IDLE: RecorderState = { phase: "idle", seconds: 0, level: 0, waiting: 0 };
@@ -117,12 +133,33 @@ export class MeetingRecorder {
   /** Each finished part's seconds, by part. */
   private partSeconds: number[] = [];
   private partStarted = 0;
+  /** When the last part stopped by itself, and the seconds missed before each part. */
+  private pausedAt = 0;
+  private missed: number[] = [];
+  /** When the microphone went quiet (muted) or the app was hidden, to measure a pause on return. */
+  private mutedAt = 0;
+  private hiddenAt = 0;
+  private resuming = false;
   private queue: Piece[] = [];
   private sending = false;
   private stopping = false;
   private readonly onVisible = () => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible") {
+      if (this.state.phase === "recording") this.hiddenAt = Date.now();
+      return;
+    }
+    const hidden = this.hiddenAt;
+    this.hiddenAt = 0;
     void this.keepAwake();
+    // An iPhone never records in the background, even when it gives no sign: time away there
+    // is a pause. (Android and computers often carry on, so they go by the microphone's events.)
+    if (
+      this.state.phase === "recording" &&
+      hidden &&
+      backgroundStopsRecording() &&
+      Date.now() - hidden >= AWAY_SECONDS * 1000
+    )
+      this.interrupted(hidden);
     if (this.state.phase === "paused") void this.resume();
   };
   private readonly onLeave = (event: BeforeUnloadEvent) => {
@@ -170,6 +207,11 @@ export class MeetingRecorder {
     this.part = 0;
     this.piece = 0;
     this.partSeconds = [];
+    this.missed = [];
+    this.pausedAt = 0;
+    this.mutedAt = 0;
+    this.hiddenAt = 0;
+    this.resuming = false;
     this.queue = [];
     this.stopping = false;
     try {
@@ -231,19 +273,28 @@ export class MeetingRecorder {
       // No level bars; the recording itself is unaffected.
     }
     for (const track of this.stream.getAudioTracks()) {
-      track.addEventListener("ended", () => this.interrupted());
+      track.addEventListener("ended", () => this.interrupted(this.lostSince()));
     }
     // An iPhone mutes the microphone (rather than ending it) when it locks or another app takes
-    // it; a mute that lasts a few seconds is a pause, a blip isn't.
+    // it; a mute that lasts a few seconds is a pause, a blip isn't. Timers don't run on a locked
+    // phone, so the pause is measured from when the mute began, once the person is back; the
+    // timer only covers a mute while the screen is still on.
     for (const track of this.stream.getAudioTracks()) {
       let muted: ReturnType<typeof setTimeout> | undefined;
       track.addEventListener("mute", () => {
         clearTimeout(muted);
+        this.mutedAt = Date.now();
         muted = setTimeout(() => {
-          if (track.muted) this.interrupted();
+          if (track.muted && document.visibilityState === "visible")
+            this.interrupted(this.mutedAt || undefined);
         }, 3000);
       });
-      track.addEventListener("unmute", () => clearTimeout(muted));
+      track.addEventListener("unmute", () => {
+        clearTimeout(muted);
+        const since = this.mutedAt;
+        this.mutedAt = 0;
+        if (since && Date.now() - since >= AWAY_SECONDS * 1000) this.interrupted(since);
+      });
     }
   }
   private closeMicrophone() {
@@ -270,19 +321,34 @@ export class MeetingRecorder {
       }
     };
     recorder.onstop = () => {
-      if (!this.stopping && this.recorder === recorder) this.interrupted();
+      if (!this.stopping && this.recorder === recorder) this.interrupted(this.lostSince());
     };
-    recorder.onerror = () => this.interrupted();
+    recorder.onerror = () => this.interrupted(this.lostSince());
     this.recorder = recorder;
     this.partStarted = Date.now();
     recorder.start(PIECE_MS);
     this.set({ phase: "recording", error: undefined });
   }
-  /** The microphone stopped without being asked (the phone locked): this part ends here. */
-  private interrupted() {
+  /**
+   * When sound was last surely coming in: a mute seen earlier, or (on an iPhone, which never
+   * records in the background) when the app was hidden; else now.
+   */
+  private lostSince() {
+    return this.mutedAt || (backgroundStopsRecording() ? this.hiddenAt : 0) || undefined;
+  }
+  /**
+   * The microphone stopped without being asked (the phone locked): this part ends here, or at
+   * `at` when the pause is only noticed later (a locked iPhone runs no timers).
+   */
+  private interrupted(at = Date.now()) {
     if (this.state.phase !== "recording" || this.stopping) return;
-    this.partSeconds[this.part] = (Date.now() - this.partStarted) / 1000;
+    const end = Math.max(this.partStarted, Math.min(at, Date.now()));
+    this.partSeconds[this.part] = (end - this.partStarted) / 1000;
     this.partStarted = 0;
+    this.pausedAt = end;
+    // Both signs of this pause are used up: a late one mustn't count it again.
+    this.mutedAt = 0;
+    this.hiddenAt = 0;
     const recorder = this.recorder;
     this.recorder = undefined;
     if (recorder && recorder.state !== "inactive") recorder.stop();
@@ -292,14 +358,27 @@ export class MeetingRecorder {
   }
   /** A new part after a pause; a tap on Resume tries again if this one can't. */
   async resume() {
-    if (this.state.phase !== "paused") return;
+    // Coming back can ask twice (the microphone's event and the screen's); one new part only.
+    if (this.state.phase !== "paused" || this.resuming) return;
+    this.resuming = true;
     try {
       await this.openMicrophone();
       this.part++;
+      const missed = this.pausedAt ? (Date.now() - this.pausedAt) / 1000 : 0;
+      this.missed[this.part] = missed;
+      this.pausedAt = 0;
       this.beginPart();
+      // More than a blip: say so, so nobody thinks those minutes are in the notes.
+      if (missed >= AWAY_SECONDS)
+        this.set({
+          away: missed,
+          missedSeconds: this.missed.reduce((sum, s) => sum + (s >= AWAY_SECONDS ? s : 0), 0),
+        });
     } catch (error) {
       this.closeMicrophone();
       this.set({ error: this.reason(error) });
+    } finally {
+      this.resuming = false;
     }
   }
   private tick() {
@@ -391,7 +470,7 @@ export class MeetingRecorder {
     try {
       await this.api.request(`/api/meetings/${id}/finish`, {
         seconds: Math.round(this.seconds()),
-        parts: this.partSeconds.map((seconds, index) => ({ index, seconds: seconds ?? 0 })),
+        parts: this.parts(),
       });
       this.finish();
       return id;
@@ -413,7 +492,7 @@ export class MeetingRecorder {
     try {
       await this.api.request(`/api/meetings/${id}/finish`, {
         seconds: Math.round(this.seconds()),
-        parts: this.partSeconds.map((seconds, index) => ({ index, seconds: seconds ?? 0 })),
+        parts: this.parts(),
       });
       this.set({ ...IDLE });
       return id;
@@ -489,6 +568,19 @@ export class MeetingRecorder {
     void this.wakeLock?.release().catch(() => undefined);
     this.wakeLock = undefined;
     if (!keepError) this.set({ ...IDLE });
+  }
+  /** How long each part ran and what was missed before it, for the server. */
+  private parts() {
+    // Array.from, not map: a missing part is sent as 0 seconds, never as a hole (null).
+    return Array.from(this.partSeconds, (seconds, index) => ({
+      index,
+      seconds: seconds ?? 0,
+      ...(this.missed[index] ? { missedBefore: Math.round(this.missed[index] as number) } : {}),
+    }));
+  }
+  /** The "you were away" note has been read. */
+  seenAway() {
+    if (this.state.away !== undefined) this.set({ away: undefined });
   }
   /** Back to the start after an error has been read. */
   clear() {

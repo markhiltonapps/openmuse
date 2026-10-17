@@ -40,6 +40,7 @@ import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { earlierPages, searchEarlierPages } from "../main-pages.ts";
 import { ownAppToolSpecs } from "../mcp-apps.ts";
 import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
+import { transcriptText } from "../meetings.ts";
 import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
 import { MODEL_JOBS, PICKS, RECOMMENDED, SERVER_MODEL } from "../model-choices.ts";
 import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
@@ -420,7 +421,9 @@ export class ConversationAgent extends AbstractAgent {
           speakers: z
             .record(z.string().max(12), z.string().max(60))
             .optional()
-            .describe('For name_speakers: label to name, such as {"2": "Dana"}'),
+            .describe(
+              'For name_speakers: label to name, such as {"2": "Dana"}; "Speaker 1 (after pause)" is "2:1" (after pause 2: "3:1")',
+            ),
           title: z.string().max(120).optional().describe("For rename: the new title"),
         }),
         execute: async ({ do: what, id, query, from, speakers, title }) => {
@@ -483,12 +486,7 @@ export class ConversationAgent extends AbstractAgent {
             return { meeting: brief(named), speakers: named.speakers, ...shown };
           }
           const meeting = await meetings.read(this.owner, id);
-          const words = meeting.segments
-            .map(
-              (s) =>
-                `${meeting.speakers[s.speaker] || `Speaker ${s.speaker.replace(/^\d+:/, "")}`}: ${s.text}`,
-            )
-            .join("\n");
+          const words = transcriptText(meeting, meeting.segments, meeting.gaps);
           const start = Math.min(from ?? 0, words.length);
           const piece = words.slice(start, start + 40_000);
           return {

@@ -179,7 +179,8 @@ test("a meeting in two parts is joined, written up, timed and noted; Soniox keep
     seconds: 1200,
     parts: [
       { index: 0, seconds: 600 },
-      { index: 1, seconds: 600 },
+      // The phone was locked for three minutes before part 1.
+      { index: 1, seconds: 600, missedBefore: 180 },
     ],
   });
   assert.equal(finished.status, "transcribing");
@@ -204,6 +205,13 @@ test("a meeting in two parts is joined, written up, timed and noted; Soniox keep
     "the second part's words come after the first part's ten minutes",
   );
   assert.match(sentToNotes[0] ?? "", /^Speaker 1: I'm Sarah/);
+  // The pause is marked where it was, for the page and for the notes.
+  assert.deepEqual(read.gaps, [{ at: 600_000, seconds: 180 }]);
+  assert.equal(read.missedSeconds, 180);
+  assert.match(
+    sentToNotes[0] ?? "",
+    /November works\.\n\[Recording paused here: nothing was recorded for about 3 minutes\]\nSpeaker 1 \(after pause\): Dana/,
+  );
   assert.deepEqual(fake.uploads, [5, 4], "each part's pieces joined into one file");
   assert.equal(fake.created[0]?.model, "stt-async-v5");
   assert.equal(fake.created[0]?.enable_speaker_diarization, true);
