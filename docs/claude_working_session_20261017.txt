@@ -123,6 +123,13 @@ Found" was shown raw ("Unexpected non-whitespace character after JSON at positio
 app's `request` now says "The server is updating. Try again in a minute." when an answer
 isn't JSON.
 
+First real recording on Railway (17:51Z, 40 s): written up fine (Soniox, then Haiku notes,
+$0.0016). Asked on a live call what the last recording was about, the look-up answered in 50
+words from the one-line meetings context without calling meetings read. The context line and
+VOICE_RULES now say to read the meeting first and never answer from the list alone. The
+owner also couldn't find the recording: it's under Files › Meetings (and the bell's "Meeting
+notes are ready"); worth a Home card or a "recorded" line later.
+
 Owner to do on Railway
 - api service › Variables: add SONIOX_API_KEY (it can be ${{voice.SONIOX_API_KEY}}), then
   choose Deploy on the banner. Optional: MEETING_MONTHLY_HOURS.
