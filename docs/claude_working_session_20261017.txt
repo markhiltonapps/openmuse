@@ -141,9 +141,11 @@ matched the cache between turns (chat: "read 66150 (41133 cached)" every turn; a
   carry a cache mark, so the next turn's lookup finds the conversation up to them;
 - the top-level cache mark stays for the rest of a reply (tool calls and results).
   Four breakpoints in all (the API's limit). The runtime's message copies aren't changed.
-Expected: a chat message from ~7.5¢ to 2–3¢ on Sonnet; a hand-off from ~5¢ to ~0.5¢. To be
-checked in Railway's "Model call" lines after the deploy (the cached count should be close to
-the read count from the second turn on). Tests: prompt-caching.test.ts checks the request shape
+Measured after the deploy (20:29–20:30Z, Railway's "Model call: chat" lines): the first message
+read 70,673 (0 cached, $0.177, the cache write); the next step and the next message read
+~71,300 with ~70,600 cached, $0.016–0.019 each. Before: ~66,000 read, 41,000 cached, ~$0.075
+each. So follow-up messages cost about a quarter of what they did; the first message after a
+quiet spell (5 min for the conversation, 1 h for the instructions) still pays the write. Tests: prompt-caching.test.ts checks the request shape
 and the two-turn match.
 Also staged on Railway (not deployed; the owner chooses Deploy): VOICE_PROVIDER=pipecat on the
 api, so everyone defaults to our own voice (1.1¢/min) instead of OpenAI's (5¢/min). It was
