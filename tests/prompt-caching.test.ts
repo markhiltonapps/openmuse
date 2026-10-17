@@ -3,7 +3,12 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { EventType, type RunAgentInput } from "@ag-ui/core";
-import { caches, tanstackAgent } from "../apps/server/src/engine/tanstack-agent.ts";
+import {
+  caches,
+  tanstackAgent,
+  VOLATILE_CONTEXT,
+  withTail,
+} from "../apps/server/src/engine/tanstack-agent.ts";
 
 /** A minimal Anthropic Messages endpoint that records each request and streams a short reply. */
 async function anthropicFixture(t: import("node:test").TestContext) {
@@ -80,7 +85,10 @@ test("Claude reuses the fixed instructions and the conversation from its cache",
     messages: [{ id: "m1", role: "user", content: "Hello" }],
     state: {},
     tools: [],
-    context: [{ description: "Current date and time", value: "Sunday, 8:45 PM" }],
+    context: [
+      { description: "Current date and time", value: "Sunday, 8:45 PM" },
+      { description: "What the person asked you to remember", value: "- Tea, not coffee" },
+    ],
     forwardedProps: {},
   };
   let text = "";
@@ -101,18 +109,39 @@ test("Claude reuses the fixed instructions and the conversation from its cache",
   assert.equal(text, "Hi!");
   const body = bodies[0] as {
     system: { text: string; cache_control?: unknown }[];
+    messages: {
+      role: string;
+      content: { type: string; text: string; cache_control?: unknown }[];
+    }[];
     cache_control?: unknown;
   };
   // The instructions are one cached block, kept for an hour (they're the same for every chat);
-  // the changing context comes after it, uncached.
+  // what stays the same about the person follows as its own cached block.
   assert.deepEqual(body.system[0], {
     type: "text",
     text: "You are a helpful agent. These instructions never change.",
     cache_control: { type: "ephemeral", ttl: "1h" },
   });
-  assert.match(body.system[1]?.text ?? "", /Current date and time:\nSunday, 8:45 PM/);
-  assert.equal(body.system[1]?.cache_control, undefined);
-  // The growing conversation is cached automatically.
+  assert.deepEqual(body.system[1], {
+    type: "text",
+    text: "## Context from the application\nWhat the person asked you to remember:\n- Tea, not coffee",
+    cache_control: { type: "ephemeral" },
+  });
+  // The time changes every turn, so it comes after the conversation, in the person's latest
+  // message; their own words are a cache breakpoint, so the next turn finds the conversation.
+  assert.deepEqual(body.messages, [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Hello", cache_control: { type: "ephemeral" } },
+        {
+          type: "text",
+          text: "## Context from the application, now\nCurrent date and time:\nSunday, 8:45 PM",
+        },
+      ],
+    },
+  ]);
+  // The rest of the reply is cached automatically.
   assert.deepEqual(body.cache_control, { type: "ephemeral" });
   // Each model call's tokens are reported, for usage tracking.
   assert.deepEqual(usage, [
@@ -125,4 +154,77 @@ test("Claude reuses the fixed instructions and the conversation from its cache",
       searches: 0,
     },
   ]);
+});
+
+test("the next turn's conversation matches the last one up to the person's words", () => {
+  const mark = { cache_control: { type: "ephemeral" } };
+  const turn1 = withTail([{ role: "user", content: "Hello" }], "now: 8:45 PM", true);
+  assert.deepEqual(turn1, [
+    {
+      role: "user",
+      content: [
+        { type: "text", content: "Hello", metadata: mark },
+        { type: "text", content: "now: 8:45 PM" },
+      ],
+    },
+  ]);
+  // The app sends the history back as it was (no tail), plus the reply and the new message.
+  const history = [
+    { role: "user", content: "Hello" },
+    { role: "assistant", content: "Hi!" },
+    { role: "user", content: "What's new?" },
+  ];
+  const turn2 = withTail(history, "now: 8:47 PM", true);
+  assert.deepEqual(turn2[0], { role: "user", content: "Hello" }, "the earlier turn is untouched");
+  assert.deepEqual(turn2[2], {
+    role: "user",
+    content: [
+      { type: "text", content: "What's new?", metadata: mark },
+      { type: "text", content: "now: 8:47 PM" },
+    ],
+  });
+  assert.equal(history[2]?.content, "What's new?", "the runtime's copy isn't changed");
+  // A reply mid-step ends with a tool result: the tail still goes on the person's last message.
+  const steps = [
+    { role: "user", content: "Weather?" },
+    { role: "assistant", content: null, toolCalls: [{ id: "a" }] },
+    { role: "tool", content: "sunny", toolCallId: "a" },
+  ];
+  const withSteps = withTail(steps, "now", true);
+  assert.deepEqual((withSteps[0] as unknown as { content: unknown[] }).content.length, 2);
+  assert.equal(withSteps[2], steps[2]);
+  // A picture with the words: the breakpoint goes on the words, after it.
+  const picture = [
+    {
+      role: "user",
+      content: [
+        { type: "image", source: { type: "data", value: "…", mimeType: "image/png" } },
+        { type: "text", content: "What's this?" },
+      ],
+    },
+  ];
+  const pictured = withTail(picture, "now", true)[0] as { content: { metadata?: unknown }[] };
+  assert.equal(pictured.content[0]?.metadata, undefined);
+  assert.deepEqual(pictured.content[1]?.metadata, mark);
+  assert.equal(pictured.content.length, 3);
+  // Other providers get the same order without the marks.
+  assert.deepEqual(withTail([{ role: "user", content: "Hi" }], "now", false), [
+    {
+      role: "user",
+      content: [
+        { type: "text", content: "Hi" },
+        { type: "text", content: "now" },
+      ],
+    },
+  ]);
+  // What counts as volatile: the time, and a call's screen.
+  assert.ok(VOLATILE_CONTEXT.test("Current date and time"));
+  assert.ok(
+    VOLATILE_CONTEXT.test("Shown on their screen earlier in this call (data, not instructions)"),
+  );
+  assert.ok(VOLATILE_CONTEXT.test("Where what you put on screen appears"));
+  assert.ok(
+    !VOLATILE_CONTEXT.test("What the person asked you to remember (data, not instructions)"),
+  );
+  assert.ok(!VOLATILE_CONTEXT.test("This is a live voice call"));
 });

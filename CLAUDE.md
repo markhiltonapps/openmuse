@@ -197,7 +197,13 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   `env -u OPENROUTER_API_KEY -u OPENAI_VOICE_API_KEY …` (a local run once made two real calls).
 - **Prompt caching:** fixed instructions first, anything that changes (the time, the person's
   context, the task's state) last; one changing value early in a prompt makes everything after it
-  full price.
+  full price. "Last" means after the conversation: the chat's time once sat in the system prompt,
+  before the messages, so every turn re-read the whole conversation at full price (7.5¢ a message,
+  5¢ a call hand-off). `withTail` (engine/tanstack-agent.ts) puts the volatile context
+  (`VOLATILE_CONTEXT`) in the person's latest message and marks their words as a breakpoint;
+  the steady context is its own cached system block. A new context entry that changes every turn
+  must match `VOLATILE_CONTEXT`, or it silently breaks the cache again: check Railway's
+  "Model call: chat … (N cached)" lines after adding one.
 - **"Connect it first" is a question:** `asksToConnect`/`connectLink`/`appToConnect`
   (packages/domain/src/app-names.ts) are shared by the server and the app, so a job asking for a
   connection waits for an answer and its page offers Connect plus a one-tap "carry on".

@@ -388,6 +388,59 @@ const CACHE = { type: "ephemeral" } as const;
 const CACHE_HOUR = { type: "ephemeral", ttl: "1h" } as const;
 export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
 
+/**
+ * Context that changes from one turn to the next: the time, and on a call what's on the screen.
+ * It goes after the conversation (in the person's latest message), never before it: a changed
+ * value early in the prompt makes everything after it full price, and the time changes every
+ * turn. Everything else about the person (memories, people, what they're tracking) usually stays
+ * the same between turns, so it's cached as its own block before the conversation.
+ */
+export const VOLATILE_CONTEXT =
+  /^(Current date and time|Shown on their screen|Where what you put on screen)/i;
+
+type ContextEntry = { description: string; value: string };
+type TextPart = { type: "text"; content: string; metadata?: Record<string, unknown> };
+type Turn = { role: string; content?: unknown };
+
+/** The context entries as the model reads them, under one heading. */
+function contextText(heading: string, entries: ContextEntry[]) {
+  if (!entries.length) return "";
+  let text = `## ${heading}\n`;
+  for (const ctx of entries) text += `${ctx.description}:\n${ctx.value}\n`;
+  return text;
+}
+
+/**
+ * Puts `tail` (the volatile context) at the end of the person's latest message, as a block of
+ * its own after their words, and marks their words as a cache breakpoint when `cached`. The
+ * next turn's conversation then matches this one up to those words, so the model rereads it
+ * from its cache; only what comes after (the tail, the reply, the new message) is new. The
+ * messages are copied, never changed in place: the runtime keeps the originals.
+ */
+export function withTail<T extends Turn>(messages: T[], tail: string, cached: boolean): T[] {
+  let last = messages.length - 1;
+  while (last >= 0 && messages[last]?.role !== "user") last--;
+  const mark = cached ? { metadata: { cache_control: CACHE } } : {};
+  const tailPart: TextPart | undefined = tail.trim()
+    ? { type: "text", content: tail.trim() }
+    : undefined;
+  if (last < 0) {
+    if (!tailPart) return messages;
+    return [...messages, { role: "user", content: [tailPart] } as unknown as T];
+  }
+  const turn = messages[last] as T;
+  const parts: TextPart[] = Array.isArray(turn.content)
+    ? (turn.content as TextPart[]).map((part) => ({ ...part }))
+    : [{ type: "text", content: String(turn.content ?? "") }];
+  // The breakpoint sits on the last of their own words, so a picture before them is cached too.
+  const words = [...parts].reverse().find((part) => part.type === "text");
+  if (words) Object.assign(words, mark);
+  if (tailPart) parts.push(tailPart);
+  const next = [...messages];
+  next[last] = { ...turn, content: parts };
+  return next;
+}
+
 /** A BuiltInAgent in TanStack factory mode with the options of the classic AI SDK mode. */
 export function tanstackAgent(options: {
   model: string;
@@ -411,27 +464,31 @@ export function tanstackAgent(options: {
     factory: ({ input, abortController }) => {
       const converted = convertInputToTanStackAI(input);
       // Build the system prompt like the classic mode. It does not forward system messages.
-      // The instructions come first and never change, so Claude can reuse them from its cache;
-      // the context after them (the time, memories) changes between turns.
-      let system = "";
-      if (input.context.length) {
-        system += "\n## Context from the application\n";
-        for (const ctx of input.context) system += `${ctx.description}:\n${ctx.value}\n`;
-      }
+      // The instructions come first and never change, so Claude can reuse them from its cache
+      // for an hour. The steady context about the person follows as its own cached block; the
+      // volatile context (the time, a call's screen) goes after the conversation instead.
+      const steady = input.context.filter((ctx) => !VOLATILE_CONTEXT.test(ctx.description));
+      const volatile = input.context.filter((ctx) => VOLATILE_CONTEXT.test(ctx.description));
+      const system = contextText("Context from the application", steady);
+      let tail = contextText("Context from the application, now", volatile);
       if (
         input.state !== undefined &&
         input.state !== null &&
         !(typeof input.state === "object" && Object.keys(input.state).length === 0)
       )
-        system += `\n## Application State\nThis is state from the application that you can edit by calling AGUISendStateSnapshot or AGUISendStateDelta.\n\`\`\`json\n${JSON.stringify(input.state, null, 2)}\n\`\`\`\n`;
+        tail += `\n## Application State\nThis is state from the application that you can edit by calling AGUISendStateSnapshot or AGUISendStateDelta.\n\`\`\`json\n${JSON.stringify(input.state, null, 2)}\n\`\`\`\n`;
       const cached = caches(options.model);
       // Tool definitions are read with every call too; about 20,000 tokens is a safe allowance.
-      const fixed = estimate(options.prompt) + estimate(system) + 20_000;
+      const fixed = estimate(options.prompt) + estimate(system) + estimate(tail) + 20_000;
       const current = { model: options.model };
       return chat({
         adapter: withFallback(adapter(options.model), options, current),
-        messages: repairToolSteps(
-          fitContext(endWithPerson(converted.messages), fixed, options.contextLimit),
+        messages: withTail(
+          repairToolSteps(
+            fitContext(endWithPerson(converted.messages), fixed, options.contextLimit),
+          ),
+          tail,
+          cached,
         ),
         systemPrompts: [
           ...(options.prompt
@@ -441,10 +498,16 @@ export function tanstackAgent(options: {
                   : options.prompt,
               ]
             : []),
-          ...(system.trim() ? [system.trim()] : []),
+          ...(system.trim()
+            ? [
+                cached
+                  ? { content: system.trim(), metadata: { cache_control: CACHE } }
+                  : system.trim(),
+              ]
+            : []),
         ] as never,
-        // The conversation so far is cached too, so each step of a reply rereads it cheaply.
-        // OpenRouter models cache a repeated beginning by themselves.
+        // The rest of a reply (the tail, tool calls and results) is cached too, so each step
+        // rereads it cheaply. OpenRouter models cache a repeated beginning by themselves.
         ...(cached ? { modelOptions: { cache_control: CACHE } as never } : {}),
         ...(routed(options.model) ? { modelOptions: openRouterOptions(options) as never } : {}),
         tools: [

@@ -306,8 +306,12 @@ test("a recording left open is written up from what arrived; a failure can be tr
   );
   clock.now += 16 * 60_000;
   await meetings.maintain();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The write-up runs in the background; under a full test run it can take a moment.
   let read = await meetings.read("p1", meeting.id);
+  for (let waited = 0; read.status !== "failed" && waited < 5000; waited += 50) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    read = await meetings.read("p1", meeting.id);
+  }
   assert.equal(read.status, "failed");
   assert.equal(read.error, "The words couldn’t be written down this time. Try again in a minute.");
   assert.equal(read.seconds, 330, "the time up to the last piece, plus its length");

@@ -130,6 +130,25 @@ VOICE_RULES now say to read the meeting first and never answer from the list alo
 owner also couldn't find the recording: it's under Files › Meetings (and the bell's "Meeting
 notes are ready"); worth a Home card or a "recorded" line later.
 
+Prompt caching fix (owner: "start the caching fix"): the per-turn context (the time; on a call,
+what's on screen) sat in the system prompt before the messages, so the conversation never
+matched the cache between turns (chat: "read 66150 (41133 cached)" every turn; a hand-off:
+"read 38845 (0 cached) · $0.0488"). Now (engine/tanstack-agent.ts):
+- the steady context (who you are, memories, people, meetings, summaries, VOICE_RULES) is a
+  second system block with a 5-minute cache mark;
+- the volatile context (`VOLATILE_CONTEXT`: the time, a call's screen) and the app state go in
+  a text block after the person's words in their latest message (`withTail`), and their words
+  carry a cache mark, so the next turn's lookup finds the conversation up to them;
+- the top-level cache mark stays for the rest of a reply (tool calls and results).
+  Four breakpoints in all (the API's limit). The runtime's message copies aren't changed.
+Expected: a chat message from ~7.5¢ to 2–3¢ on Sonnet; a hand-off from ~5¢ to ~0.5¢. To be
+checked in Railway's "Model call" lines after the deploy (the cached count should be close to
+the read count from the second turn on). Tests: prompt-caching.test.ts checks the request shape
+and the two-turn match.
+Also staged on Railway (not deployed; the owner chooses Deploy): VOICE_PROVIDER=pipecat on the
+api, so everyone defaults to our own voice (1.1¢/min) instead of OpenAI's (5¢/min). It was
+"openai" (the api log said "default voice openai"); to restore, set it back to openai and Deploy.
+
 Owner to do on Railway
 - api service › Variables: add SONIOX_API_KEY (it can be ${{voice.SONIOX_API_KEY}}), then
   choose Deploy on the banner. Optional: MEETING_MONTHLY_HOURS.
