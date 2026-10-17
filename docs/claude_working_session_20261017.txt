@@ -117,6 +117,12 @@ APK rather than a store app for now)
 - Cost report given to the owner (per action, three monthly profiles, fixed costs), from Railway
   logs and the session notes.
 
+Pushed (owner: "Go ahead and push") at 17:23Z: 6e08df2 and 1f55e22. The web finished deploying
+a minute before the api, and the owner tapped Record in that minute: the old api's "404 Not
+Found" was shown raw ("Unexpected non-whitespace character after JSON at position 4"). The
+app's `request` now says "The server is updating. Try again in a minute." when an answer
+isn't JSON.
+
 Owner to do on Railway
 - api service › Variables: add SONIOX_API_KEY (it can be ${{voice.SONIOX_API_KEY}}), then
   choose Deploy on the banner. Optional: MEETING_MONTHLY_HOURS.

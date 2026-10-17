@@ -27,13 +27,22 @@ export class MuseApi {
       },
       body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     });
-    const payload = await response.json();
+    // While the server is being replaced (a deploy), an answer may be plain text ("404 Not
+    // Found") rather than JSON: say so, instead of showing the parser's own words.
+    const payload = (await response.json().catch(() => undefined)) as
+      | { error?: unknown }
+      | undefined;
     if (response.status === 401) signedOut();
     if (!response.ok)
       throw new Error(
-        typeof payload.error === "string" ? payload.error : `Request failed (${response.status})`,
+        typeof payload?.error === "string"
+          ? payload.error
+          : payload === undefined
+            ? "The server is updating. Try again in a minute."
+            : `Request failed (${response.status})`,
       );
-    return payload;
+    if (payload === undefined) throw new Error("The server gave an answer the app couldn’t read.");
+    return payload as T;
   }
   /** Sends raw bytes (a piece of a recording) with PUT. */
   async upload(path: string, body: Blob) {
