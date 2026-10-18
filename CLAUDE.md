@@ -369,6 +369,12 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   real usage in Railway's logs before trusting a cost estimate.
 - **The voice service's logs:** Pipecat's DEBUG lines print the whole prompt (personal details)
   and every word said; keep VOICE_LOG_LEVEL at INFO on Railway.
+- **What a call minute costs (Oct 2026):** silence costs only Soniox's 0.2¢/min (nothing speaks
+  or thinks), speaking ~0.5¢ and thinking ~0.4¢ only while there's conversation, and a look-up's
+  first run in a call ~5¢ (the Haiku cache write), later ones ~0.5¢. Soniox bills the open
+  stream's whole duration, keepalive or not, so "pause listening" saves nothing; only closing
+  and reopening the stream would, for ~0.01–0.1¢/min with a reconnect risk. Cut look-ups and
+  chat prompts before touching silence.
 - **Two live voices (OpenAI's and our own, apps/voice):** ours speaks OpenAI's live protocol, so
   the api runs it as a second `LiveVoice` (pointed at VOICE_SERVICE_URL); never change OpenAI's
   request to suit ours (a test checks it's unchanged). Extras for ours go in `openmuse` in the

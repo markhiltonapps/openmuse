@@ -198,7 +198,7 @@ export function readConfig(): Config {
       process.env.VOICE_PROVIDER?.trim().toLowerCase() === "pipecat" ? "pipecat" : "openai",
     voiceServiceUrl: process.env.VOICE_SERVICE_URL?.trim().replace(/\/$/, "") || undefined,
     voiceServiceToken: process.env.VOICE_INTERNAL_TOKEN?.trim() || undefined,
-    voicePipecatIdleSeconds: Number(process.env.VOICE_PIPECAT_IDLE_SECONDS) || 45,
+    voicePipecatIdleSeconds: Number(process.env.VOICE_PIPECAT_IDLE_SECONDS) || 30,
     voiceMonthlyMinutes:
       process.env.VOICE_MONTHLY_MINUTES === undefined
         ? 200

@@ -151,6 +151,17 @@ Also staged on Railway (not deployed; the owner chooses Deploy): VOICE_PROVIDER=
 api, so everyone defaults to our own voice (1.1¢/min) instead of OpenAI's (5¢/min). It was
 "openai" (the api log said "default voice openai"); to restore, set it back to openai and Deploy.
 
+Per-minute cost, round 2 (owner, Oct 18: "stop listening during long silence, hang up after 30
+seconds"): the quiet hang-up on our own voice is now 30 s (VOICE_PIPECAT_IDLE_SECONDS default,
+config.ts; README, .env.example and the admin Help topic say so). "Stop listening" was looked
+into and not built: Soniox bills the open stream's whole duration (its docs: billed even while
+paused; a keepalive only keeps the socket open), so saving anything means closing the stream in
+silences and reopening it on speech with a buffered pre-roll. Silence costs only Soniox's
+0.2¢/min (nothing speaks or thinks), so the safe version (close after ~8 s of quiet) saves
+~0.01–0.03¢/min and the aggressive one (open only while the person speaks) ~0.1¢/min with a
+reconnect at every turn; Soniox is blocked from the sandbox, so it couldn't be tested here. The
+owner was told and asked; the 30 s hang-up alone saves ~0.05¢ per call.
+
 Owner to do on Railway
 - api service › Variables: add SONIOX_API_KEY (it can be ${{voice.SONIOX_API_KEY}}), then
   choose Deploy on the banner. Optional: MEETING_MONTHLY_HOURS.

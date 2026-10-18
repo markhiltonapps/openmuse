@@ -130,7 +130,7 @@ Talking live runs on one of two voices, chosen per person:
 
 **Switch who uses which.** The admin's **People** card (Apps › Account › People) has **Live talk voice**: *Try the new voice* for yourself, and for each person. `VOICE_PROVIDER=pipecat` makes ours everyone's default; anyone set to OpenAI stays there. The app needs no change: it asks the api which voice to use.
 
-**Limits.** On our own voice each person gets `VOICE_MONTHLY_MINUTES` a month (200 by default). When 10 or fewer are left the voice says so in its hello; under 30 seconds left a call can't start, a running call is warned 20 seconds before it ends, and Talk goes to the chat until the 1st (in the person's time zone). `0` means no limit. A quiet call hangs up after `VOICE_PIPECAT_IDLE_SECONDS` (45); OpenAI's keep `VOICE_IDLE_SECONDS` (90).
+**Limits.** On our own voice each person gets `VOICE_MONTHLY_MINUTES` a month (200 by default). When 10 or fewer are left the voice says so in its hello; under 30 seconds left a call can't start, a running call is warned 20 seconds before it ends, and Talk goes to the chat until the 1st (in the person's time zone). `0` means no limit. A quiet call hangs up after `VOICE_PIPECAT_IDLE_SECONDS` (30); OpenAI's keep `VOICE_IDLE_SECONDS` (90).
 
 **Run a side-by-side test.** Put yourself (and a few testers) on the new voice, make the same kinds of calls on both voices, then tap **Compare the voices** on the People card for the summary. The full report, with each call's turn times, comes from the api (admin only). `$TOKEN` is your sign-in token: in the app on the web, open the browser's developer tools › Application › Local Storage and copy `openmuse.session`. Keep it private; anyone with it is signed in as you.
 

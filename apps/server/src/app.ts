@@ -406,7 +406,7 @@ export async function createApp(
         model: PIPECAT_MODEL,
         provider: { name: "the voice service", keyVariable: "VOICE_INTERNAL_TOKEN" },
         canSetUp: (owner) => accounts.isAdmin(owner),
-        idleSeconds: config.voicePipecatIdleSeconds ?? 45,
+        idleSeconds: config.voicePipecatIdleSeconds ?? 30,
         setupUrl: config.railwayVariablesUrl,
         ...(canLookUp ? { answer: voiceAnswer(voiceBrain) } : {}),
         tell: (owner, title, body, key) => agent.notify(owner, title, body, undefined, key),
@@ -1149,7 +1149,7 @@ export async function createApp(
               default: config.voiceProvider ?? "openai",
               mine: await voiceOf(c.get("owner")),
               limitMinutes: config.voiceMonthlyMinutes ?? 200,
-              idleSeconds: config.voicePipecatIdleSeconds ?? 45,
+              idleSeconds: config.voicePipecatIdleSeconds ?? 30,
             },
           }
         : {}),
