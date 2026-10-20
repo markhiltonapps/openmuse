@@ -372,6 +372,10 @@ export function helpLink() {
   const value = new URL(window.location.href).searchParams.get("help");
   return value === null ? undefined : value.trim().slice(0, 100);
 }
+/** /?request from the website's Request access buttons: the sign-in screen opens on the request form. */
+export function requestLink() {
+  return web() && new URL(window.location.href).searchParams.has("request");
+}
 export function takeHelpLink() {
   const value = helpLink();
   if (value === undefined) return undefined;

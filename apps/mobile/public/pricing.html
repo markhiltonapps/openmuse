@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neddy · Pricing</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Two plans for Neddy, your own AI helper: $20 a month or $100 a month, counted in call minutes, messages and meeting hours you can picture.">
+<meta name="theme-color" content="#151219">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Neddy · Pricing">
+<meta property="og:description" content="$20 or $100 a month, counted in minutes, messages and meetings. Early access by invite.">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="neddy.css">
+<style>
+/* Pricing: the same sea, two glass plan cards side by side, then what counts and what happens over the cap. */
+.intro { padding-block: calc(96px + env(safe-area-inset-top, 0px)) 24px; text-align: center; }
+.intro .wrap { display: grid; justify-items: center; }
+.intro .lead { max-width: 40em; }
+.plans { padding-block: 24px 48px; }
+.plans .wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.plan { border-radius: 30px; padding: 26px 26px 24px; display: flex; flex-direction: column; gap: 18px; position: relative; }
+.plan .tag { position: absolute; top: -14px; left: 26px; padding: 5px 12px; border-radius: 14px; font-size: 13px; font-weight: 800; color: #3b1d00; }
+.plan h2 { font-size: 26px; margin: 0; }
+.plan .for { color: var(--ink-2); font-size: 15px; margin-top: 4px; }
+.price { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.price b { font-size: 54px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+.price span { color: var(--ink-2); font-size: 16px; }
+.inc { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.inc li { display: flex; gap: 12px; align-items: flex-start; font-size: 16px; }
+.inc li .ic { width: 20px; height: 20px; color: #9dffc0; margin-top: 2px; }
+.inc b { font-weight: 700; }
+.inc small { display: block; color: var(--ink-2); font-size: 14px; }
+.plan .btn { align-self: stretch; justify-content: center; margin-top: auto; }
+.counts { padding-block: 48px; }
+.counts .wrap { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 40px; align-items: start; }
+.table { border-radius: 24px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: left; padding: 13px 16px; vertical-align: top; }
+thead th { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--peach); font-weight: 700; border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
+tbody tr + tr td { border-top: 1px solid rgba(255, 255, 255, 0.1); }
+td b { font-weight: 700; }
+td small { display: block; color: var(--ink-2); font-size: 13px; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qa { padding-block: 24px 48px; }
+.qa .wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.q { border-radius: 24px; padding: 18px 20px; }
+.q h3 { font-size: 18px; margin-bottom: 8px; text-shadow: none; letter-spacing: -0.02em; }
+.q p { color: var(--ink-2); font-size: 15px; }
+.muse { padding-block: 24px 64px; }
+.muse .wrap { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 40px; align-items: start; }
+.foot-note { font-size: 14px; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 10px rgba(30, 10, 40, 0.6); margin-top: 12px; }
+.foot-note a { color: #fff; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255, 255, 255, 0.4); }
+@media (max-width: 940px) {
+  .plans .wrap, .counts .wrap, .qa .wrap, .muse .wrap { grid-template-columns: 1fr; gap: 20px; }
+  .intro { padding-block: calc(84px + env(safe-area-inset-top, 0px)) 16px; }
+  .price b { font-size: 46px; }
+  .table { overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+<video id="sea" class="sea" autoplay muted loop playsinline preload="metadata" poster="backdrops/beach-sunset.jpg" aria-hidden="true" tabindex="-1"><source src="backdrops/beach-sunset.mp4" type="video/mp4"></video>
+<div class="scrim" aria-hidden="true"></div>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="bar">
+  <div class="glass">
+    <a class="brand" href="neddy.html" aria-label="Neddy, home page"><img src="home/neddy-full.webp" alt="">Neddy</a>
+    <nav aria-label="Site">
+      <a href="neddy.html#talk">What he does</a>
+      <a href="pricing.html" aria-current="page">Pricing</a>
+      <a href="compare.html">Compare</a>
+    </nav>
+    <a class="soft" href="/">Sign in</a>
+    <a class="cta gloss blue" href="/?request">Request access</a>
+  </div>
+</header>
+
+<div class="page" id="top">
+<main id="main">
+
+<section class="intro" aria-labelledby="pr-h">
+  <div class="wrap copy">
+    <h1 id="pr-h">Pay for what you do.</h1>
+    <p class="lead">Two plans. $20 a month for one busy person, or $100 for five times the room. Both count what you can picture, like minutes on a call, messages in the chat and hours of meetings.</p>
+    <p class="note">Early access is by invite. You pick a plan once you’re in; until then there’s nothing to pay.</p>
+  </div>
+</section>
+
+<section class="plans" aria-label="Plans">
+  <div class="wrap">
+    <article class="plan smoke" aria-labelledby="p1">
+      <div><h2 id="p1">Neddy</h2><p class="for">For one busy person.</p></div>
+      <p class="price"><b>$20</b><span>a month</span></p>
+      <ul class="inc">
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>60 minutes of calls</b><small>Two-way, in the browser, hands-free in the car.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>150 messages</b><small>Typed, with pictures and files.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>3 hours of recorded meetings</b><small>Summary, decisions, action items, every word.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>5 background jobs</b><small>Research, errands and bookings he runs while you’re away.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Memory, apps, Feed, Spaces, reminders, your voice and backdrop</b><small>Included in every plan.</small></div></li>
+      </ul>
+      <a class="btn gloss blue" href="/?request">Request access</a>
+    </article>
+    <article class="plan smoke" aria-labelledby="p2">
+      <span class="tag gloss amber">Five times the room</span>
+      <div><h2 id="p2">Neddy Max</h2><p class="for">For someone who runs a household, a business, or both.</p></div>
+      <p class="price"><b>$100</b><span>a month</span></p>
+      <ul class="inc">
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>300 minutes of calls</b><small>Ten minutes a day.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>750 messages</b><small>Twenty-five a day.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>15 hours of recorded meetings</b><small>About three and a half hours a week, written up as soon as it ends.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>25 background jobs</b><small>Hand him the whole errand list.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything in Neddy</b><small>Memory, apps, Feed, Spaces, reminders, your choice of voice and backdrop.</small></div></li>
+      </ul>
+      <a class="btn gloss blue" href="/?request">Request access</a>
+    </article>
+  </div>
+</section>
+
+<section class="counts" aria-labelledby="counts-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="counts-h">What counts, and what happens at the edge.</h2>
+      <p class="lead">A minute is a minute on a live call, silence included. A message is one thing you send, however long his answer. A meeting hour is recording time. A job is one errand you hand him, however many sites he visits.</p>
+      <p class="lead" style="margin-top: 14px">When you reach a cap, Neddy says so, out loud if you’re on a call. Run out of call minutes and you can keep typing. Ask us for the bigger plan or the extras below. What you’ve stored stays yours to read.</p>
+    </div>
+    <div class="table smoke rise">
+      <table>
+        <thead><tr><th scope="col">Extras, if you want them</th><th scope="col" class="num">Price</th></tr></thead>
+        <tbody>
+          <tr><td><b>30 more call minutes</b><small>12¢ a minute.</small></td><td class="num">$3.60</td></tr>
+          <tr><td><b>50 more messages</b><small>8¢ a message.</small></td><td class="num">$4</td></tr>
+          <tr><td><b>Another meeting hour</b></td><td class="num">80¢</td></tr>
+          <tr><td><b>Another background job</b></td><td class="num">$1.50</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="qa" aria-label="Common questions">
+  <div class="wrap">
+    <div class="q smoke rise"><h3>Do unused minutes roll over?</h3><p>No. Each month starts fresh. Start with the smaller one and move up when he says you’ve reached the edge.</p></div>
+    <div class="q smoke rise"><h3>Can I change or cancel?</h3><p>Yes. Say it to Neddy, or email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a>, and we’ll change or stop it. What you’ve stored stays until you download or delete it.</p></div>
+    <div class="q smoke rise"><h3>Is there a free trial?</h3><p>No trial. There’s nothing to pay until you’re in and choose a plan, and early access is by invite.</p></div>
+  </div>
+</section>
+
+<section class="muse" aria-labelledby="muse-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="muse-h">Next to Meta Muse.</h2>
+      <p class="lead">Muse sells tokens, 500 million a week on Power and 3 billion on Maximum. A token is a fragment of a word, and everything the agent reads and writes counts. A message like ours is about 70,000 tokens, so 500 million a week is roughly 7,000 messages, and for typed chat Muse is effectively unlimited. Neddy’s $20 plan gives you 150 messages a month. We won’t pretend that’s more.</p>
+      <p class="lead" style="margin-top: 14px">What the same $20 buys with Neddy that Muse’s pages don’t list: an hour of live calls, three hours of recorded meetings with notes, five errands he runs for you in the background, memory you can read and change, and a person at <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> who answers when you write.</p>
+      <p class="foot-note">Muse prices as reported from Meta’s help pages by third-party guides, read October 20, 2026. <a href="compare.html">See the full comparison.</a></p>
+    </div>
+    <div class="table smoke rise">
+      <table>
+        <thead><tr><th scope="col">For $20 a month</th><th scope="col">Neddy</th><th scope="col">Muse Power</th></tr></thead>
+        <tbody>
+          <tr><td><b>Typed chat</b></td><td>150 messages</td><td>Effectively unlimited<small>500M tokens a week</small></td></tr>
+          <tr><td><b>Live calls</b></td><td>60 minutes</td><td>Voice mode, from the same tokens<small>Minutes not stated</small></td></tr>
+          <tr><td><b>Recorded meetings</b></td><td>3 hours, with notes</td><td>Not described</td></tr>
+          <tr><td><b>Errands in the background</b></td><td>5 jobs</td><td>Yes<small>From the same tokens</small></td></tr>
+          <tr><td><b>Memory you can read and change</b></td><td>Yes</td><td>Remembers<small>Editing not described</small></td></tr>
+          <tr><td><b>Asks before it acts</b></td><td>Always</td><td>Not stated</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">
+    <span>Neddy is made by Neato Ventures.</span>
+    <span class="links"><a href="neddy.html">Home</a><a href="compare.html">Compare</a><a href="/">Sign in</a><a href="/help.html">Help</a></span>
+    <span>Built on OpenMuse, open source under the MIT license.</span>
+    <span>Backdrop scenes from Mixkit.</span>
+  </div>
+</footer>
+</div>
+<script src="neddy-site.js"></script>
+</body>
+</html>

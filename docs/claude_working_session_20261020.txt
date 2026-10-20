@@ -1,0 +1,118 @@
+Claude working session — 2026-10-20
+===================================
+
+Weekly upstream check (Oct 19, routine)
+- CopilotKit/OpenMuse main has not moved since the Oct 12 check: its tip is still 1ac68f3
+  (Oct 6). The same 71 commits are unmerged and a full merge (git merge-tree) still conflicts
+  in the same 26 files. The per-commit summary and the merge/skip/hold recommendations in
+  docs/claude_working_session_20261012.txt stand unchanged.
+- Nothing merged; the note was pushed on the owner's "push it".
+
+Pricing questions (owner)
+- Per-minute bottom line: ~1.6¢ a minute on our own voice (plan on 2¢); a quiet minute 0.2¢;
+  a chatty one ~1.9¢; meetings 10¢ an hour; OpenAI's voice 5¢ a minute.
+- Tokens vs Meta Muse's plans (Power $20 / 500M tokens a week, Maximum $100 / 3B): measured
+  costs are ~$0.70 per million tokens on Sonnet chat, ~$0.35 on Haiku, ~$0.02 on DeepSeek flash.
+  At a 60% margin the $20 plan buys 2.5M tokens a week on Sonnet, 5M on Haiku, 90M on DeepSeek.
+  Muse's figure is a ceiling nobody reaches (a full-size message every second, all day); a
+  heavy chatter uses ~15M a week. Advised pricing on what people do, with tokens as fine print.
+
+The name (owner: "I really can't use the word muse")
+- Ten names with domains checked on GoDaddy. Owner chose Neddy (neddy.ai, heyneddy.com and
+  neddyapp.com were free on Oct 20; neddy.app taken). The app itself still says Neato_Muse in
+  places; renaming it is a separate job.
+
+Neddy website (owner: "build the webpage and call it Neddy… surprise me with who it's for…
+an agent that's always with you, remembers everything, your own private agent")
+- Three static pages in apps/mobile/public, served by the web service next to the app:
+  - neddy.html: the landing page. Hero (Neddy's cut-out figure in front of a phone showing
+    Home), then Just say it (live call), He remembers what you tell him (chat from memory),
+    He gets things done, and asks first (Approve card), Record the meeting (notes card), One
+    Neddy wherever you are (a pinned phone that changes Home → Chat → Call as you scroll, or
+    by tapping a step), Private to you, Make him yours (voices, backdrop strip), Ask for your
+    invite. Request access and Sign in go to "/" (the app's sign-in screen).
+  - pricing.html: two plans ($20 "Neddy": 60 call minutes, 150 messages, 3 meeting hours,
+    5 jobs; $100 "Neddy Max": five times that, 300 / 750 / 15 / 25), extras (12¢ a minute, 8¢ a
+    message, 80¢ a meeting hour, $1.50 a job), three questions, a table next to Muse's plans. The numbers are
+    proposals: see docs/pricing_math.md (80% margin only holds with the leaner chat setup,
+    Haiku 4.5 and a ~30k context, which isn't built yet; with today's Sonnet chat the message
+    caps would have to be a third).
+  - compare.html: Neddy vs Meta Muse, ChatGPT, Grok and Gemini on price, what the plan
+    counts, live talk, doing things, asking first, editable memory, in-person meeting notes,
+    who runs it, voice/scene choice, open source; a "where they're ahead" list; sources. Facts
+    from public pages and reviews read Oct 20, 2026 (official pricing pages are JS-only and
+    couldn't be fetched; third-party guides and TIME/CNN/Inc. were used). Unknowns say "not
+    stated".
+  - neddy.css (shared look: the app's glass/smoke/gloss/dock materials over the beach) and
+    neddy-site.js (video + reveal for the inner pages; the landing page has its own script).
+  - The backdrop is the app's filmed beach-sunset loop (Mixkit; owner asked for photorealism
+    over the drawn scene), with its still frame as the poster; it stays still under reduced
+    motion or Save-Data. Phones are "windows" onto the same sea (transparent screens).
+  - Scroll motion: hero drift, sections rising into view, the pinned phone, two backdrop rows
+    sliding opposite ways. All off under prefers-reduced-motion; the pinned scene is static
+    (steps tapped) under 740px tall.
+  - Neddy's cut-out (apps/mobile/assets/neddy-full.webp) was copied to public/home/ for the
+    pages.
+- Design division, round one (landing page): copy 7 must-fixes (samples that acted without an
+  Approve, traffic/texting not features, "remembers everything", bank line, backdrop names,
+  "Look"→"See it"), usability 5 (pinned scene didn't fit a phone, 19 dead Tab stops, reduced
+  motion hid two states, notch over the call title, anchors under the header), visual 7
+  (copy contrast over the sky, pinned scene, header wrap 861–960, hero figure at tablet
+  widths, drift too large, backdrop row hole, header text over bright content). All applied.
+  Round two (all three pages): copy 19 must-fixes (the big one: the extras table undercut the
+  $100 plan and "Best value" was false; Max is now five times the $20 plan at the same rates
+  and extras cost more than their share of a plan; also hedged every competitor cell not
+  backed by a source, renamed "Open source" to "The app's code is published", no acting before
+  an Approve in the pinned chat, Theodore not Theo). Usability 9 (header overflow at 961–1060
+  with the two new links, footer links running together on desktop, compare cells on a phone
+  now carry their column name, the pricing lead opens with the two plans, the cap wording no
+  longer implies an in-app upsell, extras lead with the block price, Request access now opens
+  the request form via /?request, a contact in the change/cancel answer, a link to the plans
+  under the comparison table). Visual round two: contrast on the inner pages (intro halo, notes,
+  the held column opaque, swipe line and Sources on smoke, foot-note links underlined).
+- Owner (later): "I'm not sure how to compare Muse's tokens with our minutes and messages."
+  Answered with the math (a Neddy message ≈ 70k tokens; our $20 ≈ 2.5M tokens a week vs Muse's
+  500M; for chat Muse is effectively unlimited). The pricing page's Muse section now says so
+  plainly and compares the $20 on what Muse's pages don't list (calls, meetings, jobs, editable
+  memory, a person who answers); docs/pricing_math.md has the working.
+- Round three (verification): copy found one over-promise (the message cap doesn't let you
+  keep typing) and a token sentence that read as thousands of tokens (now "a message like ours
+  is about 70,000 tokens, so 500 million a week is roughly 7,000 messages"); usability found that
+  the sign-in screen's own effect reset the form to "email" right after mount, so /?request
+  never landed on the request form (fixed: the effect respects the link), plus a focus ring on
+  the comparison scroll area; visual found two phone-only contrast misses on pricing (the halo
+  now reaches 48px below a copy block on phones; the foot-note has the note treatment) and the
+  table box's stray section padding. All applied and pre-verified by the reviewers.
+- Owner: "When I compare this to Muse, Muse looks like a better deal. Maybe our price is too
+  high." Advised (not yet done): price margin on typical use rather than on the cap, so the $20
+  plan can say unlimited typed chat with a ~1,000-message fair-use ceiling; a $10 entry plan
+  (unlimited chat, 30 minutes, 2 meeting hours, 3 jobs); take the Muse table off the pricing
+  page and market on privacy, calls, meetings and a person who answers. All of it needs the
+  leaner chat setup first (Haiku, ~30k context); on Sonnet 1,000 messages costs $48. Waiting on
+  the owner's decision.
+- App change for the site: the sign-in screen opens on the request form when the address
+  carries ?request (requestLink in web-app.ts, sign-in.tsx), so every Request access button on
+  the site lands on the form. Help's sign-in topic says so.
+- Lint: Biome checks these files too (HTML, CSS and the scripts); formatted with it and clean
+  at error level. `pnpm lint` passes.
+- Preview for the owner: a private artifact with all three pages.
+
+Commercial write-ups
+- docs/scaling_and_licensing.md: how each Railway service scales (api one instance, voice
+  CPU-bound at ~0.44 core a call, 8 calls today, ~70 on the largest box), what to do before
+  paying customers (api safe as two copies, staging, load test, alerts, backups, chat token
+  caps), and the MIT obligations (keep LICENSE, bundle third-party notices with packaged apps,
+  no implied endorsement). Dependency scan: 1,239 npm packages, no GPL/AGPL; MPL-2.0 in
+  dompurify/lightningcss/web-push (fine unmodified); three with no licence field. Python deps
+  all BSD/MIT/Apache. Open for the owner: rights to Neddy's artwork (origin not recorded),
+  a trademark search on "Neddy", terms of service and privacy policy.
+- docs/pricing_math.md: the margin table above.
+
+Known issues / later
+- The pricing page's "first month on us" and "change or cancel from Apps › Account" are not
+  decided or built; the copy reviewer was told to flag them.
+- The app's own request-access form can't be opened from a URL, so Request access lands on
+  the sign-in screen with the "No account yet? Request access" button.
+- The site is at /neddy.html, /pricing.html and /compare.html; the app still opens at "/".
+  Pointing a domain (heyneddy.com) at the site means swapping the root later.
+- The app still calls itself Neato_Muse; the rename is a separate job.

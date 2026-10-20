@@ -4,7 +4,7 @@ import { API_URL, requestAccess, requestSignInLink } from "./api";
 import { SignedOutHelp } from "./help-ui";
 import { pastedLoginToken } from "./session-store";
 import { Button, Card, ErrorNotice, Field, s } from "./ui";
-import { helpLink } from "./web-app";
+import { helpLink, requestLink } from "./web-app";
 
 /** Email sign-in links when the server can send them; the access key otherwise, or on request. */
 export function SignInCard({
@@ -20,7 +20,9 @@ export function SignInCard({
   onLogin: (token: string) => void;
   onCode: (email: string, code: string) => void;
 }) {
-  const [method, setMethod] = useState<"email" | "key" | "request">(emailSignIn ? "email" : "key");
+  const [method, setMethod] = useState<"email" | "key" | "request">(() =>
+    emailSignIn ? (requestLink() ? "request" : "email") : "key",
+  );
   const [email, setEmail] = useState("");
   // Request access: who's asking, why, and the address the request went in for.
   const [name, setName] = useState("");
@@ -34,7 +36,10 @@ export function SignInCard({
   const [problem, setProblem] = useState("");
   // The help guide over the sign-in screen: from "New here?", or a ?help= link.
   const [help, setHelp] = useState<string | undefined>(() => helpLink());
-  useEffect(() => setMethod(emailSignIn ? "email" : "key"), [emailSignIn]);
+  useEffect(
+    () => setMethod(emailSignIn ? (requestLink() ? "request" : "email") : "key"),
+    [emailSignIn],
+  );
   const address = email.trim();
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
   // A pasted sign-in link still works in the code box, for anyone used to that.

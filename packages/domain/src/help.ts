@@ -116,7 +116,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Each device stays signed in for 30 days after you last used it.",
     ],
     body: [
-      "New here? Tap **Request access** and leave your name and email; the person who runs Neato_Muse can invite you.",
+      "New here? Tap **Request access** and leave your name and email; the person who runs Neato_Muse can invite you. The website’s Request access buttons open that form straight away.",
       "Using the app from an iPhone home screen? Links open in Safari. Press and hold the link in the email, tap **Copy**, and paste it in the code box on the sign-in screen.",
     ],
     keywords: [

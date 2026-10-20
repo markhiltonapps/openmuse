@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neddy · Your own agent</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Neddy is your own private agent. He talks, listens, remembers what you tell him and gets things done, on your phone, at your desk and in the car. Early access by invite.">
+<meta name="theme-color" content="#151219">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Neddy · Your own agent. Always with you.">
+<meta property="og:description" content="He talks, listens, remembers and gets things done. Private to you, and he asks before he acts.">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="neddy.css">
+</head>
+<body>
+<video id="sea" class="sea" autoplay muted loop playsinline preload="metadata" poster="backdrops/beach-sunset.jpg" aria-hidden="true" tabindex="-1"><source src="backdrops/beach-sunset.mp4" type="video/mp4"></video>
+<div class="scrim" aria-hidden="true"></div>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="bar">
+  <div class="glass">
+    <a class="brand" href="#top" aria-label="Neddy, top of the page"><img src="home/neddy-full.webp" alt="">Neddy</a>
+    <nav aria-label="Page">
+      <a href="#talk">Talk</a>
+      <a href="#remember">Memory</a>
+      <a href="#done">Gets things done</a>
+      <a href="#private">Private</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="compare.html">Compare</a>
+    </nav>
+    <a class="soft" href="/">Sign in</a>
+    <a class="cta gloss blue" href="/?request">Request access</a>
+  </div>
+</header>
+
+<div class="page" id="top">
+<main id="main">
+
+<section class="hero" aria-labelledby="hero-h">
+  <div class="wrap">
+    <div class="copy">
+      <h1 id="hero-h">Your own agent.<span>Always with you.</span></h1>
+      <p class="lead">Neddy is your own AI helper. He talks, listens and remembers. Say what you need, on your phone, at your desk or in the car, and he gets it done. He’s private to you, and he asks before he acts.</p>
+      <div class="cta-row">
+        <a class="btn gloss blue" href="/?request">Request access</a>
+        <a class="btn soft" href="#talk">See how it works<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+      </div>
+      <p class="note">Early access is by invite. Leave your name and email and we’ll send you a link. Works in the browser on your phone or computer. Nothing to install.</p>
+    </div>
+    <div class="art">
+      <span class="halo" aria-hidden="true"></span>
+      <img class="figure drift" data-drift="0.06" src="home/neddy-full.webp" alt="Neddy, a small friendly robot, waving">
+      <div class="phone drift" data-drift="-0.04" role="img" aria-label="Neddy’s home screen on a phone: what needs you today, your day, what he’s working on, and a Talk to Neddy button">
+        <div class="screen"><div class="ui">
+          <div class="top">
+            <div class="side"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+            <span class="me"><img class="neddy" src="home/neddy-full.webp" alt=""><span class="name smoke">Neddy</span></span>
+            <div class="side end"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14h6M12 11v6"/></svg></span><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></span></div>
+          </div>
+          <div class="home">
+            <p class="hello">Good morning, Mark.</p>
+            <p class="sub">Two things need you. The rest is handled.</p>
+            <div class="cards">
+              <div class="card wide smoke">
+                <div class="cardhead"><span class="mini tile t-activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><h3>Needs you</h3><span class="chip glass">2</span></div>
+                <div class="ask"><div><strong>Send Dana’s reply?</strong><small>“Friday works for me. See you at 2.”</small></div><span class="gloss green">Approve</span></div>
+                <div class="ask"><div><strong>Book the 7:15 table?</strong><small>Marlow’s, four people, Saturday</small></div><span class="gloss blue">See it</span></div>
+              </div>
+              <div class="card smoke">
+                <div class="cardhead"><span class="mini tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg></span><h3>Today</h3></div>
+                <div class="weather"><b>72°</b>Sunny</div>
+                <ul class="lines"><li><time>9:30</time>Dentist</li><li><time>12:00</time>Lunch with Alex</li></ul>
+              </div>
+              <div class="card smoke">
+                <div class="cardhead"><span class="mini tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><h3>Working on</h3></div>
+                <p class="job">Comparing flights to Denver for May 14</p>
+                <div class="jobmeta"><span class="pulse"></span>3 sites checked · 4 min</div>
+              </div>
+            </div>
+          </div>
+          <div class="talkrow">
+            <span class="talk gloss blue"><img class="neddy" src="home/neddy-full.webp" alt=""><span>Talk to Neddy</span><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></span>
+            <span class="round typebtn glass"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg></span>
+          </div>
+          <div class="dock glass">
+            <span class="dk on"><span class="tile t-chat"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><em>Chat</em></span>
+            <span class="dk"><span class="tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg></span><em>Feed</em></span>
+            <span class="dk"><span class="tile t-spaces"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><em>Spaces</em></span>
+            <span class="dk"><span class="tile t-activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM3 9h18M9 21V9"/></svg><span class="badge">2</span></span><em>Activity</em></span>
+            <span class="dk"><span class="tile t-ideas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg></span><em>Ideas</em></span>
+            <span class="dk"><span class="tile t-goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 12l2 2 4-4"/></svg></span><em>Goals</em></span>
+            <span class="dk"><span class="tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span><em>Files</em></span>
+            <span class="dk"><span class="tile t-apps"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1ZM4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM14 17.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"/></svg></span><em>Apps</em></span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="feat" id="talk" aria-labelledby="talk-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="talk-h">Just say it.</h2>
+      <p class="lead">Talk to Neddy the way you’d talk to a person. He answers out loud, and the call keeps going while you move around the app. When he needs a moment he says so, then reads back what he found. In the car, it’s hands-free.</p>
+      <div class="quote smoke"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg><div><b>“Neddy, what’s on my calendar today?”</b><span>“Your dentist is at 9:30, so leave by 9:10. And Dana’s reply is ready to send.”</span></div></div>
+    </div>
+    <div class="art rise">
+      <div class="phone" role="img" aria-label="A live call with Neddy: he is speaking, a card waits for your OK on Dana’s reply, with Mute and Hang up buttons">
+        <div class="screen"><div class="ui">
+          <div class="callhead"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><div><h3>Talking with Neddy</h3><small><i></i>Live · 2:14</small></div></div>
+          <div class="call">
+            <div class="orb"><span class="ring"></span><span class="ring two"></span><span class="face"></span><img class="figure" src="home/neddy-full.webp" alt=""></div>
+            <p class="speaking">Neddy is speaking</p>
+            <p class="caption smoke">Your dentist is at 9:30, so leave by 9:10. And Dana’s reply is ready to send.</p>
+            <div class="readback smoke">
+              <h3><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>Waiting for your OK</h3>
+              <p>Reply to Dana: “Friday works for me. See you at 2.”</p>
+              <small>Say “yes, approve,” or tap.</small>
+              <div class="btns"><span class="gloss green">Approve</span></div>
+            </div>
+          </div>
+          <div class="controls">
+            <span class="glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>Mute</span>
+            <span class="gloss red"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91M22 2 2 22"/></svg>Hang up</span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="feat flip" id="remember" aria-labelledby="rem-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="rem-h">He remembers what you tell him.</h2>
+      <p class="lead">Your address, the kids’ names, the table you liked, what Dana said about Friday. Each thing lands somewhere you can see and change, and every chat, call and meeting is searchable. Ask “what did I decide about the kitchen?” and he knows.</p>
+      <div class="quote smoke"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg><div><b>“Remember that I weigh 173 now.”</b><span>It goes on your weight tracker, where you can see the chart and correct it.</span></div></div>
+    </div>
+    <div class="art rise">
+      <div class="phone" role="img" aria-label="A chat with Neddy: you ask what Dana said about Friday; he answers from memory and shows what he remembered">
+        <div class="screen"><div class="ui">
+          <div class="top">
+            <div class="side"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+            <span class="chatpill glass"><img class="neddy" src="home/neddy-full.webp" alt=""><b>Neddy</b><span>Main chat<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></span>
+            <div class="side end"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span></div>
+          </div>
+          <div class="chat">
+            <div class="me-msg gloss blue">What did Dana say about Friday?</div>
+            <div class="ned-msg smoke">Last Tuesday she asked if Friday still works. You said yes, and I sent the reply. Lunch is at 2 at Marlow’s, your usual.</div>
+            <div class="remembered glass"><b><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 1 7 7c0 3-2 4.5-3 6.5a3 3 0 0 1-.5 1.5h-7a3 3 0 0 1-.5-1.5C7 13.5 5 12 5 9a7 7 0 0 1 7-7zM9 21h6"/></svg>From memory</b><span>Dana Ruiz · prefers afternoons</span><span>Marlow’s · your usual lunch place</span><span>Chat from Tue, Oct 13</span></div>
+            <div class="me-msg gloss blue">Remind me to leave at 1:30.</div>
+            <div class="ned-msg smoke">Done. I’ll remind you Friday at 1:30.</div>
+          </div>
+          <div class="composer glass">
+            <div class="ph">Message…</div>
+            <div class="row"><span class="round soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></span><span class="gap"></span><span class="round gloss blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></span><span class="round soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg></span></div>
+          </div>
+          <div class="dock glass">
+            <span class="dk on"><span class="tile t-chat"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><em>Chat</em></span>
+            <span class="dk"><span class="tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg></span><em>Feed</em></span>
+            <span class="dk"><span class="tile t-spaces"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><em>Spaces</em></span>
+            <span class="dk"><span class="tile t-activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM3 9h18M9 21V9"/></svg></span><em>Activity</em></span>
+            <span class="dk"><span class="tile t-ideas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg></span><em>Ideas</em></span>
+            <span class="dk"><span class="tile t-goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 12l2 2 4-4"/></svg></span><em>Goals</em></span>
+            <span class="dk"><span class="tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span><em>Files</em></span>
+            <span class="dk"><span class="tile t-apps"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1ZM4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM14 17.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"/></svg></span><em>Apps</em></span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="feat" id="done" aria-labelledby="done-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="done-h">He gets things done, and asks first.</h2>
+      <p class="lead">Email, calendar, the web, and the errands in between. Hand him a job and he works on it in the background while you get on with your day. Before anything goes out, you see it: tap Approve, or say “yes, approve.” Money and sign-in codes always need a tap.</p>
+      <div class="quote smoke"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg><div><b>“Find me a flight to Denver on the 14th, under $300.”</b><span>He checks the sites, comes back with the best three, and books only when you say so.</span></div></div>
+    </div>
+    <div class="art rise">
+      <div class="phone" role="img" aria-label="A chat where Neddy asks to send an email, with Approve, Edit and Not now, and a card showing a job he is working on">
+        <div class="screen"><div class="ui">
+          <div class="top">
+            <div class="side"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+            <span class="chatpill glass"><img class="neddy" src="home/neddy-full.webp" alt=""><b>Neddy</b><span>Main chat<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></span>
+            <div class="side end"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot"></span></span></div>
+          </div>
+          <div class="chat">
+            <div class="me-msg gloss blue">Tell Dana Friday works, 2 o’clock.</div>
+            <div class="ned-msg smoke">Here’s the reply. Want me to send it?</div>
+            <div class="approve smoke">
+              <h3><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>Send this email?</h3>
+              <div class="mail"><div>To Dana Ruiz · Re: Friday</div><p>Friday works for me. See you at 2.</p></div>
+              <div class="btns"><span class="gloss green">Approve</span><span class="soft">Edit</span><span class="plain">Not now</span></div>
+            </div>
+            <div class="card smoke" style="align-self: stretch">
+              <div class="cardhead"><span class="mini tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><h3>Working on</h3></div>
+              <p class="job">Flights to Denver, May 14, under $300</p>
+              <div class="jobmeta"><span class="pulse"></span>3 sites checked · 4 min</div>
+            </div>
+          </div>
+          <div class="composer glass">
+            <div class="ph">Message…</div>
+            <div class="row"><span class="round soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></span><span class="gap"></span><span class="round gloss blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></span><span class="round soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg></span></div>
+          </div>
+          <div class="dock glass">
+            <span class="dk on"><span class="tile t-chat"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><em>Chat</em></span>
+            <span class="dk"><span class="tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg></span><em>Feed</em></span>
+            <span class="dk"><span class="tile t-spaces"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><em>Spaces</em></span>
+            <span class="dk"><span class="tile t-activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM3 9h18M9 21V9"/></svg><span class="badge">1</span></span><em>Activity</em></span>
+            <span class="dk"><span class="tile t-ideas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg></span><em>Ideas</em></span>
+            <span class="dk"><span class="tile t-goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 12l2 2 4-4"/></svg></span><em>Goals</em></span>
+            <span class="dk"><span class="tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span><em>Files</em></span>
+            <span class="dk"><span class="tile t-apps"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1ZM4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM14 17.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"/></svg></span><em>Apps</em></span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="meetings" aria-labelledby="meet-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="meet-h">Record the meeting. Keep the notes.</h2>
+      <p class="lead">Tap Record when it starts. Afterwards you get a summary, the decisions, the action items, and every word with who said it. Ask Neddy about it next week, out loud.</p>
+      <p class="say glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>“Speaker 2 was Dana.”</p>
+    </div>
+    <div class="notes smoke rise" role="img" aria-label="Meeting notes: Kitchen remodel kickoff, 48 minutes, with a summary, three decisions, two action items and a Make reminders button">
+      <div>
+        <h3>Kitchen remodel kickoff</h3>
+        <div class="meta"><span class="rec"><i></i>Recorded</span><span>Tue, Oct 13 · 48 min</span><span>3 speakers</span></div>
+      </div>
+      <div><h4>Summary</h4><p>Dana walked through the layout options. You chose the island plan and set the budget at $38,000. Demolition starts the first week of November.</p></div>
+      <div><h4>Decisions</h4><ul><li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Island layout, not the galley</li><li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Budget capped at $38,000</li><li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Quartz counters, white oak fronts</li></ul></div>
+      <div><h4>Action items</h4><ul><li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2"/></svg>You: send Dana the appliance list by Friday</li><li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2"/></svg>Dana: two counter samples, next Tuesday</li></ul></div>
+      <div><h4>Every word</h4><div class="who"><div><b>Dana</b>So the island gives you the prep space you wanted, and we keep the window.</div><div><b>You</b>Let’s do the island. What does that do to the number?</div><div><b>Dana</b>With quartz, about thirty-eight.</div></div></div>
+      <div class="foot"><span class="gloss blue">Make reminders</span><span class="soft">Ask Neddy about it</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="pin" id="everywhere" aria-labelledby="every-h">
+  <div class="stick">
+    <div class="wrap">
+      <div class="copy">
+        <h2 id="every-h">One Neddy, wherever you are.</h2>
+        <div class="steps">
+          <button type="button" class="step on" data-step="0" aria-pressed="true"><b>At home</b><span>Home shows what needs you today, and one button to talk.</span></button>
+          <button type="button" class="step" data-step="1" aria-pressed="false"><b>In a meeting</b><span>Type when you can’t talk. Same Neddy, same memory.</span></button>
+          <button type="button" class="step" data-step="2" aria-pressed="false"><b>In the car</b><span>Talk when you can’t type. The call keeps going while you drive.</span></button>
+        </div>
+        <p class="now" id="pinnow" aria-live="polite">Home shows what needs you today, and one button to talk.</p>
+        <p class="hint" id="pinhint"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Keep scrolling, or tap a step</p>
+      </div>
+      <div class="phone" id="pinphone" role="img" aria-label="Neddy’s phone showing the home screen, the chat or a live call, whichever step is chosen">
+        <div class="screen">
+          <div class="ui" data-s="0">
+            <div class="top">
+              <div class="side"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+              <span class="me"><img class="neddy" src="home/neddy-full.webp" alt=""><span class="name smoke">Neddy</span></span>
+              <div class="side end"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span></div>
+            </div>
+            <div class="home">
+              <p class="hello">Good evening, Mark.</p>
+              <p class="sub">All quiet. Dana’s reply went out at 2:05.</p>
+              <div class="cards">
+                <div class="card smoke"><div class="cardhead"><span class="mini tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg></span><h3>Tomorrow</h3></div><ul class="lines"><li><time>8:00</time>Gym</li><li><time>10:30</time>Dana, counters</li></ul></div>
+                <div class="card smoke"><div class="cardhead"><span class="mini tile t-goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 12l2 2 4-4"/></svg></span><h3>Weight</h3></div><div class="weather"><b>173</b>lb · down 2 this month</div></div>
+              </div>
+            </div>
+            <div class="talkrow"><span class="talk gloss blue"><img class="neddy" src="home/neddy-full.webp" alt=""><span>Talk to Neddy</span><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></span><span class="round typebtn glass"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg></span></div>
+            <div class="dock glass">
+              <span class="dk on"><span class="tile t-chat"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><em>Chat</em></span>
+              <span class="dk"><span class="tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg></span><em>Feed</em></span>
+              <span class="dk"><span class="tile t-spaces"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><em>Spaces</em></span>
+              <span class="dk"><span class="tile t-activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM3 9h18M9 21V9"/></svg></span><em>Activity</em></span>
+              <span class="dk"><span class="tile t-ideas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg></span><em>Ideas</em></span>
+              <span class="dk"><span class="tile t-goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 12l2 2 4-4"/></svg></span><em>Goals</em></span>
+              <span class="dk"><span class="tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span><em>Files</em></span>
+              <span class="dk"><span class="tile t-apps"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1ZM4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM14 17.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"/></svg></span><em>Apps</em></span>
+            </div>
+          </div>
+          <div class="ui" data-s="1" hidden>
+            <div class="top">
+              <div class="side"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+              <span class="chatpill glass"><img class="neddy" src="home/neddy-full.webp" alt=""><b>Neddy</b><span>Main chat<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></span>
+              <div class="side end"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span></div>
+            </div>
+            <div class="chat">
+              <div class="me-msg gloss blue">In a meeting. Move my 3:00 to tomorrow?</div>
+              <div class="ned-msg smoke">Tomorrow at 3:00 is free, and so is Priya. Want me to move it?</div>
+              <div class="me-msg gloss blue">Yes. And order the usual lunch for the team, for 12:30.</div>
+              <div class="approve smoke"><h3><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg>Move it, and order lunch?</h3><div class="mail"><div>Priya moves to tomorrow 3:00 and gets an update</div><p>Luigi’s · 4 × the usual · $62.40 · 12:30</p></div><div class="btns"><span class="gloss green">Approve</span><span class="plain">Not now</span></div></div>
+            </div>
+            <div class="composer glass"><div class="ph">Message…</div><div class="row"><span class="round soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></span><span class="gap"></span><span class="round gloss blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></span><span class="round soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg></span></div></div>
+            <div class="dock glass">
+              <span class="dk on"><span class="tile t-chat"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg></span><em>Chat</em></span>
+              <span class="dk"><span class="tile t-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg></span><em>Feed</em></span>
+              <span class="dk"><span class="tile t-spaces"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><em>Spaces</em></span>
+              <span class="dk"><span class="tile t-activity"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM3 9h18M9 21V9"/></svg></span><em>Activity</em></span>
+              <span class="dk"><span class="tile t-ideas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg></span><em>Ideas</em></span>
+              <span class="dk"><span class="tile t-goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 12l2 2 4-4"/></svg></span><em>Goals</em></span>
+              <span class="dk"><span class="tile t-files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></span><em>Files</em></span>
+              <span class="dk"><span class="tile t-apps"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1ZM4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1zM14 17.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"/></svg></span><em>Apps</em></span>
+            </div>
+          </div>
+          <div class="ui" data-s="2" hidden>
+            <div class="callhead"><span class="round glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span><div><h3>Talking with Neddy</h3><small><i></i>Live · 12:40</small></div></div>
+            <div class="call">
+              <div class="orb"><span class="ring"></span><span class="ring two"></span><span class="face"></span><img class="figure" src="home/neddy-full.webp" alt=""></div>
+              <p class="speaking">Neddy is listening</p>
+              <p class="caption smoke">You’re due at Dana’s at 10:30 for the counter samples. Want me to email her that you’re on the way?</p>
+              <div class="readback smoke"><h3><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>Waiting for your OK</h3><p>Email to Dana: “On my way, there by 10:30.”</p><small>Say “yes, approve.”</small></div>
+            </div>
+            <div class="controls"><span class="glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>Mute</span><span class="gloss red"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91M22 2 2 22"/></svg>Hang up</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="private" id="private" aria-labelledby="priv-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="priv-h">Private to you.</h2>
+      <p class="lead">Neddy is your agent, under your own account. What he knows about you is yours to see, change and delete, and he asks before anything goes out.</p>
+    </div>
+    <ul class="rules smoke rise">
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>By invite only.</b><span>Tap Request access, and the person who runs it lets you in.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>He asks before he acts.</b><span>Every email, booking and purchase shows up for your approval first.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Money and sign-in codes need a tap.</b><span>Your voice alone is never enough for those.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>What he remembers is in plain sight.</b><span>About you, people, trackers and meetings, all editable. Download everything or reset at any time.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Apps connect one at a time, with your sign-in.</b><span>Gmail, Outlook, your calendar. Each one you choose, and each one you can disconnect.</span></div></li>
+    </ul>
+  </div>
+</section>
+
+<section class="yours" id="yours" aria-labelledby="yours-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="yours-h">Make him yours.</h2>
+      <p class="lead">Pick his voice. Pick the scene behind everything, from a beach at sunset to the northern lights. Or just say it.</p>
+      <p class="say glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>“Change my backdrop to the city.”</p>
+      <div class="voices">
+        <span class="glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5zM16 9a5 5 0 0 1 0 6"/></svg>Sarah</span>
+        <span class="glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5zM16 9a5 5 0 0 1 0 6"/></svg>Theodore</span>
+        <span class="glass"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5zM16 9a5 5 0 0 1 0 6"/></svg>Olivia</span>
+        <span class="glass">and more</span>
+      </div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="row" data-slide="-0.12">
+      <div class="shot"><img src="backdrops/beach-sunset-thumb.jpg" alt="" loading="lazy"><span>Beach at sunset</span></div>
+      <div class="shot"><img src="backdrops/waves-close-thumb.jpg" alt="" loading="lazy"><span>Waves up close</span></div>
+      <div class="shot"><img src="backdrops/above-clouds-thumb.jpg" alt="" loading="lazy"><span>Above the clouds</span></div>
+      <div class="shot"><img src="backdrops/alps-thumb.jpg" alt="" loading="lazy"><span>Snowy peaks</span></div>
+      <div class="shot"><img src="backdrops/city-lights-thumb.jpg" alt="" loading="lazy"><span>City lights</span></div>
+      <div class="shot"><img src="backdrops/downtown-thumb.jpg" alt="" loading="lazy"><span>Downtown at night</span></div>
+      <div class="shot"><img src="backdrops/night-avenue-thumb.jpg" alt="" loading="lazy"><span>Busy street</span></div>
+      <div class="shot"><img src="backdrops/forest-rain-thumb.jpg" alt="" loading="lazy"><span>Rain in the forest</span></div>
+    </div>
+    <div class="row back" data-slide="0.12">
+      <div class="shot"><img src="backdrops/pine-drops-thumb.jpg" alt="" loading="lazy"><span>Raindrops on pine</span></div>
+      <div class="shot"><img src="backdrops/misty-forest-thumb.jpg" alt="" loading="lazy"><span>Misty forest</span></div>
+      <div class="shot"><img src="backdrops/forest-stream-thumb.jpg" alt="" loading="lazy"><span>Forest stream</span></div>
+      <div class="shot"><img src="backdrops/northern-lights-thumb.jpg" alt="" loading="lazy"><span>Northern lights</span></div>
+      <div class="shot"><img src="backdrops/aurora-dawn-thumb.jpg" alt="" loading="lazy"><span>Aurora at dawn</span></div>
+      <div class="shot"><img src="backdrops/starry-lake-thumb.jpg" alt="" loading="lazy"><span>Starry lake</span></div>
+      <div class="shot"><img src="backdrops/milky-way-thumb.jpg" alt="" loading="lazy"><span>Milky Way</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="close" aria-labelledby="close-h">
+  <div class="wrap">
+    <img class="figure rise" src="home/neddy-full.webp" alt="">
+    <h2 id="close-h" class="rise">Ask for your invite.</h2>
+    <p class="lead rise">Leave your name and email. When you’re in, you get a link. No password to remember, ever.</p>
+    <div class="cta-row rise"><a class="btn gloss blue" href="/?request">Request access</a><a class="btn soft" href="/help.html">Read the guide</a></div>
+  </div>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">
+    <span>Neddy is made by Neato Ventures.</span>
+    <span class="links"><a href="pricing.html">Pricing</a><a href="compare.html">Compare</a><a href="/">Sign in</a><a href="/help.html">Help</a></span>
+    <span>Built on OpenMuse, open source under the MIT license.</span>
+    <span>Backdrop scenes from Mixkit.</span>
+  </div>
+</footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  document.documentElement.classList.add('js');
+  var mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  function lessMotion() { return !!(mq && mq.matches); }
+
+  // The sea: the app's own filmed beach loop (Mixkit). Its still frame shows until it plays; it stays
+  // still when the device asks for less motion, and the browser pauses it in a hidden tab.
+  var sea = document.getElementById('sea');
+  var conn = navigator.connection, thrifty = !!(conn && conn.saveData) || (window.matchMedia && window.matchMedia('(prefers-reduced-data: reduce)').matches);
+  function tide() {
+    if (!sea) return;
+    if (lessMotion() || thrifty) { sea.pause(); sea.removeAttribute('autoplay'); return; }
+    var p = sea.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+  if (sea) {
+    if (mq && mq.addEventListener) mq.addEventListener('change', tide);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tide(); });
+    tide();
+  }
+
+  // Things rise into place the first time they come into view.
+  var rises = Array.prototype.slice.call(document.querySelectorAll('.rise'));
+  if ('IntersectionObserver' in window && !lessMotion()) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
+    rises.forEach((el) => { io.observe(el); });
+  } else {
+    rises.forEach((el) => { el.classList.add('in'); });
+  }
+
+  // Scroll: the hero drifts, the backdrop rows slide, and the pinned phone changes screens.
+  var drifts = Array.prototype.slice.call(document.querySelectorAll('.drift'));
+  var rows = Array.prototype.slice.call(document.querySelectorAll('.row[data-slide]'));
+  var pin = document.getElementById('everywhere');
+  var pinUis = pin ? Array.prototype.slice.call(pin.querySelectorAll('.ui[data-s]')) : [];
+  var pinSteps = pin ? Array.prototype.slice.call(pin.querySelectorAll('.step[data-step]')) : [];
+  var pinStep = 0, ticking = false;
+  var pinHint = document.getElementById('pinhint'), chosen = false;
+  function showStep(n) {
+    if (n === pinStep) return;
+    pinStep = n;
+    pinUis.forEach((ui) => { ui.hidden = Number(ui.getAttribute('data-s')) !== n; });
+    pinSteps.forEach((s) => {
+      var on = Number(s.getAttribute('data-step')) === n;
+      s.classList.toggle('on', on); s.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if (pinHint) pinHint.classList.toggle('done', n === 2 || chosen);
+    var now = document.getElementById('pinnow'), words = pinSteps[n] && pinSteps[n].querySelector('span');
+    if (now && words) now.textContent = words.textContent;
+  }
+  // On a phone, the pinned phone takes whatever height is left under the heading and the steps.
+  var pinCopy = pin ? pin.querySelector('.copy') : null, pinPhone = document.getElementById('pinphone');
+  function fitPin() {
+    if (!pinCopy || !pinPhone) return;
+    if (window.innerWidth >= 941 || window.innerHeight <= 740) { pinPhone.style.removeProperty('--ps'); return; }
+    var room = window.innerHeight - pinCopy.offsetHeight - 74 - 20 - 16;
+    pinPhone.style.setProperty('--ps', Math.max(0.34, Math.min(0.54, (room - 20) / 844)).toFixed(3));
+  }
+  // Tapping a step shows its screen, for keyboard users, fast scrollers and anyone with motion turned down.
+  pinSteps.forEach((s) => {
+    s.addEventListener('click', () => { chosen = true; showStep(Number(s.getAttribute('data-step'))); if (pinHint) pinHint.classList.add('done'); });
+  });
+  function onScroll() {
+    ticking = false;
+    var y = window.scrollY || window.pageYOffset, vh = window.innerHeight;
+    if (!lessMotion()) {
+      // Less drift on a phone, where the hero is stacked and the figure would slide into the next section.
+      const yd = Math.min(y, vh) * (window.innerWidth < 940 ? 0.35 : 1);
+      drifts.forEach((el) => { el.style.transform = 'translateY(' + (yd * Number(el.getAttribute('data-drift'))).toFixed(1) + 'px)'; });
+      rows.forEach((row) => {
+        var r = row.getBoundingClientRect();
+        var p = (vh - r.top) / (vh + r.height);
+        row.style.transform = 'translateX(' + ((p - 0.5) * Number(row.getAttribute('data-slide')) * vh).toFixed(1) + 'px)';
+      });
+    }
+    if (pin && pinUis.length === 3 && !lessMotion() && !chosen) {
+      const top = pin.getBoundingClientRect().top + y, span = pin.offsetHeight - vh;
+      const p2 = span > 0 ? (y - top) / span : 0;
+      showStep(p2 < 0.36 ? 0 : p2 < 0.7 ? 1 : 2);
+    }
+  }
+  function ask() { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }
+  window.addEventListener('scroll', ask, { passive: true });
+  window.addEventListener('resize', () => { fitPin(); ask(); });
+  fitPin();
+  if (mq && mq.addEventListener) mq.addEventListener('change', () => {
+    if (lessMotion()) { drifts.concat(rows).forEach((el) => { el.style.transform = ''; }); rises.forEach((el) => { el.classList.add('in'); }); }
+    ask();
+  });
+  onScroll();
+})();
+</script>
+</body>
+</html>

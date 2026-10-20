@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neddy · Compare</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="How Neddy compares with Meta Muse, ChatGPT, Grok and Gemini: price, what the plan counts, live calls, memory you can edit, approvals, meeting notes and privacy.">
+<meta name="theme-color" content="#151219">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Neddy · Compare">
+<meta property="og:description" content="Neddy next to Meta Muse, ChatGPT, Grok and Gemini, from their public pages.">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="neddy.css">
+<style>
+/* Compare: one wide glass table over the sea, scrollable sideways on a phone with the first column held. */
+.intro { padding-block: calc(96px + env(safe-area-inset-top, 0px)) 24px; text-align: center; }
+.intro .wrap { display: grid; justify-items: center; }
+.intro .lead { max-width: 42em; }
+.grid { padding-block: 16px 40px; }
+.table { border-radius: 24px; overflow: hidden; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.scroll:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+table { width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; font-size: 15px; }
+th, td { text-align: left; padding: 14px 16px; vertical-align: top; min-width: 150px; }
+th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; background: rgba(25, 20, 42, 0.6); min-width: 170px; font-weight: 700; }
+.grid .table { padding: 0; }
+thead th { font-size: 14px; font-weight: 800; border-bottom: 1px solid rgba(255, 255, 255, 0.16); vertical-align: bottom; }
+thead th.us { color: var(--peach); }
+thead th small { display: block; font-weight: 500; font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+tbody tr + tr td, tbody tr + tr th { border-top: 1px solid rgba(255, 255, 255, 0.1); }
+td.us { background: rgba(255, 217, 168, 0.08); }
+td small { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+.yes, .no, .part { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.yes .ic { color: #9dffc0; } .no .ic { color: rgba(255, 255, 255, 0.45); } .part .ic { color: var(--peach); }
+.yes .ic, .no .ic, .part .ic { width: 18px; height: 18px; }
+.honest { padding-block: 24px 48px; }
+.honest .wrap { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 40px; align-items: start; }
+.honest ul { margin: 0; padding: 8px 6px; list-style: none; border-radius: 24px; }
+.honest li { padding: 14px 18px; font-size: 16px; display: flex; gap: 12px; align-items: flex-start; }
+.honest li + li { border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.honest li .ic { color: var(--peach); margin-top: 3px; width: 20px; height: 20px; }
+.honest li span { color: var(--ink-2); }
+.honest li b { display: block; color: #fff; }
+.sources { padding-block: 8px 64px; }
+.sources .wrap { max-width: 760px; }
+.sources .box { border-radius: 24px; padding: 20px 24px; }
+.sources h2 { font-size: 22px; }
+.sources ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.sources a { color: #fff; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255, 255, 255, 0.4); }
+.sources a:hover { text-decoration-color: #fff; }
+.swipe { margin: 0; padding: 10px 16px 0; font-size: 13px; color: var(--ink-2); display: none; }
+.after { margin: 18px 0 0; display: flex; justify-content: center; }
+td::before { display: none; }
+@media (max-width: 980px) {
+  .intro { padding-block: calc(84px + env(safe-area-inset-top, 0px)) 16px; }
+  .honest .wrap { grid-template-columns: 1fr; gap: 20px; }
+  th, td { padding: 12px 12px; min-width: 132px; }
+  th:first-child, td:first-child { min-width: 136px; }
+  td::before { content: attr(data-col); display: block; font-size: 12px; color: var(--ink-3); margin-bottom: 2px; }
+  td.us::before { color: var(--peach); }
+}
+/* Narrower than the table: it scrolls, the held column goes opaque and the swipe line shows. */
+@media (max-width: 891px) {
+  .swipe { display: block; }
+  th:first-child, td:first-child { background: #19142a; box-shadow: 1px 0 0 rgba(255, 255, 255, 0.1); }
+}
+</style>
+</head>
+<body>
+<video id="sea" class="sea" autoplay muted loop playsinline preload="metadata" poster="backdrops/beach-sunset.jpg" aria-hidden="true" tabindex="-1"><source src="backdrops/beach-sunset.mp4" type="video/mp4"></video>
+<div class="scrim" aria-hidden="true"></div>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="bar">
+  <div class="glass">
+    <a class="brand" href="neddy.html" aria-label="Neddy, home page"><img src="home/neddy-full.webp" alt="">Neddy</a>
+    <nav aria-label="Site">
+      <a href="neddy.html#talk">What he does</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="compare.html" aria-current="page">Compare</a>
+    </nav>
+    <a class="soft" href="/">Sign in</a>
+    <a class="cta gloss blue" href="/?request">Request access</a>
+  </div>
+</header>
+
+<div class="page" id="top">
+<main id="main">
+
+<section class="intro" aria-labelledby="cmp-h">
+  <div class="wrap copy">
+    <h1 id="cmp-h">How Neddy compares.</h1>
+    <p class="lead">What each one costs, what the plan counts, and what it does for you. Taken from public pages, guides and reviews, read October 20, 2026. Where a page doesn’t say, we say so.</p>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="wrap">
+    <section class="table smoke" aria-label="Comparison table, scrolls sideways">
+      <p class="swipe">Swipe sideways to see every column.</p>
+      <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"><span class="sr-only">What is compared</span></th>
+            <th scope="col" class="us">Neddy<small>by Neato Ventures</small></th>
+            <th scope="col">Meta Muse<small>Meta</small></th>
+            <th scope="col">ChatGPT<small>OpenAI</small></th>
+            <th scope="col">Grok<small>xAI</small></th>
+            <th scope="col">Gemini<small>Google</small></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Price a month</th>
+            <td class="us" data-col="Neddy">$20 or $100</td>
+            <td data-col="Meta Muse">Power $20, Maximum $100<small>Free tier not mentioned in the sources we read</small></td>
+            <td data-col="ChatGPT">Go $8, Plus $20, Pro from $200<small>Free tier with limits</small></td>
+            <td data-col="Grok">SuperGrok $30, Heavy $300<small>Free tier with limits</small></td>
+            <td data-col="Gemini">AI Pro $19.99, AI Ultra from $99.99<small>Free tier with limits</small></td>
+          </tr>
+          <tr>
+            <th scope="row">What the plan counts</th>
+            <td class="us" data-col="Neddy">Call minutes, messages, meeting hours, jobs<small>Things you can picture</small></td>
+            <td data-col="Meta Muse">Tokens: 500M or 3B a week<small>A token is a fragment of a word</small></td>
+            <td data-col="ChatGPT">Limits by plan<small>Amounts not stated</small></td>
+            <td data-col="Grok">Daily limits<small>Including voice minutes a day</small></td>
+            <td data-col="Gemini">Higher limits than free<small>Amounts not stated</small></td>
+          </tr>
+          <tr>
+            <th scope="row">Talk to it live, both ways</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>In the browser, on a call that keeps going while you use the app; hands-free in the car</small></td>
+            <td data-col="Meta Muse"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Voice mode in the Muse app</small></td>
+            <td data-col="ChatGPT"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Voice mode; limits by plan</small></td>
+            <td data-col="Grok"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Voice mode and companions; minutes a day by plan</small></td>
+            <td data-col="Gemini"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Gemini Live</small></td>
+          </tr>
+          <tr>
+            <th scope="row">Does things for you</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Email, calendar, websites, bookings and errands, in the background too</small></td>
+            <td data-col="Meta Muse"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Research, websites, email, calendar, purchases; keeps working in the background</small></td>
+            <td data-col="ChatGPT"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>On paid plans</span><small>Agent mode, with limits per plan</small></td>
+            <td data-col="Grok"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
+            <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>On Ultra</span><small>Gemini Agent, US and English only; Tasks on Pro</small></td>
+          </tr>
+          <tr>
+            <th scope="row">Asks before it acts</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Always</span><small>Every email, booking and purchase waits for your OK; money and sign-in codes need a tap</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not stated</span><small>Public pages don’t say when it asks</small></td>
+            <td data-col="ChatGPT"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
+            <td data-col="Grok"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not stated</span></td>
+            <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not stated</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Memory you can see and edit</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>About you, people, trackers and meetings, each editable; every chat, call and meeting searchable</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Remembers</span><small>Keeps profiles of you and people you mention, updated hourly; editing not described</small></td>
+            <td data-col="ChatGPT"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Memory you can review or turn off in settings</small></td>
+            <td data-col="Grok"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Remembers</span><small>Memory across chats, described as beta</small></td>
+            <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Remembers</span><small>Personal Intelligence, early access, US only</small></td>
+          </tr>
+          <tr>
+            <th scope="row">Records in-person meetings</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Tap Record; summary, decisions, action items and every word with who said it</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
+            <td data-col="ChatGPT"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Some plans</span><small>Record mode in the desktop app</small></td>
+            <td data-col="Grok"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
+            <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Who runs it</th>
+            <td class="us" data-col="Neddy">A small team, by invite<small>Your own account on our servers; download or reset any time</small></td>
+            <td data-col="Meta Muse">Meta<small>US and Canada at launch</small></td>
+            <td data-col="ChatGPT">OpenAI</td>
+            <td data-col="Grok">xAI</td>
+            <td data-col="Gemini">Google</td>
+          </tr>
+          <tr>
+            <th scope="row">Pick the voice and the scene</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Voices to choose from and a backdrop behind everything, by voice too</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not stated</span></td>
+            <td data-col="ChatGPT"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Voices</span></td>
+            <td data-col="Grok"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Voices and companions</span></td>
+            <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Voices</span></td>
+          </tr>
+          <tr>
+            <th scope="row">The app’s code is published</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Built on OpenMuse, MIT license</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not published</span></td>
+            <td data-col="ChatGPT"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not published</span></td>
+            <td data-col="Grok"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not published</span></td>
+            <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not published</span></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+    <p class="after"><a class="btn soft" href="pricing.html">See Neddy’s plans</a></p>
+  </div>
+</section>
+
+<section class="honest" aria-labelledby="hon-h">
+  <div class="wrap">
+    <div class="copy rise">
+      <h2 id="hon-h">Where they’re ahead.</h2>
+      <p class="lead">We’d rather you knew. The big four have more people, more models and more countries. Here’s what that buys them, and what we do about it.</p>
+    </div>
+    <ul class="smoke rise">
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg><div><b>Their own models.</b><span>Neddy runs on the best models we can rent, and can switch when a better one appears. You’re never stuck with one lab.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg><div><b>Native phone apps.</b><span>Neddy runs in the browser and can be added to your home screen. There’s no store app yet.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg><div><b>Open sign-up.</b><span>Neddy is by invite while it’s small, so every person gets a real human behind the door.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg><div><b>Built-in integrations.</b><span>Neddy connects Gmail, Outlook, calendars, Drive, Dropbox, Spotify, Brex and more through a growing app directory, and can work on websites in his own browser.</span></div></li>
+    </ul>
+  </div>
+</section>
+
+<section class="sources" aria-labelledby="src-h">
+  <div class="wrap">
+    <div class="smoke box">
+    <h2 id="src-h">Sources</h2>
+    <ol>
+      <li>Meta Muse plans and token allowances: Meta Help Center via <a href="https://www.layer3labs.io/guides/meta-muse-pricing" rel="noopener">layer3labs.io</a> and <a href="https://www.toolcolumn.com/learn/meta-muse-usage-limits-by-plan" rel="noopener">toolcolumn.com</a>; memory and privacy: <a href="https://time.com/article/2026/10/06/meta-muse-ai-agent-privacy/" rel="noopener">TIME, October 6, 2026</a>; features: <a href="https://www.cnn.com/2026/09/23/tech/meta-muse-ai-agent" rel="noopener">CNN</a>, <a href="https://www.inc.com/aaron-mok/metas-muse-will-keep-working-for-you-after-you-leave-your-computer-heres-how-to-set-it-up/91410134" rel="noopener">Inc.</a></li>
+      <li>ChatGPT plans and features: <a href="https://www.cloudzero.com/blog/how-much-does-chatgpt-cost/" rel="noopener">CloudZero</a>, <a href="https://www.ai-toolbox.co/chatgpt-models/chatgpt-pricing" rel="noopener">AI Toolbox</a></li>
+      <li>Grok plans and features: <a href="https://www.cloudzero.com/blog/grok-pricing/" rel="noopener">CloudZero</a>, <a href="https://aitoolradar.io/guides/grok" rel="noopener">AI Tool Radar</a></li>
+      <li>Google AI plans and features: <a href="https://one.google.com/about/google-ai-plans/" rel="noopener">Google One</a>, <a href="https://costbench.com/software/ai-chatbots/gemini/" rel="noopener">Costbench</a></li>
+    </ol>
+    <p class="note">Prices and features change. If something here is out of date, tell us at <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> and we’ll fix it.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">
+    <span>Neddy is made by Neato Ventures.</span>
+    <span class="links"><a href="neddy.html">Home</a><a href="pricing.html">Pricing</a><a href="/">Sign in</a><a href="/help.html">Help</a></span>
+    <span>Built on OpenMuse, open source under the MIT license.</span>
+    <span>Backdrop scenes from Mixkit.</span>
+  </div>
+</footer>
+</div>
+<script src="neddy-site.js"></script>
+</body>
+</html>
