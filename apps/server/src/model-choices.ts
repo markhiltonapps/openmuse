@@ -113,7 +113,7 @@ export class ModelChoices {
   private readonly hasKey: () => boolean;
   constructor(
     private readonly db: Store,
-    private readonly server: { model?: string; workerModel?: string },
+    private readonly server: { model?: string; workerModel?: string; chatModel?: string },
     private readonly options: {
       /** OpenRouter is set up; OPENROUTER_API_KEY by default. */
       hasKey?: () => boolean;
@@ -136,9 +136,14 @@ export class ModelChoices {
   get ready() {
     return this.hasKey();
   }
-  /** The server's own model for a job: MODEL for the chat, WORKER_MODEL (or MODEL) otherwise. */
+  /**
+   * The server's own model for a job. The chat uses CHAT_MODEL, else the quick WORKER_MODEL (the
+   * leaner setup, owner 2026-10-20), else MODEL; every other job uses WORKER_MODEL, else MODEL.
+   */
   serverModel(job: ModelJob) {
-    return job === "chat" ? this.server.model : (this.server.workerModel ?? this.server.model);
+    return job === "chat"
+      ? (this.server.chatModel ?? this.server.workerModel ?? this.server.model)
+      : (this.server.workerModel ?? this.server.model);
   }
   /** The admin's choice, else the recommendation (which waits for the key). */
   choice(job: ModelJob): ModelChoice {

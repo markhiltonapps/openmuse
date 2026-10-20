@@ -116,3 +116,57 @@ Known issues / later
 - The site is at /neddy.html, /pricing.html and /compare.html; the app still opens at "/".
   Pointing a domain (heyneddy.com) at the site means swapping the root later.
 - The app still calls itself Neato_Muse; the rename is a separate job.
+
+"Okay, do all three" (owner, after "Muse looks like a better deal, maybe our price is too high")
+1. Leaner chat
+- Where the tokens go (measured with the test fixtures): a chat call is ~26,000 tokens before
+  any conversation (7,000 of instructions, 19,000 of tool definitions, 89 tools). The rest is
+  the person's own context and the conversation.
+- The chat now runs on the quick worker model (Haiku 4.5 on Railway) unless CHAT_MODEL names
+  another: `ModelChoices.serverModel` (chat: CHAT_MODEL, else WORKER_MODEL, else MODEL), with
+  `config.chatModel` and the same rule in `service.modelFor`'s fallback. First attempt edited
+  only modelFor, which the real server never reaches (agent.models is always set): caught by
+  reading ModelChoices before trusting the change.
+- The conversation kept word for word is now 40,000 characters, summarized sooner (chat-summary
+  LIMIT 40,000, TAIL 20,000; was 100,000 and 50,000): ~10,000 tokens instead of up to ~25,000.
+  Together: ~45,000 tokens a call (was ~70,000) at half the price per token, about 0.32 of
+  before, so a message goes from ~4.8¢ blended to ~1.5¢. THIS IS A PROJECTION; confirm from
+  Railway's "Model call: chat" lines after the deploy.
+- Tradeoff, told to the owner: Haiku is a step down from Sonnet for hard, many-tool requests.
+  To put the chat back: set CHAT_MODEL (e.g. the Sonnet name) on the api service in Railway and
+  choose Deploy. The Models card still overrides everything once OpenRouter is set up.
+- Tests: openrouter.test.ts's picks test now expects the chat on the worker model; a new test
+  covers CHAT_MODEL, the worker fallback and the main-model fallback. chat-summary tests pass at
+  the new limits. Help (admin-models), .env.example and the README say how the chat's model is
+  chosen.
+2. Pricing ladder and 3. privacy story (pricing.html)
+- Three plans: Starter $10 (20 minutes, 500 messages, 1 meeting hour, 2 jobs), Neddy $20
+  (60 / 1,000 / 3 / 5), Neddy Max $100 (300 / 5,000 / 15 / 25: exactly five times Neddy on every
+  count). Chat is "generous" with a real ceiling; the page never says "unlimited". Extras as
+  before (12¢ a minute in 30s, 8¢ a message in 50s, 80¢ an hour, $1.50 a job). compare.html's
+  Neddy price cell says "$10, $20 or $100".
+- The Muse table is gone from the pricing page. The closing section is "Built to be yours."
+  (by invite, he asks first, memory you can read, a person who answers) plus one sourced line
+  on Muse's hourly profiles (TIME, Oct 6, 2026) and a link to the full comparison.
+- docs/pricing_math.md rewritten: margins by usage profile (light 73–97%, typical 69% on $20 at
+  ten messages a day, heavy Max 84%), ceilings (13–17% before fees, never a loss), card fees,
+  extras checks. Honest finding: an 80% margin on the $20 plan holds at about five messages a day,
+  not ten; I had assumed 150 a month as "typical". There is no real usage data yet.
+- Design division review of the three-plan page: copy reviewer (three passes) and usability
+  reviewer signed off; the visual reviewer's pass is recorded below once it lands. Copy fixes
+  applied: no promise of a free trial or of being told before a charge (owner decisions, not
+  mine); "billing isn't switched on yet" in the note and first question; "asks first" qualified
+  everywhere ("unless you've said a kind of thing is always fine; purchases always ask");
+  every count said "per month"; phone-only "plans at a glance" card.
+- Visual reviewer: first pass said no (three must-fixes), second pass said yes. Fixed: the
+  mailto links in the Q cards and rules now look like links (underline); the phone "plans at a
+  glance" rows have an inset keyboard focus ring (the card's overflow clipped the outer one); a
+  fuller halo behind the two tall text blocks and a shorter Meta paragraph (a link measured
+  4.0:1 over the bright horizon, now 6:1+). Also: prices line up to the pixel in the three-up
+  row, "Everything else is included" replaces the bold feature run-on, a "›" cue on glance rows,
+  glance and cards share a 640px cap on tablets. No Help change (the site isn't an app screen).
+  All three reviewers (copy, usability, visual) have signed off.
+- Checks on the final tree: Biome (error level) clean, typecheck and the worker's tsc clean,
+  549 of 549 tests pass (run with OPENROUTER_API_KEY removed).
+Not built (needed before selling): enforcing the plans and the message and job caps in the
+server, billing, and the "you've reached the edge" moment for messages and jobs.

@@ -4,11 +4,14 @@ import type { Store } from "./db.ts";
 /**
  * Long chats: the model sees a summary of the older part plus the recent messages word for word,
  * like Muse's compacted history. The summary is rebuilt only when the unsummarized part grows past
- * LIMIT, so it costs one small background-model call every few dozen messages.
+ * LIMIT, so it costs one small background-model call every dozen or two messages. The limits are
+ * in characters (about four a token): 40,000 keeps the word-for-word part under ~10,000 tokens,
+ * which with the instructions, the tools and the person's context makes a message about 45,000
+ * tokens instead of 70,000 (owner, 2026-10-20: the leaner chat setup).
  */
-export const LIMIT = 100_000;
+export const LIMIT = 40_000;
 /** About how much recent conversation stays word for word after a summary is made. */
-export const TAIL = 50_000;
+export const TAIL = 20_000;
 /** Recent messages always kept word for word. */
 const MIN_TAIL = 12;
 

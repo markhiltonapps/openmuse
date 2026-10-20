@@ -1986,6 +1986,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "A model is the AI that does the work. Different models cost different amounts, and any model costs more the harder it thinks.",
+      "Until OpenRouter is set up, the chat runs on the server’s quick Claude model (the same one that does background jobs), which keeps each message cheap; to put the chat back on the main model, add **CHAT_MODEL** with that model’s name under **Variables** on the api service in Railway and choose **Deploy**.",
       "Recommended: **GPT-6.1 Sol** thinking hard for chat, **GPT-6.1 Sol** with some thinking for background jobs, the cheap, fast **DeepSeek V4.1 Flash** for simple jobs (summaries of long chats, Ideas, bookings found in emails), and the server’s quick Claude for look-ups during calls. They’re picked for the best results per dollar.",
       "These run through OpenRouter, one account and one bill for models from many companies. Create a key at openrouter.ai and add some credit there. Then add the key as **OPENROUTER_API_KEY** under **Variables** on the api service in Railway, and choose **Deploy** on the banner. Until then everything uses Claude.",
       "**Another OpenRouter model** takes a model ID from its page at openrouter.ai. It’s checked with OpenRouter before it’s saved, and one that can’t use the app’s tools can’t do chat or background jobs.",

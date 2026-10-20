@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Neddy · Pricing</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Two plans for Neddy, your own AI helper: $20 a month or $100 a month, counted in call minutes, messages and meeting hours you can picture.">
+<meta name="description" content="Neddy plans at $10, $20 or $100 a month, counted in call minutes, messages, meeting hours and background jobs you can picture. Early access by invite.">
 <meta name="theme-color" content="#151219">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Neddy · Pricing">
-<meta property="og:description" content="$20 or $100 a month, counted in minutes, messages and meetings. Early access by invite.">
+<meta property="og:description" content="$10, $20 or $100 a month, counted in call minutes, messages, meeting hours and jobs. Early access by invite.">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,13 +17,25 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="neddy.css">
 <style>
-/* Pricing: the same sea, two glass plan cards side by side, then what counts and what happens over the cap. */
+/* Pricing: the same sea, three glass plan cards side by side, then what counts and what happens over the cap. */
 .intro { padding-block: calc(96px + env(safe-area-inset-top, 0px)) 24px; text-align: center; }
 .intro .wrap { display: grid; justify-items: center; }
 .intro .lead { max-width: 40em; }
+.glance-sec { display: none; padding-block: 0 8px; }
+.glance { border-radius: 24px; overflow: hidden; }
+.glance a { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 14px 18px; color: #fff; }
+.glance a + a { border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.glance a:hover { background: rgba(255, 255, 255, 0.06); }
+.glance b { font-size: 17px; font-weight: 800; }
+.glance em { font-style: normal; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.glance span { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0 14px; font-size: 14px; color: var(--ink-2); }
+.glance i { font-style: normal; white-space: nowrap; }
+.glance em::after { content: "›" / ""; margin-left: 10px; font-weight: 400; color: var(--ink-2); }
+.glance a:focus-visible { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 5px rgba(94, 164, 255, 0.85); }
+.plan { scroll-margin-top: 84px; }
 .plans { padding-block: 24px 48px; }
-.plans .wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
-.plan { border-radius: 30px; padding: 26px 26px 24px; display: flex; flex-direction: column; gap: 18px; position: relative; }
+.plans .wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.plan { border-radius: 30px; padding: 26px 24px 24px; display: flex; flex-direction: column; gap: 18px; position: relative; }
 .plan .tag { position: absolute; top: -14px; left: 26px; padding: 5px 12px; border-radius: 14px; font-size: 13px; font-weight: 800; color: #3b1d00; }
 .plan h2 { font-size: 26px; margin: 0; }
 .plan .for { color: var(--ink-2); font-size: 15px; margin-top: 4px; }
@@ -51,15 +63,26 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
 .q { border-radius: 24px; padding: 18px 20px; }
 .q h3 { font-size: 18px; margin-bottom: 8px; text-shadow: none; letter-spacing: -0.02em; }
 .q p { color: var(--ink-2); font-size: 15px; }
+.q a, .rules a { color: #fff; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255, 255, 255, 0.4); }
+.q a:hover, .rules a:hover { text-decoration-color: #fff; }
 .muse { padding-block: 24px 64px; }
 .muse .wrap { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 40px; align-items: start; }
-.foot-note { font-size: 14px; color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 10px rgba(30, 10, 40, 0.6); margin-top: 12px; }
-.foot-note a { color: #fff; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255, 255, 255, 0.4); }
+/* The two tall text blocks get a fuller halo so their last lines stay readable over the bright horizon. */
+.counts .copy::before, .muse .copy::before { background: radial-gradient(ellipse 110% 90% at 50% 50%, rgba(16, 10, 28, 0.7), rgba(16, 10, 28, 0.6) 70%, rgba(16, 10, 28, 0) 100%); }
+/* Cards in a row: subtitles reserve two lines so the three prices line up. */
+@media (min-width: 941px) {
+  .plan .for { min-height: 3.1em; }
+}
 @media (max-width: 940px) {
   .plans .wrap, .counts .wrap, .qa .wrap, .muse .wrap { grid-template-columns: 1fr; gap: 20px; }
   .intro { padding-block: calc(84px + env(safe-area-inset-top, 0px)) 16px; }
+  .glance-sec { display: block; }
   .price b { font-size: 46px; }
   .table { overflow-x: auto; }
+  .plan:nth-child(3) { margin-top: 12px; }
+}
+@media (min-width: 641px) and (max-width: 940px) {
+  .plans .wrap, .glance-sec .wrap { max-width: 640px; margin-inline: auto; }
 }
 </style>
 </head>
@@ -86,38 +109,60 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
 
 <section class="intro" aria-labelledby="pr-h">
   <div class="wrap copy">
-    <h1 id="pr-h">Pay for what you do.</h1>
-    <p class="lead">Two plans. $20 a month for one busy person, or $100 for five times the room. Both count what you can picture, like minutes on a call, messages in the chat and hours of meetings.</p>
-    <p class="note">Early access is by invite. You pick a plan once you’re in; until then there’s nothing to pay.</p>
+    <h1 id="pr-h">Pick the room you need.</h1>
+    <p class="lead">Three plans. $10 a month to start, $20 for daily use, $100 for five times the room of the $20 plan. Chat is generous on all of them, and every plan counts four things: call minutes, messages, hours of recorded meetings and background jobs.</p>
+    <p class="note">Early access is by invite, and billing isn’t switched on yet. You pick a plan once you’re in.</p>
+  </div>
+</section>
+
+<section class="glance-sec" aria-label="The three plans at a glance">
+  <div class="wrap">
+    <nav class="glance smoke" aria-label="Plans">
+      <a href="#plan-starter"><b>Starter</b><em>$10 a month</em><span><i>20 call minutes</i><i>500 messages</i><i>1 hour of meetings</i><i>2 jobs</i></span></a>
+      <a href="#plan-neddy"><b>Neddy</b><em>$20 a month</em><span><i>60 call minutes</i><i>1,000 messages</i><i>3 hours of meetings</i><i>5 jobs</i></span></a>
+      <a href="#plan-max"><b>Neddy Max</b><em>$100 a month</em><span><i>300 call minutes</i><i>5,000 messages</i><i>15 hours of meetings</i><i>25 jobs</i></span></a>
+    </nav>
   </div>
 </section>
 
 <section class="plans" aria-label="Plans">
   <div class="wrap">
-    <article class="plan smoke" aria-labelledby="p1">
+    <article class="plan smoke" id="plan-starter" aria-labelledby="p0">
+      <div><h2 id="p0">Starter</h2><p class="for">For getting to know him.</p></div>
+      <p class="price"><b>$10</b><span>a month</span></p>
+      <ul class="inc">
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>20 minutes of calls</b><small>A few short calls, talking in the browser.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>500 messages</b><small>Typed, with pictures and files. About 17 a day.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>1 hour of meetings</b><small>Recorded, with summary, decisions, action items and every word.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>2 background jobs</b><small>Research, errands and bookings he runs while you’re away.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything else is included</b><small>Memory, apps, Feed, Spaces, reminders, a choice of voice and backdrop.</small></div></li>
+      </ul>
+      <a class="btn gloss blue" href="/?request" aria-label="Request access, Starter plan">Request access</a>
+    </article>
+    <article class="plan smoke" id="plan-neddy" aria-labelledby="p1">
       <div><h2 id="p1">Neddy</h2><p class="for">For one busy person.</p></div>
       <p class="price"><b>$20</b><span>a month</span></p>
       <ul class="inc">
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>60 minutes of calls</b><small>Two-way, in the browser, hands-free in the car.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>150 messages</b><small>Typed, with pictures and files.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>3 hours of recorded meetings</b><small>Summary, decisions, action items, every word.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>60 minutes of calls</b><small>About two minutes a day, hands-free in the car.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>1,000 messages</b><small>Typed, with pictures and files. About 33 a day.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>3 hours of meetings</b><small>Recorded, with summary, decisions, action items and every word.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>5 background jobs</b><small>Research, errands and bookings he runs while you’re away.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Memory, apps, Feed, Spaces, reminders, your voice and backdrop</b><small>Included in every plan.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything else is included</b><small>Memory, apps, Feed, Spaces, reminders, a choice of voice and backdrop.</small></div></li>
       </ul>
-      <a class="btn gloss blue" href="/?request">Request access</a>
+      <a class="btn gloss blue" href="/?request" aria-label="Request access, Neddy plan">Request access</a>
     </article>
-    <article class="plan smoke" aria-labelledby="p2">
-      <span class="tag gloss amber">Five times the room</span>
+    <article class="plan smoke" id="plan-max" aria-labelledby="p2">
+      <span class="tag gloss amber">Five times Neddy</span>
       <div><h2 id="p2">Neddy Max</h2><p class="for">For someone who runs a household, a business, or both.</p></div>
       <p class="price"><b>$100</b><span>a month</span></p>
       <ul class="inc">
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>300 minutes of calls</b><small>Ten minutes a day.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>750 messages</b><small>Twenty-five a day.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>15 hours of recorded meetings</b><small>About three and a half hours a week, written up as soon as it ends.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>25 background jobs</b><small>Hand him the whole errand list.</small></div></li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything in Neddy</b><small>Memory, apps, Feed, Spaces, reminders, your choice of voice and backdrop.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>300 minutes of calls</b><small>About ten minutes a day.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>5,000 messages</b><small>About 167 a day.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>15 hours of meetings</b><small>About three and a half hours a week.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>25 background jobs</b><small>Room for a long list of errands.</small></div></li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything in the Neddy plan</b><small>Memory, apps, Feed, Spaces, reminders, your choice of voice and backdrop.</small></div></li>
       </ul>
-      <a class="btn gloss blue" href="/?request">Request access</a>
+      <a class="btn gloss blue" href="/?request" aria-label="Request access, Neddy Max plan">Request access</a>
     </article>
   </div>
 </section>
@@ -125,9 +170,9 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
 <section class="counts" aria-labelledby="counts-h">
   <div class="wrap">
     <div class="copy rise">
-      <h2 id="counts-h">What counts, and what happens at the edge.</h2>
-      <p class="lead">A minute is a minute on a live call, silence included. A message is one thing you send, however long his answer. A meeting hour is recording time. A job is one errand you hand him, however many sites he visits.</p>
-      <p class="lead" style="margin-top: 14px">When you reach a cap, Neddy says so, out loud if you’re on a call. Run out of call minutes and you can keep typing. Ask us for the bigger plan or the extras below. What you’ve stored stays yours to read.</p>
+      <h2 id="counts-h">What counts, and what happens at the limit.</h2>
+      <p class="lead">Everything is counted per month. A minute is a minute on a live call, silence included. A message is one thing you send, however long his answer. Chat is generous, and it has a ceiling, so no month surprises either of us. A meeting hour is recording time. A job is one errand you hand him, however many sites he visits.</p>
+      <p class="lead" style="margin-top: 14px">When you reach a limit, Neddy tells you. If you run out of call minutes, you can keep typing. For more room, email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> about the next plan or the extras in the table. Extras and upgrades start when billing does.</p>
     </div>
     <div class="table smoke rise">
       <table>
@@ -143,35 +188,28 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
   </div>
 </section>
 
-<section class="qa" aria-label="Common questions">
+<section class="qa" aria-labelledby="qa-h">
+  <h2 id="qa-h" class="sr-only">Questions</h2>
   <div class="wrap">
-    <div class="q smoke rise"><h3>Do unused minutes roll over?</h3><p>No. Each month starts fresh. Start with the smaller one and move up when he says you’ve reached the edge.</p></div>
-    <div class="q smoke rise"><h3>Can I change or cancel?</h3><p>Yes. Say it to Neddy, or email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a>, and we’ll change or stop it. What you’ve stored stays until you download or delete it.</p></div>
-    <div class="q smoke rise"><h3>Is there a free trial?</h3><p>No trial. There’s nothing to pay until you’re in and choose a plan, and early access is by invite.</p></div>
+    <div class="q smoke rise"><h3>Can I sign up and pay today?</h3><p>Not yet. Neddy is invite-only and billing isn’t switched on. Request access to ask for an invite.</p></div>
+    <div class="q smoke rise"><h3>Does anything roll over?</h3><p>No. Unused minutes, messages, meeting hours and jobs don’t carry into the next month. If you run short, there are extras, or you can move up a plan.</p></div>
+    <div class="q smoke rise"><h3>Can I change or cancel?</h3><p>Yes, once billing starts. Email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> and we’ll change or stop it. You can download your data first.</p></div>
   </div>
 </section>
 
 <section class="muse" aria-labelledby="muse-h">
   <div class="wrap">
     <div class="copy rise">
-      <h2 id="muse-h">Next to Meta Muse.</h2>
-      <p class="lead">Muse sells tokens, 500 million a week on Power and 3 billion on Maximum. A token is a fragment of a word, and everything the agent reads and writes counts. A message like ours is about 70,000 tokens, so 500 million a week is roughly 7,000 messages, and for typed chat Muse is effectively unlimited. Neddy’s $20 plan gives you 150 messages a month. We won’t pretend that’s more.</p>
-      <p class="lead" style="margin-top: 14px">What the same $20 buys with Neddy that Muse’s pages don’t list: an hour of live calls, three hours of recorded meetings with notes, five errands he runs for you in the background, memory you can read and change, and a person at <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> who answers when you write.</p>
-      <p class="foot-note">Muse prices as reported from Meta’s help pages by third-party guides, read October 20, 2026. <a href="compare.html">See the full comparison.</a></p>
+      <h2 id="muse-h">Built to be yours.</h2>
+      <p class="lead">Neddy is by invite, you get your own account, and he asks before anything goes out, unless you’ve said that kind of thing is always fine. When you write to <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a>, a person answers.</p>
+      <p class="lead" style="margin-top: 14px"><a href="https://time.com/article/2026/10/06/meta-muse-ai-agent-privacy/" rel="noopener">TIME</a> reported on October 6, 2026 that Meta’s Muse updates profiles of you and the people mentioned in the chats, messages and emails it reads, every hour. Neddy’s notes sit in places you can read, edit and download. <a href="compare.html">See the full comparison.</a></p>
     </div>
-    <div class="table smoke rise">
-      <table>
-        <thead><tr><th scope="col">For $20 a month</th><th scope="col">Neddy</th><th scope="col">Muse Power</th></tr></thead>
-        <tbody>
-          <tr><td><b>Typed chat</b></td><td>150 messages</td><td>Effectively unlimited<small>500M tokens a week</small></td></tr>
-          <tr><td><b>Live calls</b></td><td>60 minutes</td><td>Voice mode, from the same tokens<small>Minutes not stated</small></td></tr>
-          <tr><td><b>Recorded meetings</b></td><td>3 hours, with notes</td><td>Not described</td></tr>
-          <tr><td><b>Errands in the background</b></td><td>5 jobs</td><td>Yes<small>From the same tokens</small></td></tr>
-          <tr><td><b>Memory you can read and change</b></td><td>Yes</td><td>Remembers<small>Editing not described</small></td></tr>
-          <tr><td><b>Asks before it acts</b></td><td>Always</td><td>Not stated</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <ul class="rules smoke rise">
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>By invite only.</b><span>A real person lets you in.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>He asks first.</b><span>Emails, bookings and purchases wait for your OK, unless you’ve said a kind of thing is always fine. Purchases always ask.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Memory you can read.</b><span>About you, people, trackers and meetings, each one editable, all of it downloadable.</span></div></li>
+      <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>A person who answers.</b><span>Questions about your plan, a bill or anything that went wrong get a reply from a person at <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a>.</span></div></li>
+    </ul>
   </div>
 </section>
 

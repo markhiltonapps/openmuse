@@ -1455,13 +1455,17 @@ export class AgentService {
       voice?: string,
     ) => Promise<{ listening: true; voice: string } | { error: string }>;
   };
-  /** What a call for this job uses: the Models card's choice, or the server's own model. */
+  /**
+   * What a call for this job uses: the Models card's choice, or the server's own model. The chat
+   * runs on CHAT_MODEL, else the quick worker model (the leaner setup), else MODEL.
+   */
   modelFor(job: ModelJob): CallPlan {
     return (
       this.models?.plan(job) ?? {
         model:
-          (job === "chat" ? this.config.model : (this.config.workerModel ?? this.config.model)) ??
-          "",
+          (job === "chat"
+            ? (this.config.chatModel ?? this.config.workerModel ?? this.config.model)
+            : (this.config.workerModel ?? this.config.model)) ?? "",
       }
     );
   }

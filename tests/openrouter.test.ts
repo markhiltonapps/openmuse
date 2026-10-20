@@ -250,6 +250,26 @@ test("a chat reply OpenRouter can't start (out of credit) is answered by the ser
   );
 });
 
+test("the chat runs on CHAT_MODEL, else the quick worker model, else the main model", async () => {
+  const sonnet = "anthropic/claude-sonnet-5";
+  const haiku = "anthropic/claude-haiku-4-5-20251001";
+  const plan = (server: { model?: string; workerModel?: string; chatModel?: string }) =>
+    new ModelChoices(db, server, { hasKey: () => false });
+  // The leaner setup: with a quick worker model, the chat uses it, and the main model stays
+  // available to anyone who sets CHAT_MODEL to it.
+  assert.equal(plan({ model: sonnet, workerModel: haiku }).plan("chat").model, haiku);
+  assert.equal(
+    plan({ model: sonnet, workerModel: haiku, chatModel: sonnet }).plan("chat").model,
+    sonnet,
+  );
+  // Without a worker model there is nothing quicker to use: the chat keeps the main model.
+  assert.equal(plan({ model: sonnet }).plan("chat").model, sonnet);
+  // Nothing else follows CHAT_MODEL: jobs, simple jobs and look-ups keep the worker model.
+  const both = plan({ model: sonnet, workerModel: haiku, chatModel: sonnet });
+  for (const job of ["background", "simple", "voice"] as const)
+    assert.equal(both.plan(job).model, haiku);
+});
+
 test("each job uses the picks once OpenRouter is set up, and the admin's choice after that", async (t) => {
   await fakeOpenRouter(t);
   let key = false;
@@ -259,9 +279,9 @@ test("each job uses the picks once OpenRouter is set up, and the admin's choice 
     { model: "anthropic/claude-sonnet-5", workerModel: "anthropic/claude-haiku-4-5-20251001" },
     { hasKey: () => key, onPrice: (model, price) => prices.push([model, price]) },
   ).load();
-  // No key: everything stays on the server's Claude models, as before, and the card shows the
-  // picks that start once the key is there.
-  assert.deepEqual(choices.plan("chat"), { model: "anthropic/claude-sonnet-5" });
+  // No key: everything stays on the server's Claude models, as before (the chat on the quick
+  // worker model, the leaner setup), and the card shows the picks that start once the key is there.
+  assert.deepEqual(choices.plan("chat"), { model: "anthropic/claude-haiku-4-5-20251001" });
   assert.deepEqual(choices.plan("simple"), { model: "anthropic/claude-haiku-4-5-20251001" });
   assert.equal(choices.choice("chat").model, RECOMMENDED.chat.model);
   key = true;
@@ -270,7 +290,7 @@ test("each job uses the picks once OpenRouter is set up, and the admin's choice 
     effort: "high",
     maxTokens: OUTPUT_LIMITS.chat,
     contextLimit: CONTEXT_LIMIT,
-    fallback: "anthropic/claude-sonnet-5",
+    fallback: "anthropic/claude-haiku-4-5-20251001",
     job: "chat",
   });
   assert.equal(choices.plan("background").effort, "medium");

@@ -428,3 +428,20 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   hidden counts as a pause there. Coming back can fire two events (the track's `unmute` and
   `visibilitychange`): guard the resume so only one new part starts, and send part lists with
   `Array.from` (a hole from a skipped index becomes `null` in JSON and fails validation).
+- **Which model "the server's model" is:** on the real server `agent.models` (ModelChoices) is
+  always set, so `ModelChoices.serverModel` decides it; `service.modelFor`'s own fallback only runs
+  without it (tests). A change to "which model the chat uses" belongs in `serverModel` (and is
+  mirrored in the fallback). The chat runs on CHAT_MODEL, else WORKER_MODEL (the quick Claude),
+  else MODEL (owner, 2026-10-20: the leaner chat); every other job ignores CHAT_MODEL.
+- **A chat call is ~26,000 tokens before the person says anything:** ~7,000 of instructions and
+  ~19,000 of tool definitions (89 tools). Measure it by running `ConversationAgent` against
+  `modelFixture` and sizing `body.instructions` and `body.tools` (a throwaway `.mts` inside
+  `scripts/`, so packages resolve; delete it after). The conversation is the part you can trim:
+  `chat-summary.ts` LIMIT/TAIL are in characters (about four a token).
+- **The site's local server:** `python3 -m http.server 8787 --directory apps/mobile/public`
+  serves neddy.html, pricing.html and compare.html for screenshots; it dies with the container,
+  so check it answers before trusting a screenshot (a stale page looks like a failed edit).
+- **Pricing claims need a basis:** margins on the pricing page come from `docs/pricing_math.md`.
+  Per-message costs are projections until Railway's "Model call: chat" lines confirm them;
+  "typical use" is an assumption until real per-person usage exists. Never say "unlimited" for a
+  number with a ceiling.

@@ -1,87 +1,109 @@
-# Pricing math: an 80% margin on the $20 and $100 plans
+# Pricing math: the $10 / $20 / $100 ladder
 
-Written 2026-10-20. The owner wants plans like Meta Muse's (Power $20, Maximum $100) that are a better deal, with caps that keep at least an 80% gross margin on usage. So usage may cost at most $4 a month on the $20 plan and $20 on the $100 plan. Fixed costs (Railway, CopilotKit Cloud, domains) come out of the remaining 80%.
+Rewritten 2026-10-20 after the owner chose to market on privacy and generous chat rather than
+compare tokens with Meta Muse. Targets: at least an 80% margin on what people typically use, and
+never a loss at the ceilings. Fixed costs (Railway, CopilotKit Cloud, domains) and card fees come
+out of what is left.
 
-## What each thing costs us (measured on Railway, Oct 2026)
+## What each thing costs us
 
-| Thing | Cost today | With the leaner chat setup | Notes |
+| Thing | Cost | Basis |
+|---|---|---|
+| Call minute (our own voice) | 2¢ | Measured 1.6¢ typical, 1.9¢ chatty; plan on 2¢. OpenAI's voice is 5¢ and isn't offered on these plans. |
+| Chat message, before | 4.8¢ blended (2¢ follow-up, 8¢ after 5 quiet minutes, 18¢ after an hour) | Measured on Railway on Sonnet 5 with ~70k tokens a call, Oct 19–20. |
+| Chat message, now | **about 1.5¢ blended** (0.65¢ follow-up, 2.6¢, 5.8¢) | A projection, not a measurement: the same mix scaled by price (Haiku 4.5 is half of Sonnet 5 per token) and size (~45k tokens a call instead of ~70k), 0.5 × 0.64 = 0.32. **Check it against Railway's "Model call: chat" lines after the deploy.** |
+| Recorded meeting, per hour | 12¢ | Soniox 10¢ + notes ~1¢. |
+| Background job | 15¢ | 10 to 20 Haiku steps plus a few web searches at 1¢ each. |
+| Card fees | 2.9% + 30¢ a charge | $0.59 on $10, $0.88 on $20, $3.20 on $100. Not yet in the margins below. |
+| CopilotKit Cloud | unknown per thread | Read the first invoice after a month of real use. |
+
+### Where the chat's tokens went (measured with the test fixtures, Oct 20)
+
+A chat call carries about 26,000 tokens before any conversation: 7,000 of instructions and 19,000
+of tool definitions (89 tools; the largest are show_in_app, save_week_plan and
+update_space_playbook at ~1,250 each). The rest is the person's own context (memories, people,
+meetings, summaries) and the conversation. Two changes cut it: the chat model went from Sonnet 5
+to the quick worker model (Haiku 4.5), and the word-for-word part of a long chat went from
+100,000 characters to 40,000 (summarized sooner: LIMIT 40,000, TAIL 20,000 in chat-summary.ts),
+which takes the conversation share from up to ~25,000 tokens to ~10,000. That makes ~45,000 a call
+for a person with a lot of context. Pruning the tool descriptions would save a few thousand more
+tokens; not done, because it risks the agent picking the wrong tool.
+
+Haiku 4.5 only caches prompts of 4,096 tokens or more; these are far over that.
+
+## The ladder
+
+| | Starter $10 | Neddy $20 | Neddy Max $100 |
 |---|---|---|---|
-| Call minute (our own voice) | 1.6¢, plan on 2¢ | 2¢ | Soniox 0.2¢ + Inworld ~0.5¢ + Haiku ~0.4¢ + a share of look-ups. OpenAI's voice is 5¢ and shouldn't be on these plans. |
-| Chat message (Sonnet 5, 70k context) | 1.6¢ warm, 17.7¢ after a quiet spell; ~4.8¢ blended | 1.2¢ blended | "Leaner" = chat on Haiku 4.5 with a ~30k context. Not built yet. |
-| Recorded meeting, per hour | 12¢ | 12¢ | Soniox 10¢ + notes ~1¢. |
-| Background job | ~20¢ | ~15¢ | 10 to 20 Haiku steps plus a few web searches at 1¢ each. |
-| CopilotKit Cloud | not known per thread | | Check the invoice after a month of real use. |
+| Call minutes | 20 | 60 | 300 |
+| Typed messages (ceiling) | 500 | 1,000 | 5,000 |
+| Meeting hours | 1 | 3 | 15 |
+| Background jobs | 2 | 5 | 25 |
 
-## Caps at 80% margin
+Max is exactly five times Neddy on all four counts and on price. The page says "generous", never
+"unlimited": a hard ceiling isn't unlimited, and the pricing page's copy reviewer would object.
 
-### $20 plan ("Neddy")
+## Margin by how people use it (at 1.5¢ a message)
 
-| Included | Today's costs | Leaner chat |
+Usage cost = messages × 1.5¢ + minutes × 2¢ + meeting hours × 12¢ + jobs × 15¢.
+
+| Profile | Usage | Cost | Margin on $10 | on $20 | on $100 |
+|---|---|---|---|---|---|
+| Light: 5 messages a day (150), 10 min, 1 h, 1 job | | $2.72 | 73% | 86% | 97% |
+| Typical: 10 a day (300), 40 min, 3 h, 3 jobs | | $6.11 | over Starter's caps | 69% | 94% |
+| Heavy on Max: 600 messages, 250 min, 10 h, 15 jobs | | $16.45 | | | 84% |
+
+| At the ceilings (everything used) | Cost | Margin before fees and fixed costs |
 |---|---|---|
-| 60 call minutes | $1.20 | $1.20 |
-| 150 messages | $7.20 (too much) | $1.80 |
-| 3 meeting hours | $0.36 | $0.36 |
-| 5 background jobs | $1.00 | $0.75 |
-| Total | $9.76 (51% margin) | $4.11 (79% margin) |
+| Starter | $8.32 | 17% |
+| Neddy | $17.31 | 13% |
+| Neddy Max | $86.55 | 13% |
 
-With today's chat costs the $20 plan would have to drop to about 40 messages a month to hold 80%, which is not sellable. So the $20 plan as shown on the pricing page assumes the leaner chat setup. Build that first.
+Read this honestly:
 
-### $100 plan ("Neddy Max"): five times the $20 plan, at the same rates
+- **The 80% target holds for a light user and for a heavy Max user, not for a typical $20 user at
+  ten messages a day (69%).** An 80% margin on the $20 plan leaves $4 of usage; after calls,
+  meetings and jobs at typical levels (about $1.60) that is about 160 messages, five a day.
+- **There is no real usage data yet** (a handful of invited people, mostly testing), so
+  "typical" here is an assumption. Measure a month of real use per person (Usage already
+  tracks it) before selling, and move the ceilings or the price to match.
+- **Nobody loses us money at the ceilings** (13% to 17% before card fees and fixed costs), so
+  the exposure is thin margin, not a loss.
+- Levers if the typical margin needs to rise: a smaller context (trim tool descriptions,
+  summarize chats at 20,000 characters), a one-hour cache on the whole conversation block, a
+  lower message ceiling on Starter and Neddy (for example 300 and 600), or $24 for the middle plan.
 
-| Included | Today's costs | Leaner chat |
-|---|---|---|
-| 300 call minutes | $6.00 | $6.00 |
-| 750 messages | $36.00 (too much) | $9.00 |
-| 15 meeting hours | $1.80 | $1.80 |
-| 25 background jobs | $5.00 | $3.75 |
-| Total | $48.80 (51% margin) | $20.55 (79.5% margin) |
+## Extras (over a cap)
 
-Max is exactly five times Neddy, so neither plan is a worse deal per unit than the other. The
-margin sits a hair under 80% on the job-cost guess (15¢); at 13¢ a job it is 80%. The copy
-reviewer's first draft had Max at 350/600/12/20, which made the $20 plan the better deal on
-three of four counts and let a person buy Max's allowances cheaper as extras; both fixed.
+| Extra | Price | Our cost | Margin |
+|---|---|---|---|
+| 30 more call minutes | $3.60 (12¢ each) | 60¢ | 83% |
+| 50 more messages | $4 (8¢ each) | 75¢ | 81% |
+| Another meeting hour | 80¢ | 12¢ | 85% |
+| Another background job | $1.50 | 15¢ | 90% |
 
-### Over the cap
-
-Each extra unit is priced at six to eight times its cost, so overage holds 83% to 87%:
-
-| Extra | Price | Our cost |
-|---|---|---|
-| Call minute | 12¢ | 2¢ |
-| Message | 8¢ | 1.2¢ |
-| Meeting hour | 80¢ | 12¢ |
-| Background job | $1.50 | 15 to 20¢ |
-
-The check that matters: a person on the $20 plan must not be able to buy Max's allowances as
-extras for less than Max. 240 minutes + 600 messages + 12 hours + 20 jobs as extras cost
-$28.80 + $48 + $9.60 + $30 = $116.40 on top of $20, so Max at $100 wins. (The first draft's
-extras of 10¢ / 6¢ / 60¢ / $1 came to $96.40 and undercut Max; the copy reviewer caught it.)
-
-Overage is optional on the page (off by default: when a cap is reached Neddy says so and offers Type instead or the next plan). Turn it on later with a card on file.
-
-## What a typical person actually uses
-
-- Light: 10 minutes of calls, 60 messages, 1 meeting hour, 1 job a month: about $1.30 on the leaner setup. Margin on $20: 93%.
-- Typical: 40 minutes, 150 messages, 3 hours, 3 jobs: about $3.40. Margin 83%.
-- Heavy on $100: 250 minutes, 600 messages, 10 hours, 15 jobs: about $15.65. Margin 84%.
-
-Most people never reach the caps, so the real margin sits above 80% even before overage.
+The checks that matter: extras must never be a cheaper way to buy a bigger plan. Starter to Neddy
+as extras: 40 minutes + 500 messages + 2 hours + 3 jobs = $4.80 + $40 + $1.60 + $4.50 = $50.90
+on top of $10, against $10 more for the plan. Neddy to Max: 240 minutes + 4,000 messages + 12
+hours + 20 jobs = $28.80 + $320 + $9.60 + $30 on top of $20, against $80 more. Both plans win by far.
 
 ## Against Meta Muse
 
-Muse sells tokens (500M a week on Power, 3B on Maximum). Apples to apples, by the owner's
-question on Oct 20: a Neddy message costs ~70k tokens (mostly the cached re-read of memory and
-the conversation), so our $20 plan is ~2.5M tokens a week against Muse's 500M, about 200× less
-raw; even if Muse spends 3× the tokens per message, their plan is ~70× ours in typed chat.
-For chat, Muse is effectively unlimited and we are capped; the page now says so plainly
-("We won't pretend that's more") and frames the $20 on what Muse's pages don't list: an hour of
-calls, three meeting hours with notes, five background jobs, editable memory, a person who
-answers. Competing on chat volume would need a budget model (DeepSeek flash ~0.1¢ a message)
-at a visible quality cost; not chosen.
+Muse sells tokens (500M a week on Power, 3B on Maximum). Apples to apples: a Neddy message was
+~70k tokens (now ~45k), so our $20 plan's old 150 messages were ~2.5M tokens a week against Muse's
+500M. For typed chat Muse is effectively unlimited. The owner's call (Oct 20) was to stop
+competing on that axis: the pricing page no longer has a side-by-side table; it says what Neddy is
+(by invite, asks first, memory you can read, a person who answers) and cites TIME (Oct 6, 2026)
+on Muse's hourly profiles of you and the people you mention. The compare page keeps the honest
+table, with "not described" wherever Meta's pages are silent.
 
 ## To do before the pricing page goes live
 
-1. Build the leaner chat setup (Haiku 4.5 for chat, ~30k context) and measure a week of real messages.
-2. Put the caps into the server (calls and meetings already have monthly limits; add messages and jobs), and make the "you've reached your cap" moment kind: say it, offer Type instead or the next plan, never a red error.
-3. Read the first CopilotKit Cloud invoice and add its per-thread cost here.
-4. Decide on overage (card on file) or hard caps.
+1. Deploy the leaner chat and read Railway's "Model call: chat" lines for a week: confirm ~45k
+   tokens read, ~0.65¢ a follow-up and ~1.5¢ blended; correct this page if it is off.
+2. Put the plans and caps into the server: calls and meetings already have monthly limits; add
+   messages and jobs, three plans, and a kind "you've reached the edge" moment (say it, offer the
+   next plan or extras, never a red error).
+3. Billing: card payments, and the card fees above in the margins.
+4. Read the first CopilotKit Cloud invoice and add its per-thread cost.
+5. Decide on overage (card on file) or hard caps.

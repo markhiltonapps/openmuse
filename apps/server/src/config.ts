@@ -59,6 +59,12 @@ export interface Config {
   model?: string;
   /** Model for background work (tasks, routines, scans); MODEL when unset. */
   workerModel?: string;
+  /**
+   * Model for the chat (CHAT_MODEL). Unset, the chat runs on the quick worker model (owner,
+   * 2026-10-20: the leaner chat setup, so a message costs about a quarter of what it did on the
+   * main model); set it to MODEL's value to put the chat back on the main model.
+   */
+  chatModel?: string;
   agentBackend: "sample" | "model" | "agui";
   agentUrl?: string;
   agentToken?: string;
@@ -173,6 +179,7 @@ export function readConfig(): Config {
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
     workerModel: process.env.WORKER_MODEL?.trim() || undefined,
+    chatModel: process.env.CHAT_MODEL?.trim() || undefined,
     agentBackend: backend,
     agentUrl: process.env.AGENT_URL,
     agentToken: process.env.AGENT_TOKEN,
