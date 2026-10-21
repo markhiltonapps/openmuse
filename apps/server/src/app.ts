@@ -7,6 +7,15 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { ownWords } from "../../../packages/domain/src/chat-export.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
+import {
+  CONTACT_EMAIL,
+  COUNTED,
+  type Counted,
+  EXTRAS,
+  isPlanId,
+  PLAN_ORDER,
+  type PlanId,
+} from "../../../packages/domain/src/plans.ts";
 import { AccessRequests } from "./access-requests.ts";
 import { AccountService, type Mailer, ResendMailer } from "./accounts.ts";
 import { ActionService } from "./actions.ts";
@@ -62,6 +71,7 @@ import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.t
 import { ModelChoices, SERVER_MODEL } from "./model-choices.ts";
 import { monitorChecks } from "./monitor-history.ts";
 import { PastChats } from "./past-chats.ts";
+import { nextMonthDay, Plans } from "./plans.ts";
 import { PushService } from "./push.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
 import { ReminderService } from "./reminders.ts";
@@ -82,7 +92,6 @@ import {
   CallVoices,
   findPerson,
   isPipecatCall,
-  limitReached,
   PIPECAT_MODEL,
   pipecatConfigured,
   SHORTEST_CALL_SECONDS,
@@ -234,6 +243,77 @@ export async function createApp(
   agent.usage = usage;
   // Today and the last 7 days are counted in each person's own time zone.
   usage.zoneOf = (owner) => agent.timeZone(owner);
+  // Plans and monthly counts (owner, 2026-10-21). Anyone without a plan stays on early access:
+  // the old call and meeting limits, with messages and jobs not counted.
+  const plans = new Plans(db, {
+    early: {
+      callMinutes: config.voiceMonthlyMinutes ?? 200,
+      meetingHours: config.meetingMonthlyHours ?? 10,
+    },
+    timeZone: (owner) => agent.timeZone(owner),
+  });
+  agent.plans = plans;
+  /** Live-talk minutes against the person's plan; plans count both voices, early access only ours. */
+  const callAllowance = async (owner: string) => {
+    const { plan, limit } = await plans.limits(owner);
+    return {
+      ...(await voiceAllowance(usage, config, owner, limit.callMinutes, plan.id !== "early")),
+      planId: plan.id,
+    };
+  };
+  /** One person for the admin, by the name or email they said ("me" is the admin). */
+  const personFor = async (admin: string, who: string) => {
+    if (/^(me|myself|i)$/i.test(who.trim())) return { id: admin, name: "you" };
+    const everyone = (await accounts.list()).filter((account) => account.status === "active");
+    const found = findPerson(everyone, who);
+    return "error" in found ? found : { id: found.person.id, name: found.person.name };
+  };
+  agent.planTools = {
+    mine: async (owner) => {
+      const view = await plans.view(owner);
+      const zone = await agent.timeZone(owner).catch(() => "UTC");
+      const [calls, meetingNow] = await Promise.all([
+        callAllowance(owner),
+        meetings.allowance(owner),
+      ]);
+      const count = (used: number, of: number | null) => ({
+        used: Math.round(used * 10) / 10,
+        of,
+        left: of === null ? null : Math.max(0, Math.round((of - used) * 10) / 10),
+      });
+      return {
+        plan: view.name,
+        comesBack: nextMonthDay(zone),
+        liveTalkMinutes: count(calls.usedMinutes, view.limit.callMinutes),
+        messages: count(view.messages, view.limit.messages),
+        recordedMeetingMinutes: count(
+          meetingNow.usedMinutes,
+          view.limit.meetingHours === null ? null : Math.round(view.limit.meetingHours * 60),
+        ),
+        backgroundJobs: count(view.jobs, view.limit.jobs),
+        moreRoom: `Nothing can be bought in the app yet. For more room, they can email ${CONTACT_EMAIL} and a person will help.`,
+        note: "An of that is null means it isn’t counted: no limit.",
+      };
+    },
+    setPlan: async (admin, who, plan) => {
+      const person = await personFor(admin, who);
+      if ("error" in person) return person;
+      if (!isPlanId(plan)) return { error: "That isn’t one of the plans." };
+      const view = await plans.setPlan(person.id, plan);
+      return { who: person.name, plan: view.name };
+    },
+    addExtra: async (admin, who, kind, packs) => {
+      const person = await personFor(admin, who);
+      if ("error" in person) return person;
+      if (!(COUNTED as string[]).includes(kind)) return { error: "That can’t be added." };
+      const view = await plans.addExtra(person.id, kind as Counted, packs);
+      return {
+        who: person.name,
+        added: `${packs} × ${EXTRAS[kind as Counted].label}`,
+        plan: view.name,
+      };
+    },
+  };
   // Which model does which job: the admin's Models card, else the picks, else MODEL/WORKER_MODEL.
   const models = await new ModelChoices(db, config, {
     onPrice: (model, price) => usage.addPrice(model, price),
@@ -416,7 +496,7 @@ export async function createApp(
         extras: async (owner) => {
           const [iceServers, allowance, identity, voice] = await Promise.all([
             turnServers(config),
-            voiceAllowance(usage, config, owner),
+            callAllowance(owner),
             db.get<{ name?: string }>(owner, "agent-settings", "identity").catch(() => null),
             callVoices?.chosen(owner).catch(() => ""),
           ]);
@@ -425,10 +505,7 @@ export async function createApp(
             allowance.leftSeconds !== undefined &&
             allowance.leftSeconds < SHORTEST_CALL_SECONDS
           )
-            throw limitReached(
-              allowance.limitMinutes,
-              await agent.timeZone(owner).catch(() => "UTC"),
-            );
+            throw new AppError(await plans.limitMessage(owner, "callMinutes"), 429);
           return {
             openmuse: {
               iceServers,
@@ -658,6 +735,7 @@ export async function createApp(
     soniox,
     usage,
     monthlyHours: config.meetingMonthlyHours ?? 10,
+    plans,
     timeZone: (owner) => agent.timeZone(owner),
     removed: async (owner) =>
       (await db.get<{ status: string }>("system", "accounts", owner))?.status === "disabled",
@@ -1138,7 +1216,12 @@ export async function createApp(
             pipecatVoice && usesOurs(voice)
               ? (await voiceAllowance(usage, config, account.id)).usedMinutes
               : undefined;
-          return { ...account, voice, ...(voiceMinutes !== undefined ? { voiceMinutes } : {}) };
+          return {
+            ...account,
+            voice,
+            ...(voiceMinutes !== undefined ? { voiceMinutes } : {}),
+            plan: await plans.view(account.id),
+          };
         }),
       ),
       requests: await accessRequests.list(c.get("owner")),
@@ -1158,6 +1241,50 @@ export async function createApp(
   app.post("/api/accounts", async (c) =>
     c.json(await accounts.invite(c.get("owner"), await c.req.json()), 201),
   );
+  // The admin chooses a person's plan, or adds extras for this month (until card payments do).
+  app.post("/api/accounts/:id/plan", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can manage people", 403);
+    const id = c.req.param("id");
+    if (id !== ADMIN_OWNER && !(await accounts.get(id)))
+      throw new AppError("Person not found", 404);
+    const { plan } = z
+      .object({ plan: z.enum(["free", "starter", "neddy", "max", "early"]) })
+      .parse(await c.req.json());
+    return c.json(await plans.setPlan(id, plan as PlanId));
+  });
+  app.post("/api/accounts/:id/extras", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can manage people", 403);
+    const id = c.req.param("id");
+    if (id !== ADMIN_OWNER && !(await accounts.get(id)))
+      throw new AppError("Person not found", 404);
+    const { kind, packs } = z
+      .object({
+        kind: z.enum(COUNTED as [Counted, ...Counted[]]),
+        packs: z.number().int().min(1).max(100).default(1),
+      })
+      .parse(await c.req.json());
+    return c.json(await plans.addExtra(id, kind, packs));
+  });
+  // Their own plan, what's used and what's left this month.
+  app.get("/api/plan", async (c) => {
+    const owner = c.get("owner");
+    const view = await plans.view(owner);
+    const [calls, meetingNow, zone] = await Promise.all([
+      callAllowance(owner),
+      meetings.allowance(owner),
+      agent.timeZone(owner).catch(() => "UTC"),
+    ]);
+    return c.json({
+      ...view,
+      callMinutesUsed: calls.usedMinutes,
+      meetingMinutesUsed: meetingNow.usedMinutes,
+      comesBack: nextMonthDay(zone),
+      contact: CONTACT_EMAIL,
+      extras: EXTRAS,
+    });
+  });
   app.post("/api/accounts/:id/disable", async (c) =>
     c.json(await accounts.setStatus(c.get("owner"), c.req.param("id"), "disabled")),
   );
@@ -1979,8 +2106,9 @@ export async function createApp(
     const owner = c.get("owner");
     const { provider, voice } = await liveVoiceOf(owner);
     const status = await voice.status(owner);
-    const allowance =
-      provider === "pipecat" ? await voiceAllowance(usage, config, owner) : undefined;
+    // Plans count calls on either voice; early access only ever counted our own.
+    const own = await callAllowance(owner);
+    const allowance = provider === "pipecat" || own.planId !== "early" ? own : undefined;
     // This month's minutes used up: Talk goes to the chat until the 1st.
     const limited =
       allowance?.leftSeconds !== undefined && allowance.leftSeconds < SHORTEST_CALL_SECONDS;
@@ -2010,6 +2138,15 @@ export async function createApp(
     if (body.provider && body.provider !== provider)
       throw new AppError("VOICE_PROVIDER_CHANGED", 409);
     const { sdp } = body;
+    // A plan's minutes are used up: say so kindly before a call starts (either voice).
+    const left = await callAllowance(owner);
+    if (
+      left.planId !== "early" &&
+      left.limitMinutes &&
+      left.leftSeconds !== undefined &&
+      left.leftSeconds < SHORTEST_CALL_SECONDS
+    )
+      throw new AppError(await plans.limitMessage(owner, "callMinutes"), 429);
     const started = await voice.start(owner, sdp);
     await voiceComparison.started(owner, started.sessionId, provider);
     return c.json({ ...started, provider });

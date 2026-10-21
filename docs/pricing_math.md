@@ -43,6 +43,26 @@ Haiku 4.5 only caches prompts of 4,096 tokens or more; these are far over that.
 Max is exactly five times Neddy on all four counts and on price. The page says "generous", never
 "unlimited": a hard ceiling isn't unlimited, and the pricing page's copy reviewer would object.
 
+### The Free plan (owner, 2026-10-21)
+
+| Count | Free |
+|---|---|
+| Call minutes | 5 |
+| Typed messages | 100 |
+| Recorded meetings | 30 minutes |
+| Background jobs | 1 |
+
+At the ceilings a Free person costs about **$1.81 a month** (100 messages × 1.5¢ = $1.50, 5 minutes × 2¢ = 10¢,
+half an hour of meetings × 12¢ an hour = 6¢, one job at 15¢) and pays nothing, so Free is a cost of getting
+people to try Neddy, not a product with a margin. It is by invite like everything else, so the total is the
+number of invited people × about $1.80 at most; in practice most use far less. **Watch it:** if 100 people sit on
+Free that is up to $181 a month, so move active ones up or lower the Free numbers. Routine runs and watches are
+not counted as jobs yet (a daily routine would cost up to 15¢ × 30), so a Free person with a few routines can
+cost more than $1.81; count routine runs before opening Free widely.
+
+New people invited from now on start on Free. People who were here before plans keep early access (200 call
+minutes, 10 meeting hours, messages and jobs not counted) until the admin gives them a plan.
+
 ## Margin by how people use it (at 1.5¢ a message)
 
 Usage cost = messages × 1.5¢ + minutes × 2¢ + meeting hours × 12¢ + jobs × 15¢.

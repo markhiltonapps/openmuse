@@ -4,6 +4,7 @@ import type { Auth } from "./auth.ts";
 import type { Blobs } from "./blobs.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import type { Plans } from "./plans.ts";
 import type { UsageMeter } from "./usage.ts";
 
 /**
@@ -342,6 +343,8 @@ export interface MeetingsOptions {
   usage?: UsageMeter;
   /** Hours a month each person may record; 0 for no limit. */
   monthlyHours: number;
+  /** Plans: each person's own hours (and the words said when they're used up), when set. */
+  plans?: Pick<Plans, "limits" | "limitMessage">;
   /** The notes from the transcript; undefined when no model is set up (the words still come). */
   writeNotes?: (owner: string, transcript: string) => Promise<MeetingNotes | undefined>;
   notify?: (owner: string, meeting: Meeting) => Promise<void>;
@@ -392,7 +395,9 @@ export class Meetings {
         0,
       );
     const used = counted + open;
-    const limit = this.options.monthlyHours;
+    const limit = this.options.plans
+      ? ((await this.options.plans.limits(owner)).limit.meetingHours ?? 0)
+      : this.options.monthlyHours;
     return {
       usedMinutes: Math.round(used / 6) / 10,
       limitHours: limit || undefined,
@@ -423,7 +428,9 @@ export class Meetings {
     const { leftSeconds, limitHours } = await this.allowance(owner);
     if (leftSeconds !== undefined && leftSeconds < 60)
       throw new AppError(
-        `You’ve used this month’s ${limitHours} ${limitHours === 1 ? "hour" : "hours"} of recording. It starts again on the 1st.`,
+        this.options.plans
+          ? await this.options.plans.limitMessage(owner, "meetingHours")
+          : `You’ve used this month’s ${limitHours} ${limitHours === 1 ? "hour" : "hours"} of recording. It starts again on the 1st.`,
         429,
       );
     if ((await this.db.count(owner, "meetings")) >= MAX_MEETINGS)

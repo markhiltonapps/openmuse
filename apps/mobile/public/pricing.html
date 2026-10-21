@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Neddy · Pricing</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Neddy plans at $10, $20 or $100 a month, counted in call minutes, messages, meeting hours and background jobs you can picture. Early access by invite.">
+<meta name="description" content="Neddy has a free plan, then $10, $20 or $100 a month, counted in minutes of calls, messages, meeting hours and background jobs. Early access by invite.">
 <meta name="theme-color" content="#151219">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Neddy · Pricing">
-<meta property="og:description" content="$10, $20 or $100 a month, counted in call minutes, messages, meeting hours and jobs. Early access by invite.">
+<meta property="og:description" content="Free, then $10, $20 or $100 a month, counted in minutes of calls, messages, meeting hours and jobs. Early access by invite.">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -59,7 +59,7 @@ td b { font-weight: 700; }
 td small { display: block; color: var(--ink-2); font-size: 13px; }
 .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .qa { padding-block: 24px 48px; }
-.qa .wrap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.qa .wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .q { border-radius: 24px; padding: 18px 20px; }
 .q h3 { font-size: 18px; margin-bottom: 8px; text-shadow: none; letter-spacing: -0.02em; }
 .q p { color: var(--ink-2); font-size: 15px; }
@@ -69,6 +69,17 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
 .muse .wrap { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 40px; align-items: start; }
 /* The two tall text blocks get a fuller halo so their last lines stay readable over the bright horizon. */
 .counts .copy::before, .muse .copy::before { background: radial-gradient(ellipse 110% 90% at 50% 50%, rgba(16, 10, 28, 0.7), rgba(16, 10, 28, 0.6) 70%, rgba(16, 10, 28, 0) 100%); }
+/* The Free plan: one slim band above the three paid cards. */
+.intro .note { color: #fff; }
+.plan .soon { margin: -8px 0 0; color: var(--ink-2); font-size: 14px; }
+.freeplan-sec { padding-block: 24px 0; }
+.freeplan { border-radius: 30px; padding: 22px 26px; display: grid; grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 2fr) auto; gap: 14px 28px; align-items: center; scroll-margin-top: 84px; }
+.freeplan h2 { font-size: 26px; margin: 0; }
+.freeplan .for { color: var(--ink-2); font-size: 15px; margin-top: 4px; }
+.freeplan .price b { font-size: 46px; }
+.freeplan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 16px; }
+.freeplan li { white-space: nowrap; }
+.freeplan li b { font-weight: 800; font-variant-numeric: tabular-nums; }
 /* Cards in a row: subtitles reserve two lines so the three prices line up. */
 @media (min-width: 941px) {
   .plan .for { min-height: 3.1em; }
@@ -80,9 +91,12 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
   .price b { font-size: 46px; }
   .table { overflow-x: auto; }
   .plan:nth-child(3) { margin-top: 12px; }
+  .freeplan { grid-template-columns: 1fr; padding: 22px 24px; }
+  .freeplan .btn { justify-self: stretch; justify-content: center; }
+  .freeplan ul { display: grid; gap: 6px; }
 }
 @media (min-width: 641px) and (max-width: 940px) {
-  .plans .wrap, .glance-sec .wrap { max-width: 640px; margin-inline: auto; }
+  .plans .wrap, .glance-sec .wrap, .freeplan-sec .wrap { max-width: 640px; margin-inline: auto; }
 }
 </style>
 </head>
@@ -110,18 +124,35 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
 <section class="intro" aria-labelledby="pr-h">
   <div class="wrap copy">
     <h1 id="pr-h">Pick the room you need.</h1>
-    <p class="lead">Three plans. $10 a month to start, $20 for daily use, $100 for five times the room of the $20 plan. Chat is generous on all of them, and every plan counts four things: call minutes, messages, hours of recorded meetings and background jobs.</p>
-    <p class="note">Early access is by invite, and billing isn’t switched on yet. You pick a plan once you’re in.</p>
+    <p class="lead">Start free. When you want more room, $10 a month is the start, $20 is for daily use, and $100 is five times the room of the $20 plan. Every plan counts four things: minutes of calls, messages, hours of recorded meetings and background jobs.</p>
+    <p class="note">Early access is by invite. New people start on Free. Billing isn’t switched on yet, so the paid plans can’t be bought yet.</p>
   </div>
 </section>
 
-<section class="glance-sec" aria-label="The three plans at a glance">
+<section class="glance-sec" aria-label="The plans at a glance">
   <div class="wrap">
     <nav class="glance smoke" aria-label="Plans">
-      <a href="#plan-starter"><b>Starter</b><em>$10 a month</em><span><i>20 call minutes</i><i>500 messages</i><i>1 hour of meetings</i><i>2 jobs</i></span></a>
-      <a href="#plan-neddy"><b>Neddy</b><em>$20 a month</em><span><i>60 call minutes</i><i>1,000 messages</i><i>3 hours of meetings</i><i>5 jobs</i></span></a>
-      <a href="#plan-max"><b>Neddy Max</b><em>$100 a month</em><span><i>300 call minutes</i><i>5,000 messages</i><i>15 hours of meetings</i><i>25 jobs</i></span></a>
+      <a href="#plan-free"><b>Free</b><em>$0 a month</em><span><i>5 minutes of calls</i><i>100 messages</i><i>30 minutes of meetings</i><i>1 job</i></span></a>
+      <a href="#plan-starter"><b>Starter</b><em>$10 a month</em><span><i>20 minutes of calls</i><i>500 messages</i><i>1 hour of meetings</i><i>2 jobs</i></span></a>
+      <a href="#plan-neddy"><b>Neddy</b><em>$20 a month</em><span><i>60 minutes of calls</i><i>1,000 messages</i><i>3 hours of meetings</i><i>5 jobs</i></span></a>
+      <a href="#plan-max"><b>Neddy Max</b><em>$100 a month</em><span><i>300 minutes of calls</i><i>5,000 messages</i><i>15 hours of meetings</i><i>25 jobs</i></span></a>
     </nav>
+  </div>
+</section>
+
+<section class="freeplan-sec" aria-label="Free plan">
+  <div class="wrap">
+    <article class="freeplan smoke" id="plan-free" aria-labelledby="pf">
+      <div><h2 id="pf">Free</h2><p class="for">For trying him out. New people start here.</p></div>
+      <p class="price"><b>$0</b><span>a month</span></p>
+      <ul>
+        <li><b>5</b> minutes of calls</li>
+        <li><b>100</b> messages</li>
+        <li><b>30</b> minutes of meetings</li>
+        <li><b>1</b> background job</li>
+      </ul>
+      <a class="btn gloss blue" href="/?request" aria-label="Request access, Free plan">Request access</a>
+    </article>
   </div>
 </section>
 
@@ -130,6 +161,7 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
     <article class="plan smoke" id="plan-starter" aria-labelledby="p0">
       <div><h2 id="p0">Starter</h2><p class="for">For getting to know him.</p></div>
       <p class="price"><b>$10</b><span>a month</span></p>
+      <p class="soon">Not on sale yet. You start on Free.</p>
       <ul class="inc">
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>20 minutes of calls</b><small>A few short calls, talking in the browser.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>500 messages</b><small>Typed, with pictures and files. About 17 a day.</small></div></li>
@@ -137,11 +169,12 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>2 background jobs</b><small>Research, errands and bookings he runs while you’re away.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything else is included</b><small>Memory, apps, Feed, Spaces, reminders, a choice of voice and backdrop.</small></div></li>
       </ul>
-      <a class="btn gloss blue" href="/?request" aria-label="Request access, Starter plan">Request access</a>
+      <a class="btn gloss blue" href="/?request">Request access</a>
     </article>
     <article class="plan smoke" id="plan-neddy" aria-labelledby="p1">
       <div><h2 id="p1">Neddy</h2><p class="for">For one busy person.</p></div>
       <p class="price"><b>$20</b><span>a month</span></p>
+      <p class="soon">Not on sale yet. You start on Free.</p>
       <ul class="inc">
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>60 minutes of calls</b><small>About two minutes a day, hands-free in the car.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>1,000 messages</b><small>Typed, with pictures and files. About 33 a day.</small></div></li>
@@ -149,12 +182,13 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>5 background jobs</b><small>Research, errands and bookings he runs while you’re away.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything else is included</b><small>Memory, apps, Feed, Spaces, reminders, a choice of voice and backdrop.</small></div></li>
       </ul>
-      <a class="btn gloss blue" href="/?request" aria-label="Request access, Neddy plan">Request access</a>
+      <a class="btn gloss blue" href="/?request">Request access</a>
     </article>
     <article class="plan smoke" id="plan-max" aria-labelledby="p2">
       <span class="tag gloss amber">Five times Neddy</span>
       <div><h2 id="p2">Neddy Max</h2><p class="for">For someone who runs a household, a business, or both.</p></div>
       <p class="price"><b>$100</b><span>a month</span></p>
+      <p class="soon">Not on sale yet. You start on Free.</p>
       <ul class="inc">
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>300 minutes of calls</b><small>About ten minutes a day.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>5,000 messages</b><small>About 167 a day.</small></div></li>
@@ -162,7 +196,7 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>25 background jobs</b><small>Room for a long list of errands.</small></div></li>
         <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><div><b>Everything in the Neddy plan</b><small>Memory, apps, Feed, Spaces, reminders, your choice of voice and backdrop.</small></div></li>
       </ul>
-      <a class="btn gloss blue" href="/?request" aria-label="Request access, Neddy Max plan">Request access</a>
+      <a class="btn gloss blue" href="/?request">Request access</a>
     </article>
   </div>
 </section>
@@ -171,14 +205,14 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
   <div class="wrap">
     <div class="copy rise">
       <h2 id="counts-h">What counts, and what happens at the limit.</h2>
-      <p class="lead">Everything is counted per month. A minute is a minute on a live call, silence included. A message is one thing you send, however long his answer. Chat is generous, and it has a ceiling, so no month surprises either of us. A meeting hour is recording time. A job is one errand you hand him, however many sites he visits.</p>
-      <p class="lead" style="margin-top: 14px">When you reach a limit, Neddy tells you. If you run out of call minutes, you can keep typing. For more room, email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> about the next plan or the extras in the table. Extras and upgrades start when billing does.</p>
+      <p class="lead">Everything is counted per month. A minute is a minute on a live call, silence included. A message is one thing you send, however long his answer. A call uses your minutes of calls, not messages. A meeting hour is recording time. A job is one errand you hand him, however many sites he visits.</p>
+      <p class="lead" style="margin-top: 14px">When you reach a limit, Neddy tells you when it comes back. If you run out of minutes of calls, you can keep typing. For more room, email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> and a person will help. Paid plans and extras can’t be bought yet.</p>
     </div>
     <div class="table smoke rise">
       <table>
-        <thead><tr><th scope="col">Extras, if you want them</th><th scope="col" class="num">Price</th></tr></thead>
+        <thead><tr><th scope="col">Extras (not on sale yet)</th><th scope="col" class="num">Price</th></tr></thead>
         <tbody>
-          <tr><td><b>30 more call minutes</b><small>12¢ a minute.</small></td><td class="num">$3.60</td></tr>
+          <tr><td><b>30 more minutes of calls</b><small>12¢ a minute.</small></td><td class="num">$3.60</td></tr>
           <tr><td><b>50 more messages</b><small>8¢ a message.</small></td><td class="num">$4</td></tr>
           <tr><td><b>Another meeting hour</b></td><td class="num">80¢</td></tr>
           <tr><td><b>Another background job</b></td><td class="num">$1.50</td></tr>
@@ -191,9 +225,10 @@ td small { display: block; color: var(--ink-2); font-size: 13px; }
 <section class="qa" aria-labelledby="qa-h">
   <h2 id="qa-h" class="sr-only">Questions</h2>
   <div class="wrap">
-    <div class="q smoke rise"><h3>Can I sign up and pay today?</h3><p>Not yet. Neddy is invite-only and billing isn’t switched on. Request access to ask for an invite.</p></div>
-    <div class="q smoke rise"><h3>Does anything roll over?</h3><p>No. Unused minutes, messages, meeting hours and jobs don’t carry into the next month. If you run short, there are extras, or you can move up a plan.</p></div>
-    <div class="q smoke rise"><h3>Can I change or cancel?</h3><p>Yes, once billing starts. Email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> and we’ll change or stop it. You can download your data first.</p></div>
+    <div class="q smoke rise"><h3>Is there a free plan?</h3><p>Yes. New people start on Free: 5 minutes of calls, 100 messages, 30 minutes of meetings and 1 background job a month. Neddy is invite-only and billing isn’t switched on yet, so you can’t pay today. Request access to ask for an invite.</p></div>
+    <div class="q smoke rise"><h3>Does anything roll over?</h3><p>No. Unused minutes, messages, meeting hours and jobs don’t carry into the next month. If you run short, email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> and a person will help. Buying extras or a bigger plan starts when billing does.</p></div>
+    <div class="q smoke rise"><h3>Can I change or cancel?</h3><p>Billing isn’t on yet, so there’s nothing to cancel today. Once it is, email <a href="mailto:hello@neatoventures.com">hello@neatoventures.com</a> and we’ll change or stop your plan. You can download your data first.</p></div>
+    <div class="q smoke rise"><h3>Do you train on my chats?</h3><p>No. Neddy doesn’t train AI models on your chats, calls, meetings or files. To answer you, your words do go to the AI and voice services we use, under their business terms.</p></div>
   </div>
 </section>
 

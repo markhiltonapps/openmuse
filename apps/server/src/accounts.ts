@@ -229,6 +229,12 @@ export class AccountService {
       throw new AppError("That address name is taken", 409);
     await this.db.put("system", "accounts", account);
     await this.db.put("system", "account-emails", { id: hash(email), accountId: account.id });
+    // Everyone invited from now on starts on the Free plan; the admin moves them up from People.
+    await this.db.put("system", "plans", {
+      id: account.id,
+      plan: "free",
+      updatedAt: new Date(this.now()).toISOString(),
+    });
     await this.sendLink(account, INVITE_TTL, true);
     return { ...account, agentEmail: this.address(account) };
   }

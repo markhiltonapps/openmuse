@@ -109,12 +109,20 @@ export async function turnServers(
 }
 
 /** Minutes this person has talked on our own voice this month, and what's left. */
-export async function voiceAllowance(usage: UsageMeter, config: VoiceConfig, owner: string) {
+export async function voiceAllowance(
+  usage: UsageMeter,
+  config: VoiceConfig,
+  owner: string,
+  /** The person's plan limit (null for none); the server's own limit when not given. */
+  planLimit?: number | null,
+  /** A plan counts talk on either voice; early access has only ever counted our own. */
+  everyVoice = false,
+) {
   const month = await usage.month(owner);
   const seconds = month.lines
-    .filter((line) => line.model.startsWith(PIPECAT_MODEL))
+    .filter((line) => (everyVoice ? line.kind === "voice" : line.model.startsWith(PIPECAT_MODEL)))
     .reduce((sum, line) => sum + (line.seconds ?? 0), 0);
-  const limit = config.voiceMonthlyMinutes ?? 200;
+  const limit = planLimit === undefined ? (config.voiceMonthlyMinutes ?? 200) : (planLimit ?? 0);
   return {
     usedMinutes: Math.round(seconds / 6) / 10,
     limitMinutes: limit || undefined,

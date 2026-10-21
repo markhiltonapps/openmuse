@@ -86,7 +86,64 @@ export class ConversationAgent extends AbstractAgent {
   clone(): ConversationAgent {
     return new ConversationAgent(this.config, this.service, this.owner);
   }
+  /**
+   * A typed message counts toward the person's plan, once however many times it's retried. When
+   * this month's messages are used up, the reply is a kind note (no model call) saying when they
+   * come back and how to get more. Calls, their hand-offs and saved calls aren't counted here:
+   * those are minutes.
+   */
   run(input: RunAgentInput): Observable<BaseEvent> {
+    const plans = this.service.plans;
+    const props = input.forwardedProps as
+      | { voiceLookup?: boolean; spokenCall?: unknown }
+      | undefined;
+    const latest = input.messages.filter((m) => m.role === "user").at(-1);
+    if (
+      !plans?.claimMessage ||
+      !latest ||
+      props?.spokenCall ||
+      props?.voiceLookup ||
+      input.threadId.startsWith("voice-")
+    )
+      return this.runModel(input);
+    return new Observable<BaseEvent>((subscriber) => {
+      let inner: Subscription | undefined;
+      void (async () => {
+        let text: string | undefined;
+        try {
+          const claim = await plans.claimMessage(this.owner, latest.id);
+          if (!claim.ok) text = claim.text;
+        } catch (error) {
+          // Counting must never stop a chat: say nothing and go on.
+          console.warn(
+            `[OpenMuse] Couldn't count a message: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        if (subscriber.closed) return;
+        if (text === undefined) {
+          inner = this.runModel(input).subscribe(subscriber);
+          return;
+        }
+        const messageId = `limit-${latest.id}`;
+        subscriber.next({
+          type: EventType.RUN_STARTED,
+          threadId: input.threadId,
+          runId: input.runId,
+        });
+        subscriber.next({ type: EventType.TEXT_MESSAGE_START, messageId, role: "assistant" });
+        subscriber.next({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: text });
+        subscriber.next({ type: EventType.TEXT_MESSAGE_END, messageId });
+        subscriber.next({
+          type: EventType.RUN_FINISHED,
+          threadId: input.threadId,
+          runId: input.runId,
+        });
+        subscriber.complete();
+      })();
+      return () => inner?.unsubscribe();
+    });
+  }
+  private runModel(input: RunAgentInput): Observable<BaseEvent> {
     // The app adds a finished live voice call to the chat this way: no model, just the call.
     const spoken = (input.forwardedProps as { spokenCall?: unknown } | undefined)?.spokenCall;
     if (typeof spoken === "string" && spoken) return this.addSpokenCall(input, spoken);
@@ -294,6 +351,40 @@ export class ConversationAgent extends AbstractAgent {
         execute: async () => this.service.aiCosts(this.owner),
       }),
       defineTool({
+        name: "my_plan",
+        description:
+          "Their plan and what is left this month: call minutes, messages, hours of recorded meetings and background jobs, with what they've used and when it all comes back (the 1st). Use it when they ask what plan they're on, how much they have left, or whether they can do something this month. Say it in a sentence or two, only the counts they asked about, using the left numbers as they are. Payments aren't set up: never quote a price or offer to buy anything. If they are near a limit or ask for more, say they can email hello@neatoventures.com for more room, and offer to draft that email for them.",
+        parameters: z.object({}),
+        execute: async () =>
+          this.service.planTools?.mine(this.owner) ?? { error: "Plans aren’t set up here." },
+      }),
+      defineTool({
+        name: "set_plan",
+        description:
+          "Admin only. Put a person on a plan (free, starter, neddy or max; early is the old early-access limits, for people who were here before plans), or add extras for this month: 30 call minutes, 50 messages, an hour of meetings or a background job, per pack. Use it only when the admin asks; then say what changed. Money isn't taken by this: it's for people the admin has agreed a plan with.",
+        parameters: z.object({
+          who: z.string().max(120).describe("The person's name or email as they said it"),
+          plan: z.enum(["free", "starter", "neddy", "max", "early"]).optional(),
+          extra: z.enum(["callMinutes", "messages", "meetingHours", "jobs"]).optional(),
+          packs: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .optional()
+            .describe("Packs of the extra; 1 if unsaid"),
+        }),
+        execute: async ({ who, plan, extra, packs }) => {
+          const tools = this.service.planTools;
+          if (!tools) return { error: "Plans aren’t set up here." };
+          if (!(await (this.service.isAdmin?.(this.owner) ?? Promise.resolve(false))))
+            return { error: "Only the admin can change plans." };
+          if (plan) return tools.setPlan(this.owner, who.trim(), plan);
+          if (extra) return tools.addExtra(this.owner, who.trim(), extra, packs ?? 1);
+          return { error: "Say which plan, or which extra to add." };
+        },
+      }),
+      defineTool({
         name: "live_talk_voice",
         description:
           'Admin only. Live talk has two voices: OpenAI’s and the new, cheaper one. set moves one person (or the admin, who: "me") to the new voice or back to OpenAI’s; compare gives both voices side by side for everyone’s calls over the last 7 or 30 days (calls, minutes, the usual and slowest wait for a reply, cost per minute). Use it only when the admin asks; then say what changed. For a comparison, lead with the difference in plain words (“the new voice answered about 0.3 seconds slower and cost 1 cent a minute against 5”), and give the rest only if asked.',
@@ -444,7 +535,9 @@ export class ConversationAgent extends AbstractAgent {
             const { leftSeconds, limitHours } = await meetings.allowance(this.owner);
             if (leftSeconds !== undefined && leftSeconds < 60)
               return {
-                error: `They’ve used this month’s ${limitHours} ${limitHours === 1 ? "hour" : "hours"} of recording; it starts again on the 1st.`,
+                error: this.service.plans
+                  ? await this.service.plans.limitMessage(this.owner, "meetingHours")
+                  : `They’ve used this month’s ${limitHours} ${limitHours === 1 ? "hour" : "hours"} of recording; it starts again on the 1st.`,
               };
             return {
               recorder: true,

@@ -1,5 +1,7 @@
+import { Check } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Platform, Text, View } from "react-native";
+import { type Counted, PLAN_ORDER, PLANS, type PlanId } from "../../../packages/domain/src/plans";
 import { Button, Card, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
 import { disablePush, pushState } from "./web-app";
 import { useWorkspace } from "./workspace";
@@ -17,6 +19,14 @@ interface Person {
   voice?: string;
   /** Minutes on the new voice this month (people using it). */
   voiceMinutes?: number;
+  /** Their plan, this month's limits and what they've used (admin's list only). */
+  plan?: {
+    plan: PlanId;
+    name: string;
+    limit: Record<Counted, number | null>;
+    messages: number;
+    jobs: number;
+  };
 }
 type VoiceChoice = "openai" | "pipecat";
 interface VoiceSettings {
@@ -42,6 +52,19 @@ interface AccessRequest {
   createdAt: string;
 }
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** What each extra adds, for the buttons and the toast ("Add 50 messages"). */
+const EXTRA_SHORT: Record<Counted, string> = {
+  callMinutes: "30 minutes of calls",
+  messages: "50 messages",
+  meetingHours: "1 meeting hour",
+  jobs: "1 job",
+};
+const EXTRA_BUTTON: Record<Counted, string> = {
+  callMinutes: `Add ${EXTRA_SHORT.callMinutes}`,
+  messages: `Add ${EXTRA_SHORT.messages}`,
+  meetingHours: `Add ${EXTRA_SHORT.meetingHours}`,
+  jobs: `Add ${EXTRA_SHORT.jobs}`,
+};
 /** A heading inside a card, one step below the card's own. */
 const subheading = [s.small, { fontWeight: "600" as const, color: colors.text, marginTop: 6 }];
 
@@ -142,13 +165,17 @@ export function PeopleCard() {
   }, [api, load]);
   if (!people) return null;
   const domain = people.find((p) => p.role === "admin")?.agentEmail?.split("@")[1];
-  async function run(id: string, work: () => Promise<unknown>, done: string) {
+  async function run(
+    id: string,
+    work: () => Promise<unknown>,
+    done: string | ((result: unknown) => string),
+  ) {
     setBusy(id);
     setError("");
     try {
-      await work();
+      const result = await work();
       await load();
-      notify(done);
+      notify(typeof done === "function" ? done(result) : done);
       return true;
     } catch (e) {
       setError(message(e));
@@ -237,7 +264,10 @@ export function PeopleCard() {
       <Text style={s.muted}>
         Invite someone and they get their own private workspace: their own chats, apps, routines and
         memory{domain ? `, plus their own agent address @${domain}` : ""}. They sign in with a link
-        sent to their email, no password or key.
+        sent to their email, no password or key. New people start on the Free plan (
+        {PLANS.free.callMinutes} minutes of calls, {PLANS.free.messages} messages, 30 minutes of
+        meetings, {PLANS.free.jobs} job a month); change it from their row below. Nothing is charged
+        yet.
       </Text>
       {voice && (
         <View style={{ gap: 6 }}>
@@ -252,7 +282,7 @@ export function PeopleCard() {
                 : "Try the new, cheaper voice on yourself or a few people before switching everyone. "
             }Calls look the same with either. On the new voice ${
               voice.limitMinutes
-                ? `each person gets ${voice.limitMinutes} minutes a month`
+                ? `people on early access get ${voice.limitMinutes} minutes a month, and everyone else their plan’s`
                 : "there’s no monthly limit"
             }, and a quiet call hangs up after ${voice.idleSeconds} seconds.`}
           </Text>
@@ -395,6 +425,74 @@ export function PeopleCard() {
           {voice && person.status !== "disabled" && (
             <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
               {voiceButton(person.id, person.voice, person.name)}
+            </View>
+          )}
+          {person.plan && person.status !== "disabled" && (
+            <View style={{ gap: 6, marginBottom: 10 }}>
+              <Text style={s.small}>
+                {[
+                  `Plan: ${person.plan.name}`,
+                  person.plan.limit.messages !== null
+                    ? `${person.plan.messages.toLocaleString()} of ${person.plan.limit.messages.toLocaleString()} ${person.plan.limit.messages === 1 ? "message" : "messages"}`
+                    : "",
+                  person.plan.limit.jobs !== null
+                    ? `${person.plan.jobs} of ${person.plan.limit.jobs} ${person.plan.limit.jobs === 1 ? "job" : "jobs"}`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+              <View
+                role="group"
+                aria-label={`Plan for ${person.name}`}
+                style={[s.row, { gap: 8, flexWrap: "wrap" }]}
+              >
+                {[...PLAN_ORDER, "early" as const].map((id) => (
+                  <Button
+                    key={id}
+                    small
+                    primary={person.plan?.plan === id}
+                    selected={person.plan?.plan === id}
+                    icon={person.plan?.plan === id ? Check : undefined}
+                    busy={busy === `${person.id}:plan:${id}`}
+                    accessibilityLabel={`Put ${person.name} on ${PLANS[id].name}`}
+                    onPress={() =>
+                      void run(
+                        `${person.id}:plan:${id}`,
+                        () => api.request(`/api/accounts/${person.id}/plan`, { plan: id }),
+                        `${person.name} is on ${PLANS[id].name}.`,
+                      )
+                    }
+                  >
+                    {PLANS[id].name}
+                  </Button>
+                ))}
+              </View>
+              <Text style={[s.small, { marginTop: 4 }]}>Add for this month</Text>
+              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                {(["callMinutes", "messages", "meetingHours", "jobs"] as const).map((kind) => (
+                  <Button
+                    key={kind}
+                    small
+                    busy={busy === `${person.id}:extra:${kind}`}
+                    accessibilityLabel={`${EXTRA_BUTTON[kind]} for ${person.name} this month`}
+                    onPress={() =>
+                      void run(
+                        `${person.id}:extra:${kind}`,
+                        () => api.request(`/api/accounts/${person.id}/extras`, { kind, packs: 1 }),
+                        (result) => {
+                          const total = (
+                            result as { limit?: Partial<Record<Counted, number | null>> }
+                          ).limit?.[kind];
+                          return `Added ${EXTRA_SHORT[kind]} for ${person.name} this month${typeof total === "number" ? `: ${person.name} now has ${total}` : ""}.`;
+                        },
+                      )
+                    }
+                  >
+                    {EXTRA_BUTTON[kind]}
+                  </Button>
+                ))}
+              </View>
             </View>
           )}
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>

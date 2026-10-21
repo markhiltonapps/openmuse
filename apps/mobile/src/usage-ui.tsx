@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { modelLabel, USAGE_KINDS } from "../../../packages/domain/src/model-names";
+import type { Counted, PlanId } from "../../../packages/domain/src/plans";
 import { BarChart } from "./charts";
-import { Card, colors, SectionHeading, s } from "./ui";
+import { Button, Card, colors, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 interface UsageLine {
@@ -200,6 +201,143 @@ const localToday = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 };
 
+/** What GET /api/plan answers: the plan, this month's limits and what's used. */
+interface PlanView {
+  plan: PlanId;
+  name: string;
+  price: number;
+  limit: Record<Counted, number | null>;
+  messages: number;
+  jobs: number;
+  callMinutesUsed: number;
+  meetingMinutesUsed: number;
+  comesBack: string;
+  contact: string;
+}
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+const roundTo = (n: number) => Math.round(n * 10) / 10;
+
+/** One count against its limit: "12 of 100 messages", with a bar that never turns into an error. */
+function PlanRow({
+  label,
+  used,
+  of,
+  unit,
+}: {
+  label: string;
+  used: number;
+  of: number | null;
+  unit: string;
+}) {
+  const share = of ? Math.min(1, used / of) : 0;
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+        <Text style={[s.text, { flex: 1 }]}>{label}</Text>
+        <Text style={[s.text, { fontVariant: ["tabular-nums"] }]}>
+          {of === null
+            ? `${roundTo(used).toLocaleString()} ${unit}, no limit`
+            : `${roundTo(used).toLocaleString()} of ${of.toLocaleString()} ${unit}`}
+        </Text>
+      </View>
+      {of !== null && (
+        <View
+          role="progressbar"
+          aria-label={`${label}: ${roundTo(used).toLocaleString()} of ${of.toLocaleString()} ${unit}`}
+          aria-valuemin={0}
+          aria-valuemax={of}
+          aria-valuenow={Math.min(used, of)}
+          style={{ height: 8, borderRadius: 4, backgroundColor: colors.line, overflow: "hidden" }}
+        >
+          <View
+            style={{
+              width: `${Math.round(share * 100)}%`,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: colors.blueDark,
+            }}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** The person's plan, and what's left of this month's calls, messages, meetings and jobs. */
+function PlanBlock() {
+  const { api } = useWorkspace();
+  const [plan, setPlan] = useState<PlanView>();
+  useEffect(() => {
+    void api.request<PlanView>("/api/plan").then(setPlan, () => undefined);
+  }, [api]);
+  if (!plan) return null;
+  const { limit } = plan;
+  const early = plan.plan === "early";
+  // Under an hour (Free's half hour) reads better in minutes.
+  const shortMeetings = limit.meetingHours !== null && limit.meetingHours < 1;
+  return (
+    <View style={{ gap: 10 }}>
+      <Text role="heading" aria-level={3} style={[s.label, { color: colors.mutedStrong }]}>
+        Your plan
+      </Text>
+      <Text style={s.text}>
+        {early
+          ? "You’re on early access. Live talk and recorded meetings are counted per month and come back on "
+          : `You’re on ${plan.name}. Everything below is counted per month and comes back on `}
+        {plan.comesBack}.{early ? " Messages and jobs aren’t counted." : ""}
+      </Text>
+      <PlanRow
+        label="Live talk"
+        used={plan.callMinutesUsed}
+        of={limit.callMinutes}
+        unit={plural(limit.callMinutes ?? plan.callMinutesUsed, "minute", "minutes")}
+      />
+      <PlanRow
+        label="Messages"
+        used={plan.messages}
+        of={limit.messages}
+        unit={plural(limit.messages ?? plan.messages, "message", "messages")}
+      />
+      <PlanRow
+        label="Recorded meetings"
+        used={shortMeetings ? plan.meetingMinutesUsed : plan.meetingMinutesUsed / 60}
+        of={
+          shortMeetings && limit.meetingHours !== null
+            ? limit.meetingHours * 60
+            : limit.meetingHours
+        }
+        unit={
+          shortMeetings
+            ? "minutes"
+            : plural(limit.meetingHours ?? plan.meetingMinutesUsed / 60, "hour", "hours")
+        }
+      />
+      <PlanRow
+        label="Background jobs"
+        used={plan.jobs}
+        of={limit.jobs}
+        unit={plural(limit.jobs ?? plan.jobs, "job", "jobs")}
+      />
+      {!early && (
+        <View style={{ gap: 8, alignItems: "flex-start" }}>
+          <Text style={s.muted}>
+            Nothing can be bought in the app yet. For more room, email {plan.contact} and a person
+            will help. You can also ask what you have left.
+          </Text>
+          <Button
+            small
+            accessibilityLabel="Email for more room"
+            onPress={() => void Linking.openURL(`mailto:${plan.contact}`).catch(() => undefined)}
+          >
+            Email for more room
+          </Button>
+        </View>
+      )}
+      <View style={[s.divider, { marginVertical: 6 }]} />
+    </View>
+  );
+}
+
 /** What the agent's model calls cost this month, and for the admin, what each person costs. */
 export function UsageCard() {
   const { api } = useWorkspace();
@@ -240,6 +378,7 @@ export function UsageCard() {
   return (
     <Card style={{ gap: 12 }}>
       <SectionHeading title="Usage" />
+      <PlanBlock />
       {usage.periods && (
         <View style={{ gap: 10 }}>
           {everyone && <Text style={[s.label, { color: colors.mutedStrong }]}>Just you</Text>}

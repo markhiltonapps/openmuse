@@ -445,3 +445,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   Per-message costs are projections until Railway's "Model call: chat" lines confirm them;
   "typical use" is an assumption until real per-person usage exists. Never say "unlimited" for a
   number with a ceiling.
+- **Plans and limits (owner, 2026-10-21):** plan numbers live in `packages/domain/src/plans.ts` (the
+  site, Help and `docs/pricing_math.md` must match). Anyone without a saved plan is on "early access" (the
+  old limits, nothing counted), so adding a limit never changes existing testers; new invitees start on
+  Free. A limit says so kindly and says when it comes back; keep `limitText` starting "You’ve used this
+  month’s" (the call screen's `isLiveLimit` reads it). Count what a person starts (typed messages,
+  handed-off jobs) once, by id, one person at a time (`Plans.claim`), and never let counting block a chat.
+  A function that returns the next item of an ordered list needs a guard for ids not in the list
+  (`nextPlan("early")` once offered Free).

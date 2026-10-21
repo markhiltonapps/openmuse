@@ -65,6 +65,7 @@ import { MiniApps } from "../mini-apps.ts";
 import type { ModelChoices, ModelJob } from "../model-choices.ts";
 import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
+import type { Plans } from "../plans.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
@@ -449,6 +450,11 @@ export class AgentService {
       leaseUntil: null,
       artifactIds: [],
     };
+    // A job the person hands off counts toward their plan; routines and watches don't yet.
+    if (input.input.handedOff === true && this.plans) {
+      const claim = await this.plans.claimJob(owner, id);
+      if (!claim.ok) throw new AppError(claim.text, 429);
+    }
     await this.ensure(owner);
     await this.db.insertIfAbsent(owner, "tasks", task);
     return (await this.db.get<AgentTask>(owner, "tasks", id)) ?? task;
@@ -1520,6 +1526,14 @@ export class AgentService {
   recipes?: RecipeKitchen;
   /** Purchase guardrails for connected-app actions. */
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
+  /** Plans and this month's counts: a job the person hands off is counted, and can be refused. */
+  plans?: Pick<Plans, "claimJob" | "claimMessage" | "limitMessage">;
+  /** What people ask about their plan, and what the admin can do about it, by voice or in the chat. */
+  planTools?: {
+    mine(owner: string): Promise<unknown>;
+    setPlan(admin: string, who: string, plan: string): Promise<unknown>;
+    addExtra(admin: string, who: string, kind: string, packs: number): Promise<unknown>;
+  };
   /** Emails the person about jobs they handed off; set when the server can send email. */
   jobMail?: {
     send(message: { to: string; subject: string; text: string; html: string }): Promise<void>;

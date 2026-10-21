@@ -1,0 +1,86 @@
+Claude working session, 2026-10-21
+==================================
+
+Owner answers (to the questions in the Oct 20 ordered list)
+- hello@neatoventures.com is real and watched.
+- Offer a free plan; I design it. Update the website to show it.
+- Stripe is the payment provider (NOT built yet; waits for the owner's go-ahead and keys).
+- At a message or job limit: let people add more (extras: minutes, messages, meeting hours, jobs).
+- Never train on anyone's chats (the site says so).
+- The three paid plans are final: Starter $10, Neddy $20, Neddy Max $100.
+- "Go ahead and hit Update based on the order": items 2-5 of the order, then commit locally.
+
+What was built (uncommitted until the Design division signs off, then a local commit; no push
+until the owner says "push it")
+1. Plans (packages/domain/src/plans.ts, shared by server, app and tests)
+   - Free (5 call minutes, 100 messages, 30 minutes of meetings, 1 job; about $1.81 a month at the
+     ceilings), Starter, Neddy, Neddy Max (exactly 5x Neddy), plus an internal "early" plan.
+   - EXTRAS packs: 30 call minutes $3.60, 50 messages $4, 1 meeting hour 80¢, 1 job $1.50.
+   - limitText(): the words said at a limit (kind, when it comes back, where to write). Before
+     billing it says "For more room, email hello@neatoventures.com and a person will help"; with
+     billing=true it names extras and the next plan. It still starts "You’ve used this month’s",
+     which the call screen's isLiveLimit relies on.
+2. Server (apps/server/src/plans.ts, wired in app.ts)
+   - A person's plan is "system"/"plans"/<owner>. No plan means early access: the old limits
+     (VOICE_MONTHLY_MINUTES 200, MEETING_MONTHLY_HOURS 10), messages and jobs not counted, so
+     nothing changed for testers. People invited from now on get Free (accounts.invite).
+   - Counts per UTC month (same month as the usage meter): typed messages and handed-off jobs, kept
+     in "plan-counts" with the last 60 ids so a retry isn't counted twice; one at a time per
+     person. Extras are added by the admin per month ("plan-extras").
+   - Messages: ConversationAgent.run counts a typed message before the model; past the limit it
+     replies with a kind note and no model call. Live-call hand-offs (threadId voice-…), saved
+     calls and voice look-ups are not counted. A counting failure never blocks a chat.
+   - Jobs: createTask counts a job the person hands off (input.handedOff) and refuses past the limit
+     (429, kind text). Routine runs and watches are NOT counted yet (risk noted in pricing_math.md).
+   - Call minutes and meeting hours: voiceAllowance and Meetings.allowance now read the person's plan.
+   - Routes: GET /api/plan (own), POST /api/accounts/:id/plan, POST /api/accounts/:id/extras (admin);
+     GET /api/accounts includes each person's plan. Tools: my_plan (anyone), set_plan (admin, by voice
+     or chat: "Put Dana on Starter", "Add 50 messages for Dana").
+3. App: "Your plan" block at the top of Usage (usage-ui.tsx), plan and extras buttons per invited person
+   in People (account-ui.tsx). Help: new "plan" topic, admin-people updated. No screenshots changed
+   (those topics have none).
+4. Website: pricing.html has a Free band above the three paid cards, a Free row in the phone glance card,
+   an FAQ "Is there a free plan?" and "Do you train on my chats?" (4 cards, 2 columns), counts copy
+   ("Messages have a ceiling"), meta descriptions. compare.html's price cell says "Free, then $10, $20 or
+   $100". docs/pricing_math.md has the Free plan's cost.
+5. Tests: tests/plans.test.ts (10 tests: plan numbers, early access unchanged, counting once, races,
+   month rollover, extras, limit text, the kind note instead of a model call, routes and tools, new
+   invitees start on Free). A real bug found by the tests: nextPlan("early") offered Free.
+
+Known gaps and risks (for the owner)
+- Stripe billing, self-service plan changes/cancel and buying extras in the app are not built. Until then
+  the admin sets plans and adds extras by hand; people are told to email.
+- Routine runs and watches aren't counted as jobs; a Free person with routines can cost more than $1.81.
+- Providers: "we don't train on your chats" is Neato's own promise. Check each provider's terms
+  (Anthropic API, OpenAI voice, OpenRouter models, Soniox, Inworld, CopilotKit) and OpenRouter's data
+  policy setting before relying on it.
+- Month boundaries: counts use the UTC month (like the usage meter); the "comes back on" date uses the
+  person's time zone, so around midnight on the 1st the two can differ by a few hours.
+- Idea acceptance creates a goal before the job; if the job is refused past the limit the goal remains.
+
+Design division outcome (all three signed off after one round of fixes)
+- Copy reviewer (first pass: no, 13 must-fixes): fixed "Everyone starts on Free" (current testers are on
+  early access, so the site says "New people start on Free"), extras/upgrades/cancel promises (nothing can
+  be bought yet; the limit message says "email hello@neatoventures.com and a person will help" and names no
+  price until billing exists), the paid cards ("Not on sale yet. You start on Free."), the training answer
+  ("Neddy doesn't train AI models on your chats... your words do go to the AI and voice services we use,
+  under their business terms"), singular job text, money format, "on early access", minutes for meetings
+  under an hour, my_plan wording (never quote prices; offer to draft the email).
+- Usability reviewer: plans now count live talk on either voice and a call is refused kindly past the limit
+  (POST /api/voice/live; early access unchanged, still counts only our own voice); the admin can put someone
+  back on early access (route, set_plan tool, an "Early access" button); my_plan returns left per count and
+  "nothing can be bought in the app yet"; the Your plan block has an "Email for more room" button; extras
+  buttons say "Add 50 messages" and the toast gives the new total.
+- Visual reviewer: check mark on the current plan button, label-in-name, captions and spacing in People,
+  a divider under Your plan, thousands separators, a whiter intro note, "$20 or $100" kept together.
+- Not done, by choice: 38px small buttons (the app's existing small Button), a layout shift when Your plan
+  loads, a read-back before set_plan by voice, the orphan goal when an accepted Idea's job is refused.
+
+Checks on the final tree: Biome (error level) clean, typecheck and the worker's tsc clean, 560 of 560 tests.
+
+Still to do (owner)
+- Stripe billing (test mode first): needs the owner's go-ahead and keys on Railway (never pasted here).
+- Check each AI provider's terms before relying on "we don't train on your chats".
+- After a push: watch the api log for a Free person's first limit message, and test a Free person running
+  out of minutes in the middle of a live call (not testable here).
+- Routine runs and watches are not counted as jobs yet.
