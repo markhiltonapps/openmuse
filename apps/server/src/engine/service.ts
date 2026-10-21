@@ -1528,6 +1528,12 @@ export class AgentService {
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> };
   /** Plans and this month's counts: a job the person hands off is counted, and can be refused. */
   plans?: Pick<Plans, "claimJob" | "claimMessage" | "limitMessage">;
+  /** The admin's waiting access requests, by voice or in the chat (approve sends the usual invite). */
+  accessTools?: {
+    list(admin: string): Promise<unknown>;
+    approve(admin: string, who: string): Promise<unknown>;
+    decline(admin: string, who: string): Promise<unknown>;
+  };
   /** What people ask about their plan, and what the admin can do about it, by voice or in the chat. */
   planTools?: {
     mine(owner: string): Promise<unknown>;

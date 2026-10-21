@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { accessRequestEmail } from "./access-request-email.ts";
 import type { AccountService } from "./accounts.ts";
 import { ADMIN_OWNER } from "./auth.ts";
 import type { Store } from "./db.ts";
@@ -52,6 +53,12 @@ export class AccessRequests {
       key: string,
     ) => Promise<unknown>,
     private readonly now: () => number = Date.now,
+    /** Email to the admin's own address for each new request, when email is set up. */
+    private readonly mail?: {
+      send(message: { to: string; subject: string; text: string; html: string }): Promise<void>;
+      to(): Promise<string | undefined>;
+      appUrl: string;
+    },
   ) {}
   async request(raw: unknown) {
     if (!this.accounts.emailSignIn)
@@ -82,7 +89,31 @@ export class AccessRequests {
       `${email}${request.note ? ` — “${request.note}”` : ""}. Approve or decline under Apps & settings → Account → People.`,
       `access-request:${request.id}:${request.createdAt}`,
     );
+    await this.emailAdmin(request);
     return { ok: true as const };
+  }
+  /** Tells the admin by email too (owner, 2026-10-21). A failure never stops the request. */
+  private async emailAdmin(request: AccessRequest) {
+    if (!this.mail) return;
+    try {
+      const to = await this.mail.to();
+      if (!to) return;
+      const waiting = (await this.db.list<AccessRequest>("system", "access-requests")).length;
+      await this.mail.send({
+        to,
+        ...accessRequestEmail({
+          name: request.name,
+          email: request.email,
+          ...(request.note ? { note: request.note } : {}),
+          appUrl: this.mail.appUrl,
+          waiting,
+        }),
+      });
+    } catch (error) {
+      console.warn(
+        `[OpenMuse] Couldn't email the admin about an access request: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   /** Requests still waiting; one whose address got an account some other way is dropped. */
   async list(owner: string) {
@@ -102,11 +133,25 @@ export class AccessRequests {
     const input = z
       .object({ name: z.string().trim().min(1).max(80).optional(), handle: z.string().optional() })
       .parse(raw ?? {});
-    const account = await this.accounts.invite(owner, {
-      email: request.email,
-      name: input.name ?? request.name,
-      ...(input.handle ? { handle: input.handle } : {}),
-    });
+    let account: Awaited<ReturnType<AccountService["invite"]>>;
+    try {
+      account = await this.accounts.invite(owner, {
+        email: request.email,
+        name: input.name ?? request.name,
+        ...(input.handle ? { handle: input.handle } : {}),
+      });
+    } catch (error) {
+      // The account is made before its email goes out. If it exists now, only the email failed,
+      // and the request would otherwise vanish from the list without a word.
+      if (await this.accounts.byEmail(request.email)) {
+        await this.db.remove("system", "access-requests", id);
+        throw new AppError(
+          `${request.name}’s account was made, but the invite email didn’t send. Open them under Invited and tap Send new invite.`,
+          502,
+        );
+      }
+      throw error;
+    }
     await this.db.remove("system", "access-requests", id);
     return account;
   }

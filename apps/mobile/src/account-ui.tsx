@@ -1,8 +1,8 @@
-import { Check } from "lucide-react-native";
+import { Check, ChevronDown, ChevronUp } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { type Counted, PLAN_ORDER, PLANS, type PlanId } from "../../../packages/domain/src/plans";
-import { Button, Card, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
+import { Button, Card, Chip, colors, ErrorNotice, Field, SectionHeading, s } from "./ui";
 import { disablePush, pushState } from "./web-app";
 import { useWorkspace } from "./workspace";
 
@@ -14,6 +14,7 @@ interface Person {
   handle?: string;
   status?: "active" | "disabled";
   lastSignInAt?: string;
+  createdAt?: string;
   agentEmail?: string;
   /** Their live-talk voice: "openai", "pipecat" (our own), or "default". */
   voice?: string;
@@ -65,6 +66,9 @@ const EXTRA_BUTTON: Record<Counted, string> = {
   meetingHours: `Add ${EXTRA_SHORT.meetingHours}`,
   jobs: `Add ${EXTRA_SHORT.jobs}`,
 };
+/** People and requests shown at first, and added by "Show more". */
+const PAGE = 8;
+const REQUESTS_FIRST = 3;
 /** A heading inside a card, one step below the card's own. */
 const subheading = [s.small, { fontWeight: "600" as const, color: colors.text, marginTop: 6 }];
 
@@ -139,6 +143,15 @@ export function PeopleCard() {
     pipecat: VoiceSide;
   }>();
   const [comparing, setComparing] = useState(0);
+  /** Who is shown: a search, how many rows, which row is open, and what is folded away. */
+  const [query, setQuery] = useState("");
+  const [shown, setShown] = useState(PAGE);
+  const [openId, setOpenId] = useState("");
+  /** The person whose Remove access was tapped once; a second tap removes them. */
+  const [removing, setRemoving] = useState("");
+  const [allRequests, setAllRequests] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [compareError, setCompareError] = useState("");
   const load = useCallback(
     () =>
@@ -178,7 +191,9 @@ export function PeopleCard() {
       notify(typeof done === "function" ? done(result) : done);
       return true;
     } catch (e) {
+      // Shown where the person is looking as well as under the card, which may be far below.
       setError(message(e));
+      notify(message(e));
       return false;
     } finally {
       setBusy("");
@@ -199,9 +214,27 @@ export function PeopleCard() {
       setName("");
       setEmail("");
       setHandle("");
+      setInviting(false);
     }
   }
-  const members = people.filter((p) => p.role === "member");
+  // Newest first, and people who haven't signed in yet before those who have: the ones to look at.
+  const members = people
+    .filter((p) => p.role === "member")
+    .sort(
+      (a, b) =>
+        Number(!!a.lastSignInAt) - Number(!!b.lastSignInAt) ||
+        (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+    );
+  const needle = query.trim().toLowerCase();
+  const found = needle
+    ? members.filter((p) =>
+        `${p.name} ${p.email ?? ""} ${p.handle ?? ""} ${p.plan?.name ?? ""}`
+          .toLowerCase()
+          .includes(needle),
+      )
+    : members;
+  const visible = found.slice(0, shown);
+  const shownRequests = allRequests ? requests : requests.slice(0, REQUESTS_FIRST);
   async function compareVoices(days: number) {
     setComparing(days);
     setCompareError("");
@@ -264,16 +297,114 @@ export function PeopleCard() {
       <Text style={s.muted}>
         Invite someone and they get their own private workspace: their own chats, apps, routines and
         memory{domain ? `, plus their own agent address @${domain}` : ""}. They sign in with a link
-        sent to their email, no password or key. New people start on the Free plan (
-        {PLANS.free.callMinutes} minutes of calls, {PLANS.free.messages} messages, 30 minutes of
-        meetings, {PLANS.free.jobs} job a month); change it from their row below. Nothing is charged
-        yet.
+        sent to their email, no password or key. New people start on the Free plan; change it by
+        opening their row. Nothing is charged yet.
       </Text>
+      <Text role="status" style={[s.text, { fontWeight: "600" }]}>
+        {`${members.length} ${members.length === 1 ? "person" : "people"} invited`}
+        {requests.length > 0
+          ? ` · ${requests.length} waiting for your answer`
+          : " · nobody is waiting for your answer"}
+      </Text>
+      {requests.length > 0 && (
+        <View style={{ gap: 16 }}>
+          <View style={{ gap: 4 }}>
+            <Text role="heading" aria-level={3} style={subheading}>
+              {`Asked to join (${requests.length})`}
+            </Text>
+            <Text style={s.small}>
+              Approving sends the usual invite. Declining doesn’t email them.
+            </Text>
+          </View>
+          {shownRequests.map((request) => (
+            <View key={request.id} style={{ gap: 6 }}>
+              <Text style={s.text}>
+                {request.name} · {request.email}
+              </Text>
+              {!!request.note && (
+                <Text style={[s.small, { fontStyle: "italic" }]}>“{request.note}”</Text>
+              )}
+              <Text style={s.small}>Asked {new Date(request.createdAt).toLocaleDateString()}</Text>
+              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                {declining === request.id ? (
+                  <>
+                    <Button
+                      small
+                      danger
+                      busy={busy === `${request.id}:decline`}
+                      accessibilityLabel={`Yes, decline ${request.name}`}
+                      onPress={() =>
+                        void run(
+                          `${request.id}:decline`,
+                          () => api.request(`/api/accounts/requests/${request.id}/decline`, {}),
+                          `Declined. ${request.name} wasn’t emailed.`,
+                        ).then(() => setDeclining(""))
+                      }
+                    >
+                      Yes, decline
+                    </Button>
+                    <Button small onPress={() => setDeclining("")}>
+                      Keep
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      small
+                      primary
+                      busy={busy === `${request.id}:approve`}
+                      accessibilityLabel={`Approve and invite ${request.name}`}
+                      onPress={() =>
+                        void run(
+                          `${request.id}:approve`,
+                          () => api.request(`/api/accounts/requests/${request.id}/approve`, {}),
+                          `Invite sent to ${request.email}.`,
+                        )
+                      }
+                    >
+                      Approve and invite
+                    </Button>
+                    <Button
+                      small
+                      accessibilityLabel={`Decline ${request.name}`}
+                      onPress={() => setDeclining(request.id)}
+                    >
+                      Decline
+                    </Button>
+                  </>
+                )}
+              </View>
+            </View>
+          ))}
+          {requests.length > REQUESTS_FIRST && (
+            <Button small onPress={() => setAllRequests(!allRequests)}>
+              {allRequests ? "Show fewer requests" : `Show all ${requests.length} requests`}
+            </Button>
+          )}
+        </View>
+      )}
       {voice && (
-        <View style={{ gap: 6 }}>
+        <Pressable
+          role="button"
+          aria-expanded={voiceOpen}
+          onPress={() => setVoiceOpen(!voiceOpen)}
+          style={({ pressed }) => [
+            s.row,
+            { minHeight: 44, justifyContent: "space-between", opacity: pressed ? 0.8 : 1 },
+          ]}
+        >
           <Text role="heading" aria-level={3} style={subheading}>
             Live talk voice
           </Text>
+          {voiceOpen ? (
+            <ChevronUp size={20} color={colors.mutedStrong} />
+          ) : (
+            <ChevronDown size={20} color={colors.mutedStrong} />
+          )}
+        </Pressable>
+      )}
+      {voice && voiceOpen && (
+        <View style={{ gap: 6 }}>
           <Text style={s.small}>
             {`${
               // Once everyone's on it, the line below says so.
@@ -323,231 +454,248 @@ export function PeopleCard() {
           <ErrorNotice error={compareError} />
         </View>
       )}
-      {requests.length > 0 && (
-        <View style={{ gap: 16 }}>
-          <View style={{ gap: 4 }}>
-            <Text role="heading" aria-level={3} style={subheading}>
-              Asked to join
-            </Text>
-            <Text style={s.small}>
-              Approving sends the usual invite. Declining doesn't email them.
-            </Text>
-          </View>
-          {requests.map((request) => (
-            <View key={request.id} style={{ gap: 6 }}>
-              <Text style={s.text}>
-                {request.name} · {request.email}
-              </Text>
-              {!!request.note && (
-                <Text style={[s.small, { fontStyle: "italic" }]}>“{request.note}”</Text>
+      {members.length > 0 && (
+        <Text role="heading" aria-level={3} style={subheading}>
+          {`Invited (${members.length})`}
+        </Text>
+      )}
+      {members.length > 6 && (
+        <Field
+          label="Search people"
+          hideLabel
+          value={query}
+          onChangeText={(text) => {
+            setQuery(text);
+            setShown(PAGE);
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="Search by name, email or plan"
+        />
+      )}
+      {needle && found.length === 0 && (
+        <Text role="status" style={s.muted}>
+          {`Nobody matches “${query.trim()}”. Clear the search to see everyone.`}
+        </Text>
+      )}
+      {visible.map((person) => {
+        const open = openId === person.id;
+        const state =
+          person.status === "disabled"
+            ? "Can’t sign in"
+            : person.lastSignInAt
+              ? `Last signed in ${new Date(person.lastSignInAt).toLocaleDateString()}`
+              : "Hasn’t signed in yet";
+        return (
+          <View key={person.id} style={{ borderTopWidth: 1, borderTopColor: colors.line }}>
+            <Pressable
+              role="button"
+              aria-expanded={open}
+              aria-label={`${person.name}, ${person.plan && person.status !== "disabled" ? `${person.plan.name} plan, ` : ""}${state}. ${open ? "Hide" : "Show"} details`}
+              onPress={() => setOpenId(open ? "" : person.id)}
+              style={({ pressed }) => [
+                s.row,
+                { minHeight: 56, paddingVertical: 8, gap: 10, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.text} numberOfLines={1}>
+                  {person.name}
+                </Text>
+                <Text style={s.small} numberOfLines={1}>
+                  {person.email}
+                </Text>
+                <Text style={s.small} numberOfLines={1}>
+                  {state}
+                </Text>
+              </View>
+              {person.status === "disabled" ? (
+                <Chip tint={colors.errorBg}>Removed</Chip>
+              ) : (
+                person.plan && <Chip>{person.plan.name}</Chip>
               )}
-              <Text style={s.small}>Asked {new Date(request.createdAt).toLocaleDateString()}</Text>
-              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-                {declining === request.id ? (
-                  <>
-                    <Button
-                      small
-                      danger
-                      busy={busy === `${request.id}:decline`}
-                      accessibilityLabel={`Yes, decline ${request.name}`}
-                      onPress={() =>
-                        void run(
-                          `${request.id}:decline`,
-                          () => api.request(`/api/accounts/requests/${request.id}/decline`, {}),
-                          `Declined. ${request.name} wasn't emailed.`,
-                        ).then(() => setDeclining(""))
-                      }
+              {open ? (
+                <ChevronUp size={20} color={colors.mutedStrong} />
+              ) : (
+                <ChevronDown size={20} color={colors.mutedStrong} />
+              )}
+            </Pressable>
+            {open && (
+              <View style={{ gap: 8, paddingBottom: 14 }}>
+                <Text style={s.small}>
+                  {[
+                    person.agentEmail,
+                    voice
+                      ? effective(person.voice) === "pipecat"
+                        ? `Live talk: new voice${person.voiceMinutes ? ` (${person.voiceMinutes} minutes this month)` : ""}`
+                        : "Live talk: OpenAI"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Text>
+                {voice && person.status !== "disabled" && (
+                  <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                    {voiceButton(person.id, person.voice, person.name)}
+                  </View>
+                )}
+                {person.plan && person.status !== "disabled" && (
+                  <View style={{ gap: 6, marginBottom: 10 }}>
+                    <Text style={s.small}>
+                      {[
+                        `Plan: ${person.plan.name}`,
+                        person.plan.limit.messages !== null
+                          ? `${person.plan.messages.toLocaleString()} of ${person.plan.limit.messages.toLocaleString()} ${person.plan.limit.messages === 1 ? "message" : "messages"}`
+                          : "",
+                        person.plan.limit.jobs !== null
+                          ? `${person.plan.jobs} of ${person.plan.limit.jobs} ${person.plan.limit.jobs === 1 ? "job" : "jobs"}`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                    <View
+                      role="group"
+                      aria-label={`Plan for ${person.name}`}
+                      style={[s.row, { gap: 8, flexWrap: "wrap" }]}
                     >
-                      Yes, decline
-                    </Button>
-                    <Button small onPress={() => setDeclining("")}>
-                      Keep
-                    </Button>
-                  </>
-                ) : (
-                  <>
+                      {[...PLAN_ORDER, "early" as const].map((id) => (
+                        <Button
+                          key={id}
+                          small
+                          primary={person.plan?.plan === id}
+                          selected={person.plan?.plan === id}
+                          icon={person.plan?.plan === id ? Check : undefined}
+                          busy={busy === `${person.id}:plan:${id}`}
+                          accessibilityLabel={`Put ${person.name} on ${PLANS[id].name}`}
+                          onPress={() =>
+                            void run(
+                              `${person.id}:plan:${id}`,
+                              () => api.request(`/api/accounts/${person.id}/plan`, { plan: id }),
+                              `${person.name} is on ${PLANS[id].name}.`,
+                            )
+                          }
+                        >
+                          {PLANS[id].name}
+                        </Button>
+                      ))}
+                    </View>
+                    <Text style={[s.small, { marginTop: 4 }]}>Add for this month</Text>
+                    <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                      {(["callMinutes", "messages", "meetingHours", "jobs"] as const).map(
+                        (kind) => (
+                          <Button
+                            key={kind}
+                            small
+                            busy={busy === `${person.id}:extra:${kind}`}
+                            accessibilityLabel={`${EXTRA_BUTTON[kind]} for ${person.name} this month`}
+                            onPress={() =>
+                              void run(
+                                `${person.id}:extra:${kind}`,
+                                () =>
+                                  api.request(`/api/accounts/${person.id}/extras`, {
+                                    kind,
+                                    packs: 1,
+                                  }),
+                                (result) => {
+                                  const total = (
+                                    result as { limit?: Partial<Record<Counted, number | null>> }
+                                  ).limit?.[kind];
+                                  return `Added ${EXTRA_SHORT[kind]} for ${person.name} this month${typeof total === "number" ? `: ${person.name} now has ${total}` : ""}.`;
+                                },
+                              )
+                            }
+                          >
+                            {EXTRA_BUTTON[kind]}
+                          </Button>
+                        ),
+                      )}
+                    </View>
+                  </View>
+                )}
+                <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                  {person.status === "disabled" ? (
                     <Button
                       small
-                      primary
-                      busy={busy === `${request.id}:approve`}
-                      accessibilityLabel={`Approve and invite ${request.name}`}
+                      busy={busy === person.id}
                       onPress={() =>
                         void run(
-                          `${request.id}:approve`,
-                          () => api.request(`/api/accounts/requests/${request.id}/approve`, {}),
-                          `Invite sent to ${request.email}.`,
+                          person.id,
+                          () => api.request(`/api/accounts/${person.id}/enable`, {}),
+                          `${person.name} can sign in again.`,
                         )
                       }
                     >
-                      Approve and invite
+                      Restore access
                     </Button>
-                    <Button
-                      small
-                      accessibilityLabel={`Decline ${request.name}`}
-                      onPress={() => setDeclining(request.id)}
-                    >
-                      Decline
-                    </Button>
-                  </>
-                )}
+                  ) : (
+                    <>
+                      {emailSignIn && (
+                        <Button
+                          small
+                          busy={busy === `${person.id}:invite`}
+                          onPress={() =>
+                            void run(
+                              `${person.id}:invite`,
+                              () => api.request(`/api/accounts/${person.id}/invite`, {}),
+                              `New sign-in link sent to ${person.email}.`,
+                            )
+                          }
+                        >
+                          Send new invite
+                        </Button>
+                      )}
+                      {removing === person.id ? (
+                        <>
+                          <Button
+                            small
+                            danger
+                            busy={busy === person.id}
+                            accessibilityLabel={`Yes, remove ${person.name}’s access`}
+                            onPress={() =>
+                              void run(
+                                person.id,
+                                () => api.request(`/api/accounts/${person.id}/disable`, {}),
+                                `${person.name} is signed out and can’t sign in. Their data is kept.`,
+                              ).then(() => setRemoving(""))
+                            }
+                          >
+                            Yes, remove access
+                          </Button>
+                          <Button small onPress={() => setRemoving("")}>
+                            Keep
+                          </Button>
+                        </>
+                      ) : (
+                        <Button small danger onPress={() => setRemoving(person.id)}>
+                          Remove access
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
-      {(requests.length > 0 || !!voice) && members.length > 0 && (
-        <Text role="heading" aria-level={3} style={subheading}>
-          Invited
-        </Text>
-      )}
-      {members.map((person) => (
-        <View key={person.id} style={{ gap: 6, marginBottom: 4 }}>
-          <Text style={s.text}>
-            {person.name} · {person.email}
-          </Text>
-          <Text style={s.small}>
-            {[
-              person.agentEmail,
-              person.status === "disabled"
-                ? "Access removed"
-                : person.lastSignInAt
-                  ? `Last signed in ${new Date(person.lastSignInAt).toLocaleDateString()}`
-                  : "Hasn't signed in yet",
-              voice
-                ? effective(person.voice) === "pipecat"
-                  ? `Live talk: new voice${person.voiceMinutes ? ` (${person.voiceMinutes} minutes this month)` : ""}`
-                  : "Live talk: OpenAI"
-                : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </Text>
-          {voice && person.status !== "disabled" && (
-            <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-              {voiceButton(person.id, person.voice, person.name)}
-            </View>
-          )}
-          {person.plan && person.status !== "disabled" && (
-            <View style={{ gap: 6, marginBottom: 10 }}>
-              <Text style={s.small}>
-                {[
-                  `Plan: ${person.plan.name}`,
-                  person.plan.limit.messages !== null
-                    ? `${person.plan.messages.toLocaleString()} of ${person.plan.limit.messages.toLocaleString()} ${person.plan.limit.messages === 1 ? "message" : "messages"}`
-                    : "",
-                  person.plan.limit.jobs !== null
-                    ? `${person.plan.jobs} of ${person.plan.limit.jobs} ${person.plan.limit.jobs === 1 ? "job" : "jobs"}`
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-              <View
-                role="group"
-                aria-label={`Plan for ${person.name}`}
-                style={[s.row, { gap: 8, flexWrap: "wrap" }]}
-              >
-                {[...PLAN_ORDER, "early" as const].map((id) => (
-                  <Button
-                    key={id}
-                    small
-                    primary={person.plan?.plan === id}
-                    selected={person.plan?.plan === id}
-                    icon={person.plan?.plan === id ? Check : undefined}
-                    busy={busy === `${person.id}:plan:${id}`}
-                    accessibilityLabel={`Put ${person.name} on ${PLANS[id].name}`}
-                    onPress={() =>
-                      void run(
-                        `${person.id}:plan:${id}`,
-                        () => api.request(`/api/accounts/${person.id}/plan`, { plan: id }),
-                        `${person.name} is on ${PLANS[id].name}.`,
-                      )
-                    }
-                  >
-                    {PLANS[id].name}
-                  </Button>
-                ))}
-              </View>
-              <Text style={[s.small, { marginTop: 4 }]}>Add for this month</Text>
-              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-                {(["callMinutes", "messages", "meetingHours", "jobs"] as const).map((kind) => (
-                  <Button
-                    key={kind}
-                    small
-                    busy={busy === `${person.id}:extra:${kind}`}
-                    accessibilityLabel={`${EXTRA_BUTTON[kind]} for ${person.name} this month`}
-                    onPress={() =>
-                      void run(
-                        `${person.id}:extra:${kind}`,
-                        () => api.request(`/api/accounts/${person.id}/extras`, { kind, packs: 1 }),
-                        (result) => {
-                          const total = (
-                            result as { limit?: Partial<Record<Counted, number | null>> }
-                          ).limit?.[kind];
-                          return `Added ${EXTRA_SHORT[kind]} for ${person.name} this month${typeof total === "number" ? `: ${person.name} now has ${total}` : ""}.`;
-                        },
-                      )
-                    }
-                  >
-                    {EXTRA_BUTTON[kind]}
-                  </Button>
-                ))}
-              </View>
-            </View>
-          )}
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            {person.status === "disabled" ? (
-              <Button
-                small
-                busy={busy === person.id}
-                onPress={() =>
-                  void run(
-                    person.id,
-                    () => api.request(`/api/accounts/${person.id}/enable`, {}),
-                    `${person.name} can sign in again.`,
-                  )
-                }
-              >
-                Restore access
-              </Button>
-            ) : (
-              <>
-                {emailSignIn && (
-                  <Button
-                    small
-                    busy={busy === `${person.id}:invite`}
-                    onPress={() =>
-                      void run(
-                        `${person.id}:invite`,
-                        () => api.request(`/api/accounts/${person.id}/invite`, {}),
-                        `New sign-in link sent to ${person.email}.`,
-                      )
-                    }
-                  >
-                    Send new invite
-                  </Button>
-                )}
-                <Button
-                  small
-                  danger
-                  busy={busy === person.id}
-                  onPress={() =>
-                    void run(
-                      person.id,
-                      () => api.request(`/api/accounts/${person.id}/disable`, {}),
-                      `${person.name} is signed out and can't sign in. Their data is kept.`,
-                    )
-                  }
-                >
-                  Remove access
-                </Button>
-              </>
             )}
           </View>
-        </View>
-      ))}
-      {emailSignIn ? (
+        );
+      })}
+      {found.length > visible.length && (
+        <Button small onPress={() => setShown(shown + PAGE)}>
+          {found.length - visible.length > PAGE
+            ? `Show ${PAGE} more (${found.length - visible.length} not shown)`
+            : `Show ${found.length - visible.length} more`}
+        </Button>
+      )}
+      {emailSignIn && !inviting && (
+        <Button primary onPress={() => setInviting(true)}>
+          Invite someone
+        </Button>
+      )}
+      {emailSignIn && inviting ? (
         <>
+          <Text role="heading" aria-level={3} style={subheading}>
+            Invite someone
+          </Text>
           <Field label="Name" value={name} onChangeText={setName} placeholder="Sarah Jones" />
           <Field
             label="Email"
@@ -576,11 +724,16 @@ export function PeopleCard() {
           >
             Send invite
           </Button>
+          <Button small onPress={() => setInviting(false)}>
+            Cancel
+          </Button>
         </>
       ) : (
-        <Text style={s.small}>
-          Inviting people needs email sign-in. Set ADMIN_EMAIL and RESEND_API_KEY on the server.
-        </Text>
+        !emailSignIn && (
+          <Text style={s.small}>
+            Inviting people needs email sign-in. Set ADMIN_EMAIL and RESEND_API_KEY on the server.
+          </Text>
+        )
       )}
       <ErrorNotice error={error} />
     </Card>

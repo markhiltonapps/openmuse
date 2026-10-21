@@ -97,3 +97,28 @@ Fix: the attach panel hid the message box (owner's screenshot, muse.neatoventure
   mocked files: before, the box was behind the dock at 1100x640 and 390x700; after, it is clear at all four
   and the file list shows 2 rows and scrolls. Full suite 560 of 560. No Help change (no new screen).
 - Not covered: windows shorter than about 560px (the panel's fixed parts alone need about 290px).
+
+Owner asks, later on Oct 21
+1. Email me when someone requests access (admin account's own address, markallenhilton@gmail.com)
+   - apps/server/src/access-request-email.ts and AccessRequests.emailAdmin: one email per new request to
+     accounts.get(ADMIN_OWNER).email (no address is hard-coded); the in-app notification stays. A failing
+     mailer never stops the request; asking again while one waits sends nothing; the name and note are
+     escaped and kept out of the subject's line breaks. Limits unchanged: 3 per address a day, 20 an hour.
+   - Not done: a ?people deep link from the email (App routing would need wider work) and fire-and-forget
+     sending (it is awaited inside the visitor's request); URLs typed in a note aren't defanged.
+2. People card cleanup (apps/mobile/src/account-ui.tsx)
+   - Summary line; "Asked to join (N)" first (3 shown, Show all); Live talk voice folded away; Invited (N) as
+     compact rows (name, email, last sign-in, plan chip) sorted not-signed-in-yet first then newest; search
+     above 6 people; 8 rows at a time (Show 8 more); a tap opens a row (plan and extras buttons, voice,
+     Send new invite, Remove access with a second confirming tap); Invite someone behind a button.
+   - Errors also show as a toast (the card is long); an approve whose invite email fails says so.
+   - Voice and chat: access_requests (admin only): list, approve, decline by name or email. It needs the name
+     or email in the admin's own latest message, asks for the email when two requests fit, and treats names
+     and notes as untrusted data. Help topic admin-people updated. No Help screenshots show People.
+3. Cost of a call minute: about 1.6¢ typical on our own voice is the Oct 19-20 measurement (listening 0.2¢,
+   speaking ~0.5¢, thinking ~0.4¢, plus the odd look-up: ~5¢ the first in a call, ~0.5¢ after). Railway was
+   disconnected, so it was not re-measured; the live number is People > Live talk voice > Compare the voices.
+4. Attach panel overlap fixed earlier (see above).
+Design division for items 1-2: usability and copy signed off after fixes; the visual reviewer had not
+reported when the owner said "push it", so it went out without its sign-off.
+Checks: Biome, typecheck, worker tsc, 563 of 563 tests.
