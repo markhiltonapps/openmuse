@@ -122,3 +122,12 @@ Owner asks, later on Oct 21
 Design division for items 1-2: usability and copy signed off after fixes; the visual reviewer had not
 reported when the owner said "push it", so it went out without its sign-off.
 Checks: Biome, typecheck, worker tsc, 563 of 563 tests.
+
+Deploy problem found after the pushes (open)
+- Pushed 8192266 (Free plan + limits, attach-panel fix) and 123e6bc (access email, People card): GitHub's
+  deployment list shows web and api last deployed 3178424 (Oct 20 22:29); voice and browser say "watched
+  paths not modified" (correct). No web or api deployment or status exists for 8192266 or 123e6bc, an hour
+  later. The live bundle (muse.neatoventures.com) has none of the new strings, and the live pricing page is
+  the Oct 20 version. Cause unknown: Railway's tools were disconnected in this session. To check: Railway >
+  openmuse > web and api > Deployments (queued, failed or paused?), then Redeploy the latest commit.
+- Visual review fixes after the push: efed81c (44px request buttons, visible plan tag), local only.
