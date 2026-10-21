@@ -84,3 +84,16 @@ Still to do (owner)
 - After a push: watch the api log for a Free person's first limit message, and test a Free person running
   out of minutes in the middle of a live call (not testable here).
 - Routine runs and watches are not counted as jobs yet.
+
+Fix: the attach panel hid the message box (owner's screenshot, muse.neatoventures.com)
+- Cause: tapping + in the chat opens "Add a photo or file" above the message box inside a column that
+  never shrinks (react-native-web gives every View flexShrink 0). On a short window the panel (about 420px
+  with its file list) plus the message box was taller than the room above the bottom bar, so the message box
+  slid under the glossy dock and couldn't be tapped.
+- Fix (apps/mobile/src/chat.tsx): the message list shrinks first (flexShrink 100), then the panel's file list
+  (flexShrink 1, minHeight 72, still max 230), and the KeyboardAvoidingView and panel card may shrink too.
+  Nothing changes on a tall window.
+- Checked with the local sample server and a web build at 1496x752, 1100x640, 390x700 and 390x844 with 7
+  mocked files: before, the box was behind the dock at 1100x640 and 390x700; after, it is clear at all four
+  and the file list shows 2 rows and scrolls. Full suite 560 of 560. No Help change (no new screen).
+- Not covered: windows shorter than about 560px (the panel's fixed parts alone need about 290px).

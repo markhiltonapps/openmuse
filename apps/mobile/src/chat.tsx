@@ -1401,6 +1401,8 @@ export function ChatScreen({
       <ScrollView
         ref={list}
         showsVerticalScrollIndicator={false}
+        // The messages give way first when the attach panel needs room on a short window.
+        style={{ flexShrink: 100, minHeight: 0 }}
         contentContainerStyle={{ gap: 13, paddingTop: 15, paddingBottom: 20, flexGrow: 1 }}
         onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
           const nearEnd = contentSize.height - contentOffset.y - layoutMeasurement.height < 100;
@@ -1652,7 +1654,12 @@ export function ChatScreen({
           Latest messages
         </Button>
       )}
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {/* On a short window the attach panel's file list gives way, so the message box below it
+          always stays above the bottom bar (a column doesn't shrink unless each part says so). */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flexShrink: 1, minHeight: 0 }}
+      >
         <ErrorNotice error={saveError} />
         {!!saveError && (
           <Button
@@ -1738,7 +1745,7 @@ export function ChatScreen({
         )}
         {!voiceMode && <MealCheckInCard replying={replying} active={active} />}
         {picking && (
-          <Card style={{ marginBottom: 12, padding: 15 }}>
+          <Card style={{ marginBottom: 12, padding: 15, flexShrink: 1, minHeight: 0 }}>
             <Text style={s.heading}>Add a photo or file</Text>
             <View style={[s.row, { gap: 8, flexWrap: "wrap", marginVertical: 10 }]}>
               <Button
@@ -1774,7 +1781,10 @@ export function ChatScreen({
               )}
             </View>
             <Text style={s.small}>Or pick something already in Files:</Text>
-            <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={{ maxHeight: 230, flexShrink: 1, minHeight: 72 }}
+              keyboardShouldPersistTaps="handled"
+            >
               {w.files.length ? (
                 w.files.map((f) => (
                   <CheckRow

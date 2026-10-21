@@ -453,3 +453,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   handed-off jobs) once, by id, one person at a time (`Plans.claim`), and never let counting block a chat.
   A function that returns the next item of an ordered list needs a guard for ids not in the list
   (`nextPlan("early")` once offered Free).
+- **A panel above the composer must be able to shrink:** react-native-web Views and ScrollViews don't
+  shrink by default, so anything stacked above the message box (the attach panel) pushes the box under
+  the bottom bar on a short window. Give the parts that can give way `flexShrink` (the message list a big
+  one so it goes first) and a `minHeight`, and check a short window (1100x640, 390x700), not just a tall one.
