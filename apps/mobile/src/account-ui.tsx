@@ -329,7 +329,6 @@ export function PeopleCard() {
                 {declining === request.id ? (
                   <>
                     <Button
-                      small
                       danger
                       busy={busy === `${request.id}:decline`}
                       accessibilityLabel={`Yes, decline ${request.name}`}
@@ -343,14 +342,11 @@ export function PeopleCard() {
                     >
                       Yes, decline
                     </Button>
-                    <Button small onPress={() => setDeclining("")}>
-                      Keep
-                    </Button>
+                    <Button onPress={() => setDeclining("")}>Keep</Button>
                   </>
                 ) : (
                   <>
                     <Button
-                      small
                       primary
                       busy={busy === `${request.id}:approve`}
                       accessibilityLabel={`Approve and invite ${request.name}`}
@@ -365,7 +361,6 @@ export function PeopleCard() {
                       Approve and invite
                     </Button>
                     <Button
-                      small
                       accessibilityLabel={`Decline ${request.name}`}
                       onPress={() => setDeclining(request.id)}
                     >
@@ -377,7 +372,7 @@ export function PeopleCard() {
             </View>
           ))}
           {requests.length > REQUESTS_FIRST && (
-            <Button small onPress={() => setAllRequests(!allRequests)}>
+            <Button onPress={() => setAllRequests(!allRequests)}>
               {allRequests ? "Show fewer requests" : `Show all ${requests.length} requests`}
             </Button>
           )}
@@ -510,9 +505,15 @@ export function PeopleCard() {
                 </Text>
               </View>
               {person.status === "disabled" ? (
-                <Chip tint={colors.errorBg}>Removed</Chip>
+                <View style={{ alignSelf: "center" }}>
+                  <Chip tint={colors.errorBg}>Removed</Chip>
+                </View>
               ) : (
-                person.plan && <Chip>{person.plan.name}</Chip>
+                person.plan && (
+                  <View style={{ alignSelf: "center" }}>
+                    <Chip tint={colors.subtle}>{person.plan.name}</Chip>
+                  </View>
+                )
               )}
               {open ? (
                 <ChevronUp size={20} color={colors.mutedStrong} />
@@ -680,7 +681,7 @@ export function PeopleCard() {
         );
       })}
       {found.length > visible.length && (
-        <Button small onPress={() => setShown(shown + PAGE)}>
+        <Button onPress={() => setShown(shown + PAGE)}>
           {found.length - visible.length > PAGE
             ? `Show ${PAGE} more (${found.length - visible.length} not shown)`
             : `Show ${found.length - visible.length} more`}
