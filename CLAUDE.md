@@ -83,6 +83,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   numbered marks, and directions that point at what's in the picture ("tap the 2"), not walls of
   text. A feature isn't finished until its Help topic and pictures are in the same commit; if a
   picture can't be taken (a screen the sandbox can't show), say so in the session notes and why.
+- **Standing rule (owner, 2026-10-22):** the website's home page (`apps/mobile/public/neddy.html`;
+  also `pricing.html` and `compare.html` when a plan, price or comparison changes) is updated in the
+  same commit as any feature people would notice. Say only what is true today, with its honest limits;
+  retake its screenshots at 390×844 and 1280×800 and look at them.
 
 ## Lessons learned
 
@@ -481,4 +485,12 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   capped at 35% of the window and waits while a heads-up shows on a window under 900px, and heads-ups cap themselves.
   Test every new thing that goes above the composer with the others open, at 1913x911, 1100x640 and 390x700
   (`scratchpad` repro: mock `/api/meal-checkins` and `/api/heads-ups`, click "Attach a document").
-
+- **Redaction (owner, 2026-10-22):** card, Social Security, bank and ID numbers, passwords, PINs and API
+  keys are found by shape (`packages/domain/src/redact.ts`) and replaced before any model sees them.
+  Everything that reaches a model goes through it: the chat's history (`guardInput`), every chat tool's
+  result (`guardTools`), a job's tool results and prompt, connector results (`bounded()`), browser page
+  text (`hide()`), chat summaries and meeting transcripts (`hideText`). A new tool or a new path into a
+  prompt must use the same guard, or it is a hole. Keep id/url/hash keys on `secretsOnly` (a long digit
+  string there isn't a card). Limits to say honestly: the raw typed message stays in the saved chat
+  history, a live call's voice model hears the raw speech, and numbers spelled in words or unlabeled
+  foreign ID formats can slip through. Tests: `tests/redact.test.ts`, `tests/redaction-chat.test.ts`.

@@ -5,6 +5,7 @@ import type { Blobs } from "./blobs.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 import type { Plans } from "./plans.ts";
+import { hideText } from "./redaction.ts";
 import type { UsageMeter } from "./usage.ts";
 
 /**
@@ -926,7 +927,9 @@ export class Meetings {
     const transcript = await this.db.get<Transcript>(owner, "meeting-transcripts", meeting.id);
     const text = transcript ? transcriptText(meeting, transcript.segments, transcript.gaps) : "";
     // About 250,000 letters is several hours of talk; anything past it is left out of the notes.
-    const notes = text ? await this.options.writeNotes?.(owner, text.slice(0, 250_000)) : undefined;
+    const notes = text
+      ? await this.options.writeNotes?.(owner, hideText(text.slice(0, 250_000)))
+      : undefined;
     const speakers = { ...(notes?.speakers ?? {}), ...(meeting.speakers ?? {}) };
     const next: Meeting = {
       ...meeting,

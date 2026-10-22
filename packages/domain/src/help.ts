@@ -219,6 +219,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Things that can’t wait (time to leave, security and money alerts) are said out loud; see **Urgent alerts on calls**.",
       "Say “brief me” any time, on a call or in the chat, for a short rundown of your day: what’s next, what’s waiting for your OK, jobs that need you, and what’s coming up.",
       "Things waiting for your OK can be approved by voice too: {agent} reads each one back, and you say “yes, approve” (purchases and payments still need a tap).",
+      "Don’t read out card numbers, passwords or PINs on a call. {agent} hides them from the AI in what you type and what it reads, but the voice service hears what you say out loud (see **Card numbers and passwords stay hidden**).",
       "A call hangs up by itself after a minute or so of quiet, so silence doesn’t cost anything.",
       "If live talk has a monthly limit and you reach it, calls can start again on the 1st of next month. Until then, type to {agent}, and tap **Listen** under a reply to hear it.",
     ],
@@ -240,7 +241,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "daily brief",
       "interrupt",
     ],
-    related: ["call-bar", "see-it", "call-ends", "fix-call"],
+    related: ["call-bar", "see-it", "call-ends", "fix-call", "privacy-hidden"],
   },
   {
     id: "call-bar",
@@ -1686,11 +1687,52 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Keep **Ask me before each sign-in** on, unless you want {agent} to sign in without asking.",
     ],
     body: [
-      "Never share a password in the chat. The password is typed in only on that website.",
+      "Don’t share a password in the chat. {agent} hides passwords from the AI, but what you type stays in your chat history, so a saved sign-in is safer. The password is typed in only on that website.",
       "For sites with two-step sign-in, you can add the authenticator key so {agent} can enter the codes too.",
     ],
     keywords: ["password", "login", "vault", "2fa", "authenticator", "sign in", "security"],
-    related: ["website-jobs"],
+    related: ["privacy-hidden", "website-jobs"],
+  },
+  {
+    id: "privacy-hidden",
+    group: "control",
+    title: "Card numbers and passwords stay hidden",
+    summary:
+      "Card numbers, passwords and the like are hidden before the AI sees them. {agent} tells you once when it hid something.",
+    shot: "privacy",
+    steps: [
+      "Ask as usual, like “What’s on my billing page?”. Nothing to turn on: this is always on.",
+      "If {agent} came across a card number, password or the like, it tells you once, in one short line, what it hid and that it never sees it.",
+    ],
+    body: [
+      "**What’s hidden:** card numbers, Social Security numbers, bank account and routing numbers, ID numbers (passport, licence), passwords, PINs and secret keys. They’re found by how they look and hidden before the AI model sees them, wherever they come from: what you type, your email, files, web pages {agent} reads, results from your connected apps, background jobs, chat summaries and meeting notes. {agent} sees a stand-in like “card ending 1234”.",
+      "**What it can’t do:** your own message stays in your chat history; only the AI never sees the number. On a live call the voice service hears what you say out loud, so hiding doesn’t apply to speech: don’t read out card numbers, passwords or PINs. Numbers spelled out in words, and ID numbers from other countries with no label next to them, can slip through. It lowers the risk; it isn’t a guarantee.",
+      "**What to do instead:** for a password, save the sign-in under **Apps › Account › Passwords**; the website gets it and {agent} doesn’t. For a payment, ask {agent} to buy it and tap **Approve** on the card; never type your card number into the chat.",
+      "To remove a number you typed, tap the bin under that message in the chat, or use **Reset my agent…** under **Apps › Account › Your data**.",
+    ],
+    say: [
+      { text: "What do you hide from the AI?", send: true },
+      { text: "Where do I put a password?", send: true },
+    ],
+    keywords: [
+      "card number",
+      "credit card",
+      "ssn",
+      "social security",
+      "password",
+      "pin",
+      "privacy",
+      "hidden",
+      "hide",
+      "redact",
+      "sensitive",
+      "secret key",
+      "api key",
+      "bank account",
+      "private by default",
+      "does the ai see",
+    ],
+    related: ["passwords", "approvals", "your-data", "privacy"],
   },
   {
     id: "your-data",
@@ -1703,8 +1745,11 @@ export const HELP_TOPICS: HelpTopic[] = [
       "**Download my data** gets a copy of your chats, memories, jobs, goals, routines, reminders, health log and files.",
       "**Reset my agent…** deletes them for good (type RESET to confirm). Your account, connected apps and email stay.",
     ],
+    body: [
+      "Your chats keep exactly what you typed. {agent} hides card numbers and passwords from the AI, but a number you typed is still in your chat until you delete that message (tap the bin under it) or reset.",
+    ],
     keywords: ["export", "download", "delete", "reset", "privacy", "data", "start over"],
-    related: ["privacy"],
+    related: ["privacy", "privacy-hidden"],
   },
   {
     id: "privacy",
@@ -1714,9 +1759,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "Other people using this Neato_Muse can’t see your chats, memory, files, connected apps or spending.",
       "Email, web pages and documents are treated as information, never as instructions: an email can’t tell {agent} to do something.",
+      "Card numbers, passwords and the like are hidden before the AI sees them; see **Card numbers and passwords stay hidden**.",
     ],
     keywords: ["privacy", "private", "security", "safe", "who can see"],
-    related: ["your-data", "approvals"],
+    related: ["privacy-hidden", "your-data", "approvals"],
   },
 
   // Settings and alerts

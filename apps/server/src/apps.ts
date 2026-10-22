@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type AppAction, appActionSchema } from "../../../packages/domain/src/index.ts";
+import { hiddenNames, redactDeep } from "../../../packages/domain/src/redact.ts";
 import { destructiveAction } from "./approval-rules.ts";
 import { ADMIN_OWNER } from "./auth.ts";
 import { fileLinks } from "./cloud-import.ts";
@@ -106,8 +107,12 @@ export function readOnlyAction(slug: string, app: string, tags: string[]) {
 
 /** Bounds untrusted connector output before it reaches the model. */
 export function bounded(value: unknown, limit = 30000) {
-  const text = JSON.stringify(value ?? null);
-  return text.length <= limit ? { data: value } : { data: text.slice(0, limit), truncated: true };
+  // Cleaned before it's cut, so a card number is never left half there.
+  const { value: safe, found } = redactDeep(value ?? null);
+  const text = JSON.stringify(safe);
+  const kept =
+    text.length <= limit ? { data: safe } : { data: text.slice(0, limit), truncated: true };
+  return found.length ? { ...kept, hidden: hiddenNames(found) } : kept;
 }
 
 /** Tries of a request refused for too many requests, and the longest pause between them. */

@@ -1471,6 +1471,9 @@ h1 span {
   color: var(--ink-2);
   font-size: 15px;
 }
+.rules .part .ic {
+  color: var(--peach);
+}
 
 /* Backdrops */
 .yours {

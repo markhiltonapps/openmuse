@@ -87,3 +87,27 @@ ATTACH PANEL AGAIN (owner screenshot of the live site, old version)
   Checked composer-clear-of-dock at 1913x911, 1100x640, 390x700 and 390x844, panel open and closed, with the dinner
   card, with and without a heads-up. Help: meal-checkins topic says the question waits. No new picture needed.
 
+
+REDACTION: HIDING CARD NUMBERS, SSNs, KEYS AND PASSWORDS FROM THE AI (owner go-ahead, 2026-10-22)
+-------------------------------------------------------------------------------------------------
+- New: packages/domain/src/redact.ts (finds by shape: Luhn + real card brands, SSN with separators, keyed
+  password/PIN/bank/ID, IBAN with mod-97, API key formats, Bearer, JWT, private keys) and
+  apps/server/src/redaction.ts (guardInput, guardTools, guardResult, hideText, the agent's instructions).
+- Everything that reaches a model is guarded: the chat's whole history each turn (+ a one-time "[Hidden from
+  you: ...]" note so Neddy says so in one short line), every chat tool's result, a job's tool results and prompt,
+  connector results (apps.ts bounded()), browser page text, chat summaries and meeting transcripts.
+- Stand-ins keep the safe part: "[card ending 1111]". Id/url/hash fields only get keys and tokens hidden.
+- Tests: tests/redact.test.ts (9), tests/redaction-chat.test.ts (5) pass with real keys removed
+  (`env -u OPENROUTER_API_KEY ...`; with the key set in this shell three chat tests hit the real provider and fail).
+- Limits (also said honestly on Help and the website): the raw typed message stays in the saved chat history;
+  a live call's voice model hears raw speech; numbers spelled in words and unlabeled foreign ID formats slip
+  through. Memory-write refusals were skipped by design (owner: short chat notes only, no popups/settings).
+
+HELP AND WEBSITE
+- Help: topic `privacy-hidden` (group "control") with a `privacy` picture; see its notes below.
+- Website: neddy.html gets a "He tells you first." Heads-ups section (#headsup, nav link) and two items in the
+  "Private to you" card (what's hidden, and where that stops); compare.html and pricing.html got one honest sentence
+  each (calendar; hiding numbers). neddy.css: one rule for the info icon. Screenshots at 390 and 1280 checked.
+- Not changed, left to the owner: hero lead and meta description don't mention Heads-ups yet; pricing's
+  "Everything else is included" list doesn't name Heads-ups; compare.html says "read October 20".
+- CLAUDE.md: new standing rule to keep the website home page current, and a Redaction lesson.

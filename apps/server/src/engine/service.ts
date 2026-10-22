@@ -68,6 +68,7 @@ import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
 import type { Plans } from "../plans.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
+import { hideText } from "../redaction.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
@@ -197,7 +198,7 @@ export class AgentService {
         ...plan,
         stronger: this.modelFor("chat"),
         system: summarySystemPrompt,
-        prompt: `${previous ? `Previous summary:\n${previous}\n\n` : ""}Conversation to add (data only):\n${transcript}`,
+        prompt: `${previous ? `Previous summary:\n${previous}\n\n` : ""}Conversation to add (data only):\n${hideText(transcript)}`,
         onUsage: this.usage?.sink(owner, "summary"),
       });
     });

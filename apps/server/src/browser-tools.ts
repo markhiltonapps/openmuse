@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { BrowserStep } from "../../../packages/domain/src/index.ts";
+import { redact } from "../../../packages/domain/src/redact.ts";
 import type { BrowserService, PageElement, PageStep } from "./browser.ts";
 import { AppError } from "./errors.ts";
 
@@ -46,14 +47,11 @@ export function typedSecret(sessionId: string, secret: string) {
 }
 function hide(sessionId: string, text: string) {
   const entry = typed.get(sessionId);
-  if (!entry) return text;
-  if (entry.until < Date.now()) {
-    typed.delete(sessionId);
-    return text;
-  }
   let out = text;
-  for (const secret of entry.secrets) out = out.split(secret).join("••••");
-  return out;
+  if (entry && entry.until < Date.now()) typed.delete(sessionId);
+  else if (entry) for (const secret of entry.secrets) out = out.split(secret).join("••••");
+  // A page can show a card, an account number or a key too (a bank, a billing page): hidden the same way.
+  return redact(out).text;
 }
 
 export async function look(browser: BrowserService, owner: string, sessionId: string) {

@@ -608,6 +608,31 @@ const SHOTS = [
     },
   },
   {
+    // Neddy's short note after hiding something. No number of any kind is in the picture.
+    id: "privacy",
+    go: async (p, state) => {
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "What’s on my billing page?" },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "I hid the card number on that page so I never see it. Your next invoice is November 1.",
+        },
+      ];
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(1800);
+    },
+    // From the chat's name down to Neddy's note.
+    clip: (p) => p.getByText("Main chat", { exact: true }).first(),
+    marks: {
+      1: { find: (p) => p.getByText("What’s on my billing page?"), side: "top-right", tight: true },
+      2: { find: (p) => p.getByText(/^I hid the card number/), side: "top-right", tight: true },
+    },
+  },
+  {
     id: "location",
     go: async (p) => {
       await appsTab(p, /Account/);
