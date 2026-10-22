@@ -65,7 +65,7 @@ import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { replyFailure, runConversationTurn } from "./conversation-run";
 import { ToolAppResult } from "./email-cards";
 import { isPicture } from "./file-kinds";
-import { HeadsUpCards } from "./heads-ups-ui";
+import { HeadsUpCards, useHeadsUpShowing } from "./heads-ups-ui";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { HelpAnswerCard } from "./help-ui";
 import { useCallControls } from "./live-call";
@@ -489,7 +489,8 @@ export function ChatScreen({
   // Live voice (real-time talk), for the people it's turned on for.
   const live = useLiveVoice();
   const call = useCallControls();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const headsUpShowing = useHeadsUpShowing();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
   const agentName = agentWorkspace?.identity.name || "your agent";
   // During a call the headset goes back to it.
@@ -1750,8 +1751,24 @@ export function ChatScreen({
             </Button>
           </View>
         )}
-        {!voiceMode && <HeadsUpCards replying={replying} active={active} />}
-        {!voiceMode && <MealCheckInCard replying={replying} active={active} />}
+        {/* The cards give way while a photo or file is being added, and never take more than a third
+            of the window (a short window once lost the message box under the bottom bar to the
+            dinner question and the attach panel together). The dinner question also waits while a
+            heads-up shows on a short window. They come back when the panel closes or it's cleared. */}
+        {!voiceMode && !picking && <HeadsUpCards replying={replying} active={active} />}
+        {!voiceMode && !picking && !(headsUpShowing && windowHeight < 900) && (
+          <ScrollView
+            style={{
+              flexGrow: 0,
+              flexShrink: 1,
+              minHeight: 0,
+              maxHeight: Math.round(windowHeight * 0.35),
+            }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <MealCheckInCard replying={replying} active={active} />
+          </ScrollView>
+        )}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15, flexShrink: 1, minHeight: 0 }}>
             <Text style={s.heading}>Add a photo or file</Text>

@@ -475,4 +475,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Review rounds work (owner rule, 2026-10-01, run again 2026-10-22):** visual, usability and copy reviewers each
   found real blockers in Heads-ups (a card cut off mid-button, a Later that nagged all day, an intro that said "on"
   with no calendar); expect two rounds, and send the reviewers the screenshots and the code.
+- **Cards above the message box share the window (owner screenshot, 2026-10-22):** the dinner question, heads-ups
+  and the attach (+) panel all sit above the composer, and nothing but the message list gives way, so together they
+  pushed the message box under the bottom bar. The attach panel hides the cards while it's open, the dinner card is
+  capped at 35% of the window and waits while a heads-up shows on a window under 900px, and heads-ups cap themselves.
+  Test every new thing that goes above the composer with the others open, at 1913x911, 1100x640 and 390x700
+  (`scratchpad` repro: mock `/api/meal-checkins` and `/api/heads-ups`, click "Attach a document").
 

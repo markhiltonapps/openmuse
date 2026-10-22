@@ -76,3 +76,14 @@ PENDING
 - Redaction (plan section 2.3) and the single approval gate (2.2): next in the build order.
 - Rotate provider keys after Railway's incident (owner); verify live once Railway builds resume.
 - Possible later: Composio calendar triggers, maps-based travel time, text messages, native iPhone app.
+
+ATTACH PANEL AGAIN (owner screenshot of the live site, old version)
+-------------------------------------------------------------------
+- The owner still saw the + panel hide the message box on muse.neatoventures.com. That is the old build (Railway
+  deploys are paused), so the first fix isn't live yet. Reproduced locally with the dinner check-in card open:
+  at 1100x640 the panel was squeezed to nothing and the composer sat behind the dock.
+- Fix (apps/mobile/src/chat.tsx, heads-ups-ui.tsx): the cards above the message box hide while the attach panel is
+  open; the dinner card is capped at 35% of the window and waits while a heads-up shows on windows under 900px.
+  Checked composer-clear-of-dock at 1913x911, 1100x640, 390x700 and 390x844, panel open and closed, with the dinner
+  card, with and without a heads-up. Help: meal-checkins topic says the question waits. No new picture needed.
+

@@ -992,7 +992,9 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Choose the times (8:30 am, 12:30 pm and 6:30 pm unless you change them).",
       "At each time you get a notification and a card in the chat. Tap the mic and say it.",
     ],
-    body: ["If you already logged that meal, you won’t be asked."],
+    body: [
+      "If you already logged that meal, you won’t be asked. On a short screen the question waits while you’re adding a photo or file, or while a heads-up is showing, and comes back after.",
+    ],
     say: ["Ask me what I ate at every meal."],
     keywords: ["check-in", "meal reminder", "ask", "notification"],
     related: ["log-meal", "playbook"],

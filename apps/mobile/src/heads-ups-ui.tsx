@@ -10,7 +10,14 @@ import {
   PenLine,
   Video,
 } from "lucide-react-native";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   Linking,
   Platform,
@@ -699,6 +706,29 @@ function HeadsUpCard({
  * rest one line each, until cleared, put off or expired. With none, the one-time explanation.
  * Draws nothing until the first answer is in.
  */
+/** Whether a heads-up is showing above the chat box, so the dinner question can give way on a short window. */
+let showingCount = 0;
+const showingListeners = new Set<() => void>();
+const setShowing = (count: number) => {
+  if (count === showingCount) return;
+  showingCount = count;
+  for (const listener of showingListeners) listener();
+};
+export function useHeadsUpShowing() {
+  return (
+    useSyncExternalStore(
+      (listener) => {
+        showingListeners.add(listener);
+        return () => {
+          showingListeners.delete(listener);
+        };
+      },
+      () => showingCount,
+      () => 0,
+    ) > 0
+  );
+}
+
 export function HeadsUpCards({ replying, active }: { replying?: boolean; active?: boolean }) {
   const { state, load, save } = useHeadsUps();
   const { data } = useAgentWorkspace();
@@ -743,6 +773,12 @@ export function HeadsUpCards({ replying, active }: { replying?: boolean; active?
     };
   }, [active, load]);
   const open = state?.settings.on ? state.open : [];
+  // Told to the chat screen (and cleared when the cards go away).
+  const showing = open.length;
+  useEffect(() => {
+    setShowing(showing);
+    return () => setShowing(0);
+  }, [showing]);
   // Say a new heads-up once, for screen readers; one that was already there isn't new again.
   const seen = useRef(new Set<string>());
   useEffect(() => {
