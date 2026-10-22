@@ -65,6 +65,7 @@ import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { replyFailure, runConversationTurn } from "./conversation-run";
 import { ToolAppResult } from "./email-cards";
 import { isPicture } from "./file-kinds";
+import { HeadsUpCards } from "./heads-ups-ui";
 import { MealToolCard, WorkoutToolCard } from "./health-ui";
 import { HelpAnswerCard } from "./help-ui";
 import { useCallControls } from "./live-call";
@@ -1062,9 +1063,15 @@ export function ChatScreen({
     // (the home screen's keyboard button) just puts them in the message box.
     if (prompt.draft) {
       if (!claimPrompt(prompt.id)) return;
-      // Anything they'd already typed stays, with the example on a new line.
+      // Anything they'd already typed stays, with the example on a new line (not twice).
       if (prompt.text.trim())
-        setDraft((typed) => (typed.trim() ? `${typed.trimEnd()}\n${prompt.text}` : prompt.text));
+        setDraft((typed) =>
+          !typed.trim()
+            ? prompt.text
+            : typed.includes(prompt.text)
+              ? typed
+              : `${typed.trimEnd()}\n${prompt.text}`,
+        );
       setTimeout(() => input.current?.focus(), 0);
       return;
     }
@@ -1743,6 +1750,7 @@ export function ChatScreen({
             </Button>
           </View>
         )}
+        {!voiceMode && <HeadsUpCards replying={replying} active={active} />}
         {!voiceMode && <MealCheckInCard replying={replying} active={active} />}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15, flexShrink: 1, minHeight: 0 }}>

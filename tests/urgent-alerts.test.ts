@@ -105,7 +105,7 @@ test("time to leave: something starting in 10 to 20 minutes is said on the call"
   });
   await alerts.checkLeave("urgent-2");
   assert.deepEqual(said, [
-    "Heads up: “Dentist” starts in about 15 minutes, at 3:00 PM. It’s at 12 Main St.",
+    "Coming up: “Dentist” starts in about 15 minutes, at 3:00 PM. It’s at 12 Main St.",
   ]);
   await alerts.update("urgent-2", { timeToLeave: false });
   said.length = 0;

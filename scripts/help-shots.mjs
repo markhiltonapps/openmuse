@@ -174,7 +174,10 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
       const { threadId, runId } = JSON.parse(route.request().postData() || "{}");
       const events = [
         { type: "RUN_STARTED", threadId, runId },
-        { type: "MESSAGES_SNAPSHOT", messages: threadId === "t-main" ? exchange : [] },
+        {
+          type: "MESSAGES_SNAPSHOT",
+          messages: threadId === "t-main" ? (state.exchange ?? exchange) : [],
+        },
         { type: "RUN_FINISHED", threadId, runId },
       ];
       return route.fulfill({
@@ -191,6 +194,23 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
       route.fulfill({ json: { ok: true, named: {} } }),
     );
   }
+  // Heads-ups: the one-time intro seen and nothing open, so no other picture changes; the
+  // Heads-ups pictures set state.headsUps (and tell the page) in their own steps.
+  await page.route(/\/api\/heads-ups$/, async (route) => {
+    const real = await (await route.fetch()).json();
+    await route.fulfill({
+      json: {
+        ...real,
+        settings: { ...real.settings, introSeen: true, ...state.headsUps?.settings },
+        intro: false,
+        open: state.headsUps?.open ?? [],
+        more: 0,
+        calendar: true,
+        email: true,
+        look: "ok",
+      },
+    });
+  });
   await page.route(/\/api\/weather/, (route) => route.fulfill({ json: weather() }));
   await page.route(/\/api\/voice\/live$/, (route) =>
     route.request().method() === "GET"
@@ -513,6 +533,78 @@ const SHOTS = [
     marks: {
       2: (p) => p.getByRole("checkbox", { name: /^Time to leave/ }),
       3: { find: (p) => p.getByLabel(/^Add someone/).first(), side: "inside-right" },
+    },
+  },
+  {
+    // Today's dentist (1:00-2:00 pm) and Zoom with Dana (2:30 pm): a tight gap, with a second
+    // heads-up as a one-line row under it.
+    id: "headsups",
+    go: async (p, state) => {
+      const at = (minutes) => new Date(Date.now() + minutes * 60_000).toISOString();
+      const item = (fields) => ({
+        urgency: "now",
+        eventIds: [],
+        showAt: at(-5),
+        expiresAt: at(60),
+        status: "open",
+        createdAt: at(-5),
+        ...fields,
+      });
+      state.headsUps = {
+        open: [
+          item({
+            id: "a".repeat(32),
+            kind: "tight_gap",
+            title: "Head back right after Dentist",
+            body: "Dentist ends at 2:00 pm and Zoom with Dana starts at 2:30 pm. Head out as soon as it ends. You’ll need about 30 minutes to get back.",
+            moveTitle: "Zoom with Dana",
+          }),
+          item({
+            id: "b".repeat(32),
+            kind: "starting_soon",
+            title: "Zoom with Dana starts at 2:30 pm",
+            body: "The meeting link is ready.",
+            joinUrl: "https://example.com/join/dana",
+          }),
+        ],
+      };
+      // The chat above agrees with the card: the same afternoon.
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "What’s on my calendar this afternoon?" },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content: "The dentist from 1:00 to 2:00 pm, then Zoom with Dana at 2:30 pm.",
+        },
+      ];
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(1800);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByRole("heading", { name: /^Head back right after Dentist/ }),
+        side: "top-right",
+      },
+      2: (p) => button(p, /^Done$/),
+      3: { find: (p) => button(p, /^Later$/), side: "top-right" },
+      4: { find: (p) => button(p, "Ask for a later start"), side: "inside-right" },
+      5: { find: (p) => button(p, "Stop these heads-ups"), side: "left" },
+    },
+  },
+  {
+    id: "headsupsettings",
+    height: 1000,
+    // From the tab row down to More options: the dock would cover what's under it.
+    clip: (p) => p.getByRole("tab", { name: /^About you/ }).first(),
+    go: async (p) => {
+      await appsTab(p, /Alerts/);
+    },
+    marks: {
+      1: { find: (p) => p.getByRole("switch", { name: /^Heads-ups\./ }), side: "inside-right" },
+      2: (p) => p.getByRole("radiogroup", { name: "How much I tell you" }),
+      3: (p) => button(p, "More options"),
     },
   },
   {

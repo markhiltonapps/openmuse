@@ -53,6 +53,8 @@ import { FeedService } from "./feed.ts";
 import { FileShares } from "./file-shares.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { headsUpEmail } from "./heads-up-email.ts";
+import { HeadsUps } from "./heads-ups.ts";
 import { HealthService } from "./health.ts";
 import { AgentInbox } from "./inbound.ts";
 import { backgroundFailure } from "./log.ts";
@@ -758,6 +760,47 @@ export async function createApp(
   );
   health.onMeal = (owner, entry) => checkIns.mealLogged(owner, entry);
   agent.checkIns = checkIns;
+  // Neddy speaks first about the day's calendar (on for everyone; no model, so no cost per look).
+  const headsUps = new HeadsUps(db, {
+    events: async (owner, from, to) =>
+      (await agent.calendarRange?.(owner, from, to)) ?? { events: [], checked: [], failed: [] },
+    timeZone: (owner) => agent.timeZone(owner),
+    zoneKnown: async (owner) =>
+      !!(await db.get<{ timeZone?: string }>(owner, "agent-settings", "preferences"))?.timeZone,
+    quietHours: async (owner) => (await agent.persona.get(owner, "prefs.quietHours"))?.value,
+    owners: async () =>
+      (await db.scan<{ id: string }>("agent-settings"))
+        .filter(({ value }) => value.id === "identity")
+        .map(({ owner }) => owner),
+    notify: (owner, note) =>
+      agent.notify(
+        owner,
+        note.title,
+        note.body,
+        undefined,
+        note.key,
+        { headsUpId: note.id },
+        note.push,
+      ),
+    email: mailer
+      ? async (owner, item) => {
+          const to = (await accounts.get(owner))?.email;
+          if (!to) return;
+          const name =
+            (await db.get<{ name?: string }>(owner, "agent-settings", "identity"))?.name?.trim() ||
+            "Neddy";
+          await mailer.send({
+            to,
+            ...headsUpEmail({
+              ...item,
+              appUrl: (config.appUrl ?? config.publicUrl).replace(/\/$/, ""),
+              agentName: name,
+            }),
+          });
+        }
+      : undefined,
+  });
+  agent.headsUps = headsUps;
   agent.backups = new Backups(db, blobs);
   void checkIns
     .adoptMealRoutines()
@@ -1550,6 +1593,24 @@ export async function createApp(
   app.post("/api/meal-checkins/:id/snooze", async (c) =>
     c.json(await checkIns.snooze(c.get("owner"), checkInId(c.req.param("id")))),
   );
+  app.get("/api/heads-ups", async (c) => c.json(await headsUps.current(c.get("owner"))));
+  app.post("/api/heads-ups/settings", async (c) =>
+    c.json(await headsUps.update(c.get("owner"), await c.req.json())),
+  );
+  const headsUpId = (id: string) =>
+    z
+      .string()
+      .regex(/^[a-f0-9]{32}$/)
+      .parse(id);
+  app.post("/api/heads-ups/:id/done", async (c) =>
+    c.json(await headsUps.done(c.get("owner"), headsUpId(c.req.param("id")))),
+  );
+  app.post("/api/heads-ups/:id/snooze", async (c) =>
+    c.json(await headsUps.snooze(c.get("owner"), headsUpId(c.req.param("id")))),
+  );
+  app.post("/api/heads-ups/:id/mute", async (c) =>
+    c.json(await headsUps.mute(c.get("owner"), headsUpId(c.req.param("id")))),
+  );
   app.post("/api/meal-checkins/:id/same", async (c) =>
     c.json(await checkIns.sameAsYesterday(c.get("owner"), checkInId(c.req.param("id"))), 201),
   );
@@ -1635,13 +1696,15 @@ export async function createApp(
     const { endpoint } = z.object({ endpoint: z.string().max(2048) }).parse(await c.req.json());
     return c.json(await push.unsubscribe(c.get("owner"), endpoint));
   });
-  app.get("/api/apps", async (c) =>
-    c.json(
+  app.get("/api/apps", async (c) => {
+    // Coming back from signing in to a calendar: Heads-ups looks at their day without waiting.
+    void headsUps.poke(c.get("owner")).catch(() => undefined);
+    return c.json(
       connected
         ? { configured: true, apps: await connected.connections(c.get("owner")) }
         : { configured: false, apps: [] },
-    ),
-  );
+    );
+  });
   // "Your own apps": add one by its address, sign in or add its key, check it again, remove it.
   app.get("/api/mcp", async (c) => c.json({ apps: await mcp.list(c.get("owner")) }));
   app.post("/api/mcp", async (c) => c.json(await mcp.add(c.get("owner"), await c.req.json()), 201));

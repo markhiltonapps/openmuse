@@ -178,6 +178,8 @@ export interface AgentNotification {
   actionId?: string;
   /** Set on a recorded meeting's notes being ready: opens the meeting. */
   meetingId?: string;
+  /** Set on a heads-up from the calendar: opens the chat, where its card is. */
+  headsUpId?: string;
   title: string;
   body: string;
   createdAt: string;

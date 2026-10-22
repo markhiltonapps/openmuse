@@ -78,6 +78,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   (instructions at its top), and add a shot there for a new screen that needs one.
 - Admin-only setup (Railway, keys, services) goes in the `admin` group.
 - Mention the Help change in the session notes.
+- **Standing rule (owner, 2026-10-22):** every update to the app updates Help, with no exceptions
+  and no "later". Whenever possible the topic is **visual**: screenshots of the real screen with
+  numbered marks, and directions that point at what's in the picture ("tap the 2"), not walls of
+  text. A feature isn't finished until its Help topic and pictures are in the same commit; if a
+  picture can't be taken (a screen the sandbox can't show), say so in the session notes and why.
 
 ## Lessons learned
 
@@ -457,3 +462,17 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   shrink by default, so anything stacked above the message box (the attach panel) pushes the box under
   the bottom bar on a short window. Give the parts that can give way `flexShrink` (the message list a big
   one so it goes first) and a `minHeight`, and check a short window (1100x640, 390x700), not just a tall one.
+- **Heads-ups (owner, 2026-10-22):** Neddy tells people first about their calendar (`heads-ups.ts`,
+  rules in `heads-up-rules.ts`). On for everyone, no model per look: one calendar read per person per pass
+  (10 minutes when something is near, an hour when nothing is, back-off on failures), plain rules, templates.
+  A heads-up is a card above the chat box (like meal check-ins), a bell entry and a phone notification
+  (limited per day; a meeting about to start never buzzes). Never tell people nothing is wrong when nothing is
+  being watched: the server keeps `lastLook` (ok / none / failed / no-zone) for the screens and tools. No
+  heads-ups until the app has sent the person's time zone (every clock time would be wrong). "Away from the
+  desk" is a guess: lunch, coffee, the gym and interviews count only with a real place; a call, video visit or
+  web address is never a trip. Tool text is shared with calls: say where a card appears only in the chat prompt.
+  Help pictures mock `/api/heads-ups`; use the server's real wording in the mock, or the picture lies.
+- **Review rounds work (owner rule, 2026-10-01, run again 2026-10-22):** visual, usability and copy reviewers each
+  found real blockers in Heads-ups (a card cut off mid-button, a Later that nagged all day, an intro that said "on"
+  with no calendar); expect two rounds, and send the reviewers the screenshots and the code.
+

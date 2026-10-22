@@ -36,3 +36,43 @@ PENDING
 - Rotate provider keys (owner).
 - Answer the plan's open questions, then build Heads-ups phase 1.
 - Stripe billing (task #200) still waits for the owner's go-ahead and keys.
+
+
+HEADS-UPS (built the same day, after the owner's answers)
+---------------------------------------------------------
+Owner's answers: travel buffer 30 minutes; a one-time intro card for new people; redaction notes only in short
+chat notes; build order Heads-ups first. Also: "every update to the app updates Help, with screenshots and
+visual directions whenever possible" (saved in CLAUDE.md).
+
+What was built
+- Server: packages/domain/src/heads-up.ts (types, kind labels, defaults), apps/server/src/heads-up-rules.ts
+  (pure rules: leave for / head back / tight gap / overlap / meeting about to start / no break; common-sense
+  "away from the desk" places; quiet hours parser), apps/server/src/heads-ups.ts (watcher, settings, snooze,
+  mute with undo, delivery, tools my_heads_ups and set_heads_ups), heads-up-email.ts, routes /api/heads-ups*,
+  notify() takes a push flag and a ?headsup= deep link, wired into the maintenance loop and the chat tools.
+  Connecting a calendar or saving the time zone nudges a look straight away.
+- App: apps/mobile/src/heads-ups-ui.tsx (HeadsUpCards above the chat box, the one-time intro with no-calendar /
+  couldn't-read variants, Undo rows, "N more heads-ups" button; HeadsUpsCard first in Apps > Alerts),
+  web-app.ts (?headsup=), chat.tsx (mount; draft() no longer appends the same words twice).
+- Help: topics heads-ups (shot headsups) and heads-ups-settings (shot headsupsettings), urgent-alerts mentions
+  Heads-ups; scripts/help-shots.mjs mocks /api/heads-ups so other pictures don't change. Call-time alert lines
+  now start "Coming up:" instead of "Heads up:".
+- Design division: two rounds of visual, usability and copy review, all three signed off (blockers found and
+  fixed: cut-off card stack, nagging snooze, Not useful with no undo, intro with no calendar, stale
+  "Tomorrow," text, Help promising a message the app can't show).
+
+TEST RESULTS
+- Full suite 602 pass before the last small fixes, then +1 test (reconnect after a failed read); Biome errors 0,
+  root and mobile tsc clean. New tests: tests/heads-up-rules.test.ts, heads-ups.test.ts, heads-ups-api.test.ts.
+
+KNOWN ISSUES / NOT VERIFIED
+- Nothing deployed (Railway builds paused all day). Nothing pushed; local commits only.
+- People whose browser reports exactly "UTC" and never saved a zone get no heads-ups until one is saved.
+- Not verified end to end: service-worker tap while the app is open (?headsup=), real Composio calendar reads,
+  native iPhone push (needs the app on the Home Screen), the Join tab (sandbox blocks example.com).
+- The meal check-in buttons have the same missing-edge gap the visual reviewer found on the new cards.
+
+PENDING
+- Redaction (plan section 2.3) and the single approval gate (2.2): next in the build order.
+- Rotate provider keys after Railway's incident (owner); verify live once Railway builds resume.
+- Possible later: Composio calendar triggers, maps-based travel time, text messages, native iPhone app.

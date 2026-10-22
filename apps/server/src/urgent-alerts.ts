@@ -183,7 +183,7 @@ export class UrgentAlerts {
       });
       this.deps.speak(
         owner,
-        `Heads up: “${event.title}” starts in about ${minutes} minutes, at ${at}.${event.location ? ` It’s at ${clip(event.location, 80)}.` : ""}`,
+        `Coming up: “${event.title}” starts in about ${minutes} minutes, at ${at}.${event.location ? ` It’s at ${clip(event.location, 80)}.` : ""}`,
         `leave:${event.title}:${event.start}`,
       );
     }

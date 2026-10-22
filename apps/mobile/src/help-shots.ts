@@ -15,6 +15,8 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   feed: { width: 720, height: 1558 },
   files: { width: 720, height: 1558 },
   greet: { width: 720, height: 1558 },
+  headsups: { width: 720, height: 1558 },
+  headsupsettings: { width: 720, height: 1410 },
   health: { width: 720, height: 1558 },
   home: { width: 720, height: 1558 },
   job: { width: 720, height: 1558 },

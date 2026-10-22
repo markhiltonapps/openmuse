@@ -54,6 +54,7 @@ import { AppError } from "../errors.ts";
 import { FileShares } from "../file-shares.ts";
 import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
+import type { HeadsUps } from "../heads-ups.ts";
 import type { HealthService } from "../health.ts";
 import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
 import { jobEmail } from "../job-email.ts";
@@ -265,6 +266,9 @@ export class AgentService {
       await this.checkIns
         ?.due((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("meal check-ins", error));
+      await this.headsUps
+        ?.due((owner) => this.removed(owner))
+        .catch((error) => backgroundFailure("heads-ups", error));
       for (const { owner, value } of await this.db.scan<Idea>("ideas"))
         if (
           value.status === "accepted" &&
@@ -1344,6 +1348,8 @@ export class AgentService {
   health?: HealthService;
   /** "What did you have for lunch?" at meal times; asked from the maintenance loop. */
   checkIns?: MealCheckIns;
+  /** Neddy speaks first about the day's calendar; checked from the maintenance loop. */
+  headsUps?: HeadsUps;
   /** A private code sandbox (Python, no internet) for numbers and file work. */
   sandbox?: CodeSandbox;
   /** The town or city the person lives in, for local news and "near me" searches. */
@@ -1560,7 +1566,12 @@ export class AgentService {
     body: string,
     taskId?: string,
     key?: string,
-    extra: Pick<AgentNotification, "reminderId" | "checkInId" | "actionId" | "meetingId"> = {},
+    extra: Pick<
+      AgentNotification,
+      "reminderId" | "checkInId" | "actionId" | "meetingId" | "headsUpId"
+    > = {},
+    /** False saves the bell entry without a phone notification. */
+    push = true,
   ) {
     const value: AgentNotification = {
       id: key ? hash(key) : randomUUID(),
@@ -1572,7 +1583,7 @@ export class AgentService {
       read: false,
     };
     const inserted = Boolean(await this.db.insertIfAbsent(owner, "notifications", value));
-    if (inserted && this.push)
+    if (inserted && this.push && push)
       void this.push
         .notify(owner, {
           title,
@@ -1582,13 +1593,15 @@ export class AgentService {
           // waiting for approval opens its review.
           ...(extra.checkInId
             ? { url: `/?checkin=${encodeURIComponent(extra.checkInId)}` }
-            : taskId
-              ? { url: `/?task=${encodeURIComponent(taskId)}` }
-              : extra.actionId
-                ? { url: `/?review=${encodeURIComponent(extra.actionId)}` }
-                : extra.meetingId
-                  ? { url: `/?meeting=${encodeURIComponent(extra.meetingId)}` }
-                  : {}),
+            : extra.headsUpId
+              ? { url: `/?headsup=${encodeURIComponent(extra.headsUpId)}` }
+              : taskId
+                ? { url: `/?task=${encodeURIComponent(taskId)}` }
+                : extra.actionId
+                  ? { url: `/?review=${encodeURIComponent(extra.actionId)}` }
+                  : extra.meetingId
+                    ? { url: `/?meeting=${encodeURIComponent(extra.meetingId)}` }
+                    : {}),
         })
         .catch((error) => backgroundFailure("push notification", error));
     return inserted;
@@ -1642,6 +1655,8 @@ export class AgentService {
   async setTimeZone(owner: string, raw: unknown) {
     const timeZone = timeZoneSchema.parse(raw);
     await this.db.put(owner, "agent-settings", { id: "preferences", timeZone });
+    // Heads-ups was waiting for this: look at their day now, not in an hour.
+    void this.headsUps?.refresh(owner).catch(() => undefined);
     return { timeZone };
   }
   async createRoutine(owner: string, raw: unknown, idempotencyKey?: string) {

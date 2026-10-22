@@ -297,7 +297,7 @@ function WorkspaceApp({ token }: { token: string }) {
     setPrompt({ id: Date.now(), text, draft: true });
     setSection("chat");
   }, []);
-  // A tapped meal check-in opens chat, where its card is waiting.
+  // A tapped meal check-in or heads-up opens chat, where its card is waiting.
   useEffect(
     () =>
       listenForCheckIns(() => {

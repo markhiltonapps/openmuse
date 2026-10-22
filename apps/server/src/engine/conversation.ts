@@ -34,6 +34,7 @@ import { calendarToolSpec } from "../day-tools.ts";
 import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
+import { headsUpInstructions, headsUpToolSpecs } from "../heads-ups.ts";
 import { healthTargets, healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
 import { helpToolInstructions, helpToolSpecs } from "../help-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
@@ -957,6 +958,23 @@ export class ConversationAgent extends AbstractAgent {
       );
     const health = this.service.health;
     const checkIns = this.service.checkIns;
+    const headsUps = this.service.headsUps;
+    if (headsUps)
+      tools.push(
+        ...headsUpToolSpecs(headsUps, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) => {
+              try {
+                return await (spec.execute as (value: unknown) => Promise<unknown>)(args);
+              } catch (error) {
+                return { error: error instanceof Error ? error.message : "Could not change it" };
+              }
+            },
+          }),
+        ),
+      );
     if (health)
       tools.push(
         ...[
@@ -1281,6 +1299,7 @@ export class ConversationAgent extends AbstractAgent {
         (mail ? agentEmailInstructions : "") +
         (health ? healthToolInstructions : "") +
         (health && this.service.checkIns ? checkInInstructions : "") +
+        (this.service.headsUps ? headsUpInstructions : "") +
         (this.service.areas ? areaInstructions : "") +
         (this.service.weather ? weatherInstructions : "") +
         (this.service.sandbox ? codeSandboxInstructions : "") +

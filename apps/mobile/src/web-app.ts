@@ -10,11 +10,15 @@ export function registerServiceWorker() {
   void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
 }
 
-/** Heard when a tapped notification asks for a meal check-in; the chat card reloads on it. */
+/**
+ * Heard when a tapped notification asks for a meal check-in or a heads-up; the chat cards reload
+ * on it.
+ */
 export const CHECK_IN_OPENED = "muse-checkin-opened";
 /**
- * A tapped check-in notification opens the app at /?checkin=… (or, when it's already open, the
- * service worker says so). Calls `onOpen` for either, and tidies the address bar.
+ * A tapped check-in notification opens the app at /?checkin=… (a heads-up, /?headsup=…); when
+ * it's already open, the service worker says so. Calls `onOpen` for either, and tidies the
+ * address bar.
  */
 export function listenForCheckIns(onOpen: () => void) {
   if (!web()) return () => undefined;
@@ -23,14 +27,16 @@ export function listenForCheckIns(onOpen: () => void) {
     window.dispatchEvent(new Event(CHECK_IN_OPENED));
   };
   const url = new URL(window.location.href);
-  if (url.searchParams.has("checkin")) {
+  if (url.searchParams.has("checkin") || url.searchParams.has("headsup")) {
     url.searchParams.delete("checkin");
+    url.searchParams.delete("headsup");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     opened();
   }
   const message = (event: MessageEvent) => {
     const data = event.data as { type?: string; url?: string } | undefined;
-    if (data?.type === "notification-open" && data.url?.includes("checkin=")) opened();
+    if (data?.type !== "notification-open") return;
+    if (data.url?.includes("checkin=") || data.url?.includes("headsup=")) opened();
   };
   navigator.serviceWorker?.addEventListener("message", message);
   return () => navigator.serviceWorker?.removeEventListener("message", message);

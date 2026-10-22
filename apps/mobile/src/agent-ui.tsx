@@ -69,6 +69,7 @@ import { LineChart } from "./charts-extra";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { REST_OF_JOB_DETAIL } from "./details";
 import { Emoji, topicEmoji } from "./emoji";
+import { HeadsUpsCard } from "./heads-ups-ui";
 import { HealthSection } from "./health-ui";
 import { HelpCard } from "./help-ui";
 import {
@@ -3916,6 +3917,7 @@ export function AppsScreen() {
       )}
       {tab === "alerts" && (
         <>
+          <HeadsUpsCard />
           <JobAlertsCard />
           <UrgentAlertsCard />
           <MailAlertsCard />
