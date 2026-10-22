@@ -1,0 +1,38 @@
+Claude working session 2026-10-22
+=================================
+
+WHAT HAPPENED
+- Railway had a platform outage (builds paused in all regions, plus a security incident covering
+  stored environment variables). The last pushes (123e6bc, 9b5cd65) are on GitHub but web and api
+  have not redeployed since 3178424 (Oct 20). Nothing is wrong with the code. When builds return the
+  newest commit should deploy by itself; if not, press Redeploy on web and api.
+- Owner pushed efed81c (People card visual fixes) and 9b5cd65 (notes).
+- Advice given: Railway recommends rolling every stored variable. Rotate the paid AI/voice keys
+  first (Anthropic, OpenRouter, OpenAI x2, Soniox, Inworld, Cloudflare TURN, Resend, Composio);
+  leave DATABASE_URL until Railway says how; do NOT change TOKEN_ENCRYPTION_KEY without a
+  migration (it would lock people out of their connected app sign-ins).
+- Owner asked for a proactive "Heads-ups" feature and a plan to match Anthropic's new always-on
+  agent. Wrote docs/PROACTIVE-AND-SAFETY-PLAN.md (audit of the loop, approvals and redaction, then
+  the build plan with files and stubs). Nothing built yet.
+
+OWNER'S DECISIONS (2026-10-22)
+- Heads-ups on for everyone, can be turned off.
+- Travel: common-sense rule (an appointment away from the desk needs travel before a call or desk
+  meeting), no maps in v1.
+- Calendars: Google first, Outlook ready; reads via Composio, so watch its limits.
+- Delivery: push, bell, inline chat card, email now; text later; native iPhone app eventually.
+
+TEST RESULTS
+- No code changed today (docs only), so no test run.
+
+KNOWN ISSUES
+- Web/api deploy blocked by the Railway outage; the Free plan, limits, People card, access-request
+  email and attach fix are not live until it clears.
+- Railway tools are disconnected in this session (needs authorizing in claude.ai connectors).
+
+PENDING
+- Verify live after Railway recovers (pricing page, Usage > Your plan, People card, attach panel on
+  a short window, access-request email).
+- Rotate provider keys (owner).
+- Answer the plan's open questions, then build Heads-ups phase 1.
+- Stripe billing (task #200) still waits for the owner's go-ahead and keys.
