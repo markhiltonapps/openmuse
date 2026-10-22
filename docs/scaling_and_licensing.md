@@ -11,7 +11,7 @@ Written 2026-10-20 for the owner. Plain answers first, details after.
 | api (Node) | Accounts, chat agent, background jobs, meetings, files, the voice signalling | One instance. Vertical first (more CPU/RAM on the same box). Horizontal needs the checks below. |
 | web (Caddy) | Serves the app and this landing page; static files | Stateless. Any number of copies, or put it behind a CDN. |
 | voice (Python, Pipecat) | Our own live voice: Soniox → Haiku → Inworld, WebRTC through Cloudflare TURN | CPU-bound: about 0.44 core per call. VOICE_WORKERS × VOICE_CALLS_PER_WORKER calls per box (2 × 4 = 8 today). More boxes behind the front router for more. |
-| browser (Node, Playwright) | The agent's web hands for jobs | One browser per job; add replicas as jobs grow. Redeploys only when apps/worker changes. |
+| browser (Node, Playwright) | The agent's web hands for jobs, and the screen a person can take over | One worker holds 3 active sessions and keeps each saved login (a Chromium profile) on its own disk volume, so more copies are not a simple dial: a person's next session must land on the copy that holds their profile, or the profiles move to shared storage first. See "Scaling the browser" below. Redeploys only when apps/worker changes. |
 | Postgres | Every record (accounts, jobs, chats' saved parts, meetings, usage) | Railway's managed Postgres; grows vertically to large sizes. Read replicas later if ever needed. |
 | Bucket (S3-style) | Files, recordings, exports | Effectively unlimited. |
 | Outside: CopilotKit Cloud | Chat threads and their history | Their problem to scale; our cost per thread. |
@@ -23,6 +23,83 @@ Written 2026-10-20 for the owner. Plain answers first, details after.
 - **Calls**: the one thing that eats CPU. Eight calls at once today. The largest single Railway box carries roughly 70. Past that, more voice boxes.
 - **Meetings**: transcription is sent out to Soniox; the api only joins pieces and writes notes. Cheap.
 - **Database**: at thousands of users the data is still small (text). The biggest rows are meeting transcripts.
+
+### Scaling the browser (added 2026-10-22)
+
+- **Today:** one worker, 3 active sessions at once, 20 saved profiles, 30-minute idle close, a 2 GB memory limit.
+  Each session is a headless Chromium (roughly 0.5 GB and about half a core while busy).
+- **Why replicas aren't free:** the saved profile (cookies, saved logins, downloads) lives on that worker's disk
+  volume, and the session id is only known to the worker that opened it. A second copy would not find the first
+  copy's profiles.
+- **Two ways forward, cheapest first:**
+  1. *Route by person:* the api remembers which worker holds each person's profile and always sends them there;
+     new people go to the least busy worker. Small change, but a worker's disk is then a single point of loss
+     (back up the volume).
+  2. *Shared storage:* keep profiles in the bucket and load one onto whichever worker is free. More work and a
+     little slower to start, but any worker can serve anyone and a worker can be replaced at will.
+- **Before either:** raise the 3-session cap only after measuring memory on Railway, and decide how long an idle
+  profile is kept (the 20-profile cap is per worker today, which is far below a few thousand people).
+- **Cost:** about 1 to 2 cents per hour of use, so at any realistic scale the browser is a rounding error next to
+  the AI model reading its screenshots.
+
+### Live calls in depth (added 2026-10-22)
+
+**Why calls use CPU at all.** Chat and jobs mostly wait on the AI model, so they barely touch the processor. A live
+call is different: our own voice service (apps/voice) receives and sends audio over WebRTC, and the Python library
+that does it (aiortc) handles every small audio packet, about fifty a second each way, in Python. That is steady
+work for as long as the call lasts, even in silence. Measured: about 0.44 of a CPU core per call and about 100 MB of
+memory per call.
+
+**What we can carry today.** The front process runs 2 worker processes with 4 calls each, so 8 calls at once
+(`VOICE_WORKERS` = 2, `VOICE_CALLS_PER_WORKER` = 4). That needs roughly 3.5 cores and 1 GB, so the box must have at
+least that. The ninth caller is refused by the voice service with a 429 "busy" (front.py). Check how the app words that
+refusal before launch; it should say so kindly and offer typing instead. A call that has started is not dropped
+to make room.
+
+**Is CPU a big cost?** No. It is a capacity limit, not a cost problem. Railway bills the processor by what is used:
+0.44 core is about 0.02 cents per call minute, against about 1.6 cents for the AI, speech-to-text and voice. The
+real costs are the providers, not our server. What the limit decides is how many calls can happen at the same
+moment.
+
+**How many calls at once do we need?** Concurrent calls depend on how people behave, not on how many people sign
+up. A planning rule (assumption, not measured): a person uses their monthly minutes evenly across days, and the
+busiest hour of the day holds about 15% of a day's calls. Then concurrent calls at the busiest hour is about
+0.005 x people at 60 minutes a month, and it scales with minutes. Plan for three times that for bursts.
+
+| People (60 min a month each) | Busy-hour calls at once | Plan for (3x) | Cores | Memory |
+|---|---|---|---|---|
+| 100 | 0.5 | 2 | 1 | 0.2 GB |
+| 1,000 | 5 | 15 | 7 | 1.5 GB |
+| 5,000 | 25 | 75 | 33 | 7.5 GB |
+| 10,000 | 50 | 150 | 66 | 15 GB |
+
+The Neddy plan includes 60 call minutes, Starter 20, Max 300 and Free 5, so a user base weighted to Max needs several
+times more. Meetings recorded from the phone do not use this capacity (the audio is uploaded and transcribed later).
+
+**How to scale into the thousands, in order:**
+1. *Use the room we have.* A bigger Railway box raises the cap with two settings (more workers, same 4 calls each).
+   The largest box is about 32 cores, so about 70 calls. That already covers roughly 4,000 people at 60 minutes.
+   Test first: run a load test at 8, then 16, then 32 calls and watch CPU, because 4 calls a process is where the
+   event loop starts to fall behind.
+2. *Add voice boxes behind the router.* Past one box, run several voice services and have the api pick the least
+   busy one (call ids already say which worker owns a call, so the api's side channel finds it). Nothing about a
+   call is stored in the voice service, so a box can be added or lost without losing anyone's data, only live calls.
+3. *Spread by region.* Callers far from the box hear delay. Place voice boxes near the people, and use the TURN
+   relay's nearest point (Cloudflare's relay is global).
+4. *Make the CPU per call smaller,* if it ever matters: a faster WebRTC path (a media server such as LiveKit does the
+   audio in compiled code, which can cut CPU per call by about ten times) is the single biggest lever. It is a
+   large change, so do it only when the boxes above stop being cheap.
+5. *Check the providers' limits early.* These stop you before the CPU does: Soniox (speech-to-text) and Inworld
+   (voice) limits on simultaneous streams, and Anthropic's rate limits at your spend tier. Ask each for the number
+   for your plan before launch. We do not know them yet.
+
+**Other things that scale with calls.** The api keeps a live connection to every call (cheap; hundreds are fine). The
+TURN relay carries the audio, tens of megabytes an hour per call, which should sit well inside its free
+allowance (confirm the current Cloudflare terms). A call
+cap per person (monthly minutes, per plan) already stops one person from using many.
+
+**What to do first.** Nothing now. At today's size 8 calls is plenty. Before any launch: confirm the box size, run
+the load test, and get the provider limits in writing.
 
 ### Before taking paying customers, in this order
 
