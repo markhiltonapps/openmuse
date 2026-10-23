@@ -122,3 +122,60 @@ BUCKET KEYS REJECTED (found 2026-10-23, after Railway's incident)
   between about 09:00 UTC Oct 22 and the fix may not have been stored; Postgres records are unaffected.
 - Still to do: deploy web; owner retries the meeting summary; confirm no new bucket errors; confirm the
   nightly backup runs again.
+
+RECORDER SAFEGUARDS (2026-10-23, owner: "build both safeguards")
+-----------------------------------------------------------------
+Why: on Oct 23 a 15-minute meeting was lost. The bucket rejected the api's keys, every audio piece got a 502
+for 15 minutes, the phone kept the pieces only in memory and the app showed nothing; at Stop the server had no
+audio ("No sound reached the server"). Last night's meeting (115766b3) most likely hit the same fault.
+1) Keep the audio on the device until the server has it
+   - apps/mobile/src/meeting-store.ts: IndexedDB (memory fallback). Each 30 s piece is saved before sending and
+     removed once the server has it.
+   - apps/mobile/src/meeting-uploader.ts: sends in order, retries with waits (and at once on "online" / app back),
+     resumes after a reload, closes the recording on the server only after every piece arrived (job kept on
+     the device), keeps pieces the server refuses as "closed" (stuck) so they can be saved as a file, clears
+     leftovers after 14 days, lets go of a meeting the server doesn't know.
+   - meeting-recorder.ts now hands pieces to the uploader (no queue of its own); Stop waits up to 60 s, then
+     keeps the rest on the device (or sooner: "Keep it on this device and carry on").
+2) Warn within seconds
+   - After 3 failed sends in a row (about a minute in: the first 30 s piece is sent at 30 s): "Not reaching the server" card in the recorder, "· not sending" on the red
+     bar, a status line for screen readers, and in the Saving sheet the card + the keep-and-go-on button.
+   - The meeting's page shows "Still sending from this device" (about N minutes left, Save a copy of the
+     audio) or, when the server had already closed it, "Part of this recording couldn't be sent".
+3) Server (apps/server/src/meetings.ts)
+   - start() saves and removes a tiny test file first: with storage refusing files no recording starts (503,
+     plain words). chunk() answers a refused piece with a 503 in the same plain words (was a bare 502).
+Help: new topic "A recording says it isn't sending" (shot recordertrouble, light + dark, marks 1-3) and a line in
+"Record a meeting". help-shots.mjs has a recordertrouble shot (fake recorder, server that refuses pieces).
+Tests: tests/meetings.test.ts (+1: start refused, piece 503, works again), apps/mobile/test/meeting-uploader.test.ts
+(8). Browser check (Chromium, fake microphone, a server that refuses pieces) passed 9 of 9: warning within about 10 s,
+audio kept in IndexedDB, sent and removed after recovery, Stop with unsent audio kept it and did not finish early,
+a reload sent it and then told the server the recording was over.
+Known limits: audio kept only in this browser (a different device can't send it); a recording the server closed
+after 45 minutes without any piece can't take late pieces (kept for Save a copy); a phone that locks stops
+sending until the app is back; native (non-web) apps don't record meetings yet.
+
+SECOND REVIEW ROUND (2026-10-23, Design division: visual, usability, copy; all three signed off, usability after a third look)
+Real bugs the reviewers found and that are fixed:
+ - The last 30 s piece could be written to the device after Stop had already asked the server to close the recording
+   (add() awaits the write). add() now counts in-flight writes; pending()/drained() include them (test with a slow store).
+ - A tab closed mid-recording left the meeting "Still recording" with no finish ever sent. resume(true) at app start
+   now queues a finish for left-over audio whose newest piece is over 90 s old (a fresher one may be another tab's live
+   recording). The server's finish ignores an already-finished meeting, so it is safe to send twice.
+ - A device that refuses storage (full, blocked, no IndexedDB) used to be reported as "safe on this device". putPiece now
+   returns whether it was kept; the cards then say "held in this tab only, don't close or reload", and Save a copy
+   includes the in-memory pieces ("Nothing is left on this device to save" when there are none).
+ - Throw away that can't reach the server stranded a recording: "Keep it instead" (finishWhenSent) sits beside Try again.
+ - The bar showed the offline icon while sending was healthy: now a spinner (healthy), cloud-off (trouble), triangle (stuck);
+   text "Sending · N min of audio left" / "Not sending · N min of audio".
+ - Copy: honest 45-minute wording ("if the app is closed or locked for 45 minutes"), "about a minute" not 15 s, "Save a copy
+   of the audio", stuck card says the file may only play from part-way and can't be added back, "Clear it from this device"
+   (confirmed) for a stuck recording, Throw away warns whenever anything hasn't reached the server.
+Accepted limits (not built): piece 0 of each part isn't kept, so a copy of "the rest" may play only from part-way; no
+countdown before the 14-day clearing; no visible "caught up" line (screen readers get one); the wake lock is released
+after Stop; a leftover finish sends 86,400 s (the server caps it to the time the recording was open); permanent 413/422
+answers retry for ever; a different person signing in on the same browser with audio waiting isn't warned.
+Help: topic recording-not-sending re-written for marks 1-3 and the new wording; picture retaken (ring on mark 1 now on the title).
+Checks: biome clean, tsc (root and apps/mobile) clean, pnpm test 633/633.
+Fringe-feature research (docs/FRINGE-FEATURE-IDEAS.md) committed separately; nothing from it is built.
+NOT PUSHED: waiting for "push it" (check for a live call first).

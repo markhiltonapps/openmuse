@@ -36,6 +36,12 @@ const LEFT_AFTER = 45 * 60_000;
 /** What people see when Soniox couldn't write it up (its own reason goes to the server's log). */
 const COULD_NOT_WRITE = "The words couldn’t be written down this time. Try again in a minute.";
 const NOT_FOUND = "This meeting couldn’t be found.";
+/** Storage that refuses files: said before a recording starts, and when a piece can't be saved. */
+const STORAGE_DOWN_START =
+  "We can’t save recordings right now, so nothing was recorded. Try again in a few minutes.";
+/** The app matches “can’t save” in this to say why a recording isn’t sending (whyNotSending). */
+const STORAGE_DOWN_PIECE =
+  "The server can’t save this recording right now. It’s kept on this device and sent again when it can.";
 /** One person's recordings, newest first: enough for years of weekly meetings. */
 const MAX_MEETINGS = 500;
 
@@ -436,6 +442,7 @@ export class Meetings {
       );
     if ((await this.db.count(owner, "meetings")) >= MAX_MEETINGS)
       throw new AppError("Delete some old recordings before making a new one.", 409);
+    await this.checkStorage();
     const at = this.now();
     const allowedSeconds = Math.min(MAX_MEETING_SECONDS, leftSeconds ?? MAX_MEETING_SECONDS);
     const meeting: Meeting = {
@@ -450,6 +457,22 @@ export class Meetings {
     };
     await this.db.put(owner, "meetings", meeting);
     return { meeting: this.view(meeting), maxSeconds: allowedSeconds };
+  }
+  /**
+   * A small file saved and removed, so a recording never starts into storage that isn't taking
+   * files (an hour of audio once went nowhere while the bucket refused every piece).
+   */
+  private async checkStorage() {
+    const key = `meetings/check-${randomUUID()}.txt`;
+    try {
+      await this.blobs.put(key, new TextEncoder().encode("ok"), "text/plain");
+    } catch (error) {
+      console.warn(
+        `[OpenMuse] Recording not started: file storage refused a test file (${error instanceof Error ? error.message : error})`,
+      );
+      throw new AppError(STORAGE_DOWN_START, 503);
+    }
+    await this.blobs.remove(key).catch(() => undefined);
   }
   private async get(owner: string, id: string) {
     if (!SAFE_ID.test(id)) throw new AppError(NOT_FOUND, 404);
@@ -472,7 +495,33 @@ export class Meetings {
     const elapsed = (this.now() - Date.parse(meeting.startedAt)) / 1000;
     if (elapsed > meeting.allowedSeconds + 15 * 60)
       throw new AppError("This recording has run past its time", 409);
-    await this.blobs.put(chunkKey(id, part, n), bytes, meeting.mime);
+    try {
+      await this.blobs.put(chunkKey(id, part, n), bytes, meeting.mime);
+    } catch (error) {
+      // The app keeps the piece and sends it again; its words come from here (503, not a bare 502).
+      console.warn(
+        `[OpenMuse] A piece of meeting ${id} couldn't be saved: ${error instanceof Error ? error.message : error}`,
+      );
+      throw new AppError(STORAGE_DOWN_PIECE, 503);
+    }
+    await this.db.compareAndSwap(
+      owner,
+      "meetings",
+      id,
+      { status: "recording" },
+      { lastChunkAt: this.iso() },
+    );
+    return { ok: true };
+  }
+  /**
+   * The app still holds audio it couldn't send: the recording isn't "left open" yet, so the 45
+   * minutes of silence start again. Never past the time the recording was allowed.
+   */
+  async alive(owner: string, id: string) {
+    const meeting = await this.get(owner, id);
+    if (meeting.status !== "recording") return { ok: false };
+    const elapsed = (this.now() - Date.parse(meeting.startedAt)) / 1000;
+    if (elapsed > meeting.allowedSeconds + 15 * 60) return { ok: false };
     await this.db.compareAndSwap(
       owner,
       "meetings",

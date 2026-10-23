@@ -4,12 +4,15 @@ import {
   ChevronDown,
   ChevronRight,
   CircleStop,
+  CloudOff,
+  Download,
   Mic,
   MicOff,
   Pencil,
   RotateCcw,
   Sparkles,
   Trash2,
+  TriangleAlert,
 } from "lucide-react-native";
 import {
   createContext,
@@ -34,6 +37,8 @@ import {
   spokenLength,
   stoppedAtLimit,
 } from "./meeting-recorder";
+import { indexedStore } from "./meeting-store";
+import { MeetingUploader, type Unsent } from "./meeting-uploader";
 import { dark } from "./theme";
 import { tipProps } from "./tips";
 import { Button, Card, Chip, colors, ErrorNotice, glassSurface, Sheet, s } from "./ui";
@@ -141,13 +146,17 @@ function recorderNews(state: RecorderState) {
     case "starting":
       return "Getting the microphone";
     case "recording":
+      if (state.trouble) return "Not reaching the server. The recording is safe on this device";
+      if (state.caughtUp) return "Reached the server again. Everything has been sent";
       if (state.away !== undefined)
         return `Recording again. Nothing was recorded for ${missedLength(state.away)} while you were away.`;
       return left !== undefined && left < 5 * 60 ? "5 minutes or less left" : "Recording";
     case "paused":
       return "Recording paused. It carries on when you’re back";
     case "saving":
-      return "Saving the recording";
+      return state.trouble
+        ? "Not reaching the server. You can keep the recording on this device and carry on"
+        : "Saving the recording";
     case "error":
       return state.error ?? "";
     default:
@@ -177,6 +186,11 @@ interface RecorderValue {
   openMeeting: () => void;
   /** The "paused while you were away" note has been read. */
   seenAway: () => void;
+  /** Stop is waiting on pieces the server isn't taking: keep them on this device and go on. */
+  keepOnDevice: () => void;
+  keepInstead: () => void;
+  /** Sends a recording's pieces; also what a stopped recording's page asks about what's unsent. */
+  uploader: MeetingUploader;
   /** The recorder's screen, over whatever is open; or shrunk to the red bar. */
   shown: boolean;
   expand: () => void;
@@ -187,6 +201,18 @@ export function useRecorder() {
   const value = useContext(RecorderContext);
   if (!value) throw new Error("The recorder is unavailable");
   return value;
+}
+const never = () => () => undefined;
+const noVersion = () => 0;
+/** What of this recording is still on this device, not yet on the server (undefined: all sent). */
+export function useUnsent(meetingId: string): Unsent | undefined {
+  const uploader = useContext(RecorderContext)?.uploader;
+  useSyncExternalStore(
+    uploader?.subscribe ?? never,
+    uploader?.getVersion ?? noVersion,
+    uploader?.getVersion ?? noVersion,
+  );
+  return uploader?.snapshot(meetingId);
 }
 /** Start, ending a live call first: the phone can't record and be on a call at once. */
 export function useStartRecording() {
@@ -212,7 +238,27 @@ export function useRecording() {
 
 export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
   const { api, open } = useWorkspace();
-  const recorder = useMemo(() => new MeetingRecorder(api), [api]);
+  const uploader = useMemo(() => new MeetingUploader(api, indexedStore()), [api]);
+  const recorder = useMemo(() => new MeetingRecorder(api, uploader), [api, uploader]);
+  // Audio left on this device (a reload, a closed tab, a server that wasn't taking files) is sent
+  // when the app opens, and again whenever the phone is back online or the app comes to the front.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    void uploader.resume(true);
+    const back = () => {
+      uploader.poke();
+      void uploader.resume();
+    };
+    const visible = () => {
+      if (document.visibilityState === "visible") back();
+    };
+    window.addEventListener("online", back);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.removeEventListener("online", back);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [uploader]);
   const state = useSyncExternalStore(
     recorder.subscribe,
     recorder.getSnapshot,
@@ -252,6 +298,14 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
     recorder.clear();
     if (id) open({ type: "meeting", id });
   }, [recorder, open]);
+  const keepInstead = useCallback(() => {
+    void recorder.keepInstead().then((id) => {
+      if (id) {
+        setShown(false);
+        open({ type: "meeting", id });
+      }
+    });
+  }, [recorder, open]);
   const finishAgain = useCallback(() => {
     void recorder.finishAgain().then((id) => {
       if (id && recorder.snapshot.phase === "idle") {
@@ -269,8 +323,11 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
       discard,
       resume: () => void recorder.resume(),
       seenAway: () => recorder.seenAway(),
+      keepOnDevice: () => recorder.keepOnDevice(),
+      keepInstead,
       finishAgain,
       openMeeting,
+      uploader,
       shown,
       expand: () => setShown(true),
       shrink: () => {
@@ -279,7 +336,19 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
         recorder.seenAway();
       },
     }),
-    [state, supported, start, stop, discard, finishAgain, openMeeting, recorder, shown],
+    [
+      state,
+      supported,
+      start,
+      stop,
+      discard,
+      keepInstead,
+      finishAgain,
+      openMeeting,
+      uploader,
+      recorder,
+      shown,
+    ],
   );
   return (
     <RecorderContext.Provider value={value}>
@@ -313,6 +382,162 @@ function LevelBars({ level, color, size = 1 }: { level: number; color: string; s
   );
 }
 
+/** Why the server isn't getting the audio, in plain words (never the raw error). */
+function whyNotSending(error?: string) {
+  // Matches the server's own words for a refused piece (STORAGE_DOWN_PIECE in apps/server/src/meetings.ts).
+  return error && /can’t save/i.test(error)
+    ? "The server can’t save recordings right now."
+    : "The server isn’t answering right now, or the connection dropped.";
+}
+/** A small icon in a fixed box, so a spinner and a symbol line up with the title beside them. */
+function CardIcon({ children }: { children: ReactNode }) {
+  return (
+    <View aria-hidden style={{ width: 20, height: 20, marginTop: 1, alignItems: "center" }}>
+      {children}
+    </View>
+  );
+}
+/**
+ * Shown within seconds of the first failed sends: the audio is kept, and what to do. While
+ * recording it says to keep going; once Stop was pressed it says the person can wait or move on.
+ */
+function NotSaving({ state, stopped }: { state: RecorderState; stopped?: boolean }) {
+  const hold = state.onlyHere
+    ? "This device wouldn’t keep a copy, so the recording is held in this tab only. Don’t close or reload it until it has sent."
+    : undefined;
+  return (
+    <Card style={{ gap: 10, alignSelf: "stretch", marginTop: 8, backgroundColor: colors.orange }}>
+      <View style={[s.row, { gap: 8, alignItems: "flex-start" }]}>
+        <CardIcon>
+          <CloudOff size={18} color={colors.text} />
+        </CardIcon>
+        <Text style={[s.text, { fontWeight: "700", flex: 1 }]}>Not reaching the server</Text>
+      </View>
+      <Text style={s.text}>{whyNotSending(state.troubleText)}</Text>
+      <Text style={[s.muted, { color: colors.mutedStrong }]}>
+        {hold ??
+          (stopped
+            ? "Your recording is safe on this device. You can wait here, or tap “Keep it on this device and carry on” below. It sends by itself once the server is back, as long as the app is open."
+            : "Your recording is safe on this device. Keep this screen open and keep recording. It sends by itself as soon as the server is back.")}
+      </Text>
+    </Card>
+  );
+}
+/** Saves what's still kept on this device as audio files (one per part), so nothing is lost. */
+async function saveCopies(uploader: MeetingUploader, id: string, title: string) {
+  const copies = await uploader.copies(id);
+  if (!copies.length) return 0;
+  const base =
+    title
+      .replace(/[^\w -]+/g, "")
+      .trim()
+      .replace(/\s+/g, "-") || "meeting";
+  for (const copy of copies) {
+    const url = URL.createObjectURL(copy.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${base}${copies.length > 1 ? `-part-${copy.part + 1}` : ""}.${/mp4/.test(copy.type) ? "m4a" : "webm"}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    // Browsers refuse several automatic downloads in a row, so each waits a moment.
+    if (copies.length > 1) await new Promise((resolve) => setTimeout(resolve, 600));
+  }
+  return copies.length;
+}
+/** What's left to send, in a few words ("less than a minute", "about 3 minutes"). */
+function leftToSend(seconds: number) {
+  if (seconds < 60) return "Less than a minute";
+  const minutes = Math.round(seconds / 60);
+  return `About ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+}
+/** A recording whose audio is still on this device: sending, or couldn't be sent. */
+export function UnsentCard({ unsent, title }: { unsent: Unsent; title: string }) {
+  const { uploader } = useRecorder();
+  const [saved, setSaved] = useState<string>();
+  const [confirmClear, setConfirmClear] = useState(false);
+  const left = unsent.pieces
+    ? `${leftToSend(unsent.seconds)} of the recording hasn’t reached the server yet.`
+    : "Everything has reached the server. Finishing up…";
+  return (
+    <Card style={{ gap: 10, backgroundColor: colors.orange }}>
+      <View style={[s.row, { gap: 8, alignItems: "flex-start" }]}>
+        <CardIcon>
+          {unsent.stuck ? (
+            <TriangleAlert size={18} color={colors.danger} />
+          ) : unsent.trouble ? (
+            <CloudOff size={18} color={colors.text} />
+          ) : (
+            <ActivityIndicator size="small" color={colors.mutedStrong} />
+          )}
+        </CardIcon>
+        <Text style={[s.text, { fontWeight: "700", flex: 1 }]}>
+          {unsent.stuck
+            ? "Part of this recording couldn’t be sent"
+            : "Still sending from this device"}
+        </Text>
+      </View>
+      {unsent.stuck ? (
+        <Text style={s.text}>
+          This recording was already closed, so the rest can’t be added to it. The rest is still on
+          this device for 2 weeks. Save a copy of the audio to keep it. The file may only play from
+          part-way through, and it can’t be added back to the notes.
+        </Text>
+      ) : (
+        <>
+          <Text style={s.text}>{left}</Text>
+          <Text style={[s.muted, { color: colors.mutedStrong }]}>
+            {unsent.trouble ? `${whyNotSending(unsent.error)} ` : ""}
+            {unsent.onlyHere
+              ? "This device wouldn’t keep a copy, so the recording is held in this tab only. Don’t close or reload it until it has sent. "
+              : "Your recording is kept on this device and sends by itself when the server can be reached. "}
+            Keep the app open and the screen on until it’s sent. If the app is closed or locked for
+            45 minutes, the rest can’t be added. The notes are written once everything has arrived.
+          </Text>
+        </>
+      )}
+      {unsent.pieces > 0 && (
+        <Button
+          icon={Download}
+          style={{ alignSelf: "flex-start" }}
+          onPress={() => {
+            void saveCopies(uploader, unsent.meetingId, title).then((count) =>
+              setSaved(
+                count
+                  ? "Asked your browser to save the audio. Check your downloads."
+                  : "Nothing is left on this device to save.",
+              ),
+            );
+          }}
+        >
+          Save a copy of the audio
+        </Button>
+      )}
+      <StatusLine text={saved ?? ""} />
+      {saved && <Text style={s.small}>{saved}</Text>}
+      {unsent.stuck &&
+        (confirmClear ? (
+          <View style={{ gap: 8 }}>
+            <Text style={s.text}>
+              Clear the audio from this device? The notes stay. The audio can’t be brought back.
+            </Text>
+            <View style={[s.row, { gap: 8 }]}>
+              <Button danger onPress={() => void uploader.discard(unsent.meetingId)}>
+                Clear it
+              </Button>
+              <Button onPress={() => setConfirmClear(false)}>Keep it</Button>
+            </View>
+          </View>
+        ) : (
+          <Button style={{ alignSelf: "flex-start" }} onPress={() => setConfirmClear(true)}>
+            I’ve saved it. Clear it from this device
+          </Button>
+        ))}
+    </Card>
+  );
+}
+
 /** The recorder's screen: the time, the level, Stop; or why it can't record. */
 function RecorderSheet() {
   const rec = useRecorder();
@@ -341,6 +566,11 @@ function RecorderSheet() {
                   : state.phase === "error"
                     ? "Couldn’t record"
                     : "Record a meeting";
+  // Stop's footer goes away, so keyboard focus moves to the one choice left on the saving screen.
+  const keepOffered = saving && Boolean(state.trouble);
+  useEffect(() => {
+    if (keepOffered) focusLater("keep-on-device");
+  }, [keepOffered]);
   const askThrowAway = () => {
     setConfirm(true);
     focusLater("keep-recording");
@@ -382,7 +612,11 @@ function RecorderSheet() {
             </Pressable>
             {confirm ? (
               <View style={{ gap: 8, alignItems: "center" }}>
-                <Text style={s.muted}>Throw this recording away?</Text>
+                <Text style={[s.muted, { textAlign: "center", maxWidth: 360 }]}>
+                  {state.trouble || state.waiting > 0
+                    ? "Throw this recording away for good? Part of it hasn’t reached the server, so it can’t be brought back."
+                    : "Throw this recording away for good?"}
+                </Text>
                 <View style={[s.row, { gap: 8 }]}>
                   <Button danger onPress={rec.discard}>
                     Throw away
@@ -416,8 +650,8 @@ function RecorderSheet() {
                   width: 14,
                   height: 14,
                   borderRadius: 7,
-                  backgroundColor: paused ? "transparent" : RECORD_RED,
-                  borderWidth: paused ? 2 : 0,
+                  backgroundColor: paused || saving ? "transparent" : RECORD_RED,
+                  borderWidth: paused || saving ? 2 : 0,
                   borderColor: colors.muted,
                 }}
               />
@@ -441,9 +675,9 @@ function RecorderSheet() {
         {recording && state.away !== undefined && (
           <Card style={{ gap: 10, alignSelf: "stretch", backgroundColor: colors.orange }}>
             <View style={[s.row, { gap: 8, alignItems: "flex-start" }]}>
-              <View style={{ marginTop: 3 }}>
+              <CardIcon>
                 <MicOff size={18} color={colors.text} />
-              </View>
+              </CardIcon>
               <Text style={[s.text, { fontWeight: "700", flex: 1 }]}>
                 Recording paused while you were away
               </Text>
@@ -485,19 +719,35 @@ function RecorderSheet() {
             </Button>
           </View>
         )}
-        {saving && (
+        {saving && !state.trouble && (
           <View style={[s.row, { gap: 10 }]}>
             <ActivityIndicator color={colors.muted} />
             <Text style={s.muted}>
-              {state.waiting ? "Sending the last few seconds…" : "Sending it off to be written up…"}
+              {state.waiting
+                ? "Sending the last of the recording…"
+                : "Sending it off to be written up…"}
             </Text>
           </View>
         )}
+        {saving && state.trouble && (
+          <View style={{ gap: 12, alignSelf: "stretch" }}>
+            <NotSaving state={state} stopped />
+            <Button
+              primary
+              nativeID="keep-on-device"
+              onPress={rec.keepOnDevice}
+              style={{ alignSelf: "stretch" }}
+            >
+              Keep it on this device and carry on
+            </Button>
+          </View>
+        )}
         {state.phase === "starting" && <ActivityIndicator color={colors.muted} />}
-        {(recording || paused) && state.waiting > 2 && (
+        {(recording || paused) && state.trouble && <NotSaving state={state} />}
+        {(recording || paused) && !state.trouble && state.waiting > 2 && (
           <Text style={[s.small, { textAlign: "center" }]}>
-            The connection is slow, so some of the recording hasn’t sent yet. Keep recording; it’ll
-            send when the connection’s back.
+            The connection is slow, so some of the recording hasn’t sent yet. Keep recording. It
+            will send when the connection is back.
           </Text>
         )}
         {recording && left !== undefined && left < 5 * 60 && (
@@ -521,14 +771,12 @@ function RecorderSheet() {
                 Open the meeting
               </Button>
             ) : state.notThrownAway === "offline" ? (
-              <Button
-                primary
-                icon={RotateCcw}
-                onPress={rec.discard}
-                style={{ alignSelf: "flex-start" }}
-              >
-                Try again
-              </Button>
+              <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                <Button primary icon={RotateCcw} onPress={rec.discard}>
+                  Try again
+                </Button>
+                <Button onPress={rec.keepInstead}>Keep it instead</Button>
+              </View>
             ) : state.unfinished ? (
               <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
                 <Button primary icon={RotateCcw} onPress={rec.finishAgain}>
@@ -552,12 +800,74 @@ function RecorderSheet() {
   );
 }
 
+/**
+ * Audio still on this device after the recorder is closed (a recording stopped while the server
+ * wasn't taking it, or left after a reload): a bar at the top of every screen, so it's never
+ * forgotten, that opens the meeting's page.
+ */
+function UnsentBar() {
+  const { uploader } = useRecorder();
+  const { open } = useWorkspace();
+  useSyncExternalStore(uploader.subscribe, uploader.getVersion, uploader.getVersion);
+  const first = uploader.all()[0];
+  if (!first) return null;
+  const stuck = Boolean(first.stuck);
+  const audio = `${first.seconds < 60 ? "under 1" : Math.round(first.seconds / 60)} min of audio`;
+  const words = stuck
+    ? "Part of a recording couldn’t be sent"
+    : first.trouble
+      ? `Not sending · ${audio}`
+      : `Sending · ${audio} left`;
+  return (
+    <View
+      role="region"
+      aria-label="A recording is still on this device"
+      style={{
+        marginHorizontal: 12,
+        marginTop: 8,
+        marginBottom: 4,
+        borderRadius: 30,
+        backgroundColor: colors.inverse,
+      }}
+    >
+      <Pressable
+        role="button"
+        aria-label={`${words}. Open the meeting`}
+        onPress={() => open({ type: "meeting", id: first.meetingId })}
+        style={({ pressed }) => ({
+          minHeight: 48,
+          paddingHorizontal: 16,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          opacity: pressed ? 0.8 : 1,
+        })}
+      >
+        {stuck ? (
+          <TriangleAlert size={18} color={colors.onInverse} />
+        ) : first.trouble ? (
+          <CloudOff size={18} color={colors.onInverse} />
+        ) : (
+          <ActivityIndicator size="small" color={colors.onInverse} />
+        )}
+        <Text
+          numberOfLines={1}
+          style={{ flex: 1, color: colors.onInverse, fontSize: 15, fontWeight: "600" }}
+        >
+          {words}
+        </Text>
+        <ChevronRight size={18} color={colors.onInverse} />
+      </Pressable>
+    </View>
+  );
+}
+
 /** The red bar at the top of every screen and sheet while recording; tap it for the recorder. */
 export function RecordingBar() {
   const rec = useRecorder();
   const { state } = rec;
   if (state.phase !== "recording" && state.phase !== "paused" && state.phase !== "saving")
-    return null;
+    return <UnsentBar />;
   const paused = state.phase === "paused";
   const left =
     state.maxSeconds !== undefined ? Math.max(0, state.maxSeconds - state.seconds) : undefined;
@@ -592,7 +902,7 @@ export function RecordingBar() {
       {!rec.shown && <StatusLine text={recorderNews(state)} />}
       <Pressable
         role="button"
-        aria-label={`${paused ? "Recording paused" : "Recording"}, ${spokenLength(state.seconds)}. Open the recorder`}
+        aria-label={`${paused ? "Recording paused" : "Recording"}, ${spokenLength(state.seconds)}${state.trouble ? ", not sending to the server" : ""}. Open the recorder`}
         onPress={rec.expand}
         style={({ pressed }) => ({
           flex: 1,
@@ -624,11 +934,19 @@ export function RecordingBar() {
             fontVariant: ["tabular-nums"],
           }}
         >
-          {paused ? "Paused" : state.phase === "saving" ? "Saving" : "Recording"} ·{" "}
-          {clock(state.seconds)}
-          {ending ? ` · ${Math.max(1, Math.ceil((left ?? 0) / 60))} min left` : ""}
+          {state.trouble
+            ? "Not sending"
+            : paused
+              ? "Paused"
+              : state.phase === "saving"
+                ? "Saving"
+                : "Recording"}{" "}
+          · {clock(state.seconds)}
+          {ending && !state.trouble
+            ? ` · ${Math.max(1, Math.ceil((left ?? 0) / 60))} min left`
+            : ""}
         </Text>
-        {state.phase === "recording" && !ending && (
+        {state.phase === "recording" && !ending && !state.trouble && (
           <LevelBars level={state.level} color={colors.onInverse} size={0.6} />
         )}
       </Pressable>
@@ -741,6 +1059,7 @@ export function RecordMeetingButton({ label = "Record a meeting" }: { label?: st
 function MeetingRow({ meeting }: { meeting: MeetingView }) {
   const { open } = useWorkspace();
   const rec = useRecorder();
+  const unsent = useUnsent(meeting.id);
   // The one being recorded right now opens the recorder, not an empty page.
   const live = meeting.status === "recording" && rec.state.meetingId === meeting.id;
   return (
@@ -749,7 +1068,7 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
       aria-label={
         live
           ? `${meeting.title}, recording now. Open the recorder`
-          : `Open ${meeting.title}, ${meetingLine(meeting)}, ${statusLabel(meeting.status)}`
+          : `Open ${meeting.title}, ${meetingLine(meeting)}, ${unsent ? "still sending from this device" : statusLabel(meeting.status)}`
       }
       onPress={live ? rec.expand : () => open({ type: "meeting", id: meeting.id })}
       style={({ pressed }) => ({
@@ -785,7 +1104,9 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
           {meetingLine(meeting)}
         </Text>
       </View>
-      {meeting.status === "recording" ? (
+      {unsent && meeting.status === "recording" && !live ? (
+        <Chip tint={colors.orange}>Still sending</Chip>
+      ) : meeting.status === "recording" ? (
         <View style={[s.row, { gap: 6 }]}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: RECORD_RED }} />
           <Text style={[s.small, { color: colors.mutedStrong, fontWeight: "600" }]}>Recording</Text>
@@ -895,6 +1216,7 @@ export function MeetingSheet({ id }: { id: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const seen = useRef<MeetingStatus>(undefined);
   const [news, setNews] = useState("");
+  const unsent = useUnsent(id);
   const load = useCallback(
     () =>
       api.request<MeetingRead>(`/api/meetings/${encodeURIComponent(id)}`).then(
@@ -951,6 +1273,8 @@ export function MeetingSheet({ id }: { id: string }) {
     setBusy("delete");
     try {
       await api.request(`/api/meetings/${encodeURIComponent(id)}`, undefined, "DELETE");
+      // Only now is the device's own copy let go.
+      await rec.uploader.discard(id);
       close();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Couldn’t delete it.");
@@ -966,7 +1290,11 @@ export function MeetingSheet({ id }: { id: string }) {
   if (!meeting)
     return (
       <Sheet title="Meeting" onClose={close} narrow>
-        <ErrorNotice error={error || "This meeting couldn’t be found."} />
+        <View style={{ gap: 14 }}>
+          <ErrorNotice error={error || "This meeting couldn’t be found."} />
+          {/* Offline is when the audio on this device matters most: it must still be reachable. */}
+          {unsent && <UnsentCard unsent={unsent} title="meeting" />}
+        </View>
       </Sheet>
     );
   const items = meeting.actionItems;
@@ -979,12 +1307,15 @@ export function MeetingSheet({ id }: { id: string }) {
     day: "numeric",
   });
   const ours = rec.state.meetingId === meeting.id;
+  // Recording right now on this screen's recorder (not just a recording left on the device).
+  const liveHere = ours && ["recording", "paused", "saving"].includes(rec.state.phase);
   return (
     <Sheet title={meeting.title} subtitle={meetingLine(meeting)} onClose={close} narrow fill>
       <StatusLine text={news} />
       <View style={{ gap: 18 }}>
         <ErrorNotice error={error} />
-        {recordingNow && (
+        {unsent && <UnsentCard unsent={unsent} title={meeting.title} />}
+        {recordingNow && !unsent && (
           <Card style={{ gap: 10, backgroundColor: colors.lavender }}>
             <View style={[s.row, { gap: 10 }]}>
               <View
@@ -1043,7 +1374,7 @@ export function MeetingSheet({ id }: { id: string }) {
             </Text>
           </Card>
         )}
-        {meeting.status === "failed" && (
+        {meeting.status === "failed" && !unsent?.stuck && (
           <Card style={{ gap: 10, backgroundColor: colors.errorBg }}>
             <Text style={[s.text, { color: colors.danger }]}>
               {meeting.error || "It couldn’t be written up."}
@@ -1265,7 +1596,7 @@ export function MeetingSheet({ id }: { id: string }) {
             })}
           </View>
         )}
-        {!recordingNow && (
+        {(!recordingNow || (unsent && !liveHere)) && (
           <View
             style={{
               gap: 8,
@@ -1278,7 +1609,9 @@ export function MeetingSheet({ id }: { id: string }) {
             {confirmDelete ? (
               <View style={{ gap: 8 }}>
                 <Text style={s.text}>
-                  Delete this meeting for good? Its notes, words and audio go too.
+                  {unsent
+                    ? "Delete this meeting for good? The audio still on this device goes too, and that may be the only copy."
+                    : "Delete this meeting for good? Its notes, words and audio go too."}
                 </Text>
                 <View style={[s.row, { gap: 8 }]}>
                   <Button danger busy={busy === "delete"} onPress={() => void remove()}>
@@ -1494,8 +1827,15 @@ export function HomeRecordButton({
 /** The recorder's bar under the call's, for every sheet's top (App.tsx's SheetTop). */
 export function useRecordingBar() {
   const value = useContext(RecorderContext);
+  const uploader = value?.uploader;
+  useSyncExternalStore(
+    uploader?.subscribe ?? never,
+    uploader?.getVersion ?? noVersion,
+    uploader?.getVersion ?? noVersion,
+  );
+  const waiting = (uploader?.all().length ?? 0) > 0;
   const phase = value?.state.phase ?? "idle";
-  const on = phase === "recording" || phase === "paused" || phase === "saving";
+  const on = phase === "recording" || phase === "paused" || phase === "saving" || waiting;
   // The same element while it records, so sheets aren't redrawn every second.
   return useMemo(() => (on ? <RecordingBar /> : null), [on]);
 }

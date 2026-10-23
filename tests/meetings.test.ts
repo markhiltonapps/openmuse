@@ -287,6 +287,57 @@ test("the month's hours are a limit, pieces stop after the end, and discarding k
   await assert.rejects(meetings.read("p1", "../../etc"), /couldn’t be found/);
 });
 
+test("a recording doesn't start into storage that refuses files, and a refused piece says so", async () => {
+  const { meetings, blobs } = await setup([[]]);
+  const real = blobs.put.bind(blobs);
+  // Healthy storage: it starts, and the test file it used is gone.
+  const started = (await meetings.start("p1", {})).meeting;
+  assert.deepEqual(await blobs.list("meetings/check-"), []);
+  // The bucket starts refusing (a reset key): no new recording begins, and the person is told.
+  blobs.put = async () => {
+    throw new Error("The file bucket refused to save a file (403 InvalidAccessKeyId)");
+  };
+  await assert.rejects(
+    meetings.start("p1", {}),
+    (error: Error & { status?: number }) =>
+      /can’t save recordings right now, so nothing was recorded/.test(error.message) &&
+      error.status === 503,
+  );
+  assert.equal((await meetings.list("p1")).length, 1, "no empty recording was made");
+  // A recording already going gets a clear 503 for each piece, so the app keeps it and retries.
+  await assert.rejects(
+    meetings.chunk("p1", started.id, 0, 0, new Uint8Array([1, 2, 3])),
+    (error: Error & { status?: number }) =>
+      /kept on this device and sent again when it can/.test(error.message) && error.status === 503,
+  );
+  blobs.put = real;
+  await meetings.chunk("p1", started.id, 0, 0, new Uint8Array([1, 2, 3]));
+  assert.equal((await blobs.list(`meetings/${started.id}/`)).length, 1, "it works again");
+});
+
+test("a recording whose app still holds unsent audio isn't left open, until the time allowed runs out", async () => {
+  const { meetings, clock, db } = await setup([[]]);
+  const first = (await meetings.start("p1", {})).meeting;
+  await meetings.chunk("p1", first.id, 0, 0, new Uint8Array([1, 2]));
+  clock.now += 40 * 60_000;
+  assert.deepEqual(await meetings.alive("p1", first.id), { ok: true });
+  clock.now += 30 * 60_000;
+  await meetings.maintain();
+  const still = await db.get<Meeting>("p1", "meetings", first.id);
+  assert.equal(
+    still?.status,
+    "recording",
+    "70 minutes after the piece, but 30 after the last word from the app",
+  );
+  clock.now += 20 * 3600_000;
+  assert.deepEqual(
+    await meetings.alive("p1", first.id),
+    { ok: false },
+    "never past the time allowed",
+  );
+  await assert.rejects(meetings.alive("p2", first.id), /couldn’t be found/, "one person's alone");
+});
+
 test("a recording left open is written up from what arrived; a failure can be tried again", async () => {
   const soniox = { fail: true };
   // Trying again sends the audio again: Soniox sees a second file.

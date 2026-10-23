@@ -1,10 +1,12 @@
 import { Platform } from "react-native";
 import type { MuseApi } from "./api";
+import type { MeetingUploader } from "./meeting-uploader";
 
 /**
  * Records a meeting in the room in the browser: the microphone goes to a MediaRecorder that hands
- * over a piece every 30 seconds, and each piece is sent to the server straight away (again, with
- * waits, if the connection drops), so closing the tab loses only the last few seconds.
+ * over a piece every 30 seconds. Each piece is kept on the device and sent to the server straight
+ * away (again, with waits, if the connection drops; see meeting-uploader.ts), so closing the tab
+ * or a server that won't take files loses nothing: the pieces are sent when it can.
  *
  * A phone that locks or switches apps stops the microphone. That part ends there; when the app is
  * back, a new part starts by itself (the server writes each part up and puts them in order).
@@ -27,8 +29,16 @@ export interface RecorderState {
   maxSeconds?: number;
   /** The microphone's loudness, 0 to 1, for the level bars. */
   level: number;
-  /** Pieces not yet on the server. */
+  /** Pieces not yet on the server (they're kept on this device meanwhile). */
   waiting: number;
+  /** The last tries to send failed: the recording is safe on this device but not reaching the server. */
+  trouble?: boolean;
+  /** The server's own words for why, when it gave some. */
+  troubleText?: string;
+  /** The device wouldn't keep the audio (storage full or blocked): it is held in this tab only. */
+  onlyHere?: boolean;
+  /** Sending went back to normal a moment ago (after a warning), so the screen can say so. */
+  caughtUp?: boolean;
   /** In plain words, when something went wrong. */
   error?: string;
   /** Set when it stopped by itself at the limit. */
@@ -111,13 +121,6 @@ export function spokenLength(seconds: number) {
   return h ? `${part(h, "hour")}${m ? ` ${part(m, "minute")}` : ""}` : part(m, "minute");
 }
 
-interface Piece {
-  part: number;
-  n: number;
-  blob: Blob;
-  tries: number;
-}
-
 export class MeetingRecorder {
   private state: RecorderState = IDLE;
   private readonly listeners = new Set<() => void>();
@@ -140,9 +143,11 @@ export class MeetingRecorder {
   private mutedAt = 0;
   private hiddenAt = 0;
   private resuming = false;
-  private queue: Piece[] = [];
-  private sending = false;
   private stopping = false;
+  private unsubscribe?: () => void;
+  private caughtTimer?: ReturnType<typeof setTimeout>;
+  /** Ends Stop's wait for the last pieces at once (the person chose to leave them on the device). */
+  private leaveNow?: () => void;
   private readonly onVisible = () => {
     if (document.visibilityState !== "visible") {
       if (this.state.phase === "recording") this.hiddenAt = Date.now();
@@ -168,7 +173,10 @@ export class MeetingRecorder {
       event.returnValue = "";
     }
   };
-  constructor(private readonly api: MuseApi) {}
+  constructor(
+    private readonly api: MuseApi,
+    private readonly uploader: MeetingUploader,
+  ) {}
 
   get snapshot() {
     return this.state;
@@ -212,7 +220,6 @@ export class MeetingRecorder {
     this.mutedAt = 0;
     this.hiddenAt = 0;
     this.resuming = false;
-    this.queue = [];
     this.stopping = false;
     try {
       // The microphone first, so a "no" leaves nothing behind on the server.
@@ -221,6 +228,7 @@ export class MeetingRecorder {
         mime: this.type,
       });
       this.set({ meetingId: started.meeting.id, maxSeconds: started.maxSeconds });
+      this.watchUploads(started.meeting.id);
       this.beginPart();
       document.addEventListener("visibilitychange", this.onVisible);
       window.addEventListener("beforeunload", this.onLeave);
@@ -314,11 +322,9 @@ export class MeetingRecorder {
     const part = this.part;
     this.piece = 0;
     recorder.ondataavailable = (event) => {
-      if (event.data.size) {
-        this.queue.push({ part, n: this.piece++, blob: event.data, tries: 0 });
-        this.set({ waiting: this.queue.length });
-        void this.send();
-      }
+      const id = this.state.meetingId;
+      if (event.data.size && id)
+        void this.uploader.add(id, this.type, part, this.piece++, event.data);
     };
     recorder.onstop = () => {
       if (!this.stopping && this.recorder === recorder) this.interrupted(this.lostSince());
@@ -410,39 +416,33 @@ export class MeetingRecorder {
       // Not offered (an older phone): the person keeps the screen on themselves.
     }
   }
-  /** Sends the pieces in order, one at a time, waiting longer after each failure. */
-  private async send() {
-    if (this.sending) return;
-    this.sending = true;
-    try {
-      while (this.queue.length && this.state.meetingId) {
-        const piece = this.queue[0];
-        if (!piece) break;
-        try {
-          await this.api.upload(
-            `/api/meetings/${this.state.meetingId}/chunks/${piece.part}/${piece.n}`,
-            piece.blob,
-          );
-          this.queue.shift();
-          this.set({ waiting: this.queue.length });
-        } catch (error) {
-          piece.tries++;
-          const message = error instanceof Error ? error.message : "";
-          // The server won't take it (closed while away, or past its time): no use trying again.
-          if (/already finished|run past its time|not found|couldn’t be found/i.test(message)) {
-            this.queue = [];
-            this.set({ waiting: 0 });
-            if (!this.stopping) this.closedByServer();
-            break;
-          }
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.min(30_000, 2000 * 2 ** Math.min(piece.tries, 4))),
-          );
+  /** Mirrors what the uploader is doing for this meeting into the recorder's own state. */
+  private watchUploads(id: string) {
+    this.unsubscribe?.();
+    const update = () => {
+      const unsent = this.uploader.snapshot(id);
+      const waiting = unsent?.pieces ?? 0;
+      const trouble = Boolean(unsent?.trouble);
+      const troubleText = trouble ? unsent?.error : undefined;
+      const onlyHere = Boolean(unsent?.onlyHere);
+      if (
+        waiting !== this.state.waiting ||
+        trouble !== Boolean(this.state.trouble) ||
+        troubleText !== this.state.troubleText ||
+        onlyHere !== Boolean(this.state.onlyHere)
+      ) {
+        const recovered = Boolean(this.state.trouble) && !trouble;
+        this.set({ waiting, trouble, troubleText, onlyHere, caughtUp: recovered });
+        if (recovered) {
+          clearTimeout(this.caughtTimer);
+          this.caughtTimer = setTimeout(() => this.set({ caughtUp: false }), 8000);
         }
       }
-    } finally {
-      this.sending = false;
-    }
+      // The server closed the recording while this phone was away: this part stops here.
+      if (unsent?.stuck && !this.stopping && this.state.meetingId === id) this.closedByServer();
+    };
+    this.unsubscribe = this.uploader.subscribe(update);
+    update();
   }
   /** Stops, sends the last piece, and hands the meeting to the server to write up. */
   async stop(): Promise<string | undefined> {
@@ -462,16 +462,24 @@ export class MeetingRecorder {
         recorder.stop();
       });
     this.closeMicrophone();
-    void this.send();
-    // Up to a minute for what's left to reach the server; the server uses what it has after that.
-    const until = Date.now() + 60_000;
-    while ((this.queue.length || this.sending) && Date.now() < until)
-      await new Promise((resolve) => setTimeout(resolve, 250));
+    // Up to a minute for what's left to reach the server. Past that, the pieces stay on this
+    // device and the recording is closed on the server once they have all arrived (it is never
+    // closed with pieces missing, or what's missing could not be sent later).
+    const finish = { seconds: Math.round(this.seconds()), parts: this.parts() };
+    await Promise.race([
+      this.uploader.drained(id, 60_000),
+      new Promise<void>((resolve) => {
+        this.leaveNow = resolve;
+      }),
+    ]);
+    this.leaveNow = undefined;
+    if (this.uploader.pending(id)) {
+      await this.uploader.finishWhenSent(id, finish);
+      this.finish();
+      return id;
+    }
     try {
-      await this.api.request(`/api/meetings/${id}/finish`, {
-        seconds: Math.round(this.seconds()),
-        parts: this.parts(),
-      });
+      await this.api.request(`/api/meetings/${id}/finish`, finish);
       this.finish();
       return id;
     } catch {
@@ -504,6 +512,17 @@ export class MeetingRecorder {
       return undefined;
     }
   }
+  /** Throw away couldn't reach the server: keep the recording after all (it's sent and written up). */
+  async keepInstead(): Promise<string | undefined> {
+    const id = this.state.meetingId;
+    if (!id) return undefined;
+    await this.uploader.finishWhenSent(id, {
+      seconds: Math.round(this.seconds()),
+      parts: this.parts(),
+    });
+    this.finish();
+    return id;
+  }
   /** The server closed this recording while the app was away: this part stops here. */
   private closedByServer() {
     this.stopping = true;
@@ -516,7 +535,7 @@ export class MeetingRecorder {
       closed: true,
       level: 0,
       error:
-        "The app was away too long, so this recording ended. What was recorded is being written up.",
+        "This recording was already closed, so recording has stopped. What reached the server is being written up. The rest is still on this device: save a copy of the audio from the meeting’s page.",
     });
     this.finish(true);
   }
@@ -527,21 +546,27 @@ export class MeetingRecorder {
   async discard(): Promise<boolean> {
     const id = this.state.meetingId;
     this.stopping = true;
+    // So "Keep it instead" can still close the recording with the right length.
+    if (this.state.phase === "recording" && this.partStarted)
+      this.partSeconds[this.part] = (Date.now() - this.partStarted) / 1000;
+    this.partStarted = 0;
     const recorder = this.recorder;
     this.recorder = undefined;
     if (recorder && recorder.state !== "inactive") recorder.stop();
     this.closeMicrophone();
-    this.queue = [];
     if (!id) {
       this.finish();
       return true;
     }
     try {
       await this.api.request(`/api/meetings/${id}/discard`, {});
+      // Only now is the device's copy let go: until the server answers it may be the only one.
+      await this.uploader.discard(id);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       // Already gone is what was wanted.
-      if (!/not found|couldn’t be found/i.test(message)) {
+      if (/not found|couldn’t be found/i.test(message)) await this.uploader.discard(id);
+      else {
         const written = /already finished/i.test(message);
         this.set({
           phase: "error",
@@ -563,6 +588,8 @@ export class MeetingRecorder {
   private finish(keepError = false) {
     clearInterval(this.ticker);
     this.ticker = undefined;
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
     document.removeEventListener("visibilitychange", this.onVisible);
     window.removeEventListener("beforeunload", this.onLeave);
     void this.wakeLock?.release().catch(() => undefined);
@@ -577,6 +604,10 @@ export class MeetingRecorder {
       seconds: seconds ?? 0,
       ...(this.missed[index] ? { missedBefore: Math.round(this.missed[index] as number) } : {}),
     }));
+  }
+  /** While Stop waits for pieces the server isn't taking: keep them on this device and go on. */
+  keepOnDevice() {
+    this.leaveNow?.();
   }
   /** The "you were away" note has been read. */
   seenAway() {

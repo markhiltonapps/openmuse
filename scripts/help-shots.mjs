@@ -774,6 +774,66 @@ const SHOTS = [
       4: (p) => button(p, /^Open .* Ready|^Open /),
     },
   },
+  {
+    // The recorder while the server refuses every piece: a fake microphone and recorder, and a
+    // server that answers each piece with the words the real one uses.
+    id: "recordertrouble",
+    start: "home",
+    go: async (p) => {
+      const words =
+        "The server can’t save this recording right now. It’s kept on this device and sent again when it can.";
+      await p.route(/\/api\/meetings$/, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({
+              json: {
+                available: true,
+                allowance: { usedMinutes: 0, limitHours: 10, leftSeconds: 36000 },
+                meetings: [],
+              },
+            })
+          : route.fulfill({
+              status: 201,
+              json: { meeting: { id: "help-rec", title: "Meeting at 9:34 AM" }, maxSeconds: 14400 },
+            }),
+      );
+      await p.route(/\/api\/meetings\/help-rec\/chunks\//, (route) =>
+        route.fulfill({ status: 503, json: { error: words } }),
+      );
+      await p.evaluate(() => {
+        class FakeRecorder extends EventTarget {
+          static isTypeSupported() {
+            return true;
+          }
+          state = "inactive";
+          start() {
+            this.state = "recording";
+            this.timer = setInterval(
+              () =>
+                this.ondataavailable?.({
+                  data: new Blob(["piece".repeat(400)], { type: "audio/webm" }),
+                }),
+              1200,
+            );
+          }
+          stop() {
+            clearInterval(this.timer);
+            this.state = "inactive";
+            this.dispatchEvent(new Event("stop"));
+          }
+        }
+        window.MediaRecorder = FakeRecorder;
+      });
+      await button(p, /Record a meeting/).click();
+      await p.getByText("Not reaching the server").first().waitFor({ timeout: 30000 });
+      await p.waitForTimeout(1200);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: words((p) => p.getByText("Not reaching the server").last()),
+      2: words((p) => p.getByText(/^Your recording is safe on this device/).first()),
+      3: (p) => button(p, /^Stop recording/),
+    },
+  },
 ];
 
 /**

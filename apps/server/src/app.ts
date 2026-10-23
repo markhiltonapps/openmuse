@@ -2090,6 +2090,9 @@ export async function createApp(
   app.post("/api/meetings/:id/finish", async (c) =>
     c.json(await meetings.finish(c.get("owner"), c.req.param("id"), await c.req.json())),
   );
+  app.post("/api/meetings/:id/alive", async (c) =>
+    c.json(await meetings.alive(c.get("owner"), c.req.param("id"))),
+  );
   app.post("/api/meetings/:id/discard", async (c) =>
     c.json(await meetings.discard(c.get("owner"), c.req.param("id"))),
   );

@@ -500,3 +500,16 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   while the old version kept serving). Fix: reset the bucket's credentials and give the api's five `S3_*`
   variables as references to the bucket (`${{reserved-safe.ACCESS_KEY_ID}}` etc., never pasted codes), then
   redeploy. A failed healthcheck on the api after a deploy = read that deployment's logs first.
+- **Recordings are never only in memory (owner, 2026-10-23):** a meeting's audio pieces are written to the device
+  (IndexedDB, `meeting-store.ts`) before they're sent and removed only when the server has them; the recording is
+  closed on the server only after every piece arrived (`meeting-uploader.ts`). The recorder warns within seconds
+  of failed sends (`trouble`), and the server refuses to start a recording when storage won't take a test file
+  (`checkStorage`). Keep a piece on the device if the server says it can't take it (closed): Save a copy.
+  Count a piece from the moment it starts being written (`adding`), or Stop can close the recording before the last
+  piece is queued. Audio found after a closed tab is finished only if its newest piece is over 90 s old (another tab
+  may still be recording). "Safe on this device" is said only when `putPiece` really kept it. Review rounds found
+  all three; send the reviewers the code, not only the screenshots.
+  A failing-forever async loop with a no-wait delay starves a test's own timers: tests wait with a real
+  `setTimeout` turn. And never `kill`/`pkill` by pattern in a command that contains the pattern (it ended
+  my own shell twice).
+
