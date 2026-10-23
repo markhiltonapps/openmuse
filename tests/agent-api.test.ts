@@ -317,6 +317,74 @@ test("sample monitor saves its baseline and deduplicates notifications for repea
   );
 });
 
+test("a watch described in words asks the model only when the page changed, and tells once when it comes true", async () => {
+  const original = server.agent.complete;
+  const modelFor = server.agent.modelFor;
+  let asked = 0;
+  server.agent.modelFor = (() => ({ model: "anthropic/test" })) as never;
+  server.agent.complete = (async (options: { prompt: string }) => {
+    asked++;
+    return /Medium: \d+ left/.test(options.prompt)
+      ? '{"met": true, "why": "The page lists Medium: 3 left."}'
+      : '{"met": false, "why": "Every size is sold out."}';
+  }) as never;
+  try {
+    // Too frequent a look would run up model calls: refused.
+    await read(
+      "/monitors",
+      {
+        title: "Too often",
+        url: "sample://availability",
+        condition: "describe",
+        value: "the medium is back",
+        intervalMinutes: 5,
+      },
+      422,
+    );
+    await read("/sample-page", { text: "Sold out in every size" });
+    const monitor = await read<Monitor>(
+      "/monitors",
+      {
+        title: "Shirt in medium",
+        url: "sample://availability",
+        condition: "describe",
+        value: "the medium is back in stock",
+        intervalMinutes: 15,
+      },
+      201,
+    );
+    const notices = async () =>
+      (await read<AgentNotification[]>("/notifications")).filter(
+        (item) => item.taskId === monitor.taskId,
+      );
+    await server.agent.worker.tick();
+    assert.equal(asked, 1, "the first look is judged");
+    assert.equal((await notices()).length, 0);
+    // Same page again: nothing changed, so the model isn't asked.
+    await read(`/monitors/${monitor.id}/control`, { action: "check" });
+    await server.agent.worker.tick();
+    assert.equal(asked, 1);
+    await read("/sample-page", { text: "Medium: 3 left" });
+    await read(`/monitors/${monitor.id}/control`, { action: "check" });
+    await server.agent.worker.tick();
+    assert.equal(asked, 2);
+    const found = await notices();
+    assert.equal(found.length, 1);
+    assert.match(found[0]?.body ?? "", /Medium: 3 left/);
+    // Still true on a changed page: judged, but already told.
+    await read("/sample-page", { text: "Medium: 2 left" });
+    await read(`/monitors/${monitor.id}/control`, { action: "check" });
+    await server.agent.worker.tick();
+    assert.equal(asked, 3);
+    assert.equal((await notices()).length, 1);
+  } finally {
+    server.agent.complete = original;
+    server.agent.modelFor = modelFor;
+    // The next test expects the page the earlier one left.
+    await read("/sample-page", { text: "One table at 7 pm" });
+  }
+});
+
 test("live mode rejects sample sources and hides the fixture mutation endpoint", async () => {
   const live = await createApp(db, {
     ...config,

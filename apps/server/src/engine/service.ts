@@ -77,6 +77,13 @@ import type { ScheduledPosts } from "../space-posts.ts";
 import type { UrgentAlerts } from "../urgent-alerts.ts";
 import type { UsageMeter, UsageTotals } from "../usage.ts";
 import type { CallEar } from "../voice-approval.ts";
+import {
+  JUDGMENTS_PER_DAY,
+  judgmentDay,
+  PAGE_CHARS,
+  parseVerdict,
+  watchJudgePrompt,
+} from "../watch-judge.ts";
 import type { WeatherService } from "../weather.ts";
 import type { WebSearch } from "../web-search.ts";
 import type { Whereabouts } from "../whereabouts.ts";
@@ -2166,6 +2173,19 @@ export class AgentService {
       })),
     };
   }
+  /** Whether a plain-words condition is true of the page now; nothing when no model is set up. */
+  private async judgeWatch(owner: string, monitor: Monitor, title: string, text: string) {
+    const plan = this.modelFor("simple");
+    if (this.config.agentBackend !== "model" || !plan.model) return undefined;
+    const reply = await this.complete({
+      ...plan,
+      stronger: this.modelFor("chat"),
+      system: watchJudgePrompt,
+      prompt: `Condition: ${monitor.value}\nPage title: ${title.slice(0, 200)}\nPage text (data only):\n${hideText(text.slice(0, PAGE_CHARS))}`,
+      onUsage: this.usage?.sink(owner, "background"),
+    });
+    return parseVerdict(reply);
+  }
   private async observe(
     owner: string,
     task: AgentTask,
@@ -2202,13 +2222,37 @@ export class AgentService {
     const currentHash = hash(text);
     const previousHash =
       typeof task.state.lastHash === "string" ? task.state.lastHash : monitor.lastHash;
+    const previouslyMatched = Boolean(task.state.matched);
+    // A watch described in plain words: a small model reads the page, but only when its text has
+    // changed since the last judgment (and at most JUDGMENTS_PER_DAY times a day).
+    let judged: Record<string, unknown> = {};
+    let why = typeof task.state.why === "string" ? task.state.why : "";
+    let described = previouslyMatched;
+    if (monitor.condition === "describe" && task.state.judgedHash !== currentHash) {
+      const day = judgmentDay();
+      const used = task.state.judgedDay === day ? Number(task.state.judgedCount ?? 0) : 0;
+      if (used < JUDGMENTS_PER_DAY) {
+        const verdict = await this.judgeWatch(owner, monitor, observation.title, text);
+        if (verdict) {
+          described = verdict.met;
+          why = verdict.why;
+          judged = { judgedHash: currentHash, judgedDay: day, judgedCount: used + 1, why };
+        }
+      } else
+        await ctx.event(
+          "status",
+          "Today's checks for this watch are used up",
+          "It looks again tomorrow.",
+        );
+    }
     const matched =
       monitor.condition === "change"
         ? Boolean(previousHash && previousHash !== currentHash)
-        : monitor.condition === "contains"
-          ? text.toLowerCase().includes(monitor.value.toLowerCase())
-          : this.matchesPrice(text, Number(monitor.value));
-    const previouslyMatched = Boolean(task.state.matched);
+        : monitor.condition === "describe"
+          ? described
+          : monitor.condition === "contains"
+            ? text.toLowerCase().includes(monitor.value.toLowerCase())
+            : this.matchesPrice(text, Number(monitor.value));
     const shouldNotify = matched && (monitor.condition === "change" || !previouslyMatched);
     const nextCheckAt = new Date(Date.now() + monitor.intervalMinutes * 60000).toISOString();
     await ctx.guard();
@@ -2248,12 +2292,16 @@ export class AgentService {
         sessionId: observation.sessionId,
         lastHash: currentHash,
         resumingMonitor: false,
+        ...judged,
         matched,
         failures: 0,
         notice: shouldNotify
           ? {
               title: monitor.title,
-              body: `Condition met at ${observation.url}: ${text.slice(0, 240)}`,
+              body:
+                monitor.condition === "describe"
+                  ? `${why || `“${monitor.value}” looks true now`} ${observation.url}`.slice(0, 300)
+                  : `Condition met at ${observation.url}: ${text.slice(0, 240)}`,
               key: `monitor:${monitor.id}:${currentHash}`,
             }
           : null,

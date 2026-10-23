@@ -31,5 +31,6 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   seeit: { width: 720, height: 1558 },
   spaces: { width: 720, height: 1558 },
   urgent: { width: 720, height: 1558 },
+  watchdescribe: { width: 720, height: 2308 },
   weight: { width: 720, height: 1150 },
 };

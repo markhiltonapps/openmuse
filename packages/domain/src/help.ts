@@ -823,19 +823,41 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "watch-page",
     group: "jobs",
     title: "Watch a page or a price",
-    summary: "{agent} checks a web page for you and tells you when it changes.",
+    summary:
+      "{agent} checks a web page for you and tells you when it changes, when a price drops, or when something you describe comes true.",
+    shot: "watchdescribe",
     place: "tracking",
     steps: [
-      "Send the page’s link and say what to watch for: “Tell me when this drops under $300.”",
-      "It’s in **Goals › Tracking**, with a price chart for a price. Tap **Check now** to look right away.",
+      "Send the page’s link and say what to watch for: “Tell me when the medium is back in stock on this page.” Or do it yourself in **Goals › Tracking › Track something new › A web page**.",
+      "Choose **Something I describe** (1) and write what you want to know in your own words (2). The other choices are **Page changes**, **Text appears** and **Price drops below**.",
+      "Tap **Start tracking** (3). You’re told once when your words come true, even if they already are. Tap **Check now** to look right away.",
+    ],
+    body: [
+      "Nothing is read by an AI on most checks: {agent} looks at the page and compares its words. For **Something I describe**, a small AI model reads the page only when it has changed since the last look, and at most 12 times a day for each watch. It checks every 15 minutes or longer (every hour unless you say otherwise).",
+      "A price watch is in **Goals › Tracking**, with a price chart. {agent} can only read public pages, and it never buys or books anything for you.",
     ],
     say: [
       {
         text: "Watch this page and tell me when the price drops.",
         where: "after you paste the page’s link",
       },
+      {
+        text: "Tell me when the medium is back in stock.",
+        where: "after you paste the page’s link",
+      },
     ],
-    keywords: ["watch", "price", "monitor", "track", "alert", "change"],
+    keywords: [
+      "watch",
+      "price",
+      "monitor",
+      "track",
+      "alert",
+      "change",
+      "in stock",
+      "back in stock",
+      "tell me when",
+      "available",
+    ],
     related: ["goals"],
   },
   {

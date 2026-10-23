@@ -835,6 +835,30 @@ const SHOTS = [
     },
   },
   {
+    // Goals › Tracking › A web page, with "Something I describe" chosen and filled in.
+    id: "watchdescribe",
+    height: 1250,
+    go: async (p) => {
+      await p.getByRole("tab", { name: /^Goals/ }).click();
+      await p.waitForTimeout(1500);
+      await button(p, "Track something new").click();
+      await button(p, "A web page").click();
+      await button(p, "Something I describe").click();
+      await p.getByLabel("What are you watching?").pressSequentially("Shirt in medium");
+      await p.getByLabel("Public page URL").pressSequentially("https://shop.example/tee");
+      await p
+        .getByLabel("What should I look for?")
+        .pressSequentially("The medium is back in stock");
+      await p.waitForTimeout(600);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: (p) => button(p, "Something I describe"),
+      2: { find: (p) => p.getByLabel("What should I look for?"), side: "inside-right" },
+      3: (p) => button(p, "Start tracking"),
+    },
+  },
+  {
     // Home's "Email Neddy" card: the address to forward mail to, with Copy and Save contact card.
     id: "agentaddress",
     start: "home",

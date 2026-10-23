@@ -714,7 +714,7 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "watch_page",
         description:
-          "Schedule a public-page condition check requested by the user. The worker records observations and notifies on meaningful changes. Price checks detect explicit USD or dollar prices; no booking is performed.",
+          'Schedule a public-page condition check requested by the user. The worker records observations and notifies on meaningful changes. Price checks detect explicit USD or dollar prices; no booking is performed. Pick the condition from what they said: use "describe" when they say what they want to know in their own words ("tell me when the medium is back in stock", "when tickets go on sale"), with value set to their words and intervalMinutes 15 or more (60 unless they say otherwise); a small AI model reads the page only when it has changed, at most 12 times a day, and they are told when their words come true (even if already true now). Use "price_below" for a price, "contains" for an exact phrase, "change" for any change.',
         parameters: monitorInputSchema,
         execute: async (args) => this.service.createMonitor(this.owner, args, key("watch", args)),
       }),

@@ -45,6 +45,7 @@ import type {
   Routine,
   RunEvent,
 } from "../../../packages/domain/src/agent";
+import { MIN_DESCRIBE_MINUTES } from "../../../packages/domain/src/agent";
 import {
   appLabel,
   appToConnect,
@@ -3320,6 +3321,10 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       const minutes = Number(interval);
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080)
         throw new Error("Use a check interval from 1 to 10080 minutes.");
+      if (condition === "describe" && minutes < MIN_DESCRIBE_MINUTES)
+        throw new Error(
+          `A watch you describe checks every ${MIN_DESCRIBE_MINUTES} minutes or longer.`,
+        );
       if (!sample && !/^https?:\/\//i.test(url.trim()))
         throw new Error("Enter an http or https address for a public page.");
       await mutate("/monitors", {
@@ -3362,22 +3367,47 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       )}
       <Text style={[s.small, { marginBottom: 10 }]}>Notify me when</Text>
       <View style={[s.row, { gap: 7, flexWrap: "wrap", marginBottom: 16 }]}>
-        {(["change", "contains", "price_below"] as const).map((item) => (
-          <Button small primary={condition === item} key={item} onPress={() => setCondition(item)}>
-            {item === "change"
-              ? "Page changes"
-              : item === "contains"
-                ? "Text appears"
-                : "Price drops below"}
+        {(["describe", "change", "contains", "price_below"] as const).map((item) => (
+          <Button
+            small
+            primary={condition === item}
+            key={item}
+            onPress={() => {
+              setCondition(item);
+              // A described watch asks an AI model about the page, so it looks less often.
+              if (item === "describe" && Number(interval) <= MIN_DESCRIBE_MINUTES)
+                setInterval("60");
+            }}
+          >
+            {item === "describe"
+              ? "Something I describe"
+              : item === "change"
+                ? "Page changes"
+                : item === "contains"
+                  ? "Text appears"
+                  : "Price drops below"}
           </Button>
         ))}
       </View>
       {condition !== "change" && (
         <Field
-          label={condition === "contains" ? "Text to look for" : "Target price"}
+          label={
+            condition === "describe"
+              ? "What should I look for?"
+              : condition === "contains"
+                ? "Text to look for"
+                : "Target price"
+          }
           value={value}
           onChangeText={setValue}
+          placeholder={condition === "describe" ? "The medium is back in stock" : undefined}
         />
+      )}
+      {condition === "describe" && (
+        <Text style={[s.small, { marginBottom: 14 }]}>
+          Describe it in your own words. A small AI model reads the page, but only when the page has
+          changed, so most checks cost nothing. It tells you when your words come true.
+        </Text>
       )}
       <Field
         label="Check every (minutes)"
@@ -3604,9 +3634,11 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
       <Text style={s.text}>
         {monitor.condition === "change"
           ? "Watch for a page change"
-          : monitor.condition === "contains"
-            ? `Watch for “${monitor.value}”`
-            : `Price below ${monitor.value}`}
+          : monitor.condition === "describe"
+            ? `Watch for: ${monitor.value}`
+            : monitor.condition === "contains"
+              ? `Watch for “${monitor.value}”`
+              : `Price below ${monitor.value}`}
       </Text>
       <Text style={s.small}>
         Every {monitor.intervalMinutes} min · {monitor.checks} checks
