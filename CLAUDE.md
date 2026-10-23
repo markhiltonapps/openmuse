@@ -494,3 +494,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   string there isn't a card). Limits to say honestly: the raw typed message stays in the saved chat
   history, a live call's voice model hears the raw speech, and numbers spelled in words or unlabeled
   foreign ID formats can slip through. Tests: `tests/redact.test.ts`, `tests/redaction-chat.test.ts`.
+- **Bucket keys (2026-10-23):** after Railway's incident the bucket rejected the api's pasted S3 keys (meetings
+  failed with "403 SignatureDoesNotMatch", hourly backups stopped, and a new deploy crashed at start on
+  `InvalidAccessKeyId` because the api checks the bucket as it boots, so it never passed Railway's healthcheck
+  while the old version kept serving). Fix: reset the bucket's credentials and give the api's five `S3_*`
+  variables as references to the bucket (`${{reserved-safe.ACCESS_KEY_ID}}` etc., never pasted codes), then
+  redeploy. A failed healthcheck on the api after a deploy = read that deployment's logs first.
