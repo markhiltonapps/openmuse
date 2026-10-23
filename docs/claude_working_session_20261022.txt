@@ -219,3 +219,27 @@ card line can read "Right now: Not yet: ...".
 Lesson: an edit that leaves a parse error (a straight apostrophe inside a single-quoted string) then run through `biome --write`
 rewrote two unrelated lines (the create_routine tool). Check `git diff` after any biome run that followed a syntax error.
 
+
+== "WHAT I USED" RECEIPTS (2026-10-23) ==
+Under the last answer of each question in a chat: a "What I used" chip opens a sheet with three parts: Where I looked (the places
+the answer's tool calls reached, plain words, from receipt-text.ts; an unlisted reading tool adds "Other tools I used"), Kept out of
+view (what redaction hid from the AI: kinds only, e.g. "a card number", never values), and On your About you page (the facts, each
+with Forget, and Undo in the same spot until the sheet closes). "Not available for this answer." shows when the server has no note for that
+answer, never "nothing hidden".
+Honest limits (in the sheet and Help): the model has the whole About you page in context every turn, so it can't say which fact one
+answer used; the place list covers the main places Neddy can look; hidden items are found by shape.
+Code: apps/server/src/receipts.ts (Receipts store, one row per question, merged on retry), redaction.ts (guardTools/guardInput
+collect what was hidden), engine/conversation.ts (run() wraps answer(), records on finalize; voice- threads skipped), app.ts
+GET /api/receipts/:threadId, client receipt-ui.tsx (useReceipts, ReceiptSheet), receipt-text.ts, chat.tsx (receiptAfter), chat-rows.tsx
+(chip; the action row now wraps), persona.ts (agent answers "what did you use?"; forget_about_person returns `was` so "put it back"
+works; ask once before forgetting several things). Help topic what-i-used (shot receipt), neddy.html privacy list.
+Tests: tests/receipts.test.ts, apps/mobile/test/receipt-text.test.ts, persona.test.ts (was).
+Design review: all three reviewers asked for changes in round one (touch targets, rows jumping after Forget, false "nothing hidden"
+when the record is missing, "you sent" for items that came from a page, "Nowhere" for unlisted tools, mixed names); fixed; second
+round below.
+Not built: focus moves to Undo after Forget, a "your guess" tag on guessed facts, skipping Undo when a newer value was saved, a stop
+chip on calls (calls skip receipts), a chip on earlier parts of the main chat.
+Review round two: usability signed off; visual signed off after the Forget pills got their own background and every control in the
+chat action row got a 44px target (marginVertical -13 keeps the row's height); copy signed off once Help's step 1 and the
+"Other things I remember" pointer were corrected. Checks: biome, the three tsc runs, pnpm test (651 pass).
+Help: topic what-i-used with picture "receipt" (light and dark retaken). Site: neddy.html privacy list. Not pushed yet (waiting for "push it").

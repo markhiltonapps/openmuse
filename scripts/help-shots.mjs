@@ -633,6 +633,76 @@ const SHOTS = [
     },
   },
   {
+    // "What I used" under an answer, and its sheet: where it looked, what was kept out of view, and
+    // what Neddy knows, with Forget. No number of any kind is in the picture.
+    id: "receipt",
+    go: async (p, state) => {
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "What’s on my billing page?" },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "I hid the card number on that page so I never see it. Your next invoice is November 1.",
+          toolCalls: [
+            {
+              id: "help-call-1",
+              type: "function",
+              function: { name: "look_at_page", arguments: "{}" },
+            },
+            {
+              id: "help-call-2",
+              type: "function",
+              function: { name: "search_web", arguments: '{"query":"billing"}' },
+            },
+          ],
+        },
+        { id: "help-r1", role: "tool", toolCallId: "help-call-1", content: "{}" },
+        { id: "help-r2", role: "tool", toolCallId: "help-call-2", content: "{}" },
+      ];
+      await p.route(/\/api\/receipts\//, (route) =>
+        route.fulfill({
+          json: {
+            turns: {
+              "help-u1": { at: new Date().toISOString(), hidden: "a card number", hiddenCount: 1 },
+            },
+          },
+        }),
+      );
+      const fact = (key, value) => ({
+        id: key,
+        key,
+        value,
+        source: "you",
+        confidence: "told",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await p.route(/\/api\/persona$/, (route) =>
+        route.fulfill({
+          json: {
+            facts: [
+              fact("you.name", "Sam"),
+              fact("work.occupation", "Landscaper"),
+              fact("work.hours", "Weekdays 7 to 3"),
+            ],
+          },
+        }),
+      );
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await button(p, "What I used for this answer").click();
+      await p.waitForTimeout(1500);
+    },
+    marks: {
+      1: words((p) => p.getByText("Where I looked", { exact: true })),
+      2: words((p) => p.getByText("Kept out of view", { exact: true })),
+      3: words((p) => p.getByText("On your About you page", { exact: true })),
+    },
+  },
+  {
     id: "location",
     go: async (p) => {
       await appsTab(p, /Account/);

@@ -13,6 +13,7 @@ import type {
 import type { AgentArtifact } from "../../../packages/domain/src/agent";
 import type { MuseApi } from "./api";
 import type { EmailItem } from "./email-cards";
+import type { ReceiptInfo } from "./receipt-ui";
 export type Detail =
   | { type: "mail"; mail: Mail }
   | { type: "email"; draft?: Partial<EmailDraft> & { id?: string } }
@@ -39,6 +40,8 @@ export type Detail =
   | { type: "backdrop" }
   /** A recorded meeting: its notes, audio and words. */
   | { type: "meeting"; id: string }
+  /** What an answer used (receipt-ui.tsx). */
+  | { type: "receipt"; info: ReceiptInfo }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

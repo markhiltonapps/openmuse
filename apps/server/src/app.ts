@@ -2344,6 +2344,10 @@ export async function createApp(
       details: await voiceFor(c.req.param("id")).details(c.get("owner"), c.req.param("id")),
     }),
   );
+  // What was hidden from the model in each answer of a chat (kinds and a count, never the values).
+  app.get("/api/receipts/:threadId", async (c) =>
+    c.json({ turns: await agent.receipts.forThread(c.get("owner"), c.req.param("threadId")) }),
+  );
   app.get("/api/persona", async (c) => c.json({ facts: await agent.persona.list(c.get("owner")) }));
   app.post("/api/persona/:key", async (c) =>
     c.json(await agent.persona.edit(c.get("owner"), c.req.param("key"), await c.req.json())),

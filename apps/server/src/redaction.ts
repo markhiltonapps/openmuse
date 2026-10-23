@@ -22,34 +22,45 @@ const hiddenFields = (found: Found[]) => ({
 });
 
 /** A tool's result with anything sensitive hidden, and a note about it when the result is an object. */
-export function guardResult<T>(result: T): T {
+export function guardResult<T>(result: T, onFound?: (found: Found[]) => void): T {
   const { value, found } = redactDeep(result);
   if (!found.length) return result;
+  onFound?.(found);
   if (value && typeof value === "object" && !Array.isArray(value))
     return { ...(value as object), ...hiddenFields(found) } as T;
   return value;
 }
 
 /** Wraps tools so every result they return is cleaned before the model reads it. */
-export function guardTools<T extends { execute?: (...args: never[]) => unknown }>(tools: T[]): T[] {
+export function guardTools<T extends { execute?: (...args: never[]) => unknown }>(
+  tools: T[],
+  onFound?: (found: Found[]) => void,
+): T[] {
   return tools.map((tool) => {
     const run = tool.execute as ((...args: unknown[]) => unknown) | undefined;
     if (!run) return tool;
     return {
       ...tool,
-      execute: async (...args: unknown[]) => guardResult(await run(...args)),
+      execute: async (...args: unknown[]) => guardResult(await run(...args), onFound),
     } as T;
   });
 }
 
 type Message = RunAgentInput["messages"][number];
 /** What the person typed is cleaned too (the whole history, since it is sent again each turn). */
-export function guardInput(input: RunAgentInput): { input: RunAgentInput; note: string } {
+export function guardInput(input: RunAgentInput): {
+  input: RunAgentInput;
+  note: string;
+  /** What was hidden in the person's latest message. */
+  found: Found[];
+} {
   const latestUser = [...input.messages].reverse().find((m) => m.role === "user");
   let note = "";
+  let latestFound: Found[] = [];
   const messages = input.messages.map((message): Message => {
     const { value, found } = redactDeep(message as unknown as Record<string, unknown>);
     if (message === latestUser && found.length) {
+      latestFound = found;
       const names = hiddenNames(found);
       note = `\n\n[Hidden from you: ${names}. Tell the person once, in one short line, that you hid it so you never see it, and don't ask for it again.]`;
       const content = (value as { content?: unknown }).content;
@@ -68,7 +79,7 @@ export function guardInput(input: RunAgentInput): { input: RunAgentInput; note: 
     }
     return found.length ? (value as unknown as Message) : message;
   });
-  return { input: { ...input, messages }, note };
+  return { input: { ...input, messages }, note, found: latestFound };
 }
 
 /** Text going to a model as a prompt (a job's task, a summary's transcript), cleaned. */

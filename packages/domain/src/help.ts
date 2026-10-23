@@ -1819,7 +1819,37 @@ export const HELP_TOPICS: HelpTopic[] = [
       "private by default",
       "does the ai see",
     ],
-    related: ["passwords", "approvals", "your-data", "privacy"],
+    related: ["passwords", "approvals", "what-i-used", "your-data", "privacy"],
+  },
+  {
+    id: "what-i-used",
+    group: "control",
+    title: "See what {agent} used for an answer",
+    summary:
+      "Under each answer, tap **What I used** to see where {agent} looked, what it kept out of view, and what it knows about you, with a button to forget any of it.",
+    shot: "receipt",
+    steps: [
+      "Under an answer, tap **What I used**.",
+      "**Where I looked** (1) lists the things {agent} checked for that answer: your email, your calendar, the web, your files and so on. It lists only the main places {agent} can look.",
+      "**Kept out of view** (2) says whether {agent} hid something private, such as a card number or password, before the AI read it. It names the kind of thing, never the number itself.",
+      "Under **On your About you page** (3), tap **Forget** next to anything you don’t want {agent} to keep. **Undo** puts it back.",
+    ],
+    body: [
+      "{agent} can use everything on your About you page in any answer, so this sheet can’t honestly say which of those facts one answer leaned on. It shows what is on the page right now, and you can remove any of it; **Undo** works until you close the sheet. Other things {agent} remembers, such as memories, are under **Apps › About you**, in **Other things I remember**. A change shows from your next message, and on a call from the next call.",
+      "The button shows under the last answer of each question in the main chat and your other chats, not on live calls, earlier parts of a long chat, or a copy kept on your device while the chat loads. The list covers the main places {agent} can look, and is worked out from what {agent} did in that answer. Private things are spotted by how they look, so a number written out in words might not be caught. What you typed stays in your chat until you delete it.",
+    ],
+    say: [{ text: "What did you use for that answer?", send: true }, "Forget my work hours."],
+    keywords: [
+      "what did you use",
+      "sources",
+      "receipt",
+      "why did you say that",
+      "where did that come from",
+      "forget",
+      "what do you know about me",
+      "transparency",
+    ],
+    related: ["privacy-hidden", "about-you", "memories"],
   },
   {
     id: "your-data",

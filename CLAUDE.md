@@ -517,4 +517,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   A failing-forever async loop with a no-wait delay starves a test's own timers: tests wait with a real
   `setTimeout` turn. And never `kill`/`pkill` by pattern in a command that contains the pattern (it ended
   my own shell twice).
-
+- **A receipt must say "I don't know" when it doesn't (2026-10-23):** "What I used" showed "nothing hidden" for any answer without a
+  server note (older answers, a failed fetch, a tap before the note arrived). Carry a `known` flag and say "Not available for this answer."
+  A list of "where it looked" built from an allow-list of tools needs a fallback ("Other tools I used") or it says "nowhere" when it
+  doesn't know. A row that changes after a tap (Forget → Forgotten + Undo) stays in place, or the next tap lands on another row.

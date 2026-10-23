@@ -68,6 +68,7 @@ import type { ModelChoices, ModelJob } from "../model-choices.ts";
 import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
 import type { Plans } from "../plans.ts";
+import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
 import { hideText } from "../redaction.ts";
 import type { ReminderService } from "../reminders.ts";
@@ -171,6 +172,8 @@ export class AgentService {
   readonly chats: ChatSummaries;
   /** Links to files that anyone with the link can open until they expire. */
   readonly shares: FileShares;
+  /** What was hidden from the model for each answer (the "What I used" button). */
+  readonly receipts: Receipts;
   /** Small pages and dashboards Neddy builds, shareable by link. */
   readonly miniApps: MiniApps;
   /** Pages on the people and groups the person deals with. */
@@ -196,6 +199,7 @@ export class AgentService {
     /** Third-party apps (Composio); absent when COMPOSIO_API_KEY is unset. */
     readonly apps?: AppConnector,
   ) {
+    this.receipts = new Receipts(db);
     this.shares = new FileShares(db, files, config.publicUrl);
     this.miniApps = new MiniApps(db, config.publicUrl);
     this.people = new People(db);

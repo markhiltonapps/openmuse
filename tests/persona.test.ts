@@ -110,6 +110,8 @@ test("Undo puts a forgotten fact back as it was; the agent can forget facts too"
   }[];
   assert.deepEqual(await forget?.execute({ keys: ["household.home"] }), {
     forgotten: ["household.home"],
+    // What it held, so "put it back" can save it again.
+    was: [{ key: "household.home", value: "Rent" }],
   });
   assert.equal(await persona.get("owner", "household.home"), null);
   const back = await persona.restore("owner", "household.home", saved);

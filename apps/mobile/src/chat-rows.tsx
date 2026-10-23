@@ -1,11 +1,12 @@
 import type { Message, ToolMessage } from "@copilotkit/react-native/headless";
-import { Check, Copy, Square, Trash2, Volume2 } from "lucide-react-native";
+import { Check, Copy, ReceiptText, Square, Trash2, Volume2 } from "lucide-react-native";
 import { Component, memo, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { AssistantResponse } from "./assistant-response";
 import { BrowserRunContext } from "./browser-tool-card";
 import { plainText } from "./copy-text";
 import { SpokenCall } from "./live-talk-ui";
+import type { ReceiptInfo } from "./receipt-ui";
 import { glass } from "./theme";
 import { colors, s } from "./ui";
 import { speechAvailable } from "./voice";
@@ -66,6 +67,9 @@ export interface MessageRowProps {
   canCopy: boolean;
   /** An earlier page or this device's copy: no deleting from here. */
   readOnly?: boolean;
+  /** The last answer of a turn: what it used, behind a "What I used" button. */
+  receipt?: ReceiptInfo;
+  onReceipt: (info: ReceiptInfo) => void;
   renderToolCall: (input: { toolCall: ToolCall; toolMessage?: ToolMessage }) => ReactNode;
   onListen: (id: string, text: string) => void;
   onStop: () => void;
@@ -74,6 +78,13 @@ export interface MessageRowProps {
   onDelete: (id: string) => void;
 }
 
+/**
+ * A 44px target around a small control without making the row taller (react-native-web's
+ * Pressable ignores hitSlop).
+ */
+const TAP = { minHeight: 44, justifyContent: "center", marginVertical: -13 } as const;
+const receiptKey = (info?: ReceiptInfo) =>
+  info ? `${info.used.join("|")}/${info.hiddenCount}/${info.hidden}/${info.known}` : "";
 const same = (a: MessageRowProps, b: MessageRowProps) =>
   a.message.id === b.message.id &&
   a.signature === b.signature &&
@@ -86,6 +97,8 @@ const same = (a: MessageRowProps, b: MessageRowProps) =>
   a.confirming === b.confirming &&
   a.canCopy === b.canCopy &&
   a.readOnly === b.readOnly &&
+  receiptKey(a.receipt) === receiptKey(b.receipt) &&
+  a.onReceipt === b.onReceipt &&
   a.renderToolCall === b.renderToolCall &&
   a.onListen === b.onListen &&
   a.onStop === b.onStop &&
@@ -134,6 +147,8 @@ function MessageBody({
   confirming,
   canCopy,
   readOnly,
+  receipt,
+  onReceipt,
   renderToolCall,
   onListen,
   onStop,
@@ -181,6 +196,8 @@ function MessageBody({
             s.row,
             {
               gap: 12,
+              rowGap: 6,
+              flexWrap: "wrap",
               alignSelf: user ? "flex-end" : "flex-start",
               paddingHorizontal: 6,
             },
@@ -192,7 +209,7 @@ function MessageBody({
               accessibilityLabel={speaking ? "Stop reading" : "Read aloud"}
               hitSlop={8}
               onPress={() => (speaking ? onStop() : onListen(message.id, text))}
-              style={[s.row, { gap: 5 }]}
+              style={[s.row, TAP, { gap: 5 }]}
             >
               {speaking ? (
                 <Square size={12} fill={colors.muted} strokeWidth={0} />
@@ -209,7 +226,7 @@ function MessageBody({
             }
             hitSlop={8}
             onPress={() => onCopy(message.id, user ? text : plainText(text))}
-            style={[s.row, { gap: 5 }]}
+            style={[s.row, TAP, { gap: 5 }]}
           >
             {copied ? (
               <Check size={14} color={colors.greenDark} />
@@ -220,12 +237,25 @@ function MessageBody({
               {copied ? "Copied" : canCopy ? "Copy" : "Share"}
             </Text>
           </Pressable>
+          {receipt && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="What I used for this answer"
+              hitSlop={8}
+              onPress={() => onReceipt(receipt)}
+              style={[s.row, TAP, { gap: 5 }]}
+            >
+              <ReceiptText size={14} color={colors.muted} />
+              <Text style={s.small}>What I used</Text>
+            </Pressable>
+          )}
           {readOnly ? null : confirming ? (
             <>
               <Pressable
                 accessibilityRole="button"
                 hitSlop={8}
                 onPress={() => onDelete(message.id)}
+                style={TAP}
               >
                 <Text style={[s.small, { color: colors.danger, fontWeight: "600" }]}>
                   Delete message
@@ -235,6 +265,7 @@ function MessageBody({
                 accessibilityRole="button"
                 hitSlop={8}
                 onPress={() => onAskDelete(undefined)}
+                style={TAP}
               >
                 <Text style={s.small}>Keep</Text>
               </Pressable>
@@ -245,7 +276,7 @@ function MessageBody({
               accessibilityLabel="Delete this message"
               hitSlop={8}
               onPress={() => onAskDelete(message.id)}
-              style={{ opacity: 0.55 }}
+              style={[TAP, { opacity: 0.55 }]}
             >
               <Trash2 size={13} color={colors.muted} />
             </Pressable>

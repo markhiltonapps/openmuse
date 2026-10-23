@@ -75,6 +75,8 @@ import { MealCheckInCard } from "./meal-checkins-ui";
 import { MeetingsToolCard, useRecorder, useStartRecording } from "./meetings-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
+import { lookedAt } from "./receipt-text";
+import { type ReceiptInfo, useReceipts } from "./receipt-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { SandboxCard } from "./sandbox-ui";
 import { useSpaces } from "./spaces";
@@ -485,7 +487,7 @@ export function ChatScreen({
   thread?: Selection;
   active?: boolean;
 }) {
-  const { api, workspace: w, refresh, navigate, section } = useWorkspace();
+  const { api, workspace: w, refresh, navigate, section, open: openDetail } = useWorkspace();
   // Live voice (real-time talk), for the people it's turned on for.
   const live = useLiveVoice();
   const call = useCallControls();
@@ -569,6 +571,10 @@ export function ChatScreen({
   // Browsers copy; phones hand the text to the share sheet, which has Copy.
   const canCopy =
     Platform.OS === "web" && typeof navigator !== "undefined" && !!navigator.clipboard;
+  const showReceipt = useCallback(
+    (info: ReceiptInfo) => openDetail({ type: "receipt", info }),
+    [openDetail],
+  );
   const copyMessage = useCallback(async (id: string, text: string) => {
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
@@ -1131,6 +1137,7 @@ export function ChatScreen({
   // the replay doesn't count as the agent replying.
   const showingCopy = richThreads && selection.existing && !historyDone;
   const replying = busy || (agent.isRunning && !showingCopy);
+  const receipts = useReceipts(api, threadId, richThreads && !showingCopy, replying);
   const isMainChat = richThreads && selection.id === mainId;
   const current = showingCopy ? cached : messages;
   const visible = current.filter((m) => shownRole(m) && !hidden.has(m.id));
@@ -1159,6 +1166,36 @@ export function ChatScreen({
         last = message.id;
         for (const call of "toolCalls" in message ? message.toolCalls || [] : [])
           if (call.function.name === "show_in_app") pending.push(call);
+      }
+    }
+    settle();
+  }
+  // "What I used" goes under the last answer of each turn: the places it looked and what was hidden.
+  const receiptAfter = new Map<string, ReceiptInfo>();
+  if (!showingCopy) {
+    let asked: string | undefined;
+    let tools: string[] = [];
+    let last: string | undefined;
+    const settle = () => {
+      const turn = asked ? receipts[asked] : undefined;
+      if (last && asked && !(replying && asked === messages[latestUserIndex]?.id))
+        receiptAfter.set(last, {
+          used: lookedAt(tools),
+          hidden: turn?.hidden ?? "",
+          hiddenCount: turn?.hiddenCount ?? 0,
+          known: Boolean(turn),
+        });
+      tools = [];
+      last = undefined;
+    };
+    for (const message of visible) {
+      if (message.role === "user") {
+        settle();
+        asked = message.id;
+      } else if (message.role === "assistant") {
+        if (message.id.startsWith("spoken-")) continue;
+        if (typeof message.content === "string" && message.content) last = message.id;
+        for (const call of message.toolCalls || []) tools.push(call.function.name);
       }
     }
     settle();
@@ -1193,6 +1230,8 @@ export function ChatScreen({
         confirming: confirmingDelete === message.id,
         canCopy,
         readOnly,
+        receipt: readOnly ? undefined : receiptAfter.get(message.id),
+        onReceipt: showReceipt,
         renderToolCall,
         onListen: readAloud,
         onStop: stopReading,
