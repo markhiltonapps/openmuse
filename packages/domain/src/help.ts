@@ -830,11 +830,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Send the page’s link and say what to watch for: “Tell me when the medium is back in stock on this page.” Or do it yourself in **Goals › Tracking › Track something new › A web page**.",
       "Choose **Something I describe** (1) and write what you want to know in your own words (2). The other choices are **Page changes**, **Text appears** and **Price drops below**.",
-      "Tap **Start tracking** (3). You’re told once when your words come true, even if they already are. Tap **Check now** to look right away.",
+      "Tap **Start tracking** (3). You’re told when your words come true, even if they already are, and not again unless they stop being true and come true again. Tap **Check now** to look right away.",
     ],
     body: [
-      "Nothing is read by an AI on most checks: {agent} looks at the page and compares its words. For **Something I describe**, a small AI model reads the page only when it has changed since the last look, and at most 12 times a day for each watch. It checks every 15 minutes or longer (every hour unless you say otherwise).",
-      "A price watch is in **Goals › Tracking**, with a price chart. {agent} can only read public pages, and it never buys or books anything for you.",
+      "**Page changes**, **Text appears** and **Price drops below** never use AI: {agent} just compares the page’s words. For **Something I describe**, a small AI model reads the page only when it has changed since the last look, and at most 12 times a day for each watch. A watch you describe looks every 15 minutes or longer (every hour unless you say otherwise).",
+      "Your watches are in **Goals › Tracking**. A watch you describe shows **Right now:** what {agent} last made of the page, and says so if the page asks for a sign-in. A price watch also shows a chart. {agent} can only read public pages, so a page that needs a sign-in won’t work, and it never buys or books anything for you.",
     ],
     say: [
       {

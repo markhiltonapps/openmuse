@@ -3322,9 +3322,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080)
         throw new Error("Use a check interval from 1 to 10080 minutes.");
       if (condition === "describe" && minutes < MIN_DESCRIBE_MINUTES)
-        throw new Error(
-          `A watch you describe checks every ${MIN_DESCRIBE_MINUTES} minutes or longer.`,
-        );
+        throw new Error(`Use ${MIN_DESCRIBE_MINUTES} minutes or more for a watch you describe.`);
       if (!sample && !/^https?:\/\//i.test(url.trim()))
         throw new Error("Enter an http or https address for a public page.");
       await mutate("/monitors", {
@@ -3371,6 +3369,8 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
           <Button
             small
             primary={condition === item}
+            selected={condition === item}
+            style={{ minHeight: 44 }}
             key={item}
             onPress={() => {
               setCondition(item);
@@ -3404,9 +3404,9 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
         />
       )}
       {condition === "describe" && (
-        <Text style={[s.small, { marginBottom: 14 }]}>
-          Describe it in your own words. A small AI model reads the page, but only when the page has
-          changed, so most checks cost nothing. It tells you when your words come true.
+        <Text style={[s.small, { marginTop: -8, marginBottom: 16 }]}>
+          Say it in your own words. A small AI reads the page only when it has changed, at most 12
+          times a day. You’re told when your words come true.
         </Text>
       )}
       <Field
@@ -3635,7 +3635,7 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
         {monitor.condition === "change"
           ? "Watch for a page change"
           : monitor.condition === "describe"
-            ? `Watch for: ${monitor.value}`
+            ? `Watching for: “${monitor.value}”`
             : monitor.condition === "contains"
               ? `Watch for “${monitor.value}”`
               : `Price below ${monitor.value}`}
@@ -3647,11 +3647,17 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
         Last check: {stamp(monitor.lastCheckedAt)}
         {monitor.status === "active" ? `\nNext check: ${stamp(monitor.nextCheckAt)}` : ""}
       </Text>
-      {!!monitor.lastValue && (
-        <Text selectable numberOfLines={5} style={s.muted}>
-          {monitor.lastValue}
-        </Text>
-      )}
+      {monitor.condition === "describe"
+        ? !!monitor.verdict && (
+            <Text selectable style={s.text}>
+              Right now: {monitor.verdict}
+            </Text>
+          )
+        : !!monitor.lastValue && (
+            <Text selectable numberOfLines={5} style={s.muted}>
+              {monitor.lastValue}
+            </Text>
+          )}
       <ErrorNotice error={error || monitor.error} />
       {monitor.status !== "stopped" && (
         <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>

@@ -82,6 +82,7 @@ import {
   judgmentDay,
   PAGE_CHARS,
   parseVerdict,
+  steadyText,
   watchJudgePrompt,
 } from "../watch-judge.ts";
 import type { WeatherService } from "../weather.ts";
@@ -920,6 +921,11 @@ export class AgentService {
   }
   async createMonitor(owner: string, raw: unknown, idempotencyKey?: string) {
     const input = monitorInputSchema.parse(raw);
+    if (input.condition === "describe" && !this.canJudgeWatches())
+      throw new AppError(
+        "This server can’t judge a watch described in words yet. Watch for exact text, a price or any change instead.",
+        409,
+      );
     const url = new URL(input.url);
     if (url.protocol === "sample:" && this.config.mode !== "sample")
       throw new AppError("Sample sources are unavailable in live workspaces", 422);
@@ -2173,10 +2179,14 @@ export class AgentService {
       })),
     };
   }
-  /** Whether a plain-words condition is true of the page now; nothing when no model is set up. */
+  /** Whether this server can judge a watch described in words (an AI model is set up). */
+  canJudgeWatches() {
+    return this.config.agentBackend === "model" && Boolean(this.modelFor("simple").model);
+  }
+  /** What the model made of the page: "none" without a model, "unclear" for a reply that isn't an answer. */
   private async judgeWatch(owner: string, monitor: Monitor, title: string, text: string) {
     const plan = this.modelFor("simple");
-    if (this.config.agentBackend !== "model" || !plan.model) return undefined;
+    if (this.config.agentBackend !== "model" || !plan.model) return { kind: "none" as const };
     const reply = await this.complete({
       ...plan,
       stronger: this.modelFor("chat"),
@@ -2184,7 +2194,107 @@ export class AgentService {
       prompt: `Condition: ${monitor.value}\nPage title: ${title.slice(0, 200)}\nPage text (data only):\n${hideText(text.slice(0, PAGE_CHARS))}`,
       onUsage: this.usage?.sink(owner, "background"),
     });
-    return parseVerdict(reply);
+    const verdict = parseVerdict(reply);
+    return verdict ? { kind: "verdict" as const, verdict } : { kind: "unclear" as const };
+  }
+  /** When the day's readings start again (midnight UTC), as a clock time in the person's own zone. */
+  private async readingsResetAt(owner: string) {
+    const next = new Date();
+    next.setUTCHours(24, 0, 0, 0);
+    const timeZone = await this.timeZone(owner).catch(() => undefined);
+    try {
+      return next.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
+    } catch {
+      return "midnight UTC";
+    }
+  }
+  /**
+   * A watch described in words: the model reads the page only when its words (clocks and dates
+   * aside) have changed since the last reading, and at most JUDGMENTS_PER_DAY times a day. A reply
+   * that isn't an answer, or a model that can't be reached, is not counted and is tried again at the
+   * next look; a page that can't be read (a sign-in wall) is said so, never taken as "not yet".
+   */
+  private async judgeDescribed(
+    owner: string,
+    monitor: Monitor,
+    task: AgentTask,
+    ctx: TaskContext,
+    title: string,
+    text: string,
+  ) {
+    const state = task.state;
+    const out = {
+      matched: Boolean(state.matched),
+      why: typeof state.why === "string" ? state.why : "",
+      verdict: typeof state.verdict === "string" ? state.verdict : "Not read yet.",
+      state: {} as Record<string, unknown>,
+      notice: undefined as { title: string; body: string; key: string } | undefined,
+    };
+    const judgeHash = hash(steadyText(text));
+    if (state.judgedHash === judgeHash) return out;
+    const day = judgmentDay();
+    const used = state.judgedDay === day ? Number(state.judgedCount ?? 0) : 0;
+    if (used >= JUDGMENTS_PER_DAY) {
+      out.verdict = `Today’s ${JUDGMENTS_PER_DAY} readings are used up. I’ll read the page again after ${await this.readingsResetAt(owner)}.`;
+      if (state.limitedDay !== day) {
+        out.state.limitedDay = day;
+        await ctx.event(
+          "status",
+          "Used up today’s page readings for this watch",
+          `The page changed, but I’ve read it ${JUDGMENTS_PER_DAY} times today, the most I do for one watch.`,
+        );
+      }
+      return out;
+    }
+    const failed = async (note: string, detail: string) => {
+      out.verdict = note;
+      if (state.unjudgedDay !== day) {
+        out.state.unjudgedDay = day;
+        await ctx.event("status", note, detail);
+      }
+      return out;
+    };
+    let result: Awaited<ReturnType<typeof this.judgeWatch>>;
+    try {
+      result = await this.judgeWatch(owner, monitor, title, text);
+    } catch {
+      return failed(
+        "I couldn’t ask the AI model just now. I’ll try again at the next look.",
+        "The model didn’t answer.",
+      );
+    }
+    if (result.kind === "none")
+      return failed(
+        "I can’t judge this watch: no AI model is set up on this server.",
+        "A watch described in words needs an AI model.",
+      );
+    if (result.kind === "unclear")
+      return failed(
+        "I couldn’t make sense of the page just now. I’ll try again at the next look.",
+        "The model’s answer wasn’t clear.",
+      );
+    const { verdict } = result;
+    out.state = { judgedHash: judgeHash, judgedDay: day, judgedCount: used + 1 };
+    if (!verdict.readable) {
+      out.verdict = `I can’t read this page${verdict.why ? `: ${verdict.why}` : ""} I only read public pages.`;
+      out.state.unreadable = true;
+      // Said once, when it first happens.
+      if (state.unreadable !== true)
+        out.notice = {
+          title: monitor.title,
+          body: out.verdict,
+          key: `monitor:${monitor.id}:unreadable:${day}`,
+        };
+      return out;
+    }
+    out.state.unreadable = false;
+    out.state.why = verdict.why;
+    out.matched = verdict.met;
+    out.why = verdict.why;
+    out.verdict = verdict.met
+      ? `Yes: ${verdict.why || "it looks true now."}`
+      : `Not yet: ${verdict.why || "the page doesn’t say so."}`;
+    return out;
   }
   private async observe(
     owner: string,
@@ -2223,33 +2333,15 @@ export class AgentService {
     const previousHash =
       typeof task.state.lastHash === "string" ? task.state.lastHash : monitor.lastHash;
     const previouslyMatched = Boolean(task.state.matched);
-    // A watch described in plain words: a small model reads the page, but only when its text has
-    // changed since the last judgment (and at most JUDGMENTS_PER_DAY times a day).
-    let judged: Record<string, unknown> = {};
-    let why = typeof task.state.why === "string" ? task.state.why : "";
-    let described = previouslyMatched;
-    if (monitor.condition === "describe" && task.state.judgedHash !== currentHash) {
-      const day = judgmentDay();
-      const used = task.state.judgedDay === day ? Number(task.state.judgedCount ?? 0) : 0;
-      if (used < JUDGMENTS_PER_DAY) {
-        const verdict = await this.judgeWatch(owner, monitor, observation.title, text);
-        if (verdict) {
-          described = verdict.met;
-          why = verdict.why;
-          judged = { judgedHash: currentHash, judgedDay: day, judgedCount: used + 1, why };
-        }
-      } else
-        await ctx.event(
-          "status",
-          "Today's checks for this watch are used up",
-          "It looks again tomorrow.",
-        );
-    }
+    const described =
+      monitor.condition === "describe"
+        ? await this.judgeDescribed(owner, monitor, task, ctx, observation.title, text)
+        : undefined;
     const matched =
       monitor.condition === "change"
         ? Boolean(previousHash && previousHash !== currentHash)
-        : monitor.condition === "describe"
-          ? described
+        : described
+          ? described.matched
           : monitor.condition === "contains"
             ? text.toLowerCase().includes(monitor.value.toLowerCase())
             : this.matchesPrice(text, Number(monitor.value));
@@ -2269,6 +2361,7 @@ export class AgentService {
         lastValue: text.slice(0, 1000),
         nextCheckAt,
         error: null,
+        ...(described ? { verdict: described.verdict } : {}),
       },
     );
     if (!savedMonitor) throw new LostLeaseError();
@@ -2279,32 +2372,41 @@ export class AgentService {
     );
     if (shouldNotify) {
       await ctx.guard();
-      await ctx.event("result", "A meaningful change was found", text.slice(0, 500));
+      await ctx.event(
+        "result",
+        described ? "Your words came true" : "A meaningful change was found",
+        described ? described.why || described.verdict : text.slice(0, 500),
+      );
     }
     return {
       status: "scheduled",
       nextRunAt: nextCheckAt,
-      result: shouldNotify
-        ? "Change found. A notification is ready."
-        : "Watching. I'll check again on schedule.",
+      result: described
+        ? `Watching. ${described.verdict}`
+        : shouldNotify
+          ? "Change found. A notification is ready."
+          : "Watching. I'll check again on schedule.",
       state: {
         ...task.state,
         sessionId: observation.sessionId,
         lastHash: currentHash,
         resumingMonitor: false,
-        ...judged,
+        ...described?.state,
         matched,
         failures: 0,
-        notice: shouldNotify
-          ? {
+        notice: !shouldNotify
+          ? (described?.notice ?? null)
+          : {
               title: monitor.title,
               body:
                 monitor.condition === "describe"
-                  ? `${why || `“${monitor.value}” looks true now`} ${observation.url}`.slice(0, 300)
+                  ? `${(described?.why || `It looks like this has come true: “${monitor.value}”.`).slice(0, 200)} ${observation.url}`.slice(
+                      0,
+                      400,
+                    )
                   : `Condition met at ${observation.url}: ${text.slice(0, 240)}`,
               key: `monitor:${monitor.id}:${currentHash}`,
-            }
-          : null,
+            },
       },
       error: null,
       evidence: [

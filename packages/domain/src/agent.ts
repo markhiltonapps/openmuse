@@ -82,6 +82,8 @@ export interface Monitor {
   lastHash?: string;
   error?: string;
   checks: number;
+  /** A watch described in words: what the last reading decided, in plain words. */
+  verdict?: string;
 }
 export interface Idea {
   id: string;
@@ -260,7 +262,7 @@ export const monitorInputSchema = z
     if (v.condition === "describe" && v.intervalMinutes < MIN_DESCRIBE_MINUTES)
       c.addIssue({
         code: "custom",
-        message: `Check a described watch every ${MIN_DESCRIBE_MINUTES} minutes or longer`,
+        message: `A watch you describe needs ${MIN_DESCRIBE_MINUTES} minutes or more between checks`,
       });
     if (
       v.condition === "price_below" &&

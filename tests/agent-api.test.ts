@@ -385,6 +385,89 @@ test("a watch described in words asks the model only when the page changed, and 
   }
 });
 
+test("a described watch needs a model, retries a garbled answer, says when a page can't be read, and tells once about the daily limit", async () => {
+  const original = server.agent.complete;
+  const modelFor = server.agent.modelFor;
+  const describe = {
+    title: "Shirt in medium",
+    url: "sample://availability",
+    condition: "describe",
+    value: "the medium is back in stock",
+    intervalMinutes: 15,
+  };
+  // No model on this server: refused up front, with a plain sentence.
+  const refused = await request("/monitors", describe);
+  assert.equal(refused.status, 409);
+  assert.match((await refused.json()).error, /can’t judge a watch described in words/);
+
+  let reply = "I think so";
+  let asked = 0;
+  server.agent.modelFor = (() => ({ model: "anthropic/test" })) as never;
+  server.agent.complete = (async () => {
+    asked++;
+    return reply;
+  }) as never;
+  const events = async (taskId: string) =>
+    (await db.list<RunEvent>("local-user", "run-events")).filter(
+      (event) => event.taskId === taskId,
+    );
+  try {
+    await read("/sample-page", { text: "Sold out in every size" });
+    const monitor = await read<Monitor>("/monitors", describe, 201);
+    const notices = async () =>
+      (await read<AgentNotification[]>("/notifications")).filter(
+        (item) => item.taskId === monitor.taskId,
+      );
+    const look = async () => {
+      await read(`/monitors/${monitor.id}/control`, { action: "check" });
+      await server.agent.worker.tick();
+    };
+    await server.agent.worker.tick();
+    // A garbled answer isn't a "no": the same page is read again at the next look.
+    assert.equal(asked, 1);
+    assert.match(
+      (await read<AgentWorkspace>("")).monitors.find((m) => m.id === monitor.id)?.verdict ?? "",
+      /couldn’t make sense of the page/,
+    );
+    reply = '{"met": false, "why": "Every size is sold out."}';
+    await look();
+    assert.equal(asked, 2, "tried again on the unchanged page");
+    assert.match(
+      (await read<AgentWorkspace>("")).monitors.find((m) => m.id === monitor.id)?.verdict ?? "",
+      /^Not yet: Every size is sold out/,
+    );
+    // A sign-in wall is said once, and is not taken as "not yet".
+    reply = '{"readable": false, "met": false, "why": "It asks you to sign in."}';
+    await read("/sample-page", { text: "Please sign in to continue" });
+    await look();
+    assert.equal((await notices()).length, 1);
+    assert.match((await notices())[0]?.body ?? "", /can’t read this page/);
+    await read("/sample-page", { text: "Please log in to see this page" });
+    await look();
+    assert.equal((await notices()).length, 1, "said once, not on every look");
+    // A page that changes on every look: 12 readings, then it says so once.
+    reply = '{"met": false, "why": "Still sold out."}';
+    asked = 0;
+    for (let i = 0; i < 15; i++) {
+      await read("/sample-page", { text: `Sold out in every size, ${i} people viewing` });
+      await look();
+    }
+    assert.ok(asked <= 12, `asked ${asked} times`);
+    const limited = (await events(monitor.taskId)).filter((e) =>
+      e.title.startsWith("Used up today’s page readings"),
+    );
+    assert.equal(limited.length, 1);
+    assert.match(
+      (await read<AgentWorkspace>("")).monitors.find((m) => m.id === monitor.id)?.verdict ?? "",
+      /readings are used up/,
+    );
+  } finally {
+    server.agent.complete = original;
+    server.agent.modelFor = modelFor;
+    await read("/sample-page", { text: "One table at 7 pm" });
+  }
+});
+
 test("live mode rejects sample sources and hides the fixture mutation endpoint", async () => {
   const live = await createApp(db, {
     ...config,
