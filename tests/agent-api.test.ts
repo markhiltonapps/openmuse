@@ -398,7 +398,7 @@ test("a described watch needs a model, retries a garbled answer, says when a pag
   // No model on this server: refused up front, with a plain sentence.
   const refused = await request("/monitors", describe);
   assert.equal(refused.status, 409);
-  assert.match((await refused.json()).error, /can’t judge a watch described in words/);
+  assert.match((await refused.json()).error, /AI that reads pages isn’t switched on/);
 
   let reply = "I think so";
   let asked = 0;

@@ -923,7 +923,7 @@ export class AgentService {
     const input = monitorInputSchema.parse(raw);
     if (input.condition === "describe" && !this.canJudgeWatches())
       throw new AppError(
-        "This server can’t judge a watch described in words yet. Watch for exact text, a price or any change instead.",
+        "The AI that reads pages isn’t switched on here yet. Watch for exact text, a price or any change instead.",
         409,
       );
     const url = new URL(input.url);
@@ -2260,23 +2260,23 @@ export class AgentService {
     } catch {
       return failed(
         "I couldn’t ask the AI model just now. I’ll try again at the next look.",
-        "The model didn’t answer.",
+        "The AI didn’t answer.",
       );
     }
     if (result.kind === "none")
       return failed(
-        "I can’t judge this watch: no AI model is set up on this server.",
-        "A watch described in words needs an AI model.",
+        "I can’t judge this watch yet: the AI that reads pages isn’t switched on here.",
+        "A watch described in words needs the AI that reads pages.",
       );
     if (result.kind === "unclear")
       return failed(
         "I couldn’t make sense of the page just now. I’ll try again at the next look.",
-        "The model’s answer wasn’t clear.",
+        "The AI’s answer wasn’t clear.",
       );
     const { verdict } = result;
     out.state = { judgedHash: judgeHash, judgedDay: day, judgedCount: used + 1 };
     if (!verdict.readable) {
-      out.verdict = `I can’t read this page${verdict.why ? `: ${verdict.why}` : ""} I only read public pages.`;
+      out.verdict = `I can’t read this page${verdict.why ? `: ${verdict.why.replace(/[.\s]+$/, "")}` : ""}. I only read public pages.`;
       out.state.unreadable = true;
       // Said once, when it first happens.
       if (state.unreadable !== true)

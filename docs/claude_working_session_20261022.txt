@@ -201,3 +201,21 @@ sender; approval stays in Apps > Agent > Agent email. Ask the owner if they want
 Review round 1 found: card overpromised ("anything"), held mail was a dead end for the agent, a stale address after sign-out, card
 showing when mail can't arrive, note under the Talk bar and a card that grew when a note appeared.
 
+WATCHES: ALREADY THERE, NOW ALSO IN PLAIN WORDS (2026-10-23)
+I told the owner "tell me only if" watches were a new idea; they weren't: watch_page / Goals > Tracking already watched a public
+page for change, text or a price drop, with no model per look. Added a fourth condition, "describe" (value = the person's words,
+"the medium is back in stock"). Code: watch-judge.ts (prompt, parseVerdict, steadyText, limits), engine/service.ts (judgeDescribed,
+judgeWatch, canJudgeWatches, readingsResetAt, observe), agent.ts (schema, MIN_DESCRIBE_MINUTES = 15), agent-ui.tsx (form option,
+card line "Right now: ..."), conversation.ts (watch_page wording), Help topic watch-page (shot watchdescribe), neddy.html.
+How it behaves: the model reads the page only when its words (clocks and dates removed) changed since the last reading, at most 12 a
+day per watch, never more often than every 15 minutes (the form defaults to 60). Told when the words come true (even if already true
+on the first look), and again only after it stopped being true and came true again. A garbled answer or a model error isn't counted
+and is tried again; a sign-in wall/captcha/error page is said once ("I can't read this page"), not taken as "not yet"; no model on
+the server: refused when the watch is created. The daily limit counts a UTC day; the card gives the restart time in the person's zone.
+Review (visual, usability, copy) signed off after two rounds. Known gaps (not built): no chat/voice tool to stop or edit ANY watch
+(a repeated watch_page makes a duplicate); no debounce of a flapping yes/no/yes; the Recent checks table still says "Changed / No
+change" for described watches; the form offers "Something I describe" even when the server has no model (the save says why); the
+card line can read "Right now: Not yet: ...".
+Lesson: an edit that leaves a parse error (a straight apostrophe inside a single-quoted string) then run through `biome --write`
+rewrote two unrelated lines (the create_routine tool). Check `git diff` after any biome run that followed a syntax error.
+
