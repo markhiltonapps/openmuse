@@ -98,7 +98,7 @@ export function AccountCard() {
       </Text>
       {me.agentEmail && (
         <Text style={s.muted}>
-          Your agent's email address is <Text selectable>{me.agentEmail}</Text>.
+          Your agent’s email address is <Text selectable>{me.agentEmail}</Text>.
         </Text>
       )}
       {/* The app reloads by itself when you come back to it; this is for the rare stuck moment. */}

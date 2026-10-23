@@ -30,6 +30,7 @@ import type {
 } from "../../../../packages/domain/src/index.ts";
 import { modelLabel, USAGE_KINDS } from "../../../../packages/domain/src/model-names.ts";
 import { type ActionService, usesGoogle } from "../actions.ts";
+import type { AgentInboxItem } from "../agent-email-tools.ts";
 import type { AppEvents } from "../app-events.ts";
 import type { ApprovalRules } from "../approval-rules.ts";
 import type { AppConnector } from "../apps.ts";
@@ -1524,7 +1525,10 @@ export class AgentService {
   /** New-email alerts and "when X emails me" rules. */
   mailAlerts?: MailAlerts;
   /** The agent's own email address; set when agent email is configured. */
-  mail?: { address(owner: string): Promise<string | undefined> };
+  mail?: {
+    address(owner: string): Promise<string | undefined>;
+    recent?(owner: string): Promise<AgentInboxItem[]>;
+  };
   /** Lets tests stand in for the Anthropic API when designing avatars. */
   avatarFetcher?: typeof fetch;
   /** Web search for current information; set when a search provider is configured. */

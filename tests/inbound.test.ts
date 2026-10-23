@@ -4,9 +4,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { agentEmailToolSpecs } from "../apps/server/src/agent-email-tools.ts";
 import { createApp } from "../apps/server/src/app.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
+import type { AgentService } from "../apps/server/src/engine/service.ts";
 import { AgentInbox, type InboxEmail, verifySvix } from "../apps/server/src/inbound.ts";
 import type { AgentTask } from "../packages/domain/src/agent.ts";
 
@@ -117,6 +119,69 @@ test("approved senders hand the agent work; everyone else is held", async () => 
   );
   const body = JSON.stringify({ type: "email.sent", data: { email_id: "em_x" } });
   assert.equal((await inbox.receive(body, sign(body))).status, "ignored");
+
+  // The chat can see what arrived and how it went (it used to answer "I didn't see it").
+  const recent = await inbox.recent("local-user");
+  assert.equal(recent.length, 3);
+  const handled = recent.find((e) => e.subject === "Book the dentist");
+  assert.equal(handled?.status, "task");
+  assert.equal(handled?.from, "owner@example.com");
+  assert.ok(handled?.job?.id, "the job it started is listed");
+  assert.equal(recent.find((e) => e.from === "spam@elsewhere.test")?.status, "held");
+  assert.equal(handled?.when, "just now");
+  assert.match(handled?.state ?? "", /^(Arrived; the job is being set up|The job)/);
+  const stranger = recent.find((e) => e.from === "spam@elsewhere.test");
+  assert.match(stranger?.state ?? "", /^Held: the sender isn’t on the approved list/);
+  assert.match(
+    recent.find((e) => e.reason === "Sender authentication failed")?.state ?? "",
+    /^Held: it failed the sender check/,
+  );
+  const [check] = agentEmailToolSpecs("local-user", inbox, async () => ({ id: "x" }));
+  const seen = (await check?.execute({} as never)) as { address: string; emails: unknown[] };
+  assert.equal(seen.address, "muse@agent.test");
+  assert.equal(seen.emails.length, 3);
+});
+
+test("if starting the job fails, the email isn't left marked as received, so Resend's retry works", async () => {
+  let fail = true;
+  const stub = {
+    createTask: async () => {
+      if (fail) throw new Error("could not start");
+      return { id: "task-retry" };
+    },
+    files: { accepts: () => false },
+    notify: async () => undefined,
+    mail: undefined,
+  } as unknown as AgentService;
+  const retrying = new AgentInbox(db, config, stub, server.accounts, (async (
+    url: string | URL | Request,
+  ) =>
+    String(url).endsWith("/attachments")
+      ? Response.json({ data: [] })
+      : Response.json({
+          from: "owner@example.com",
+          subject: "Retry me",
+          text: "hello",
+          headers: {},
+        })) as typeof fetch);
+  const deliver = () => {
+    const body = JSON.stringify({
+      type: "email.received",
+      data: { email_id: "em_retry", from: "x", to: ["muse@agent.test"], subject: "x" },
+    });
+    return retrying.receive(body, sign(body, "msg_em_retry"));
+  };
+  await assert.rejects(deliver(), /could not start/);
+  assert.equal(await db.get("local-user", "agent-inbox", "em_retry"), null);
+  fail = false;
+  assert.equal((await deliver()).status, "task");
+});
+
+test("with no agent address yet, the inbox check says so plainly", async () => {
+  const empty = new AgentInbox(db, config, server.agent, server.accounts);
+  const [check] = agentEmailToolSpecs("someone-new", empty, async () => ({ id: "x" }));
+  const none = (await check?.execute({} as never)) as { error?: string };
+  assert.match(none.error ?? "", /doesn’t have an email address/);
 });
 
 test("the webhook route rejects unsigned calls and settings are editable", async () => {

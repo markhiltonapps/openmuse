@@ -3,6 +3,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   about: { width: 720, height: 2400 },
   activity: { width: 720, height: 2123 },
   agent: { width: 720, height: 3028 },
+  agentaddress: { width: 720, height: 1558 },
   approve: { width: 720, height: 1558 },
   apps: { width: 720, height: 1558 },
   backdrop: { width: 720, height: 4246 },

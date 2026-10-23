@@ -179,3 +179,25 @@ Help: topic recording-not-sending re-written for marks 1-3 and the new wording; 
 Checks: biome clean, tsc (root and apps/mobile) clean, pnpm test 633/633.
 Fringe-feature research (docs/FRINGE-FEATURE-IDEAS.md) committed separately; nothing from it is built.
 NOT PUSHED: waiting for "push it" (check for a live call first).
+
+AGENT EMAIL: THE CHAT COULDN'T SEE IT, AND THE ADDRESS CARD (2026-10-23, owner: "I sent myself an email at my Muse address
+and the app said it didn't see it")
+Owner's address: muse@neatoagent.com. Railway's http log shows the webhook (POST /api/inbound/resend) answered 200 at 21:36:04 UTC
+and a background job ran 12 s later, so the mail DID arrive and was handled. The chat said "I didn't see it" because mail to the
+agent's address becomes a job (inbound.ts createTask), and the chat had no tool that looks at it.
+Fixes:
+ - New tool check_agent_inbox (agent-email-tools.ts; chat, jobs and the call's hand-offs share it): the latest 8 emails with who,
+   subject, "2 minutes ago", what became of it in plain words (held: sender not approved / failed the sender check; job being set
+   up; job working / waiting for your OK / finished / didn't work out) and the address itself. The instructions tell the agent how
+   to describe each state, not to say "I didn't see it" without checking, and where to approve a sender.
+ - inbound.ts: if starting the job fails the inbox row is removed, so Resend's retry runs it (before, the retry was "duplicate" and
+   the email was lost silently). Test added.
+ - Home: "Email Neddy" card (AddressCard in home.tsx): the address, Copy, Save contact card (a .vcf; hidden in an installed web app
+   because iOS standalone ignores downloads). Shown only when /api/agent-email says agent email is configured. The remembered
+   address and name are cleared on sign-out (session-store.ts).
+ - Help topic agent-email rewritten (shot agentaddress, marks 1-3); website line added; agent-contact.ts + tests.
+Not built, on purpose: an approve-sender tool. A held email's text reaches the model, so it could push the agent to approve its own
+sender; approval stays in Apps > Agent > Agent email. Ask the owner if they want it behind an Approve card.
+Review round 1 found: card overpromised ("anything"), held mail was a dead end for the agent, a stale address after sign-out, card
+showing when mail can't arrive, note under the Talk bar and a card that grew when a note appeared.
+

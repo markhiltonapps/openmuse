@@ -216,6 +216,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Starting a job";
     case "email_from_agent":
       return "Writing the email";
+    case "check_agent_inbox":
+      return "Checking your agent’s inbox";
     case "get_help":
       return "Looking it up in Help";
     case "manage_chats":

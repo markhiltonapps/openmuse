@@ -87,6 +87,8 @@ export function nowDoing(
     case "prepare_email":
     case "email_from_agent":
       return say("Writing an email", "mail");
+    case "check_agent_inbox":
+      return say("Checking your agent’s inbox", "mail");
     case "prepare_event":
       return say("Getting a calendar event ready", "plan");
     case "use_app":

@@ -500,6 +500,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   while the old version kept serving). Fix: reset the bucket's credentials and give the api's five `S3_*`
   variables as references to the bucket (`${{reserved-safe.ACCESS_KEY_ID}}` etc., never pasted codes), then
   redeploy. A failed healthcheck on the api after a deploy = read that deployment's logs first.
+- **Mail sent to the agent's address is a job, not chat (2026-10-23):** `AgentInbox.receive` turns it into a background job, so
+  the chat saw nothing and said "I didn't see it" about mail that had arrived. Anything the agent might be asked about
+  ("did you get…") needs a tool that reads it (`check_agent_inbox`); a state that lives only in Activity is invisible to the
+  chat and to calls. Hold a row only after the work it guards succeeds, or remove it on failure, or a retry is swallowed as a
+  duplicate. Remembered values (address, name) are cleared in `clearSession`.
 - **Recordings are never only in memory (owner, 2026-10-23):** a meeting's audio pieces are written to the device
   (IndexedDB, `meeting-store.ts`) before they're sent and removed only when the server has them; the recording is
   closed on the server only after every piece arrived (`meeting-uploader.ts`). The recorder warns within seconds

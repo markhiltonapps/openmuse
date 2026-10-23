@@ -834,6 +834,40 @@ const SHOTS = [
       3: (p) => button(p, /^Stop recording/),
     },
   },
+  {
+    // Home's "Email Neddy" card: the address to forward mail to, with Copy and Save contact card.
+    id: "agentaddress",
+    start: "home",
+    go: async (p) => {
+      await p.route(/\/api\/agent-email$/, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({
+              json: {
+                configured: true,
+                address: "muse@agent.example",
+                allowedSenders: ["sam@example.com"],
+                recent: [],
+              },
+            })
+          : route.fallback(),
+      );
+      await p.reload();
+      await p.getByText("muse@agent.example").first().waitFor({ timeout: 30000 });
+      // Home scrolls inside its own container: bring the card up out from under the Talk bar.
+      await p.evaluate(() => {
+        const heading = [...document.querySelectorAll('[role="heading"]')].find((h) =>
+          /^Email /.test(h.textContent ?? ""),
+        );
+        heading?.scrollIntoView({ block: "start" });
+      });
+      await p.waitForTimeout(800);
+    },
+    marks: {
+      1: { find: words((p) => p.getByText("muse@agent.example").first()).find, side: "top-right" },
+      2: (p) => button(p, "Copy"),
+      3: { find: (p) => button(p, "Save contact card"), side: "top-right" },
+    },
+  },
 ];
 
 /**

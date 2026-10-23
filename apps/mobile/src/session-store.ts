@@ -32,6 +32,9 @@ export async function clearSession() {
   try {
     if (Platform.OS === "web") {
       globalThis.localStorage?.removeItem(KEY);
+      // What Home remembers about the person (their name, their agent's address) goes with the sign-in.
+      globalThis.localStorage?.removeItem("openmuse.you-name");
+      globalThis.localStorage?.removeItem("openmuse.agent-email");
       // This device's copies of the ends of chats (chat-rows.tsx) go with the sign-in.
       const storage = globalThis.localStorage;
       for (let i = (storage?.length ?? 0) - 1; i >= 0; i--) {

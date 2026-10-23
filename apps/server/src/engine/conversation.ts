@@ -1011,7 +1011,7 @@ export class ConversationAgent extends AbstractAgent {
             ...spec,
             execute: async (args) => {
               try {
-                return await spec.execute(args);
+                return await spec.execute(args as never);
               } catch (error) {
                 return { error: error instanceof Error ? error.message : "Could not prepare it" };
               }

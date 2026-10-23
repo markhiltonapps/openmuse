@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { AgentEmail } from "../../../packages/domain/src/index.ts";
 import type { AccountService } from "./accounts.ts";
+import type { AgentInboxItem } from "./agent-email-tools.ts";
 import { ADMIN_OWNER } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
@@ -162,25 +163,64 @@ export class AgentInbox {
       );
       return { status: "held" };
     }
-    const attachments = await this.saveAttachments(owner, id, from);
-    const task = await this.agent.createTask(
-      owner,
-      {
-        kind: "agent",
-        title: `Email: ${subject}`.slice(0, 160),
-        prompt: inboundPrompt(from, subject, email, attachments, {
-          address: (await this.settings(owner)).address,
-          messageId: messageIdOf(email),
-          canReply: Boolean(this.agent.mail),
-        }),
-      },
-      `inbound:${id}`,
-    );
+    let task: { id: string };
+    try {
+      const attachments = await this.saveAttachments(owner, id, from);
+      task = await this.agent.createTask(
+        owner,
+        {
+          kind: "agent",
+          title: `Email: ${subject}`.slice(0, 160),
+          prompt: inboundPrompt(from, subject, email, attachments, {
+            address: (await this.settings(owner)).address,
+            messageId: messageIdOf(email),
+            canReply: Boolean(this.agent.mail),
+          }),
+        },
+        `inbound:${id}`,
+      );
+    } catch (error) {
+      // Not left marked as received: Resend delivers it again, and that retry starts the job.
+      await this.db.remove(owner, "agent-inbox", id);
+      throw error;
+    }
     await this.db.put(owner, "agent-inbox", { ...record, taskId: task.id });
     return { status: "task", taskId: task.id };
   }
   async address(owner: string) {
     return (await this.settings(owner)).address;
+  }
+  /** The latest emails to this person's agent address, each with how its job ended. */
+  async recent(owner: string): Promise<AgentInboxItem[]> {
+    const rows = (await this.db.list<InboxEmail>(owner, "agent-inbox"))
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+      .slice(0, 8);
+    return Promise.all(
+      rows.map(async (row) => {
+        let job: AgentInboxItem["job"];
+        if (row.taskId) {
+          const task = await this.agent.getTask(owner, row.taskId).catch(() => undefined);
+          if (task)
+            job = {
+              id: task.id,
+              status: task.status,
+              ...(task.result ? { result: task.result.slice(0, 600) } : {}),
+              ...(task.question ? { question: task.question.slice(0, 300) } : {}),
+            };
+        }
+        const ageMs = Date.now() - Date.parse(row.receivedAt);
+        return {
+          // A held email's subject and sender come from anyone: cut hard, never trusted.
+          from: row.from.slice(0, 120),
+          subject: row.status === "held" ? row.subject.slice(0, 80) : row.subject,
+          when: ago(ageMs),
+          state: describe(row, job, ageMs),
+          status: row.status,
+          ...(row.reason ? { reason: row.reason } : {}),
+          ...(job ? { job } : {}),
+        };
+      }),
+    );
   }
   /** Sends an approved email from the person's agent address. */
   async send(owner: string, email: AgentEmail) {
@@ -281,6 +321,40 @@ export class AgentInbox {
       attachments?: { filename?: string }[];
     };
   }
+}
+
+/** "just now", "5 minutes ago", "yesterday": plain words for how long ago. */
+function ago(ms: number) {
+  const minutes = Math.max(0, Math.round(ms / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+/** What became of one email, in words the agent can pass on. */
+function describe(row: InboxEmail, job: AgentInboxItem["job"], ageMs: number) {
+  if (row.status === "held")
+    return /authentication/i.test(row.reason ?? "")
+      ? "Held: it failed the sender check, so it wasn’t acted on"
+      : "Held: the sender isn’t on the approved list, so it wasn’t acted on";
+  if (!job)
+    return ageMs < 3 * 60_000
+      ? "Arrived; the job is being set up"
+      : "Arrived, but the job doesn’t appear to have started";
+  const said: Record<string, string> = {
+    queued: "The job is waiting to start",
+    running: "The job is working on it now",
+    scheduled: "The job is scheduled",
+    paused: "The job is paused",
+    waiting_approval: "The job is waiting for the person’s OK",
+    waiting_input: "The job is waiting for the person’s answer",
+    succeeded: "The job finished",
+    failed: "The job didn’t work out",
+    cancelled: "The job was cancelled",
+  };
+  return said[job.status] ?? `The job is ${job.status}`;
 }
 
 interface SavedAttachment {

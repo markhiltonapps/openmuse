@@ -1,16 +1,20 @@
 import {
   CalendarDays,
   Check,
+  Copy,
   Globe,
   Headset,
   Keyboard,
   type LucideIcon,
+  Mail,
   Mic,
+  UserPlus,
 } from "lucide-react-native";
 import { type ReactNode, useEffect, useState } from "react";
-import { Image, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Image, Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src";
 import { taskActivity } from "./activity";
+import { contactCard, contactFileName } from "./agent-contact";
 import { useAgentWorkspace } from "./agent-workspace";
 import { type AppDay, todaysEvents } from "./calendar-apps";
 import { appLabel } from "./details";
@@ -20,11 +24,20 @@ import { useLiveVoice } from "./live-talk-ui";
 import { HomeRecordButton, useRecording } from "./meetings-ui";
 import { dark, glass } from "./theme";
 import { tipProps } from "./tips";
-import { colors, glassSurface, s } from "./ui";
+import { Button, colors, glassSurface, s } from "./ui";
 import { useWeather } from "./weather-ui";
+import { isInstalled } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 const NAME_KEY = "openmuse.you-name";
+const ADDRESS_KEY = "openmuse.agent-email";
+function rememberedAddress() {
+  try {
+    return globalThis.localStorage?.getItem(ADDRESS_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
 function rememberedName() {
   try {
     return globalThis.localStorage?.getItem(NAME_KEY) ?? "";
@@ -329,9 +342,116 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
               )}
             </HomeCard>
           </View>
+          <AddressCard agent={agent} />
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * The address people forward mail to, where they can't miss it: copy it, or save it as a contact so
+ * their mail app can fill it in when they type the agent's name. Only shown when mail can really
+ * arrive (the server has agent email set up).
+ */
+function AddressCard({ agent }: { agent: string }) {
+  const { api } = useWorkspace();
+  // Remembered, so the card doesn't pop in under a thumb on the next open.
+  const [address, setAddress] = useState(rememberedAddress);
+  const [note, setNote] = useState("");
+  const [done, setDone] = useState<"copied" | "saved">();
+  useEffect(() => {
+    void api.request<{ configured?: boolean; address?: string }>("/api/agent-email").then(
+      (settings) => {
+        const found = settings.configured ? (settings.address ?? "") : "";
+        setAddress(found);
+        try {
+          if (found) globalThis.localStorage?.setItem(ADDRESS_KEY, found);
+          else globalThis.localStorage?.removeItem(ADDRESS_KEY);
+        } catch {
+          // Private browsing: it's looked up each time.
+        }
+      },
+      () => undefined,
+    );
+  }, [api]);
+  useEffect(() => {
+    if (!note) return;
+    const timer = setTimeout(() => {
+      setNote("");
+      setDone(undefined);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [note]);
+  if (!address) return null;
+  const web = Platform.OS === "web";
+  const copy = async () => {
+    try {
+      await globalThis.navigator.clipboard.writeText(address);
+      setDone("copied");
+      setNote("Copied.");
+    } catch {
+      setNote("Couldn’t copy. Select the address and copy it by hand.");
+    }
+  };
+  const save = () => {
+    const url = URL.createObjectURL(
+      new Blob([contactCard(agent, address)], { type: "text/vcard;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = contactFileName(agent);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setDone("saved");
+    setNote(`Contact card downloaded. Open it to add ${agent} to your contacts.`);
+  };
+  return (
+    <HomeCard title={`Email ${agent}`} icon={Mail} tint={["#6ec3ff", "#2a62d9"]}>
+      {/* The note replaces this line, high in the card, so it can't end up under the Talk bar and the
+          card never changes size. Mounted all the time so a change is read out. */}
+      <Text role="status" aria-live="polite" style={{ color: soft(), fontSize: 13 }}>
+        {note ||
+          `Forward an email from your own address to this one and ${agent} gets to work on it. Mail from addresses you haven’t approved is held and not acted on.`}
+      </Text>
+      <Text
+        selectable
+        style={
+          {
+            color: ink(),
+            fontSize: 16,
+            fontWeight: "700",
+            marginBottom: 4,
+            wordBreak: "break-all",
+          } as object
+        }
+      >
+        {address}
+      </Text>
+      {web && (
+        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+          <Button
+            icon={done === "copied" ? Check : Copy}
+            onPress={() => void copy()}
+            style={{ flex: 1, minWidth: 120 }}
+          >
+            Copy
+          </Button>
+          {/* An installed web app on an iPhone ignores downloads and would lose its page. */}
+          {!isInstalled() && (
+            <Button
+              icon={done === "saved" ? Check : UserPlus}
+              onPress={save}
+              style={{ flex: 1, minWidth: 120 }}
+            >
+              Save contact card
+            </Button>
+          )}
+        </View>
+      )}
+    </HomeCard>
   );
 }
 
