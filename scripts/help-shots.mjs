@@ -1143,9 +1143,9 @@ const SHOTS = [
       await p.waitForTimeout(800);
     },
     marks: {
-      1: { find: words((p) => p.getByText("muse@agent.example").first()).find, side: "top-right" },
+      1: words((p) => p.getByText("muse@agent.example").first()),
       2: (p) => button(p, "Copy"),
-      3: { find: (p) => button(p, "Save contact card"), side: "top-right" },
+      3: { find: (p) => button(p, "Save contact"), side: "top-right" },
     },
   },
 ];

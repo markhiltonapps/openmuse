@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   Check,
+  CloudSun,
   Copy,
   Globe,
   Headset,
@@ -13,11 +14,13 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { Image, Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src";
+import type { Weather } from "../../../packages/domain/src/weather";
 import { taskActivity } from "./activity";
 import { contactCard, contactFileName } from "./agent-contact";
 import { useAgentWorkspace } from "./agent-workspace";
 import { type AppDay, todaysEvents } from "./calendar-apps";
 import { appLabel } from "./details";
+import { Emoji } from "./emoji";
 import { GlossFill, OnGloss } from "./gloss";
 import { useCallControls } from "./live-call";
 import { useLiveVoice } from "./live-talk-ui";
@@ -25,7 +28,7 @@ import { HomeRecordButton, useRecording } from "./meetings-ui";
 import { dark, glass } from "./theme";
 import { tipProps } from "./tips";
 import { Button, colors, glassSurface, s } from "./ui";
-import { useWeather } from "./weather-ui";
+import { dayName, lastShown, todayIn, useWeather } from "./weather-ui";
 import { isInstalled } from "./web-app";
 import { useWorkspace } from "./workspace";
 
@@ -141,7 +144,6 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
           ? `Nothing needs you right now. ${agent} is on ${busy.length === 1 ? "a job" : `${count(busy.length).toLowerCase()} jobs`}.`
           : "Nothing needs you right now.";
   const events = todaysEvents([...w.events, ...(appDay?.events ?? [])], now);
-  const forecast = weather && "weather" in weather ? weather.weather.now : undefined;
   const calendarConnected =
     !!appDay?.checked.length ||
     w.connections.some((c) => c.id === "google" && c.status !== "disconnected");
@@ -257,24 +259,13 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
               tint={["#ffbe6e", "#e8591a"]}
               onPress={() => navigate("feed")}
               // A button's name replaces what's in it, so it carries what the card says.
-              label={`Today: ${forecast ? `${forecast.temp}°, ${forecast.sky}. ` : ""}${shown
+              label={`Today: ${shown
                 .map((e) => `${spoken(e)} ${e.title}`)
                 .join(", ")}${shown.length ? ". " : ""}${more ? `And ${more} more. ` : ""}${
                 dayNote ? `${dayNote} ` : ""
               }Opens your day in Feed`}
               style={{ flex: 1 }}
             >
-              {forecast && (
-                <Text style={{ color: soft(), fontSize: 13 }}>
-                  <Text
-                    style={{ color: ink(), fontSize: 22, fontWeight: "700", letterSpacing: -0.4 }}
-                  >
-                    {forecast.temp}°
-                  </Text>
-                  {"  "}
-                  {forecast.sky}
-                </Text>
-              )}
               {shown.map((e) => (
                 <View key={`${e.id}-${e.start}`} style={{ flexDirection: "row", gap: 10 }}>
                   <Text
@@ -342,10 +333,76 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
               )}
             </HomeCard>
           </View>
+          {weather && "weather" in weather ? (
+            <WeatherCard weather={weather.weather} onPress={() => navigate("feed")} />
+          ) : (
+            // Holds the card's room while the forecast loads, so the cards below don't jump.
+            !weather && lastShown() && <WeatherRoom />
+          )}
           <AddressCard agent={agent} />
         </View>
       )}
     </View>
+  );
+}
+
+/** The Weather card's space, empty, while the forecast loads. */
+function WeatherRoom() {
+  return (
+    <View aria-hidden>
+      <HomeCard title="Weather" icon={CloudSun} tint={["#7fd4ff", "#2f7be0"]}>
+        <View style={{ height: 121 }} />
+      </HomeCard>
+    </View>
+  );
+}
+
+/** The week at a glance: now, then each day's high and low. Tap for the full forecast in Feed. */
+function WeatherCard({ weather, onPress }: { weather: Weather; onPress: () => void }) {
+  const today = todayIn(weather.timeZone);
+  const days = weather.days.slice(0, 7);
+  // Late in the evening today has no high left: its column shows the low and says "Tonight".
+  const name = (day: Weather["days"][number]) =>
+    day.date === today && day.high === undefined ? "Tonight" : dayName(day.date, today, "short");
+  const spoken = days
+    .map(
+      (day) =>
+        `${name(day)}: ${day.sky.toLowerCase()}${day.high !== undefined ? `, high ${day.high}` : ""}${day.low !== undefined ? `, low ${day.low}` : ""}`,
+    )
+    .join(". ");
+  return (
+    <HomeCard
+      title="Weather"
+      icon={CloudSun}
+      tint={["#7fd4ff", "#2f7be0"]}
+      onPress={onPress}
+      label={`Weather in ${weather.place}: ${weather.now.temp} degrees, ${weather.now.sky.toLowerCase()}. ${spoken}. Opens the forecast in Feed`}
+    >
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <Text style={{ color: ink(), fontSize: 30, fontWeight: "700", letterSpacing: -0.6 }}>
+          {weather.now.temp}°
+        </Text>
+        <Text style={{ color: soft(), fontSize: 14, flexShrink: 1 }}>
+          {weather.now.sky} · {weather.place}
+        </Text>
+      </View>
+      <View style={{ flexDirection: "row", gap: 2 }}>
+        {days.map((day) => (
+          <View key={day.date} style={{ flex: 1, minWidth: 0, alignItems: "center", gap: 3 }}>
+            <Text style={{ color: soft(), fontSize: 12, fontWeight: "600" }} numberOfLines={1}>
+              {day.date === today && day.high === undefined ? "Night" : name(day)}
+            </Text>
+            <Emoji char={day.emoji} size={24} />
+            <Text style={{ color: ink(), fontSize: 14, fontWeight: "700" }}>
+              {day.high !== undefined ? `${day.high}°` : "–"}
+            </Text>
+            <Text style={{ color: soft(), fontSize: 12 }}>
+              {day.low !== undefined ? `${day.low}°` : " "}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </HomeCard>
   );
 }
 
@@ -414,16 +471,15 @@ function AddressCard({ agent }: { agent: string }) {
           card never changes size. Mounted all the time so a change is read out. */}
       <Text role="status" aria-live="polite" style={{ color: soft(), fontSize: 13 }}>
         {note ||
-          `Forward an email from your own address to this one and ${agent} gets to work on it. Mail from addresses you haven’t approved is held and not acted on.`}
+          `Forward mail here and ${agent} gets to work on it. Mail from addresses you haven’t approved is held.`}
       </Text>
       <Text
         selectable
         style={
           {
             color: ink(),
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: "700",
-            marginBottom: 4,
             wordBreak: "break-all",
           } as object
         }
@@ -433,20 +489,22 @@ function AddressCard({ agent }: { agent: string }) {
       {web && (
         <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
           <Button
+            small
             icon={done === "copied" ? Check : Copy}
             onPress={() => void copy()}
-            style={{ flex: 1, minWidth: 120 }}
+            style={{ flex: 1, minWidth: 100 }}
           >
             Copy
           </Button>
           {/* An installed web app on an iPhone ignores downloads and would lose its page. */}
           {!isInstalled() && (
             <Button
+              small
               icon={done === "saved" ? Check : UserPlus}
               onPress={save}
-              style={{ flex: 1, minWidth: 120 }}
+              style={{ flex: 1, minWidth: 100 }}
             >
-              Save contact card
+              Save contact
             </Button>
           )}
         </View>

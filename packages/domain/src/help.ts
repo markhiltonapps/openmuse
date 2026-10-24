@@ -156,11 +156,13 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "home",
     steps: [
       "**Needs you:** anything waiting for your OK, and jobs with a question for you. Tap **Review** to see the whole thing before you approve it, or **Answer** to reply.",
-      "**Today:** the weather and what’s left on your calendar. Tap it for your day in Feed.",
+      "**Today:** what’s left on your calendar. Tap it for your day in Feed.",
       "**Working on:** the job {agent} is doing now. Tap it to see how it’s going, or, when {agent} is free, to give it a job.",
       "**Talk to {agent}:** tap it and just talk. The keyboard button next to it opens the chat so you can type instead.",
     ],
     body: [
+      "Under them, the **Weather** card shows the temperature now and the next seven days, each with its high and low. Tap it for the full forecast in Feed. It’s shown when you’ve saved a US home city (see **Weather and where you live**).",
+      "If {agent} has an email address set up, a small **Email {agent}** card follows, with Copy and Save contact.",
       "To come back here from anywhere, tap {agent} at the top of the screen, choose **Home** in the ☰ Menu, or say “Take me home”.",
     ],
     say: [{ text: "Take me home.", send: true }],
@@ -1226,7 +1228,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "agent-settings",
     steps: [
       "Your address (1) is on **Home**, in the **Email {agent}** card. It is also under **Apps › Agent › Agent email** and **Apps › Account**.",
-      "Tap **Copy** (2), then paste it into the **To** box of a forward. Or tap **Save contact card** (3) and open the card it downloads (it isn’t shown in the installed app). Most mail apps will then fill in the address when you type {agent}’s name; for Gmail on the web, add the card at contacts.google.com.",
+      "Tap **Copy** (2), then paste it into the **To** box of a forward. Or tap **Save contact** (3) and open the card it downloads (it isn’t shown in the installed app). Most mail apps will then fill in the address when you type {agent}’s name; for Gmail on the web, add the card at contacts.google.com.",
       "Forward or send an email to it. Supported attachments are read too: PDFs, pictures, Word, Excel, PowerPoint, CSV and text files, up to 5 files of 10 MB each. At first only email from the address you signed in with counts, so forward from that account. To add other addresses, go to **Apps › Agent › Agent email**.",
       "Email from anyone else is held: {agent} doesn’t act on it, and you get a notice. After you approve the sender, send it again. (If the notice says it failed the sender check, approving won’t help: send it again from your usual mail app.)",
       "Email can take a minute or two to arrive. To check, ask “Did you get my email?” and {agent} lists what reached its address and how each one went.",

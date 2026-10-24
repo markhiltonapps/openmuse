@@ -301,3 +301,13 @@ minutes gone): each one needs a way back to the result, in words that are true f
 Lesson: `Button selected` only sets aria-pressed; callers pass `primary={selected}` to show it.
 Lesson: the call screen starts a call when it opens with phase "idle": anything that starts a call and opens the screen together must
 set the phase first, or two calls start.
+
+== HOME: BIGGER WEATHER CARD, SMALLER EMAIL CARD (2026-10-24) ==
+Owner: the weather should be a larger card showing more days, and the email card smaller. Home now has a full-width Weather card
+(home.tsx WeatherCard: now, sky, city, then seven day columns with weekday, icon, high, low; "Night" label when today has no high left;
+one button to Feed with a full spoken label). The Today card is calendar only. The Email Neddy card has shorter text, a 14px address
+and small buttons ("Save contact" replaces "Save contact card" in the app, Help and the picture). To keep the cards below from jumping,
+useWeather remembers its last answer per session (weather-ui.tsx lastResult) and Home holds the card's room (WeatherRoom, measured
+within a few pixels of the real card) while the first forecast loads on a device that normally gets one.
+Help: home topic text and `greet` picture; agent-email steps and `agentaddress` picture retaken. Review: one combined pass found the
+pop-in (fixed). Not checked: 320px width in a real browser, the "Night" case in a picture.

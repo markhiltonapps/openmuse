@@ -31,7 +31,7 @@ import { useWorkspace } from "./workspace";
 
 const SHOWN = "openmuse.weather-shown";
 /** Whether this device last had a forecast to show, so a loading line only shows for those who get one. */
-function lastShown() {
+export function lastShown() {
   try {
     return globalThis.localStorage?.getItem(SHOWN) !== "0";
   } catch {
@@ -39,19 +39,29 @@ function lastShown() {
   }
 }
 
+// The last answer per signed-in session, so a screen that opens again paints it at once.
+const lastResult = new WeakMap<object, WeatherResult>();
+
 /** The forecast, fetched when the Feed opens, every 15 minutes, and when the app comes back. */
 export function useWeather() {
   const { api } = useWorkspace();
-  const [result, setResult] = useState<WeatherResult>();
+  const [result, setResult] = useState<WeatherResult | undefined>(() => lastResult.get(api));
   /** `fresh` clears what's showing first, for a new city. */
   const load = useCallback(
     (fresh = false) => {
-      if (fresh) setResult(undefined);
+      if (fresh) {
+        lastResult.delete(api);
+        setResult(undefined);
+      }
       return api.request<WeatherResult>("/api/weather").then(
         (next) => {
           // A blip at the Weather Service doesn't take away a forecast that's already showing.
           const blip = "unavailable" in next && next.unavailable === "unreachable";
-          setResult((current) => (current && "weather" in current && blip ? current : next));
+          setResult((current) => {
+            const shown = current && "weather" in current && blip ? current : next;
+            lastResult.set(api, shown);
+            return shown;
+          });
           if (!blip)
             try {
               globalThis.localStorage?.setItem(SHOWN, "weather" in next ? "1" : "0");
@@ -100,7 +110,7 @@ const hourOf = (time: string) => {
   return `${hour % 12 || 12} ${hour < 12 ? "AM" : "PM"}`;
 };
 /** The city's date today. */
-const todayIn = (timeZone: string) => {
+export const todayIn = (timeZone: string) => {
   try {
     return new Date().toLocaleDateString("en-CA", { timeZone });
   } catch {
@@ -119,7 +129,7 @@ const timeIn = (value: string | Date, timeZone: string) => {
     return new Date(value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 };
-const dayName = (date: string, today: string, style: "short" | "long") =>
+export const dayName = (date: string, today: string, style: "short" | "long") =>
   date === today
     ? "Today"
     : new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, {
