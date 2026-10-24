@@ -114,6 +114,7 @@ async def create_session(request: Request):
     reference = extra.get("reference")
     voice = extra.get("voice")
     call = Call(
+        rehearse=extra.get("rehearse") is True,
         instructions=str(session.get("instructions") or ""),
         max_seconds=float(max_seconds) if isinstance(max_seconds, (int, float)) else None,
         limit_minutes=float(limit_minutes) if isinstance(limit_minutes, (int, float)) else None,

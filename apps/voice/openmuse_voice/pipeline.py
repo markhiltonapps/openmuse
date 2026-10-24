@@ -62,6 +62,11 @@ VOICE_RULES = """How this voice works:
 - Never say you've looked something up or done something unless an answer from hand_off says so.
 - The little murmurs you make while they talk ("mm-hmm", "uh-huh") can't be turned off yet. If they ask, say so kindly; never promise to stop them."""
 
+# A rehearsal plays someone else, so none of the assistant's rules or hand-offs apply.
+REHEARSAL_RULES = """How this voice works:
+- Keep each reply to one to three short sentences.
+- Everything you write is spoken aloud: no lists, markdown, emoji, symbols, links or stage directions."""
+
 HAND_OFF = FunctionSchema(
     name="hand_off",
     description=(
@@ -228,11 +233,14 @@ async def run_call(
         # What's the same for everyone first (rules, how the app works), then this person and
         # their day, then this month's minutes. Claude Haiku caches only prompts of 4,096 tokens
         # or more; the reference takes it past that, so each turn after the first is cheap.
-        system = "\n\n".join(
-            part
-            for part in (VOICE_RULES, call.reference, call.instructions, call.allowance_note())
-            if part
-        )
+        if call.rehearse:
+            system = "\n\n".join((REHEARSAL_RULES, call.instructions))
+        else:
+            system = "\n\n".join(
+                part
+                for part in (VOICE_RULES, call.reference, call.instructions, call.allowance_note())
+                if part
+            )
         llm = make_llm(config, system)
         tts = make_tts(config, http, call.voice)
         listening = Backchannel(call)
@@ -261,9 +269,14 @@ async def run_call(
             await params.result_callback(answer)
 
         # Not cancelled when they talk over it: the agent keeps working, as with OpenAI.
-        llm.register_function("hand_off", on_hand_off, cancel_on_interruption=False, timeout_secs=240)
+        if not call.rehearse:
+            llm.register_function(
+                "hand_off", on_hand_off, cancel_on_interruption=False, timeout_secs=240
+            )
 
-        context = LLMContext(tools=ToolsSchema(standard_tools=[HAND_OFF]))
+        context = LLMContext(
+            tools=ToolsSchema(standard_tools=[] if call.rehearse else [HAND_OFF])
+        )
         # Silero hears speech start and stop; the smart-turn model (the default stop strategy)
         # decides whether a pause means they've finished. Speaking over the voice interrupts it.
         user, assistant = LLMContextAggregatorPair(

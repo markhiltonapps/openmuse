@@ -11,7 +11,37 @@ export const CALL_DETAIL_TOOLS = [
   "get_help",
   "manage_chats",
   "meetings",
+  "rehearse",
 ] as const;
+/** A conversation to practise: who Neddy plays, what it's about, and what they want out of it. */
+export interface RehearsalAsk {
+  who: string;
+  about: string;
+  goal: string;
+}
+/** Words a person can read the other way round: a number and a few words, never a verdict. */
+export interface RehearsalStatsView {
+  words: number;
+  speakingSeconds: number;
+  pace?: number;
+  turns: number;
+  longestTurn: number;
+  fillers: { word: string; count: number }[];
+  softeners: { word: string; count: number }[];
+  seconds: number;
+}
+/** Where a speaking pace sits, in words anyone can use. */
+export function paceWords(pace: number) {
+  if (pace < 105) return "on the slow side, which is fine for a serious point";
+  if (pace <= 170) return "a comfortable pace";
+  return "quick: slow down for the parts that matter";
+}
+/** A rehearsal's scorecard as the app gets it. */
+export interface RehearsalView extends RehearsalAsk {
+  state: "scoring" | "done" | "short";
+  stats?: RehearsalStatsView;
+  coaching?: { outcome?: string; wentWell?: string; tips: string[] };
+}
 /**
  * "approval": something saved for their OK, shown as its Approve card. "connect": a button that
  * connects an app (the sign-in link connect_app made). "emails": emails read from Gmail or

@@ -29,7 +29,9 @@ export type UsageKind =
   | "recipes"
   | "voice"
   /** Meetings recorded in the app, transcribed by the minute. */
-  | "meetings";
+  | "meetings"
+  /** The coaching after a rehearsed conversation. */
+  | "rehearsal";
 
 /** Dollars per million tokens. */
 export interface Price {

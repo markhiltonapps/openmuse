@@ -3706,11 +3706,14 @@ export function NotificationsSheet() {
     checkInId?: string,
     actionId?: string,
     meetingId?: string,
+    rehearsalId?: string,
   ) {
     try {
       await mutate(`/notifications/${id}/read`, {});
       if (taskId) open({ type: "task", taskId });
       else if (meetingId) open({ type: "meeting", id: meetingId });
+      else if (rehearsalId)
+        open({ type: "rehearsalScore", id: rehearsalId, ask: { who: "", about: "", goal: "" } });
       else if (checkInId) {
         close();
         navigate("chat");
@@ -3798,22 +3801,31 @@ export function NotificationsSheet() {
             <Button
               small
               onPress={() =>
-                void read(item.id, item.taskId, item.checkInId, item.actionId, item.meetingId)
+                void read(
+                  item.id,
+                  item.taskId,
+                  item.checkInId,
+                  item.actionId,
+                  item.meetingId,
+                  item.rehearsalId,
+                )
               }
             >
               {item.taskId
                 ? "Open job"
-                : item.meetingId
-                  ? "Open the notes"
-                  : item.checkInId
-                    ? "Answer in chat"
-                    : item.actionId
-                      ? "Review"
-                      : item.read
-                        ? "Read"
-                        : item.reminderId
-                          ? "Done"
-                          : "Mark read"}
+                : item.rehearsalId
+                  ? "See how it went"
+                  : item.meetingId
+                    ? "Open the notes"
+                    : item.checkInId
+                      ? "Answer in chat"
+                      : item.actionId
+                        ? "Review"
+                        : item.read
+                          ? "Read"
+                          : item.reminderId
+                            ? "Done"
+                            : "Mark read"}
             </Button>
           </Card>
         ))}

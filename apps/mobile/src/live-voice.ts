@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
-import type { CallDetail } from "../../../packages/domain/src/voice";
+import type { CallDetail, RehearsalAsk } from "../../../packages/domain/src/voice";
 import type { MuseApi } from "./api";
 import { setLiveSpeaking, voiceSettings } from "./voice";
 
@@ -100,6 +100,8 @@ export interface LiveHandlers {
   onDetails?: (details: CallDetail[]) => void;
 }
 export interface LiveCall {
+  /** The server's id for this call, to ask about it afterwards (a rehearsal's scorecard). */
+  sessionId: string;
   setMuted: (muted: boolean) => void;
   /** Tells the server the call is shrunk to its bar, so the voice says where to look. */
   setShrunk: (shrunk: boolean) => void;
@@ -142,6 +144,7 @@ export function useLiveCallOn() {
 export async function startLive(
   api: MuseApi,
   handlers: LiveHandlers,
+  rehearse?: RehearsalAsk,
   retried = false,
 ): Promise<LiveCall> {
   const provider = providers.get(api) ?? "openai";
@@ -371,6 +374,7 @@ export async function startLive(
     const answer = await api.request<{ sdp: string; sessionId: string }>("/api/voice/live", {
       sdp: ours ? (peer.localDescription?.sdp ?? offer.sdp) : offer.sdp,
       provider,
+      ...(rehearse ? { rehearse } : {}),
     });
     sessionId = answer.sessionId;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
@@ -380,7 +384,7 @@ export async function startLive(
     if (!retried && error instanceof Error && error.message === PROVIDER_CHANGED) {
       const status = await api.request<{ provider?: LiveProvider }>("/api/voice/live");
       setLiveProvider(api, status.provider ?? "openai");
-      return startLive(api, handlers, true);
+      return startLive(api, handlers, rehearse, true);
     }
     throw error;
   }
@@ -388,6 +392,7 @@ export async function startLive(
   await keepAwake();
   document.addEventListener("visibilitychange", onVisible);
   return {
+    sessionId,
     setMuted: (muted) => {
       for (const track of stream.getAudioTracks()) track.enabled = !muted;
     },

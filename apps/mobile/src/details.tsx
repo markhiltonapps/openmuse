@@ -60,6 +60,7 @@ import PdfReader from "./PdfReader";
 import { artifactKind, savedDate } from "./plans";
 import { CommitmentsSheet, RemindersSheet } from "./plans-ui";
 import { ReceiptSheet } from "./receipt-ui";
+import { RehearsalScoreSheet, RehearseSheet } from "./rehearsal-ui";
 import { ShareLinkCard } from "./share-ui";
 import { codeReady, SignInReview } from "./sign-in-ui";
 import {
@@ -89,6 +90,9 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "help") return <HelpSheet topic={detail.topic} />;
   if (detail.type === "backdrop") return <BackdropSheet />;
   if (detail.type === "receipt") return <ReceiptSheet info={detail.info} />;
+  if (detail.type === "rehearse") return <RehearseSheet />;
+  if (detail.type === "rehearsalScore")
+    return <RehearsalScoreSheet id={detail.id} ask={detail.ask} />;
   if (detail.type === "food") return <FoodLogSheet log={detail.log} />;
   if (detail.type === "commitments") return <CommitmentsSheet tab={detail.tab} />;
   if (detail.type === "reminders") return <RemindersSheet />;

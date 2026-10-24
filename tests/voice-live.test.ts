@@ -5,6 +5,7 @@ import { UsageMeter } from "../apps/server/src/usage.ts";
 import {
   type LiveAnswer,
   LiveVoice,
+  type LiveVoiceOptions,
   liveInstructions,
   type SocketLike,
   type VoiceSession,
@@ -45,6 +46,7 @@ async function setup(
     answer?: LiveAnswer;
     answerSeconds?: number;
     tell?: (owner: string, title: string, body: string, key: string) => Promise<unknown>;
+    coach?: LiveVoiceOptions["coach"];
   } = {},
 ) {
   const db = await createStore();
@@ -64,6 +66,7 @@ async function setup(
       answer: options.answer,
       answerSeconds: options.answerSeconds,
       tell: options.tell,
+      coach: options.coach,
       fetcher: (async (url: string, init: RequestInit) => {
         requests.push({ url, init });
         if (options.status)
@@ -584,5 +587,74 @@ test("something urgent is said on the call straight away, or with the next answe
     /something urgent came in.*security alert.*money alert.*meeting is at 3/s,
   );
   await voice.end("owner", "live_123");
+  await db.close();
+});
+
+test("a rehearsal plays the other person with no hand-overs, then scores what was said", async () => {
+  const told: string[] = [];
+  const asked: string[] = [];
+  const { voice, requests, sockets, db } = await setup({
+    tell: async (_owner, title, body) => {
+      told.push(`${title} | ${body}`);
+    },
+    coach: async (_owner, rehearsal, transcript) => {
+      asked.push(`${rehearsal.who}: ${transcript}`);
+      return { outcome: "You asked clearly.", tips: ["Name a number early."] };
+    },
+  });
+  await voice.start("owner", "v=0 offer", {
+    who: "my landlord",
+    about: "The heater has been broken for a month",
+    goal: "A repair date",
+  });
+  const body = JSON.parse(String(requests[0]?.init.body));
+  assert.equal(body.session.delegation, undefined, "no hand-overs while rehearsing");
+  assert.match(body.session.instructions, /playing the other person in it: <<<my landlord>>>/);
+  assert.match(body.session.instructions, /heater has been broken/);
+  assert.ok(
+    !/Today so far|You are Neddy/.test(body.session.instructions),
+    "knows nothing of their day",
+  );
+  const socket = sockets[0] as FakeSocket;
+  socket.emit({ type: "session.output_transcript.delta", delta: "Hello, this is the landlord." });
+  socket.emit({
+    type: "session.input_transcript.delta",
+    delta:
+      "Hi, um, I'm sorry to bother you but I just wanted to ask when the heater will be fixed because it has been broken for a month now and it is getting really cold at night.",
+  });
+  // A delegation is turned down, in role.
+  socket.emit({ type: "session.delegation.created", delegation: { id: "d1" } });
+  assert.match(String(socket.sent[0]?.content), /Stay in the role/);
+  await voice.end("owner", "live_123");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const saved = (await db.get("owner", "voice-sessions", "live_123")) as VoiceSession;
+  assert.equal(saved.rehearsal?.state, "done");
+  assert.equal(saved.rehearsal?.who, "my landlord");
+  assert.ok((saved.rehearsal?.stats?.words ?? 0) >= 30);
+  assert.deepEqual(
+    saved.rehearsal?.stats?.fillers.map((f) => f.word),
+    ["um"],
+  );
+  assert.deepEqual(saved.rehearsal?.stats?.softeners.map((f) => f.word).sort(), ["just", "sorry"]);
+  assert.deepEqual(saved.rehearsal?.coaching?.tips, ["Name a number early."]);
+  assert.match(asked[0] ?? "", /Them: Hi, um/);
+  assert.match(told[0] ?? "", /scorecard is ready \| my landlord/);
+  assert.deepEqual(await voice.rehearsal("owner", "live_123"), saved.rehearsal);
+  await db.close();
+});
+
+test("a rehearsal with almost nothing said isn't scored", async () => {
+  const { voice, sockets, db } = await setup({
+    coach: async () => {
+      throw new Error("not asked");
+    },
+  });
+  await voice.start("owner", "offer", { who: "my boss", about: "", goal: "" });
+  (sockets[0] as FakeSocket).emit({ type: "session.input_transcript.delta", delta: "Hello?" });
+  await voice.end("owner", "live_123");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const saved = (await db.get("owner", "voice-sessions", "live_123")) as VoiceSession;
+  assert.equal(saved.rehearsal?.state, "short");
+  assert.equal(saved.rehearsal?.coaching, undefined);
   await db.close();
 });

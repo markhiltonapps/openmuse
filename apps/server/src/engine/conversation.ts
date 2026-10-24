@@ -691,6 +691,54 @@ export class ConversationAgent extends AbstractAgent {
         },
       }),
       defineTool({
+        name: "rehearse",
+        description:
+          "Practise a hard conversation out loud: Neddy plays the other person (their boss, landlord, a company's customer service, an interviewer, a language partner) on a live call, then they get a scorecard (pace, filler words, softening words, and three tips). start: when they ask to rehearse, practise, role-play or get ready for a conversation (“let’s rehearse asking my boss for a raise”), call it with who it plays and, in their words, what it's about and what they want out of it (ask one short question first only if you don't know who or what); a card to start appears on their screen (on a live call it ends the call first, and nothing starts until they tap it, so never say it has begun). Tell them once it's practice: you play the part, and they can end the call any time to see how it went; it counts toward their call minutes and stops by itself after 15 minutes. scorecard: their latest rehearsal's numbers and tips, when they ask how it went or how they did; say them in a few plain sentences. If there's none, say they haven't rehearsed yet.",
+        parameters: z.object({
+          do: z.enum(["start", "scorecard"]),
+          who: z.string().max(80).optional().describe("For start: who you play, such as “my boss”"),
+          about: z
+            .string()
+            .max(500)
+            .optional()
+            .describe("For start: what it's about, in their words"),
+          goal: z.string().max(300).optional().describe("For start: what they want out of it"),
+        }),
+        execute: async ({ do: what, who, about, goal }) => {
+          if (what === "start") {
+            if (!who?.trim()) return { error: "Say who they want to practise with." };
+            return {
+              rehearsal: { who: who.trim(), about: about?.trim() ?? "", goal: goal?.trim() ?? "" },
+              onCall,
+              shown: onCall
+                ? "On their screen: a card to end this call and start the rehearsal. Nothing has started until they tap it."
+                : "On their screen: a card to start the rehearsal. Nothing has started until they tap Start rehearsal.",
+            };
+          }
+          const latest = await this.service.rehearsals?.latest(this.owner);
+          if (!latest) return { none: true };
+          const stats = latest.stats;
+          return {
+            who: latest.who,
+            state: latest.state,
+            ...(stats
+              ? {
+                  seconds: stats.seconds,
+                  words: stats.words,
+                  ...(stats.pace ? { wordsPerMinute: stats.pace } : {}),
+                  fillers: stats.fillers,
+                  softeners: stats.softeners,
+                }
+              : {}),
+            ...(latest.coaching ?? {}),
+            rough:
+              "Say these as a rough guide, not a grade: the numbers are counted from written-out words, which can miss some “um”s, and the tips are an AI's reading of what they said. There is no score.",
+            ...(latest.state === "scoring" ? { note: "The tips are still being written." } : {}),
+            ...(latest.state === "short" ? { note: "They didn’t say enough to score." } : {}),
+          };
+        },
+      }),
+      defineTool({
         name: "change_ai_models",
         description:
           "Admin only. Change which AI model does a kind of work: chat, background jobs and routines, simple jobs (summaries of long chats, Ideas, bookings found in emails), voice (looking things up and doing things during live calls), or all of them. Use it only when the admin asks to change a model or put things back; then say what changed, with the model’s plain name (GPT-6.1 Sol), never its ID. If OpenRouter isn’t set up yet, say the change only starts once it is. Live voice calls keep their own voice model.",

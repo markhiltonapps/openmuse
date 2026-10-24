@@ -1,6 +1,16 @@
 import { type CallDetail, LIVE_UNAVAILABLE } from "../../../packages/domain/src/voice.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import {
+  type Coaching,
+  MAX_REHEARSAL_MINUTES,
+  MIN_WORDS_TO_SCORE,
+  type Rehearsal,
+  type RehearsalRecord,
+  rehearsalInstructions,
+  rehearsalStats,
+  type TimedTurn,
+} from "./rehearsal.ts";
 import type { UsageMeter } from "./usage.ts";
 import type { CallEar } from "./voice-approval.ts";
 
@@ -18,6 +28,15 @@ import type { CallEar } from "./voice-approval.ts";
 const QUIET_FOR_SIGN_IN = 5 * 60_000;
 
 export interface LiveVoiceOptions {
+  /**
+   * Coaching for a rehearsal, from the transcript (one small model call); undefined when no model
+   * is set up. The numbers on the scorecard don't need it.
+   */
+  coach?: (
+    owner: string,
+    rehearsal: Rehearsal,
+    transcript: string,
+  ) => Promise<Coaching | undefined>;
   /** Called about once a minute for each live call (urgent alerts: time to leave). */
   onCallMinute?: (owner: string) => unknown;
   apiKey?: string;
@@ -42,12 +61,18 @@ export interface LiveVoiceOptions {
   /** The longest a hand-over may take before the voice is told it couldn't be done. */
   answerSeconds?: number;
   /** Tells the person something (a bell entry and a push): a hand-over finished after the call. */
-  tell?: (owner: string, title: string, body: string, key: string) => Promise<unknown>;
+  tell?: (
+    owner: string,
+    title: string,
+    body: string,
+    key: string,
+    extra?: { rehearsalId?: string },
+  ) => Promise<unknown>;
   /**
    * Fields added to the session request for this person (the Pipecat service's relay and the
    * minutes left in their month). OpenAI's request is unchanged without it.
    */
-  extras?: (owner: string) => Promise<Record<string, unknown>>;
+  extras?: (owner: string, rehearsing?: boolean) => Promise<Record<string, unknown>>;
   /** The voice's name and key variable in messages: OpenAI and OPENAI_VOICE_API_KEY by default. */
   provider?: { name: string; keyVariable: string };
 }
@@ -94,6 +119,8 @@ export interface VoiceSession {
   reason?: string;
   /** The chat it was added to, once it's there. */
   inChat?: string;
+  /** A rehearsal: who was played, the numbers and the coaching (see rehearsal.ts). */
+  rehearsal?: RehearsalRecord;
   /** Something asked just before hanging up is still being finished; it's added after. */
   pending?: boolean;
   /** What was shown on screen instead of read out: results, products, places, files. */
@@ -108,6 +135,9 @@ interface Live {
   seconds: number;
   recorded: number;
   turns: VoiceTurn[];
+  /** Practising a conversation: who Neddy plays, and when each turn's words began and ended. */
+  rehearsal?: Rehearsal;
+  times: { from: number; to: number }[];
   socket?: SocketLike;
   timer?: ReturnType<typeof setTimeout>;
   idle?: ReturnType<typeof setInterval>;
@@ -216,15 +246,23 @@ export class LiveVoice {
       : "Live voice off: OPENAI_VOICE_API_KEY isn't set on this service (add it under Variables, then Deploy)";
   }
   /** Starts a conversation from the browser's WebRTC offer; returns OpenAI's answer. */
-  async start(owner: string, offer: string) {
+  async start(owner: string, offer: string, rehearsal?: Rehearsal) {
     if (!this.configured()) throw new AppError("Live voice isn’t set up yet.", 503);
     if (!(await this.allowedFor(owner).catch(() => false)))
       throw new AppError("Live voice isn’t turned on for you yet.", 403);
     // One conversation at a time: a new one ends the last.
     for (const live of this.sessions.values())
       if (live.owner === owner) await this.end(owner, live.id, "replaced");
-    const { instructions } = await this.context(owner);
-    const extras = (await this.options.extras?.(owner)) ?? {};
+    // A rehearsal knows nothing of their day: only who it plays and what it's about.
+    const { instructions } = rehearsal
+      ? {
+          instructions: rehearsalInstructions({
+            ...rehearsal,
+            now: new Date(this.now()).toISOString().slice(0, 16).replace("T", " ") + " UTC",
+          }),
+        }
+      : await this.context(owner);
+    const extras = (await this.options.extras?.(owner, Boolean(rehearsal))) ?? {};
     const name = this.options.provider?.name ?? "OpenAI";
     const Name = capitalized(name);
     let response: Response;
@@ -240,7 +278,8 @@ export class LiveVoice {
             model: this.model,
             instructions,
             audio: { output: { voice: this.voice } },
-            delegation: { type: "client" },
+            // A rehearsal can't look anything up or hand anything over.
+            ...(rehearsal ? {} : { delegation: { type: "client" } }),
             store: false,
             // The browser may mute, unmute and hang up, and hears only what it shows.
             client: {
@@ -308,12 +347,16 @@ export class LiveVoice {
       seconds: 0,
       recorded: 0,
       turns: [],
+      times: [],
+      ...(rehearsal ? { rehearsal } : {}),
     };
     this.sessions.set(id, live);
     this.attach(live);
     live.timer = setTimeout(
       () => void this.end(owner, id, "time_limit"),
-      (this.options.maxMinutes ?? 60) * 60_000,
+      (rehearsal
+        ? Math.min(MAX_REHEARSAL_MINUTES, this.options.maxMinutes ?? 60)
+        : (this.options.maxMinutes ?? 60)) * 60_000,
     );
     live.timer.unref?.();
     // A call left open in a quiet room is hung up; it's checked here, as a locked phone can't.
@@ -323,7 +366,8 @@ export class LiveVoice {
         if (this.now() - live.lastWords > idle && this.now() > (live.quietUntil ?? 0))
           void this.end(owner, id, "idle");
         // About once a minute: anything urgent to say (time to leave).
-        if (this.now() - (live.lastTick ?? 0) >= 60_000) {
+        // (Not on a rehearsal: nothing breaks into the role.)
+        if (!live.rehearsal && this.now() - (live.lastTick ?? 0) >= 60_000) {
           live.lastTick = this.now();
           void Promise.resolve(this.options.onCallMinute?.(owner)).catch(() => undefined);
         }
@@ -432,6 +476,15 @@ export class LiveVoice {
       .slice(0, limit)
       .map(({ details: _details, ...session }) => session);
   }
+  /**
+   * A rehearsal's scorecard: "scoring" while the call is still being saved or coached, then what
+   * was kept. Undefined for a call that wasn't a rehearsal.
+   */
+  async rehearsal(owner: string, id: string): Promise<RehearsalRecord | "scoring" | undefined> {
+    const live = this.sessions.get(id);
+    if (live) return live.owner === owner && live.rehearsal ? "scoring" : undefined;
+    return (await this.db.get<VoiceSession>(owner, "voice-sessions", id))?.rehearsal;
+  }
   /** What a call showed on screen, newest last: from the call itself while it's on. */
   async details(owner: string, id: string): Promise<CallDetail[]> {
     const live = this.sessions.get(id);
@@ -492,8 +545,15 @@ export class LiveVoice {
       case "session.output_transcript.delta": {
         const role = event.type === "session.input_transcript.delta" ? "user" : "assistant";
         const last = live.turns.at(-1);
-        if (last?.role === role) last.text += event.delta ?? "";
-        else live.turns.push({ role, text: event.delta ?? "" });
+        const at = this.now() - live.startedAt;
+        if (last?.role === role) {
+          last.text += event.delta ?? "";
+          const span = live.times.at(-1);
+          if (span) span.to = at;
+        } else {
+          live.turns.push({ role, text: event.delta ?? "" });
+          live.times.push({ from: at, to: at });
+        }
         if (event.delta?.trim()) {
           live.lastWords = this.now();
           if (role === "user") live.lastHeard = Date.now();
@@ -517,6 +577,10 @@ export class LiveVoice {
       case "session.delegation.created": {
         const delegationId = event.delegation?.id;
         if (!delegationId) break;
+        if (live.rehearsal) {
+          this.say(live, delegationId, "Stay in the role and carry on the conversation.");
+          break;
+        }
         if (!this.options.answer) {
           this.say(live, delegationId, NOT_YET);
           break;
@@ -718,6 +782,22 @@ export class LiveVoice {
           ? `The call ended before I could finish this. Ask me again here: “${question.length > 120 ? `${question.slice(0, 120).trimEnd()}…` : question}”`
           : "The call ended before I could finish something you asked. Ask me again here.",
       });
+    // A rehearsal: the numbers now (they're in the saved call at once), the coaching a moment later.
+    let record: RehearsalRecord | undefined;
+    if (live.rehearsal) {
+      const timed: TimedTurn[] = live.turns.map((turn, index) => ({
+        role: turn.role,
+        text: turn.text.replace(/\s+/g, " ").trim(),
+        from: live.times[index]?.from ?? 0,
+        to: live.times[index]?.to ?? 0,
+      }));
+      const stats = rehearsalStats(timed, live.seconds || (this.now() - live.startedAt) / 1000);
+      record = {
+        ...live.rehearsal,
+        state: stats.words >= MIN_WORDS_TO_SCORE ? "scoring" : "short",
+        stats,
+      };
+    }
     const write = (pending: boolean) => {
       const turns = [...live.turns, ...live.after]
         .map((turn) => ({ role: turn.role, text: turn.text.replace(/\s+/g, " ").trim() }))
@@ -732,6 +812,7 @@ export class LiveVoice {
           ...(live.reason ? { reason: live.reason } : {}),
           ...(pending ? { pending } : {}),
           ...(live.details.length ? { details: live.details } : {}),
+          ...(record ? { rehearsal: record } : {}),
         } satisfies VoiceSession)
         .catch((error: unknown) =>
           console.warn(`[OpenMuse] Live voice not saved: ${String(error)}`),
@@ -742,6 +823,36 @@ export class LiveVoice {
     const pending = live.inFlight > 0 && !live.stopAnswers.signal.aborted;
     await write(pending);
     if (pending) void live.queue.then(() => write(false));
+    if (record?.state === "scoring" && live.rehearsal) {
+      const transcript = live.turns
+        .map((turn) => `${turn.role === "user" ? "Them" : "The other person"}: ${turn.text.trim()}`)
+        .join("\n");
+      try {
+        record.coaching = await Promise.race([
+          this.options.coach?.(live.owner, live.rehearsal, transcript),
+          new Promise<undefined>((resolve) =>
+            setTimeout(() => resolve(undefined), 45_000).unref?.(),
+          ),
+        ]);
+      } catch (error) {
+        console.warn(`[OpenMuse] Rehearsal coaching failed: ${String(error)}`);
+      }
+      record.state = "done";
+      await write(false);
+      await this.options
+        .tell?.(
+          live.owner,
+          record.coaching
+            ? "Your rehearsal scorecard is ready"
+            : "Your rehearsal numbers are ready",
+          record.coaching
+            ? `${live.rehearsal.who}: open it to see how it went.`
+            : `${live.rehearsal.who}: the tips couldn’t be written this time, but the numbers are there.`,
+          `rehearsal:${live.id}`,
+          { rehearsalId: live.id },
+        )
+        ?.catch?.(() => undefined);
+    }
   }
 }
 

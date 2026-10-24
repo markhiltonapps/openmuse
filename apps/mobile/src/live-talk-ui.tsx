@@ -122,7 +122,7 @@ export function LiveTalkSheet() {
   const name = data?.identity.name || "Neddy";
   // The call itself lives with the app, so it carries on when this screen closes.
   const call = useLiveCall();
-  const { draft } = useWorkspace();
+  const { draft, open } = useWorkspace();
   const { state, muted, lines, error, lookingUp, details, view, setView, target, clearTarget } =
     call;
   const detailsScroller = useRef<ScrollView>(null);
@@ -212,8 +212,9 @@ export function LiveTalkSheet() {
   useEffect(() => {
     if (!needsKey && phase === "idle") start();
   }, [needsKey]);
-  /** End: the call stops and this screen closes. */
-  const finish = call.end;
+  const { rehearsal, sessionId } = call;
+  /** End: the call stops and this screen closes (a rehearsal then shows how it went). */
+  const finish = call.finish;
   /**
    * Closing the screen during a call keeps the call going, in the bar at the top, with whatever was
    * open underneath still there.
@@ -253,7 +254,16 @@ export function LiveTalkSheet() {
   // The details take the avatar's room as well as the words'.
   const detailsHeight = captionHeight + (short ? 0 : avatar + 12);
   // Out of minutes, a hint that invites a call would mislead.
-  const note = call.limited ? null : (
+  const note = call.limited ? null : rehearsal ? (
+    <Text
+      style={[
+        s.small,
+        { fontSize: 13, lineHeight: 19, textAlign: "center", maxWidth: 380, alignSelf: "center" },
+      ]}
+    >
+      {`You’re practising. ${name} is playing the other person: ${rehearsal.who}. Talk it through, and choose End when you’re done to see how it went.`}
+    </Text>
+  ) : (
     <Text
       style={[
         s.small,
@@ -271,9 +281,27 @@ export function LiveTalkSheet() {
       {over ? (
         <>
           {/* Out of this month's minutes: a call can't start again until the 1st. */}
-          {!call.limited && (
-            <Button strong style={{ minWidth: 112 }} onPress={start}>
+          {rehearsal && sessionId && (
+            <Button
+              strong
+              style={{ minWidth: 112 }}
+              onPress={() => {
+                call.dismiss();
+                hide();
+                open({ type: "rehearsalScore", id: sessionId, ask: rehearsal });
+              }}
+            >
+              See how it went
+            </Button>
+          )}
+          {!call.limited && !rehearsal && (
+            <Button strong style={{ minWidth: 112 }} onPress={() => start()}>
               Talk again
+            </Button>
+          )}
+          {!call.limited && rehearsal && (
+            <Button style={{ minWidth: 112 }} onPress={() => start(rehearsal)}>
+              Try again
             </Button>
           )}
           {/* A call that couldn't start, or no minutes left: typing still works. */}
@@ -346,9 +374,19 @@ export function LiveTalkSheet() {
     <SheetTop.Provider value={null}>
       <Sheet
         title={
-          needsKey ? `Talk live with ${name}` : over ? `Call with ${name}` : `Talking with ${name}`
+          needsKey
+            ? `Talk live with ${name}`
+            : rehearsal
+              ? over
+                ? `Rehearsal with ${rehearsal.who}`
+                : `Rehearsing with ${rehearsal.who}`
+              : over
+                ? `Call with ${name}`
+                : `Talking with ${name}`
         }
-        subtitle={needsKey || over ? undefined : "Live · just talk"}
+        subtitle={
+          needsKey || over ? undefined : rehearsal ? "Practice · just talk" : "Live · just talk"
+        }
         onClose={hide}
         // During a call, closing shrinks it to the bar at the top; End is what ends it.
         {...(call.phase === "on" && !needsKey

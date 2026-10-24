@@ -71,6 +71,7 @@ import type { Plans } from "../plans.ts";
 import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
 import { hideText } from "../redaction.ts";
+import type { RehearsalRecord } from "../rehearsal.ts";
 import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
@@ -1395,6 +1396,10 @@ export class AgentService {
   reminders?: ReminderService;
   /** Meetings recorded in the app: their words and notes. */
   meetings?: Meetings;
+  /** The latest rehearsed conversation, with its scorecard. */
+  rehearsals?: {
+    latest(owner: string): Promise<(RehearsalRecord & { id: string; at: string }) | undefined>;
+  };
   /** Social posts approved ahead of time; published from the maintenance loop. */
   spacePosts?: ScheduledPosts;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
@@ -1590,7 +1595,7 @@ export class AgentService {
     key?: string,
     extra: Pick<
       AgentNotification,
-      "reminderId" | "checkInId" | "actionId" | "meetingId" | "headsUpId"
+      "reminderId" | "checkInId" | "actionId" | "meetingId" | "headsUpId" | "rehearsalId"
     > = {},
     /** False saves the bell entry without a phone notification. */
     push = true,

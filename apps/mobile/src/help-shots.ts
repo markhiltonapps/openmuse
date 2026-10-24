@@ -30,6 +30,8 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   privacy: { width: 720, height: 486 },
   receipt: { width: 720, height: 1558 },
   recordertrouble: { width: 720, height: 1558 },
+  rehearse: { width: 720, height: 1558 },
+  rehearsescore: { width: 720, height: 1846 },
   seeit: { width: 720, height: 1558 },
   spaces: { width: 720, height: 1558 },
   urgent: { width: 720, height: 1558 },

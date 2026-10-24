@@ -268,3 +268,36 @@ Lesson: `pkill -f` ended my own shell again; find the process with ps in a separ
 Owner follow-up (2026-10-24): brain dumps count toward the plan's meeting minutes/hours. Said in Help (brain-dump summary and body, record-meeting body),
 in the app (Your plan row is now "Meetings and brain dumps"), on pricing.html (the meeting-hour line) and neddy.html. The home page now lists
 "See what he used for an answer" as its own privacy item and the brain dump paragraph has its own spacing; checked at 390x844 and 1280x800.
+
+== REHEARSE A HARD CONVERSATION (2026-10-24) ==
+A live call where Neddy plays the other person (boss, landlord, customer service, interviewer, language partner), then a scorecard.
+Server: `LiveVoice.start(owner, offer, rehearsal?)` (apps/server/src/voice-live.ts): role-play instructions (rehearsal.ts
+`rehearsalInstructions`; who/about/goal fenced in <<< >>> as data), no `delegation` (no hand-offs, no tools), 15-minute cap
+(MAX_REHEARSAL_MINUTES, ends with reason time_limit), counts toward call minutes. The call is saved with a `rehearsal` record:
+deterministic stats at once (pace only with >=25 words and >=10 s of speech, filler and softening word counts, longest turn),
+state "scoring" -> "done" after one small "simple"-model coach call (45 s race; usage kind "rehearsal"); under 15 words it's "short".
+No numeric score anywhere (the coach prompt forbids it). GET /api/voice/live/:id/rehearsal, GET /api/rehearsals/latest, the agent
+tool `rehearse` (start -> card only, scorecard -> rough numbers with a "rough, no score" note). A bell entry (rehearsalId) opens it.
+Rehearsals are left out of the chat's spoken-call cards (`session.rehearsal`).
+Pipecat voice service: `rehearse: true` in the body's `openmuse` extras -> REHEARSAL_RULES + the instructions only, no hand_off.
+NOT TESTED against the real service (Pipecat isn't installed in the sandbox; only syntax-checked): try one on Railway.
+App: apps/mobile/src/rehearsal-ui.tsx (RehearseSheet, RehearsalScoreSheet, RehearseToolCard), + panel "Rehearse a talk" (only when
+live talk is on), call screen "Rehearsing with …" with its own note, `finish` in live-call.tsx (End from the screen or the bar opens
+the scorecard), "See how it went" on the call screen and the bar when it ended by itself, REHEARSAL_ENDED wording (15-minute cap,
+quiet), `start(ask)` sets phase "on" at once or the call screen would start a second, plain call.
+Help: topics rehearse and rehearse-score, shots rehearse and rehearsescore (light and dark). Site: neddy.html section #rehearse,
+pricing.html (a rehearsal uses call minutes), docs/pricing_math.md (cost note).
+Tests: tests/rehearsal.test.ts (stats, pace words, coaching parser, instructions, schema, the agent tool), tests/voice-live.test.ts
+(rehearsal call: no delegation, record, tell, "short"). Browser check with a mocked call: one POST with `rehearse`, "Rehearsing with
+my boss", End opens the scorecard after the first "scoring" poll.
+Design review: round one found 2 visual, 8 usability and 5 copy blockers (selected chip had no look; light cards ran together; End
+from the bar skipped the scorecard; the bar's "Talk again" started a paid plain call; the bell entry went nowhere; missing tips were
+silent; starting ended a call silently; Try again could lose the topic; "Calls stop after an hour" shown on a 15-minute cap; the coach
+prompt didn't forbid a score; typed topic text could steer the role-play). All fixed; round two below.
+Known gaps: nothing ends a rehearsal by voice (starting is tap-only because it costs minutes); no push deep link (bell only);
+no time-left display or two-minute warning; chips aren't a radio group; Pipecat mode untested live.
+Lesson: a feature that starts something paid by tap must also cover every way it can END (screen End, bar End, timeout, idle,
+minutes gone): each one needs a way back to the result, in words that are true for it (not "Talk again" after a rehearsal).
+Lesson: `Button selected` only sets aria-pressed; callers pass `primary={selected}` to show it.
+Lesson: the call screen starts a call when it opens with phase "idle": anything that starts a call and opens the screen together must
+set the phase first, or two calls start.

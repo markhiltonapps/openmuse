@@ -526,4 +526,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   that can't be read must fail the recording (Try again), never finish as an empty list; with no model set up it isn't started. Every
   retry path (Record the rest, Try again) passes the recording's kind, or a dump becomes a meeting. A tool result says "shown" only when
   a card exists for it (`add_dump` has none, so the agent says it aloud).
-
+- **Rehearsals (owner, 2026-10-24):** a rehearsal is a normal live call with role-play instructions (`start(owner, sdp, rehearsal)`),
+  no hand-overs, 15 minutes at most, counted in call minutes, kept out of the chat. The scorecard is numbers counted from the written
+  words (never a grade) plus one small coach call. Its typed topic (who/about/goal) is data inside <<< >>>. Every way a rehearsal can
+  end (End on the screen or the bar, the cap, quiet, minutes gone) must lead back to "See how it went" in true words, never "Talk
+  again". `Button selected` only sets aria-pressed: pass `primary={selected}` to show it. A call started together with the call screen
+  must set the phase first, or the screen starts a second call. The Pipecat rehearse mode was untested live when it shipped.

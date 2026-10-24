@@ -44,6 +44,7 @@ class Call:
         limit_minutes: float | None = None,
         reference: str = "",
         voice: str = "",
+        rehearse: bool = False,
         accepts: Callable[[Any], bool] | None = None,
         on_end: Callable[["Call"], None] | None = None,
     ):
@@ -57,6 +58,8 @@ class Call:
         self.reference = reference
         # The voice it speaks with, and which voices it may switch to during the call.
         self.voice = voice
+        # Practising a conversation: the voice plays someone else, with no hand-offs.
+        self.rehearse = rehearse
         self._accepts = accepts or (lambda _voice: False)
         self._last_still = ""
         self.started = time.monotonic()

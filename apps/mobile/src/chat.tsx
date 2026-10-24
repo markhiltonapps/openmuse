@@ -13,6 +13,7 @@ import {
   AudioLines,
   Camera,
   CircleDot,
+  Drama,
   FileText,
   Headset,
   Image as ImageIcon,
@@ -77,6 +78,7 @@ import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { lookedAt } from "./receipt-text";
 import { type ReceiptInfo, useReceipts } from "./receipt-ui";
+import { RehearseToolCard } from "./rehearsal-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { SandboxCard } from "./sandbox-ui";
 import { useSpaces } from "./spaces";
@@ -326,6 +328,15 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <MeetingsToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  // "Let's rehearse asking my boss for a raise": a card to start the practice call.
+  useRenderTool({
+    name: "rehearse",
+    description: "Show a card to start the rehearsal the agent set up",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <RehearseToolCard result={result} loading={status !== "complete"} />
     ),
   });
   // "How do I…?": the help topic's steps, with a button to it in Help.
@@ -997,7 +1008,13 @@ export function ChatScreen({
     addingCalls.current = true;
     try {
       const { sessions } = await api.request<{
-        sessions: { id: string; turns: unknown[]; inChat?: string; pending?: boolean }[];
+        sessions: {
+          id: string;
+          turns: unknown[];
+          inChat?: string;
+          pending?: boolean;
+          rehearsal?: unknown;
+        }[];
       }>("/api/voice/live/recent");
       // Oldest first, a few at a time.
       const shown = new Set(agent.messages.map((message) => message.id));
@@ -1006,6 +1023,8 @@ export function ChatScreen({
           (session) =>
             !session.inChat &&
             !session.pending &&
+            // Practice stays out of the conversation: it has its own scorecard.
+            !session.rehearsal &&
             session.turns.length &&
             !shown.has(`spoken-${session.id}`),
         )
@@ -1853,6 +1872,19 @@ export function ChatScreen({
                   }}
                 >
                   Brain dump
+                </Button>
+              )}
+              {live === "on" && (
+                <Button
+                  small
+                  style={{ minHeight: 44 }}
+                  icon={Drama}
+                  onPress={() => {
+                    setPicking(false);
+                    openDetail({ type: "rehearse" });
+                  }}
+                >
+                  Rehearse a talk
                 </Button>
               )}
             </View>

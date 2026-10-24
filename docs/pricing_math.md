@@ -117,6 +117,15 @@ competing on that axis: the pricing page no longer has a side-by-side table; it 
 on Muse's hourly profiles of you and the people you mention. The compare page keeps the honest
 table, with "not described" wherever Meta's pages are silent.
 
+## Rehearsals (Oct 24, 2026)
+
+A rehearsal is a live call, so it is counted in call minutes at the same cost as any call; it is
+cheaper per minute than a normal call because it never looks anything up (no hand-offs, no tools).
+It stops at 15 minutes (`MAX_REHEARSAL_MINUTES`), so one rehearsal is at most 15 call minutes. On
+top of that, ending one makes one small "coach" call (the "simple" model on the transcript, capped
+at 60,000 characters), logged under usage as "Rehearsal coaching". Expected well under a cent for
+a typical 3-minute practice; confirm from Railway's usage lines once real rehearsals exist.
+
 ## To do before the pricing page goes live
 
 1. Deploy the leaner chat and read Railway's "Model call: chat" lines for a week: confirm ~45k

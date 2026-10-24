@@ -11,7 +11,11 @@ import {
   useState,
 } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
-import { type CallDetail, isLiveLimit } from "../../../packages/domain/src/voice";
+import {
+  type CallDetail,
+  isLiveLimit,
+  type RehearsalAsk,
+} from "../../../packages/domain/src/voice";
 import { useAgentWorkspace } from "./agent-workspace";
 import { AgentAvatar } from "./avatar";
 import { HIDDEN } from "./job-working-ui";
@@ -59,6 +63,14 @@ export const ENDED = (name: string): Record<string, string> => ({
   limit: `This month’s live talk minutes are used up. You can still type to ${name}.`,
   unavailable: `Something went wrong on ${name}’s side, so the call ended. Try again in a bit, or type instead.`,
 });
+/** Why a rehearsal ended on its own: "Talk again" would mislead there. */
+export const REHEARSAL_ENDED = (name: string): Record<string, string> => ({
+  time_limit:
+    "That was 15 minutes, the most a rehearsal lasts. Choose See how it went, or Try again.",
+  expired: "That’s as long as one call can last. Choose See how it went, or Try again.",
+  idle: `It went quiet, so ${name} ended the practice. Choose See how it went, or Try again.`,
+  close_requested: "The practice ended. Choose See how it went, or Try again.",
+});
 /** A browser's reason a call couldn't start, as what to do about it. */
 export function startFailure(error: unknown, name: string) {
   const kind = error instanceof Error ? error.name : "";
@@ -84,10 +96,12 @@ export interface CallControls {
   phase: CallPhase;
   /** The call screen is open; otherwise a call shows as a bar at the top. */
   shown: boolean;
-  /** Starts a call (ending one that's on). */
-  start: () => void;
+  /** Starts a call (ending one that's on), or a rehearsal when given what to practise. */
+  start: (rehearse?: RehearsalAsk) => void;
   /** Ends the call the person is on; nothing of it stays on screen. */
   end: () => void;
+  /** The person's own End: ends the call, and a rehearsal then opens how it went. */
+  finish: () => void;
   toggleMute: () => void;
   /** Lets go of a call that's over (its bar goes). */
   dismiss: () => void;
@@ -124,6 +138,10 @@ export interface LiveCallValue extends CallControls {
   limited: boolean;
   /** When the agent first answered (for the call's time). */
   startedAt?: number;
+  /** Practising a conversation: who Neddy is playing, and what it's about. */
+  rehearsal?: RehearsalAsk;
+  /** The server's id for this call, once it has started (a rehearsal's scorecard is asked by it). */
+  sessionId?: string;
 }
 // Split so words arriving many times a second redraw only the bar and the call screen, not every
 // screen that just needs to know whether there's a call.
@@ -164,7 +182,7 @@ export function CallNews({ quiet }: { quiet: boolean }) {
  * opens other things, shown full size on the call screen (a layer over everything) or as a bar.
  */
 export function LiveCallProvider({ children }: { children: ReactNode }) {
-  const { api, workspace } = useWorkspace();
+  const { api, workspace, open } = useWorkspace();
   // Things from a call still waiting for their OK: their See it stays until approved or declined.
   // Waiting means not decided and not past its time: the server only marks an approval expired
   // when someone acts on it, so the time is checked here (as its Approve card does).
@@ -223,6 +241,14 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   const [ended, setEnded] = useState("");
   const [limited, setLimited] = useState(false);
   const [startedAt, setStartedAt] = useState<number>();
+  const [rehearsal, setRehearsal] = useState<RehearsalAsk>();
+  const [sessionId, setSessionId] = useState<string>();
+  // What the next call practises, set by start() just before the effect runs.
+  const askNow = useRef<RehearsalAsk | undefined>(undefined);
+  const rehearsalNow = useRef<RehearsalAsk | undefined>(undefined);
+  rehearsalNow.current = rehearsal;
+  const sessionIdNow = useRef<string | undefined>(undefined);
+  sessionIdNow.current = sessionId;
   const [news, setNews] = useState("");
   const newsTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   /** Read out by a screen reader, while the call screen (with its own status line) isn't open. */
@@ -249,6 +275,10 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     const carried = detailsNow.current.filter((detail) =>
       approvalIds(detail).some((id) => waitingNow.current(id, true)),
     );
+    const asked = askNow.current;
+    askNow.current = undefined;
+    setRehearsal(asked);
+    setSessionId(undefined);
     setPhase("on");
     setState("connecting");
     setError("");
@@ -283,66 +313,74 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
         return next.slice(-8);
       });
     };
-    startLive(api, {
-      onState: (next) => {
-        if (!live()) return;
-        setState(next);
-        if (next === "listening" || next === "speaking") setStartedAt((at) => at ?? Date.now());
-        if (next === "ended") setPhase("over");
+    startLive(
+      api,
+      {
+        onState: (next) => {
+          if (!live()) return;
+          setState(next);
+          if (next === "listening" || next === "speaking") setStartedAt((at) => at ?? Date.now());
+          if (next === "ended") setPhase("over");
+        },
+        onChecking: (on) => live() && setLookingUp(on),
+        onDetails: (next) => {
+          // A late reply to an earlier look can't take anything away.
+          if (!live() || next.length < detailCount) return;
+          // Something new: the voice is saying it's on the screen, so that's what shows.
+          if (next.length > detailCount) {
+            setView("details");
+            // What just arrived, as the bar's See it button names it.
+            const row = newsRow(next.slice(detailCount), nameNow.current, waitingNow.current);
+            if (row) say(`${rowWords(row)}. Choose “See it” in the bar at the top.`);
+          }
+          detailCount = next.length;
+          setDetails([...carried, ...next]);
+        },
+        onWords: (role, words) => {
+          if (!live()) return;
+          const last = pending.at(-1);
+          if (last?.role === role) last.text += words;
+          else pending.push({ role, text: words });
+          flush ??= setTimeout(show, 200);
+        },
+        onEnded: (reason) => {
+          // OpenAI ended it; the server saves the call as soon as it hears.
+          callSaved(2500);
+          if (!live()) return;
+          const endings = {
+            ...ENDED(nameNow.current),
+            ...(asked ? REHEARSAL_ENDED(nameNow.current) : {}),
+          };
+          setEnded(endings[reason ?? ""] ?? "The call ended.");
+          // Out of minutes: Talk goes to the chat until the app reopens.
+          if (reason === "limit") {
+            setLimited(true);
+            liveVoiceTurnedAway(api);
+          }
+          // When the server ended it (quiet, the hour, another call), ask it why once it has
+          // saved this call.
+          if (reason === "close_requested")
+            setTimeout(() => {
+              void api
+                .request<{ sessions: { reason?: string; endedAt: string }[] }>(
+                  "/api/voice/live/recent",
+                )
+                .then(({ sessions }) => {
+                  const last = sessions[0];
+                  const fresh = last && Date.now() - Date.parse(last.endedAt) < 10_000;
+                  if (live() && fresh && last.reason && endings[last.reason])
+                    setEnded(endings[last.reason] as string);
+                })
+                .catch(() => undefined);
+            }, 1500);
+        },
       },
-      onChecking: (on) => live() && setLookingUp(on),
-      onDetails: (next) => {
-        // A late reply to an earlier look can't take anything away.
-        if (!live() || next.length < detailCount) return;
-        // Something new: the voice is saying it's on the screen, so that's what shows.
-        if (next.length > detailCount) {
-          setView("details");
-          // What just arrived, as the bar's See it button names it.
-          const row = newsRow(next.slice(detailCount), nameNow.current, waitingNow.current);
-          if (row) say(`${rowWords(row)}. Choose “See it” in the bar at the top.`);
-        }
-        detailCount = next.length;
-        setDetails([...carried, ...next]);
-      },
-      onWords: (role, words) => {
-        if (!live()) return;
-        const last = pending.at(-1);
-        if (last?.role === role) last.text += words;
-        else pending.push({ role, text: words });
-        flush ??= setTimeout(show, 200);
-      },
-      onEnded: (reason) => {
-        // OpenAI ended it; the server saves the call as soon as it hears.
-        callSaved(2500);
-        if (!live()) return;
-        const endings = ENDED(nameNow.current);
-        setEnded(endings[reason ?? ""] ?? "The call ended.");
-        // Out of minutes: Talk goes to the chat until the app reopens.
-        if (reason === "limit") {
-          setLimited(true);
-          liveVoiceTurnedAway(api);
-        }
-        // When the server ended it (quiet, the hour, another call), ask it why once it has
-        // saved this call.
-        if (reason === "close_requested")
-          setTimeout(() => {
-            void api
-              .request<{ sessions: { reason?: string; endedAt: string }[] }>(
-                "/api/voice/live/recent",
-              )
-              .then(({ sessions }) => {
-                const last = sessions[0];
-                const fresh = last && Date.now() - Date.parse(last.endedAt) < 10_000;
-                if (live() && fresh && last.reason && endings[last.reason])
-                  setEnded(endings[last.reason] as string);
-              })
-              .catch(() => undefined);
-          }, 1500);
-      },
-    })
+      asked,
+    )
       .then((started) => {
         if (!live()) return void started.end();
         call.current = started;
+        setSessionId(started.sessionId);
         // Shrunk while it was connecting: the server starts out thinking the screen is open.
         if (!shownNow.current) started.setShrunk(true);
       })
@@ -404,7 +442,18 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     };
   }, [phase]);
   useEffect(() => () => clearTimeout(newsTimer.current), []);
-  const start = useCallback(() => setAttempt((n) => n + 1), []);
+  const start = useCallback((rehearse?: RehearsalAsk) => {
+    // A press passes its event: only a real ask (someone to play) makes it a rehearsal.
+    askNow.current =
+      rehearse && typeof (rehearse as { who?: unknown }).who === "string" ? rehearse : undefined;
+    // The call screen opens in the same breath and starts a call of its own when it finds none
+    // (phase "idle"): a rehearsal marks the call as begun at once so it doesn't.
+    if (askNow.current) setPhase("on");
+    // The screen shouldn't show the last call's rehearsal for a moment while the next one starts.
+    setRehearsal(askNow.current);
+    setSessionId(undefined);
+    setAttempt((n) => n + 1);
+  }, []);
   const end = useCallback(() => {
     const wasOn = phaseNow.current === "on";
     current.current++;
@@ -417,6 +466,12 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
     setShown(false);
     if (wasOn) say("The call ended.");
   }, [say]);
+  const finish = useCallback(() => {
+    const practised = rehearsalNow.current;
+    const id = sessionIdNow.current;
+    end();
+    if (practised && id) open({ type: "rehearsalScore", id, ask: practised });
+  }, [end, open]);
   const toggleMute = useCallback(() => {
     const next = !mutedNow.current;
     mutedNow.current = next;
@@ -478,8 +533,8 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
   const rowNow = useRef(row);
   rowNow.current = row;
   const controls = useMemo<CallControls>(
-    () => ({ phase, shown, start, end, toggleMute, dismiss, expand, shrink }),
-    [phase, shown, start, end, toggleMute, dismiss, expand, shrink],
+    () => ({ phase, shown, start, end, finish, toggleMute, dismiss, expand, shrink }),
+    [phase, shown, start, end, finish, toggleMute, dismiss, expand, shrink],
   );
   const value = useMemo<LiveCallValue>(
     () => ({
@@ -497,10 +552,14 @@ export function LiveCallProvider({ children }: { children: ReactNode }) {
       ended,
       limited,
       startedAt,
+      rehearsal,
+      sessionId,
       target,
       clearTarget,
     }),
     [
+      rehearsal,
+      sessionId,
       controls,
       state,
       muted,
@@ -649,7 +708,7 @@ const asElement = (node: unknown) =>
  */
 export function CallBar() {
   const call = useLiveCall();
-  const { draft } = useWorkspace();
+  const { draft, open } = useWorkspace();
   const { data } = useAgentWorkspace();
   const name = data?.identity.name || "Neddy";
   const time = useCallTime(call.phase === "on" ? call.startedAt : undefined);
@@ -704,7 +763,7 @@ export function CallBar() {
   /** End from the bar: focus goes on to the sheet it's in, or the headset (or the menu). */
   const endCall = () => {
     const dialog = asElement(bar.current)?.closest<HTMLElement>('[role="dialog"]');
-    call.end();
+    call.finish();
     if (Platform.OS !== "web") return;
     setTimeout(() => {
       const active = document.activeElement;
@@ -838,6 +897,12 @@ export function CallBar() {
               role="button"
               onPress={() => {
                 if (Date.now() - overAt.current < 600) return;
+                // A rehearsal goes to how it went, not into a plain call that costs minutes.
+                if (call.rehearsal && call.sessionId) {
+                  call.dismiss();
+                  open({ type: "rehearsalScore", id: call.sessionId, ask: call.rehearsal });
+                  return;
+                }
                 // Out of this month's minutes: the chat, ready to type.
                 if (call.limited) {
                   call.dismiss();
@@ -864,7 +929,11 @@ export function CallBar() {
                   fontWeight: "700",
                 }}
               >
-                {call.limited ? "Type instead" : "Talk again"}
+                {call.rehearsal && call.sessionId
+                  ? "See how it went"
+                  : call.limited
+                    ? "Type instead"
+                    : "Talk again"}
               </Text>
             </Pressable>
             <Pressable

@@ -11,6 +11,7 @@ import type {
   Workspace,
 } from "../../../packages/domain/src";
 import type { AgentArtifact } from "../../../packages/domain/src/agent";
+import type { RehearsalAsk } from "../../../packages/domain/src/voice";
 import type { MuseApi } from "./api";
 import type { EmailItem } from "./email-cards";
 import type { ReceiptInfo } from "./receipt-ui";
@@ -42,6 +43,10 @@ export type Detail =
   | { type: "meeting"; id: string }
   /** What an answer used (receipt-ui.tsx). */
   | { type: "receipt"; info: ReceiptInfo }
+  /** Rehearse a hard conversation: who Neddy plays and what it's about (rehearsal-ui.tsx). */
+  | { type: "rehearse" }
+  /** How a rehearsal went, by the call's id. */
+  | { type: "rehearsalScore"; id: string; ask: RehearsalAsk }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

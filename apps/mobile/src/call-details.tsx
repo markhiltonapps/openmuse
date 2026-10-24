@@ -19,6 +19,7 @@ import { EmailCards, emailItems } from "./email-cards";
 import { fileLabel } from "./file-kinds";
 import { HelpAnswerCard } from "./help-ui";
 import { MeetingsToolCard } from "./meetings-ui";
+import { RehearseToolCard } from "./rehearsal-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
 import { colors, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -172,6 +173,8 @@ export function CallDetails({
                   return <HelpAnswerCard key={key} result={result} onCall={onCall} />;
                 case "meetings":
                   return <MeetingsToolCard key={key} result={result} onCall={onCall} />;
+                case "rehearse":
+                  return <RehearseToolCard key={key} result={result} onCall={onCall} />;
                 case "manage_chats":
                   return (
                     <ChatActionCard key={key} result={result} onCall={onCall} saved={!onCall} />

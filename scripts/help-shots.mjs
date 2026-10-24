@@ -872,6 +872,102 @@ const SHOTS = [
     },
   },
   {
+    // Rehearse a talk: the part, what it's about, the goal. Mocked: the last rehearsal's row.
+    id: "rehearse",
+    go: async (p) => {
+      await p.route(/\/api\/rehearsals\/latest$/, (route) =>
+        route.fulfill({
+          json: {
+            rehearsal: {
+              id: "help-rehearsal",
+              at: new Date().toISOString(),
+              state: "done",
+              who: "my landlord",
+              about: "",
+              goal: "",
+            },
+          },
+        }),
+      );
+      await button(p, "Attach a document").click();
+      await p.getByRole("button", { name: "Rehearse a talk" }).click();
+      await p.getByText("Rehearse a talk", { exact: true }).first().waitFor({ timeout: 20000 });
+      await p.getByRole("button", { name: "My boss" }).click();
+      await p
+        .getByLabel("What’s it about?")
+        .pressSequentially("Asking for a raise after a year of extra work", { delay: 5 });
+      await p.getByLabel("What do you want out of it?").pressSequentially("A yes, or a date", {
+        delay: 5,
+      });
+      await p.waitForTimeout(800);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: words((p) => p.getByText("Who is Neddy playing?", { exact: true })),
+      2: words((p) => p.getByText("What’s it about?", { exact: true })),
+      3: (p) => button(p, "Start rehearsal"),
+    },
+  },
+  {
+    // A finished rehearsal's scorecard. Mocked: the numbers and the coach's tips.
+    id: "rehearsescore",
+    height: 1000,
+    go: async (p) => {
+      const card = {
+        state: "done",
+        who: "my boss",
+        about: "Asking for a raise after a year of extra work",
+        goal: "A yes, or a date",
+        stats: {
+          words: 214,
+          speakingSeconds: 96,
+          pace: 134,
+          turns: 6,
+          longestTurn: 61,
+          fillers: [
+            { word: "um", count: 3 },
+            { word: "you know", count: 2 },
+          ],
+          softeners: [
+            { word: "just", count: 4 },
+            { word: "sorry", count: 1 },
+          ],
+          seconds: 204,
+        },
+        coaching: {
+          outcome: "You got a date to talk again, though not a yes.",
+          wentWell:
+            "You opened with what you’d taken on this year, and you stayed calm when they pushed back.",
+          tips: [
+            "Say the number you want before they ask for it.",
+            "Try “I’d like” instead of “I was just hoping”.",
+            "Pause after your ask and let them answer.",
+          ],
+        },
+      };
+      await p.route(/\/api\/voice\/live\/help-rehearsal\/rehearsal$/, (route) =>
+        route.fulfill({ json: { rehearsal: card } }),
+      );
+      await p.route(/\/api\/rehearsals\/latest$/, (route) =>
+        route.fulfill({
+          json: { rehearsal: { ...card, id: "help-rehearsal", at: new Date().toISOString() } },
+        }),
+      );
+      await button(p, "Attach a document").click();
+      await p.getByRole("button", { name: "Rehearse a talk" }).click();
+      await p.getByRole("button", { name: /Last time/ }).click();
+      await p.getByText("The numbers", { exact: true }).waitFor({ timeout: 20000 });
+      await p.getByText("Next time", { exact: true }).waitFor({ timeout: 20000 });
+      await p.waitForTimeout(800);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: words((p) => p.getByText("The numbers", { exact: true })),
+      2: words((p) => p.getByText("Next time", { exact: true })),
+      3: (p) => button(p, "Try again"),
+    },
+  },
+  {
     // A sorted brain dump: its things to add, ticked, and Add. Mocked: the list and the one page.
     id: "braindump",
     go: async (p) => {
