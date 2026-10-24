@@ -547,9 +547,16 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "meetings",
         description:
-          "Meetings they recorded in the app, in the room, on their phone or computer: the words were written down with who said them, and notes were written (a summary, decisions, action items). start: when they ask to record a meeting (or “take notes”, “record this”), call it; a card to start recording appears on their screen (or, if this device can’t record, it says where they can) (on a live call it ends the call first: the phone can’t do both), and recording begins only when they tap it, so never say it’s recording. Say once that it’s polite to tell everyone they’re being recorded. list: their recent meetings. read: one meeting’s notes and words, by its id (from list, search or Recent meetings); answer what they asked from it, saying who said what when it helps; when the result has next, read again with from set to it for the rest. search: meetings by words that were said or are in the notes. name_speakers puts names on speaker labels (“Speaker 2 was Dana”); rename changes a meeting’s title. To turn action items into reminders, ask when, then use set_reminder for each. The words and notes are kept until they delete them; the audio for 30 days. When the result says it’s on their screen, say so in a sentence instead of reading it all out.",
+          "Meetings they recorded in the app, in the room, on their phone or computer: the words were written down with who said them, and notes were written (a summary, decisions, action items). start: when they ask to record a meeting (or “take notes”, “record this”), call it; a card to start recording appears on their screen (or, if this device can’t record, it says where they can) (on a live call it ends the call first: the phone can’t do both), and recording begins only when they tap it, so never say it’s recording. Say once that it’s polite to tell everyone they’re being recorded. For a brain dump (“let me think out loud”, “I need to dump my thoughts”, “walk and talk”), call start with dump set to true: a card to start appears the same way, and afterwards the recording is sorted into reminders, notes, jobs for you and About you facts that wait on their screen to be added; read it (its id from list or Recent meetings) to see the sorted things, and when they say to add them (“add them all”, “just the reminders”) call add_dump with all set to true or the ids of the ones they chose (d1, d2…); never add anything they didn’t ask for, and tell them what was added and anything that couldn’t be. list: their recent meetings. read: one meeting’s notes and words, by its id (from list, search or Recent meetings); answer what they asked from it, saying who said what when it helps; when the result has next, read again with from set to it for the rest. search: meetings by words that were said or are in the notes. name_speakers puts names on speaker labels (“Speaker 2 was Dana”); rename changes a meeting’s title. To turn action items into reminders, ask when, then use set_reminder for each. The words and notes are kept until they delete them; the audio for 30 days. When the result says it’s on their screen, say so in a sentence instead of reading it all out.",
         parameters: z.object({
-          do: z.enum(["start", "list", "read", "search", "name_speakers", "rename"]),
+          do: z.enum(["start", "list", "read", "search", "name_speakers", "rename", "add_dump"]),
+          dump: z.boolean().optional().describe("For start: a brain dump, not a meeting"),
+          all: z.boolean().optional().describe("For add_dump: add everything sorted"),
+          items: z
+            .array(z.string().max(12))
+            .max(60)
+            .optional()
+            .describe("For add_dump: the ids of the things to add, such as d1"),
           id: z
             .string()
             .max(60)
@@ -570,7 +577,7 @@ export class ConversationAgent extends AbstractAgent {
             ),
           title: z.string().max(120).optional().describe("For rename: the new title"),
         }),
-        execute: async ({ do: what, id, query, from, speakers, title }) => {
+        execute: async ({ do: what, id, query, from, speakers, title, dump, all, items }) => {
           const meetings = this.service.meetings;
           if (!meetings?.available)
             return { error: "Recording meetings isn’t set up on this server yet." };
@@ -582,9 +589,17 @@ export class ConversationAgent extends AbstractAgent {
             startedAt: m.startedAt,
             minutes: minutes(m.seconds),
             status: m.status,
+            ...(m.kind === "dump" ? { brainDump: true } : {}),
+            ...(m.dump
+              ? { waitingToAdd: m.dump.filter((item) => item.state !== "added").length }
+              : {}),
             ...(m.summary ? { summary: m.summary } : {}),
           });
           if (what === "start") {
+            if (dump && !meetings.dumpAvailable)
+              return {
+                error: "A brain dump needs the AI model, which isn’t set up on this server yet.",
+              };
             const { leftSeconds, limitHours } = await meetings.allowance(this.owner);
             if (leftSeconds !== undefined && leftSeconds < 60)
               return {
@@ -594,13 +609,16 @@ export class ConversationAgent extends AbstractAgent {
               };
             return {
               recorder: true,
+              ...(dump ? { dump: true } : {}),
               ...(leftSeconds !== undefined
                 ? { minutesLeftThisMonth: Math.floor(leftSeconds / 60) }
                 : {}),
               onCall,
               shown: onCall
                 ? "On their screen: a card to end this call and start recording (or, if this device can’t record, where it can)."
-                : "On their screen: a card to start recording (or, if this device can’t record, where it can).",
+                : dump
+                  ? "On their screen: a card to start the brain dump (or, if this device can’t record, where it can). Tell them to talk as long as they like, up to half an hour, and that it’s sorted when they stop."
+                  : "On their screen: a card to start recording (or, if this device can’t record, where it can).",
             };
           }
           if (what === "list") {
@@ -615,6 +633,28 @@ export class ConversationAgent extends AbstractAgent {
               : { meetings: [], none: true };
           }
           if (!id) return { error: "Say which meeting (its id from list or search)." };
+          if (what === "add_dump") {
+            const found = await meetings.read(this.owner, id).catch(() => undefined);
+            if (found && found.kind === "dump" && !found.dump)
+              return { error: "That brain dump isn’t sorted yet. Try again in a minute." };
+            if (!all && !items?.length)
+              return { error: "Say which things to add, or to add all of them." };
+            const added = await meetings.addDump(this.owner, id, all ? "all" : (items ?? []));
+            return {
+              added: (added.dump ?? [])
+                .filter((item) => item.state === "added")
+                .map((item) => ({
+                  id: item.id,
+                  kind: item.kind,
+                  text: item.text,
+                  result: item.detail,
+                })),
+              couldNot: (added.dump ?? [])
+                .filter((item) => item.state === "failed")
+                .map((item) => ({ id: item.id, text: item.text, why: item.detail })),
+              // No "shown": nothing appears on their screen for this, so say it aloud.
+            };
+          }
           if (what === "rename") {
             if (!title?.trim()) return { error: "Say the new title." };
             return { meeting: brief(await meetings.update(this.owner, id, { title })), ...shown };
@@ -640,6 +680,7 @@ export class ConversationAgent extends AbstractAgent {
               ...brief(meeting),
               decisions: meeting.decisions,
               actionItems: meeting.actionItems,
+              ...(meeting.dump ? { sortedThings: meeting.dump } : {}),
               speakers: meeting.speakers,
               ...(meeting.error ? { error: meeting.error } : {}),
             },

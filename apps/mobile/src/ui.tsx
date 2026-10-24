@@ -483,6 +483,8 @@ export function CheckRow({
   checked,
   onPress,
   radio = false,
+  done = false,
+  problem = false,
 }: {
   label: string;
   /** The fine print under it, smaller. */
@@ -491,7 +493,31 @@ export function CheckRow({
   onPress: () => void;
   /** One choice of several (a round box), not a tick of its own. */
   radio?: boolean;
+  /** Already done: a tick in place of the box, the same size and place, and nothing to press. */
+  done?: boolean;
+  /** The fine print says something went wrong: in the danger colour, with a mark. */
+  problem?: boolean;
 }) {
+  if (done)
+    return (
+      <View
+        role="listitem"
+        aria-label={`Done. ${label}${detail ? `. ${detail}` : ""}`}
+        style={[s.row, { gap: 10, paddingVertical: 11, alignItems: "flex-start" }]}
+      >
+        <View style={{ width: 19, height: 19, marginTop: 2, alignItems: "center" }}>
+          <Check size={19} color={colors.greenText} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={s.text}>{label}</Text>
+          {detail ? (
+            <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>
+              {detail}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    );
   return (
     <Pressable
       role={radio ? "radio" : "checkbox"}
@@ -536,7 +562,17 @@ export function CheckRow({
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={s.text}>{label}</Text>
         {detail ? (
-          <Text style={{ fontSize: 13, lineHeight: 18, color: colors.mutedStrong }}>{detail}</Text>
+          <Text
+            style={{
+              fontSize: 13,
+              lineHeight: 18,
+              color: problem ? colors.danger : colors.mutedStrong,
+              fontWeight: problem ? "600" : "400",
+            }}
+          >
+            {problem ? "⚠ " : ""}
+            {detail}
+          </Text>
         ) : null}
       </View>
     </Pressable>

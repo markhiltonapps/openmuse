@@ -835,6 +835,33 @@ const SHOTS = [
     // Needs meetings on the server (SONIOX_API_KEY set; a few recorded with stand-ins).
     id: "meetings",
     go: async (p) => {
+      const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+      const meeting = (id, title, minutes, seconds) => ({
+        id,
+        kind: "meeting",
+        title,
+        status: "done",
+        startedAt: ago(minutes),
+        endedAt: ago(minutes - seconds / 60),
+        seconds,
+        summary: "",
+        decisions: [],
+        actionItems: [],
+        speakers: {},
+        audio: false,
+      });
+      await p.route(/\/api\/meetings$/, (route) =>
+        route.fulfill({
+          json: {
+            available: true,
+            allowance: { usedMinutes: 95, limitHours: 10, leftSeconds: 30300 },
+            meetings: [
+              meeting("help-m1", "Kitchen remodel kickoff", 1500, 2880),
+              meeting("help-m2", "Weekly team check-in", 4300, 1800),
+            ],
+          },
+        }),
+      );
       await tab(p, "Files & media").click();
       await p.waitForTimeout(2500);
     },
@@ -842,6 +869,69 @@ const SHOTS = [
       1: (p) => button(p, "Record a meeting"),
       3: words((p) => p.getByRole("heading", { name: "Meetings", exact: true })),
       4: (p) => button(p, /^Open .* Ready|^Open /),
+    },
+  },
+  {
+    // A sorted brain dump: its things to add, ticked, and Add. Mocked: the list and the one page.
+    id: "braindump",
+    go: async (p) => {
+      const at = new Date(Date.now() + 86_400_000);
+      at.setHours(9, 0, 0, 0);
+      const local = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}T09:00`;
+      const meeting = {
+        id: "help-dump",
+        kind: "dump",
+        title: "Weekend errands",
+        status: "done",
+        startedAt: new Date(Date.now() - 600_000).toISOString(),
+        endedAt: new Date(Date.now() - 480_000).toISOString(),
+        seconds: 118,
+        summary:
+          "Things to sort out before the weekend, a trip to plan and a note about work hours.",
+        decisions: [],
+        actionItems: [],
+        speakers: {},
+        audio: false,
+        dump: [
+          { id: "d1", kind: "reminder", text: "Call the plumber", at: local },
+          { id: "d2", kind: "task", text: "Find three hotels in Austin under $200 for March" },
+          { id: "d3", kind: "note", text: "Try the new bakery on Main Street" },
+          {
+            id: "d4",
+            kind: "fact",
+            text: "Works weekdays 7 to 3",
+            key: "work.hours",
+            value: "Weekdays 7 to 3",
+          },
+        ],
+        segments: [],
+        gaps: [],
+        audioParts: [],
+      };
+      await p.route(/\/api\/meetings$/, (route) =>
+        route.fulfill({
+          json: {
+            available: true,
+            allowance: { usedMinutes: 2, limitHours: 10, leftSeconds: 35000 },
+            meetings: [meeting],
+          },
+        }),
+      );
+      await p.route(/\/api\/meetings\/help-dump$/, (route) => route.fulfill({ json: meeting }));
+      await tab(p, "Files & media").click();
+      await p.waitForTimeout(2500);
+      await p
+        .getByRole("button", { name: /^Open Weekend errands/ })
+        .first()
+        .click();
+      await p.getByText("Ready to add", { exact: true }).waitFor({ timeout: 20000 });
+      await p.waitForTimeout(800);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: words((p) => p.getByText("Ready to add", { exact: true })),
+      2: { find: (p) => p.getByRole("checkbox").nth(1), side: "top-right" },
+      3: (p) => button(p, /^Add all 4|^Add \d+ chosen/),
     },
   },
   {

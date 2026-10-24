@@ -1,11 +1,13 @@
 import {
   AudioLines,
   Bell,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleStop,
   CloudOff,
   Download,
+  ListChecks,
   Mic,
   MicOff,
   Pencil,
@@ -26,6 +28,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { PERSONA_FACTS, type PersonaKey } from "../../../packages/domain/src/persona";
 import { PlaceAnchor } from "./app-places-ui";
 import { useCallControls } from "./live-call";
 import MeetingAudio from "./MeetingAudio";
@@ -41,7 +44,7 @@ import { indexedStore } from "./meeting-store";
 import { MeetingUploader, type Unsent } from "./meeting-uploader";
 import { dark } from "./theme";
 import { tipProps } from "./tips";
-import { Button, Card, Chip, colors, ErrorNotice, glassSurface, Sheet, s } from "./ui";
+import { Button, Card, CheckRow, Chip, colors, ErrorNotice, glassSurface, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /** The record colour for dots and words: a clear red that reads on light, dark and glass. */
@@ -50,9 +53,23 @@ export const RECORD_RED = dark ? "#FF6369" : "#D93036";
 export const RECORD_FILL = "#C7272D";
 
 export type MeetingStatus = "recording" | "transcribing" | "summarizing" | "done" | "failed";
+/** One thing a brain dump was sorted into, to be added or left. */
+export interface DumpItemView {
+  id: string;
+  kind: "reminder" | "note" | "task" | "fact";
+  text: string;
+  at?: string;
+  key?: string;
+  value?: string;
+  state?: "added" | "failed";
+  detail?: string;
+}
 export interface MeetingView {
   id: string;
   title: string;
+  /** A brain dump is sorted into things to add, not minuted. */
+  kind?: "meeting" | "dump";
+  dump?: DumpItemView[];
   status: MeetingStatus;
   startedAt: string;
   endedAt?: string;
@@ -76,6 +93,8 @@ interface MeetingRead extends MeetingView {
 }
 interface MeetingsList {
   available: boolean;
+  /** A model is set up to sort brain dumps. */
+  dumpAvailable?: boolean;
   allowance: { usedMinutes: number; limitHours?: number; leftSeconds?: number };
   meetings: MeetingView[];
 }
@@ -176,7 +195,7 @@ interface RecorderValue {
   /** Whether this device can record here (a browser with a microphone). */
   supported: boolean;
   /** Starts recording, after `wait` ms (for a call to let go of the microphone). */
-  start: (wait?: number) => void;
+  start: (wait?: number, kind?: "meeting" | "dump") => void;
   stop: () => void;
   discard: () => void;
   resume: () => void;
@@ -218,16 +237,21 @@ export function useUnsent(meetingId: string): Unsent | undefined {
 export function useStartRecording() {
   const rec = useRecorder();
   const call = useCallControls();
-  return useCallback(() => {
-    if (call.phase === "on") {
-      call.end();
-      // A moment for the call to let go of the microphone.
-      rec.start(500);
-      return;
-    }
-    if (call.phase === "over") call.dismiss();
-    rec.start();
-  }, [call, rec]);
+  // A press passes its event: only the word "dump" asks for a brain dump.
+  return useCallback(
+    (what?: unknown) => {
+      const kind = what === "dump" ? "dump" : "meeting";
+      if (call.phase === "on") {
+        call.end();
+        // A moment for the call to let go of the microphone.
+        rec.start(500, kind);
+        return;
+      }
+      if (call.phase === "over") call.dismiss();
+      rec.start(0, kind);
+    },
+    [call, rec],
+  );
 }
 /** Whether a recording is going on (the call button's other use of the microphone checks this). */
 export function useRecording() {
@@ -273,9 +297,9 @@ export function MeetingRecorderProvider({ children }: { children: ReactNode }) {
     if (state.away !== undefined) focusLater("seen-away");
   }, [state.closed, state.away]);
   const start = useCallback(
-    (wait = 0) => {
+    (wait = 0, kind: "meeting" | "dump" = "meeting") => {
       setShown(true);
-      setTimeout(() => void recorder.start(), wait);
+      setTimeout(() => void recorder.start(kind), wait);
     },
     [recorder],
   );
@@ -552,7 +576,9 @@ function RecorderSheet() {
     state.phase === "starting"
       ? "Getting the microphone"
       : recording
-        ? "Recording"
+        ? state.kind === "dump"
+          ? "Brain dump"
+          : "Recording"
         : paused
           ? "Recording paused"
           : saving
@@ -565,7 +591,9 @@ function RecorderSheet() {
                   ? "Saved, not written up yet"
                   : state.phase === "error"
                     ? "Couldn’t record"
-                    : "Record a meeting";
+                    : state.kind === "dump"
+                      ? "Brain dump"
+                      : "Record a meeting";
   // Stop's footer goes away, so keyboard focus moves to the one choice left on the saving screen.
   const keepOffered = saving && Boolean(state.trouble);
   useEffect(() => {
@@ -607,7 +635,7 @@ function RecorderSheet() {
             >
               <CircleStop size={22} color="#FFFFFF" />
               <Text style={{ color: "#FFFFFF", fontSize: 17, fontWeight: "700" }}>
-                Stop and write it up
+                {state.kind === "dump" ? "Stop and sort it" : "Stop and write it up"}
               </Text>
             </Pressable>
             {confirm ? (
@@ -686,7 +714,8 @@ function RecorderSheet() {
               Nothing was recorded for {missedLength(state.away)}. It’s recording again now.
             </Text>
             <Text style={[s.muted, { color: colors.mutedStrong }]}>
-              To catch every word, keep this screen open until the meeting ends.
+              To catch every word, keep this screen open until{" "}
+              {state.kind === "dump" ? "you’re done" : "the meeting ends"}.
             </Text>
             <Button
               primary
@@ -703,7 +732,9 @@ function RecorderSheet() {
         )}
         {recording && state.away === undefined && (
           <Text style={[s.muted, { textAlign: "center", maxWidth: 420 }]}>
-            Let everyone know they’re being recorded.
+            {state.kind === "dump"
+              ? "Just talk. When you stop, I sort it into things for you to add."
+              : "Let everyone know they’re being recorded."}
             {Platform.OS === "web"
               ? " Keep this screen open: if you switch apps or lock the phone, nothing is recorded until you’re back."
               : ""}
@@ -725,7 +756,9 @@ function RecorderSheet() {
             <Text style={s.muted}>
               {state.waiting
                 ? "Sending the last of the recording…"
-                : "Sending it off to be written up…"}
+                : state.kind === "dump"
+                  ? "Sending it off to be sorted…"
+                  : "Sending it off to be written up…"}
             </Text>
           </View>
         )}
@@ -761,7 +794,7 @@ function RecorderSheet() {
             <ErrorNotice error={state.error} />
             {state.closed ? (
               <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-                <Button primary icon={Mic} onPress={() => rec.start()}>
+                <Button primary icon={Mic} onPress={() => rec.start(0, state.kind)}>
                   Record the rest
                 </Button>
                 <Button onPress={rec.openMeeting}>Open the meeting</Button>
@@ -787,7 +820,7 @@ function RecorderSheet() {
             ) : (
               !state.meetingId &&
               rec.supported && (
-                <Button primary icon={Mic} onPress={() => rec.start()}>
+                <Button primary icon={Mic} onPress={() => rec.start(0, state.kind)}>
                   Try again
                 </Button>
               )
@@ -954,7 +987,13 @@ export function RecordingBar() {
         <Pressable
           role="button"
           aria-label={paused ? "Carry on recording" : "Stop recording and write it up"}
-          {...tipProps(paused ? "Carry on recording" : "Stop and write it up")}
+          {...tipProps(
+            paused
+              ? "Carry on recording"
+              : state.kind === "dump"
+                ? "Stop and sort it"
+                : "Stop and write it up",
+          )}
           onPress={paused ? rec.resume : rec.stop}
           style={({ pressed }) => ({
             minHeight: 44,
@@ -1020,8 +1059,32 @@ function allowanceLine(allowance: MeetingsList["allowance"]) {
   return `${used} of ${allowance.limitHours} hours used this month`;
 }
 
+/** A brain dump: talk on your own, and it comes back sorted into things to add. */
+export function BrainDumpButton({ small }: { small?: boolean }) {
+  const rec = useRecorder();
+  const startRecording = useStartRecording();
+  const busy = rec.state.phase !== "idle" && rec.state.phase !== "error";
+  if (!rec.supported || busy) return null;
+  return (
+    <Button
+      small={small}
+      icon={AudioLines}
+      onPress={() => startRecording("dump")}
+      style={{ alignSelf: "flex-start", minHeight: 48 }}
+    >
+      Brain dump
+    </Button>
+  );
+}
+
 /** The Record button, as a card's first action; it says why when it can't. */
-export function RecordMeetingButton({ label = "Record a meeting" }: { label?: string }) {
+export function RecordMeetingButton({
+  label = "Record a meeting",
+  kind = "meeting",
+}: {
+  label?: string;
+  kind?: "meeting" | "dump";
+}) {
   const rec = useRecorder();
   const startRecording = useStartRecording();
   const busy = rec.state.phase !== "idle" && rec.state.phase !== "error";
@@ -1035,7 +1098,7 @@ export function RecordMeetingButton({ label = "Record a meeting" }: { label?: st
     <Pressable
       role="button"
       aria-label={busy ? "Recording now. Open the recorder" : label}
-      onPress={busy ? rec.expand : startRecording}
+      onPress={busy ? rec.expand : () => startRecording(kind)}
       style={({ pressed }) => ({
         alignSelf: "flex-start",
         minHeight: 48,
@@ -1057,6 +1120,7 @@ export function RecordMeetingButton({ label = "Record a meeting" }: { label?: st
 }
 
 function MeetingRow({ meeting }: { meeting: MeetingView }) {
+  const toAdd = (meeting.dump ?? []).filter((item) => item.state !== "added").length;
   const { open } = useWorkspace();
   const rec = useRecorder();
   const unsent = useUnsent(meeting.id);
@@ -1068,7 +1132,7 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
       aria-label={
         live
           ? `${meeting.title}, recording now. Open the recorder`
-          : `Open ${meeting.title}, ${meetingLine(meeting)}, ${unsent ? "still sending from this device" : statusLabel(meeting.status)}`
+          : `Open ${meeting.title}${meeting.kind === "dump" ? ", brain dump" : ""}, ${meetingLine(meeting)}, ${unsent ? "still sending from this device" : statusLabel(meeting.status)}`
       }
       onPress={live ? rec.expand : () => open({ type: "meeting", id: meeting.id })}
       style={({ pressed }) => ({
@@ -1094,13 +1158,17 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
           borderColor: colors.line,
         }}
       >
-        <AudioLines size={20} color={colors.mutedStrong} />
+        {meeting.kind === "dump" ? (
+          <ListChecks size={20} color={colors.mutedStrong} />
+        ) : (
+          <AudioLines size={20} color={colors.mutedStrong} />
+        )}
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[s.text, { fontWeight: "600" }]} numberOfLines={2}>
           {meeting.title}
         </Text>
-        <Text style={s.muted} numberOfLines={1}>
+        <Text style={s.muted} numberOfLines={2}>
           {meetingLine(meeting)}
         </Text>
       </View>
@@ -1115,6 +1183,10 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
         <Chip tint={meeting.status === "failed" ? colors.errorBg : colors.lavender}>
           {statusLabel(meeting.status)}
         </Chip>
+      ) : meeting.kind === "dump" && toAdd > 0 ? (
+        <View style={{ alignSelf: "center" }}>
+          <Chip tint={colors.lavender}>{`${toAdd} to add`}</Chip>
+        </View>
       ) : null}
       <ChevronRight size={18} color={colors.muted} />
     </Pressable>
@@ -1140,10 +1212,17 @@ export function MeetingsCard() {
             Record a meeting in the room; you get a summary, decisions, action items and every word,
             with who said it.
           </Text>
+          <Text style={s.muted}>
+            Or do a brain dump: think out loud on your own, up to half an hour, and I sort it into
+            reminders, notes, jobs for me and things about you. You choose what to add.
+          </Text>
         </View>
         {data.available ? (
           <View style={{ gap: 6 }}>
-            <RecordMeetingButton />
+            <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
+              <RecordMeetingButton />
+              {data.dumpAvailable !== false && <BrainDumpButton />}
+            </View>
             {!!line && <Text style={s.small}>{line}</Text>}
           </View>
         ) : (
@@ -1194,11 +1273,192 @@ function Bullet({ children }: { children: ReactNode }) {
 /** What the meeting page says has just happened, for the status line. */
 function meetingNews(meeting: MeetingRead | null | undefined) {
   if (!meeting) return "";
-  if (meeting.status === "done") return "The notes are ready";
-  if (meeting.status === "failed") return "It couldn’t be written up";
+  const dump = meeting.kind === "dump";
+  if (meeting.status === "done") return dump ? "Your list is ready" : "The notes are ready";
+  if (meeting.status === "failed")
+    return dump ? "It couldn’t be sorted" : "It couldn’t be written up";
   if (meeting.status === "transcribing") return "Writing down every word";
   if (meeting.status === "summarizing") return "Writing the notes";
   return "";
+}
+
+const DUMP_KIND: Record<DumpItemView["kind"], string> = {
+  reminder: "Reminder",
+  note: "Note to keep",
+  task: "A job for me",
+  fact: "About you",
+};
+/** A reminder's time as it was said: "Tue, Oct 27, 9:00 AM". */
+function dumpWhen(at?: string) {
+  const when = at ? new Date(at) : undefined;
+  return when && !Number.isNaN(when.getTime())
+    ? when.toLocaleString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";
+}
+/** What a sorted thing will be, in a few words, for the line under it. */
+export function dumpDetail(item: DumpItemView) {
+  if (item.kind === "task") return "A job for me · starts when you add it";
+  if (item.kind === "reminder") {
+    const when = dumpWhen(item.at);
+    return when ? `Reminder · ${when}` : "Reminder";
+  }
+  if (item.kind === "fact") {
+    const label =
+      item.key && item.key in PERSONA_FACTS ? PERSONA_FACTS[item.key as PersonaKey].label : "";
+    return label ? `About you · ${label}: ${item.value ?? ""}` : "About you";
+  }
+  return DUMP_KIND[item.kind];
+}
+
+/**
+ * A brain dump's sorted things: each ticked to be added, nothing added until the person taps. Added
+ * ones stay in place, marked, and one that couldn't be added says why and can be tried again.
+ */
+function DumpSection({
+  meeting,
+  onChange,
+}: {
+  meeting: MeetingRead;
+  onChange: (view: Partial<MeetingRead>) => void;
+}) {
+  const { api } = useWorkspace();
+  const items = meeting.dump ?? [];
+  const waiting = items.filter((item) => item.state !== "added");
+  const [chosen, setChosen] = useState<string[]>(() => waiting.map((item) => item.id));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [said, setSaid] = useState("");
+  if (!meeting.dump) return null;
+  if (!items.length)
+    return (
+      <Text style={s.muted}>
+        Nothing to add came out of this one. The words are below, if you want to look.
+      </Text>
+    );
+  const picked = chosen.filter((id) => waiting.some((item) => item.id === id));
+  async function add() {
+    setBusy(true);
+    setError("");
+    setSaid("");
+    try {
+      const view = await api.request<MeetingRead>(
+        `/api/meetings/${encodeURIComponent(meeting.id)}/dump`,
+        { which: picked },
+      );
+      onChange({ dump: view.dump });
+      const after = view.dump ?? [];
+      const worked = picked.filter((id) => after.find((item) => item.id === id)?.state === "added");
+      const failed = picked.length - worked.length;
+      setChosen((now) => now.filter((id) => !worked.includes(id)));
+      setSaid(
+        `${worked.length} added${failed ? `. ${failed} couldn’t be added: tap Add again to retry` : ""}.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t add these. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const added = items.length - waiting.length;
+  const failedNow = items.filter((item) => item.state === "failed").length;
+  return (
+    <View style={{ gap: 10 }}>
+      <Text role="heading" aria-level={3} style={s.heading}>
+        {waiting.length === 0
+          ? "Added from your brain dump"
+          : added
+            ? "Sorted from your brain dump"
+            : "Ready to add"}
+      </Text>
+      {waiting.length > 0 && (
+        <Text style={s.muted}>
+          I can miss or misread things, so look before you add. Nothing is added until you tap the
+          button below. Or tell me “add them all”.
+        </Text>
+      )}
+      <Card style={{ gap: 0, paddingVertical: 4, backgroundColor: colors.subtle }}>
+        {items.map((item) =>
+          item.state === "added" ? (
+            <CheckRow
+              key={item.id}
+              done
+              checked
+              label={item.text}
+              detail={`Added · ${item.detail ?? dumpDetail(item)}`}
+              onPress={() => undefined}
+            />
+          ) : (
+            <CheckRow
+              key={item.id}
+              label={item.text}
+              problem={item.state === "failed"}
+              detail={item.state === "failed" ? failText(item.detail) : dumpDetail(item)}
+              checked={picked.includes(item.id)}
+              onPress={() =>
+                setChosen((now) =>
+                  now.includes(item.id) ? now.filter((id) => id !== item.id) : [...now, item.id],
+                )
+              }
+            />
+          ),
+        )}
+      </Card>
+      {waiting.length > 0 && (
+        <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
+          <Button
+            primary
+            busy={busy}
+            disabled={!picked.length}
+            onPress={() => void add()}
+            style={{ minHeight: 48 }}
+          >
+            {!picked.length
+              ? "Add"
+              : picked.length === 1
+                ? "Add 1"
+                : picked.length === waiting.length
+                  ? `Add all ${waiting.length}`
+                  : `Add ${picked.length} chosen`}
+          </Button>
+          {waiting.length > 1 && (
+            <Button onPress={() => setChosen(picked.length ? [] : waiting.map((item) => item.id))}>
+              {picked.length ? "Choose none" : "Choose all"}
+            </Button>
+          )}
+        </View>
+      )}
+      {/* Kept mounted so what happened is read out; out of the layout while it says nothing. */}
+      <Text
+        role="status"
+        style={[
+          s.muted,
+          { color: failedNow ? colors.danger : colors.greenText },
+          !said && {
+            position: "absolute",
+            width: 1,
+            height: 1,
+            opacity: 0,
+            pointerEvents: "none",
+          },
+        ]}
+      >
+        {said}
+      </Text>
+      {!!error && <ErrorNotice error={error} />}
+    </View>
+  );
+}
+
+/** Why one thing couldn't be added, without saying "couldn't" twice. */
+function failText(detail?: string) {
+  if (!detail) return "Couldn’t add this one. Try again.";
+  return /^couldn/i.test(detail) ? `${detail} Try again.` : `Couldn’t add: ${detail}`;
 }
 
 /** One meeting: its notes, the audio while it's kept, and every word with who said it. */
@@ -1342,7 +1602,11 @@ export function MeetingSheet({ id }: { id: string }) {
           </Card>
         )}
         {stoppedAtLimit.has(meeting.id) && (
-          <Text style={s.muted}>Recording stopped by itself at this month’s limit.</Text>
+          <Text style={s.muted}>
+            {meeting.kind === "dump"
+              ? "Recording stopped by itself after half an hour."
+              : "Recording stopped by itself at this month’s limit."}
+          </Text>
         )}
         {!!meeting.missedSeconds && meeting.missedSeconds >= 5 && (
           <Card style={{ gap: 6, backgroundColor: colors.orange }}>
@@ -1365,7 +1629,9 @@ export function MeetingSheet({ id }: { id: string }) {
               <Text style={[s.text, { fontWeight: "600", flex: 1 }]}>
                 {meeting.status === "transcribing"
                   ? "Writing down every word…"
-                  : "Writing the summary and action items…"}
+                  : meeting.kind === "dump"
+                    ? "Sorting what you said…"
+                    : "Writing the summary and action items…"}
               </Text>
             </View>
             <Text style={s.muted}>
@@ -1377,7 +1643,8 @@ export function MeetingSheet({ id }: { id: string }) {
         {meeting.status === "failed" && !unsent?.stuck && (
           <Card style={{ gap: 10, backgroundColor: colors.errorBg }}>
             <Text style={[s.text, { color: colors.danger }]}>
-              {meeting.error || "It couldn’t be written up."}
+              {meeting.error ||
+                (meeting.kind === "dump" ? "It couldn’t be sorted." : "It couldn’t be written up.")}
             </Text>
             <Button
               small
@@ -1393,6 +1660,12 @@ export function MeetingSheet({ id }: { id: string }) {
         {meeting.status === "done" && (
           <>
             {!!meeting.summary && <Text style={s.text}>{meeting.summary}</Text>}
+            {meeting.kind === "dump" && (
+              <DumpSection
+                meeting={meeting}
+                onChange={(view) => setMeeting((now) => (now ? { ...now, ...view } : now))}
+              />
+            )}
             {meeting.decisions.length > 0 && (
               <View style={{ gap: 8 }}>
                 <Text role="heading" aria-level={3} style={s.heading}>
@@ -1479,7 +1752,9 @@ export function MeetingSheet({ id }: { id: string }) {
                 icon={Sparkles}
                 onPress={() => {
                   close();
-                  draft(`About the meeting “${meeting.title}”: `);
+                  draft(
+                    `About the ${meeting.kind === "dump" ? "brain dump" : "meeting"} “${meeting.title}”: `,
+                  );
                 }}
               >
                 Ask about it
@@ -1611,7 +1886,9 @@ export function MeetingSheet({ id }: { id: string }) {
                 <Text style={s.text}>
                   {unsent
                     ? "Delete this meeting for good? The audio still on this device goes too, and that may be the only copy."
-                    : "Delete this meeting for good? Its notes, words and audio go too."}
+                    : meeting.kind === "dump"
+                      ? "Delete this brain dump for good? Its words and audio go too. Anything you haven’t added is lost; what you’ve added stays."
+                      : "Delete this meeting for good? Its notes, words and audio go too."}
                 </Text>
                 <View style={[s.row, { gap: 8 }]}>
                   <Button danger busy={busy === "delete"} onPress={() => void remove()}>
@@ -1640,7 +1917,7 @@ export function MeetingSheet({ id }: { id: string }) {
                   focusLater("keep-meeting");
                 }}
               >
-                Delete meeting
+                {meeting.kind === "dump" ? "Delete brain dump" : "Delete meeting"}
               </Button>
             )}
           </View>
@@ -1683,19 +1960,40 @@ export function MeetingsToolCard({
         <View style={[s.row, { gap: 10 }]}>
           <Mic size={20} color={RECORD_RED} />
           <Text style={[s.heading, { flex: 1 }]}>
-            {busy ? "Recording now" : "Ready to record your meeting"}
+            {busy
+              ? "Recording now"
+              : value.dump === true
+                ? "Ready for your brain dump"
+                : "Ready to record your meeting"}
           </Text>
         </View>
         <Text style={s.muted}>
-          {onCall
-            ? "This ends our call and starts recording. Let everyone know they’re being recorded."
-            : "Let everyone know they’re being recorded. You’ll get a summary, decisions, action items and every word."}
+          {value.dump === true
+            ? onCall
+              ? "This ends our call and starts the brain dump. Talk as long as you like, up to half an hour."
+              : "Talk as long as you like, up to half an hour. When you stop, I sort it into things for you to add."
+            : onCall
+              ? "This ends our call and starts recording. Let everyone know they’re being recorded."
+              : "Let everyone know they’re being recorded. You’ll get a summary, decisions, action items and every word."}
         </Text>
-        <RecordMeetingButton label={onCall ? "End call and record" : "Start recording"} />
+        <RecordMeetingButton
+          kind={value.dump === true ? "dump" : "meeting"}
+          label={
+            value.dump === true
+              ? onCall
+                ? "End call and start brain dump"
+                : "Start brain dump"
+              : onCall
+                ? "End call and record"
+                : "Start recording"
+          }
+        />
       </Card>
     );
   }
-  const one = value.meeting as (Partial<MeetingView> & { minutes?: number }) | undefined;
+  const one = value.meeting as
+    | (Partial<MeetingView> & { minutes?: number; brainDump?: boolean })
+    | undefined;
   if (one && typeof one.id === "string") {
     const id = one.id;
     return (
@@ -1717,7 +2015,7 @@ export function MeetingsToolCard({
           style={{ alignSelf: "flex-start" }}
           onPress={() => open({ type: "meeting", id })}
         >
-          Open the notes
+          {one.brainDump ? "Open the list" : "Open the notes"}
         </Button>
       </Card>
     );

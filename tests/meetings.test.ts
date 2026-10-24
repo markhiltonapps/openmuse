@@ -8,8 +8,10 @@ import { DiskBlobs } from "../apps/server/src/blobs.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
 import {
+  type DumpItem,
   type Meeting,
   Meetings,
+  parseDump,
   parseNotes,
   type SonioxToken,
   SonioxTranscriber,
@@ -79,7 +81,14 @@ function fakeSoniox(script: SonioxToken[][], options: { fail?: boolean } = {}) {
 
 async function setup(
   script: SonioxToken[][],
-  options: { fail?: boolean; hours?: number; notes?: boolean } = {},
+  options: {
+    fail?: boolean;
+    hours?: number;
+    notes?: boolean;
+    dump?: boolean;
+    dumpOff?: boolean;
+    dumpBad?: { on: boolean };
+  } = {},
 ) {
   const db = await createStore();
   const blobs = new DiskBlobs(await mkdtemp(join(directory, "blobs-")));
@@ -88,6 +97,7 @@ async function setup(
   const fake = fakeSoniox(script, options);
   const told: Meeting[] = [];
   const sentToNotes: string[] = [];
+  const added: string[] = [];
   const meetings = new Meetings(
     db,
     blobs,
@@ -117,12 +127,45 @@ async function setup(
                 })}`,
               );
             },
+      ...(options.dump
+        ? {
+            dumpAvailable: () => !options.dumpOff,
+            sortDump: async (_owner: string, transcript: string) => {
+              sentToNotes.push(transcript);
+              if (options.dumpBad?.on) return undefined;
+              return parseDump(
+                JSON.stringify({
+                  title: "Weekend plans",
+                  summary: "Things for the weekend.",
+                  items: [
+                    { kind: "reminder", text: "Call the plumber", at: "2026-10-18T09:00" },
+                    { kind: "reminder", text: "Buy a gift", at: "tomorrow" },
+                    { kind: "task", text: "Find three hotels in Austin" },
+                    {
+                      kind: "fact",
+                      text: "Works weekdays 7 to 3",
+                      key: "work.hours",
+                      value: "Weekdays 7 to 3",
+                    },
+                    { kind: "fact", text: "Likes tea", key: "not.a.key", value: "tea" },
+                    { kind: "note", text: "Try the new bakery" },
+                  ],
+                }),
+              );
+            },
+            addDumpItem: async (_owner: string, _meeting: Meeting, item: DumpItem) => {
+              if (item.text.includes("hotels")) throw new Error("no jobs today");
+              added.push(item.id);
+              return "Done";
+            },
+          }
+        : {}),
       notify: async (_owner, meeting) => {
         told.push(meeting);
       },
     },
   );
-  return { db, blobs, clock, usage, meetings, fake, told, sentToNotes };
+  return { db, blobs, clock, usage, meetings, fake, told, sentToNotes, added };
 }
 
 test("Soniox's tokens become turns, one per speaker change", () => {
@@ -528,4 +571,109 @@ test("without a Soniox key the recorder isn't offered", async () => {
   assert.equal(meetings.available, false);
   await assert.rejects(meetings.start("p1", {}), /isn’t set up on this server yet/);
   await store.close();
+});
+
+test("a brain dump is sorted into things to add, and nothing is added until chosen", async () => {
+  const { meetings, told, added } = await setup(
+    [[...words("1", "Call the plumber tomorrow.", 0)]],
+    {
+      dump: true,
+    },
+  );
+  const { meeting, maxSeconds } = await meetings.start("p1", { mime: "audio/webm", kind: "dump" });
+  assert.equal(maxSeconds, 30 * 60, "half an hour at most");
+  assert.equal(meeting.kind, "dump");
+  assert.match(meeting.title, /^Brain dump at /);
+  await meetings.chunk("p1", meeting.id, 0, 0, new Uint8Array([1, 2, 3]));
+  await meetings.finish("p1", meeting.id, { seconds: 60 });
+  await meetings.process("p1", meeting.id);
+  const read = await meetings.read("p1", meeting.id);
+  assert.equal(read.status, "done");
+  assert.equal(read.title, "Weekend plans");
+  assert.deepEqual(
+    read.dump?.map((item) => [item.id, item.kind]),
+    [
+      ["d1", "reminder"],
+      ["d2", "note"], // no real time given: kept as a note
+      ["d3", "task"],
+      ["d4", "fact"],
+      ["d5", "note"], // not a key About you keeps: kept as a note
+      ["d6", "note"],
+    ],
+  );
+  assert.deepEqual(added, [], "nothing is added by sorting");
+  assert.match(told.at(-1)?.title ?? "", /Weekend plans/);
+
+  const first = await meetings.addDump("p1", meeting.id, ["d1", "d3", "d4"]);
+  assert.deepEqual(added, ["d1", "d4"]);
+  const states = Object.fromEntries(
+    (first.dump ?? []).filter((item) => item.state).map((item) => [item.id, item.state]),
+  );
+  assert.deepEqual(states, { d1: "added", d3: "failed", d4: "added" });
+  assert.equal(first.dump?.find((item) => item.id === "d3")?.detail, "Couldn’t add this one.");
+  // Again: the added ones are left alone; the failed one is tried again.
+  await meetings.addDump("p1", meeting.id, "all");
+  assert.deepEqual(added, ["d1", "d4", "d2", "d5", "d6"]);
+  await assert.rejects(meetings.addDump("p1", meeting.id, ["d9"]), /isn’t in this brain dump/);
+});
+
+test("a brain dump asks for no more than half an hour, and a meeting still gets four hours", async () => {
+  const { meetings } = await setup([], { dump: true });
+  assert.equal((await meetings.start("p1", { mime: "audio/webm" })).maxSeconds, 4 * 3600);
+});
+
+test("a brain dump that can't be sorted keeps the words and says so", async () => {
+  const { meetings } = await setup([[...words("1", "Remember the milk.", 0)]], { notes: false });
+  const { meeting } = await meetings.start("p1", { mime: "audio/webm", kind: "dump" });
+  await meetings.chunk("p1", meeting.id, 0, 0, new Uint8Array([1]));
+  await meetings.finish("p1", meeting.id, { seconds: 30 });
+  await meetings.process("p1", meeting.id);
+  const read = await meetings.read("p1", meeting.id);
+  assert.equal(read.status, "done");
+  assert.equal(read.dump, undefined, "no list at all, so the page can say it couldn’t sort");
+  assert.match(read.summary ?? "", /couldn’t sort this one/);
+  await assert.rejects(meetings.addDump("p1", meeting.id, "all"), /isn’t sorted yet/);
+});
+
+test("a dump's items are cleaned and junk is dropped", () => {
+  const result = parseDump(
+    '{"items":[{"kind":"reminder","text":"Pay rent","at":"2026-11-01T09:00"},{"kind":"bad","text":"x"},{"kind":"task"},{"kind":"fact","text":"Rents","key":"household.home","value":"Rent"}]}',
+  );
+  assert.deepEqual(result?.items, [
+    { kind: "reminder", text: "Pay rent", at: "2026-11-01T09:00" },
+    { kind: "fact", text: "Rents", key: "household.home", value: "Rent" },
+  ]);
+  assert.equal(parseDump("nope"), undefined);
+});
+
+test("a brain dump isn't started when no model can sort it", async () => {
+  const { meetings } = await setup([], { dump: true, dumpOff: true });
+  await assert.rejects(
+    meetings.start("p1", { mime: "audio/webm", kind: "dump" }),
+    /needs the AI model/,
+  );
+  assert.equal(meetings.dumpAvailable, false);
+  // A meeting still starts.
+  assert.equal((await meetings.start("p1", { mime: "audio/webm" })).meeting.status, "recording");
+});
+
+test("a reply that can't be read fails the dump so Try again works", async () => {
+  const bad = { on: true };
+  const { meetings } = await setup([[...words("1", "Call the plumber.", 0)]], {
+    dump: true,
+    dumpBad: bad,
+  });
+  const { meeting } = await meetings.start("p1", { mime: "audio/webm", kind: "dump" });
+  await meetings.chunk("p1", meeting.id, 0, 0, new Uint8Array([1]));
+  await meetings.finish("p1", meeting.id, { seconds: 30 });
+  await meetings.process("p1", meeting.id);
+  const failed = await meetings.read("p1", meeting.id);
+  assert.equal(failed.status, "failed");
+  assert.match(failed.error ?? "", /couldn’t sort this one\. Try again/);
+  bad.on = false;
+  await meetings.retry("p1", meeting.id);
+  await meetings.process("p1", meeting.id);
+  const again = await meetings.read("p1", meeting.id);
+  assert.equal(again.status, "done");
+  assert.equal(again.dump?.length, 6);
 });

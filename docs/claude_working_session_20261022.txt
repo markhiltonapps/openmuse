@@ -243,3 +243,25 @@ Review round two: usability signed off; visual signed off after the Forget pills
 chat action row got a 44px target (marginVertical -13 keeps the row's height); copy signed off once Help's step 1 and the
 "Other things I remember" pointer were corrected. Checks: biome, the three tsc runs, pnpm test (651 pass).
 Help: topic what-i-used with picture "receipt" (light and dark retaken). Site: neddy.html privacy list. Not pushed yet (waiting for "push it").
+
+== BRAIN DUMP (2026-10-24) ==
+Walk-and-talk: the meeting recorder with kind "dump" (max 30 minutes; counts toward recording hours). After Soniox writes the words,
+one simple-jobs model call (meetings.ts dumpSystemPrompt/parseDump) sorts them into reminder (only with a day or time, else a note),
+note, task (a job for Neddy) and fact (About you key). Nothing is added by sorting: the page lists the things ticked, Add adds the
+chosen (POST /api/meetings/:id/dump {which}); each is added once (idempotency key dump:<meeting>:<item>), a failure stays in the list
+with why. By voice: the `meetings` tool, start with dump:true (card "Ready for your brain dump"), add_dump with all or ids (no "shown"
+claim: it says aloud what was added). Items: reminders.set, persona.save, delegate (job), a memory for notes; a reminder whose time has
+passed is saved as a note instead.
+Edges: with no model set up a dump is refused at start (dumpAvailable; the Files card hides the button); a sorter reply that can't be
+read fails the dump so Try again works; a dump with no list says it couldn't be sorted. The sorter is told the recording's end time as
+"now". Entry points: chat + panel (Add something › Brain dump), Files › Meetings, voice. Notification says how many things to add.
+Help topic brain-dump (shot braindump; meetings shot retaken with the new button and mocked meetings), neddy.html meetings band.
+Tests: tests/meetings.test.ts (sorting, partial adds, retry, refusing without a model, unreadable reply, junk items).
+Design review: three rounds of reviewers; round one found 6 visual, 4 usability and 13 copy points (status line contrast, rows moving
+and shrinking when added, a failed row that didn't look failed, meeting wording during a dump, retry turning a dump into a meeting,
+a dead end when sorting failed, past reminders that could never be added); all fixed; round two signed off.
+Not built: skipping/“Replaces” detail for an About you key that already has a value, a cap on notes per dump (notes join the
+memories in every prompt), focus move after the last add, the + panel hiding Brain dump when no model is set up (it shows the 503 message).
+Lesson: a sort-then-add flow needs three honest states (nothing sorted, couldn't sort, sorted): "done with an empty list" for a bad reply
+is a dead end; make it fail so retry exists. A button that starts the same recorder must carry its kind through every retry path.
+Lesson: `pkill -f` ended my own shell again; find the process with ps in a separate command.

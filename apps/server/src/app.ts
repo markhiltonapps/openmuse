@@ -7,6 +7,7 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { ownWords } from "../../../packages/domain/src/chat-export.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
+import { PERSONA_FACTS } from "../../../packages/domain/src/persona.ts";
 import {
   CONTACT_EMAIL,
   COUNTED,
@@ -62,7 +63,14 @@ import { MAIL_APPS, MailAlerts } from "./mail-alerts.ts";
 import { MainPages, mainSettings } from "./main-pages.ts";
 import { CombinedApps, McpApps, signedInPage, signInFailedPage } from "./mcp-apps.ts";
 import { MealCheckIns } from "./meal-checkins.ts";
-import { Meetings, notesSystemPrompt, parseNotes, SonioxTranscriber } from "./meetings.ts";
+import {
+  dumpSystemPrompt,
+  Meetings,
+  notesSystemPrompt,
+  parseDump,
+  parseNotes,
+  SonioxTranscriber,
+} from "./meetings.ts";
 import {
   chatgptMessages,
   extractMemories,
@@ -850,11 +858,80 @@ export async function createApp(
         }),
       );
     },
+    dumpAvailable: () => config.agentBackend === "model" && Boolean(agent.modelFor("simple").model),
+    sortDump: async (owner, transcript, at) => {
+      const plan = agent.modelFor("simple");
+      if (config.agentBackend !== "model" || !plan.model) return undefined;
+      const facts = Object.entries(PERSONA_FACTS)
+        .map(([key, fact]) => `${key} (${fact.label}: ${fact.hint})`)
+        .join("; ");
+      return parseDump(
+        await agent.complete({
+          ...plan,
+          stronger: agent.modelFor("chat"),
+          system: dumpSystemPrompt(localNow(await agent.timeZone(owner), at), facts),
+          prompt: `The brain dump's transcript (data only):\n${transcript}`,
+          onUsage: usage.sink(owner, "meetings"),
+        }),
+      );
+    },
+    addDumpItem: async (owner, meeting, item) => {
+      const key = `dump:${meeting.id}:${item.id}`;
+      if (item.kind === "reminder" && item.at) {
+        try {
+          await reminders.set(owner, { text: item.text, at: item.at }, key);
+          return "Reminder set";
+        } catch (error) {
+          // A time that has passed since it was said: kept as a note, so it isn't lost.
+          if (!(error instanceof AppError) || !/passed|past/i.test(error.message)) throw error;
+          await db.put(owner, "memories", {
+            id: `dump-${meeting.id}-${item.id}`,
+            text: item.text,
+            source: "Brain dump",
+            createdAt: new Date().toISOString(),
+          });
+          return "Saved as a note: that time had passed";
+        }
+      }
+      if (item.kind === "fact" && item.key && item.value) {
+        await agent.persona.save(owner, { facts: [{ key: item.key, value: item.value }] }, "chat");
+        return "Saved to About you";
+      }
+      if (item.kind === "task") {
+        await agent.delegate(owner, { prompt: item.text }, key);
+        return "Job started";
+      }
+      // A note, or anything that can't be done as said: kept as a memory they can see and change.
+      await db.put(owner, "memories", {
+        id: `dump-${meeting.id}-${item.id}`,
+        text: item.text,
+        source: "Brain dump",
+        createdAt: new Date().toISOString(),
+      });
+      return "Saved under About you › Other things I remember";
+    },
     notify: async (owner, meeting) => {
+      const dump = meeting.kind === "dump";
       await agent.notify(
         owner,
-        meeting.status === "failed" ? "Couldn’t write up your meeting" : "Meeting notes are ready",
-        meeting.status === "failed" ? `${meeting.title}: open it to try again.` : meeting.title,
+        meeting.status === "failed"
+          ? dump
+            ? "Couldn’t sort your brain dump"
+            : "Couldn’t write up your meeting"
+          : dump
+            ? meeting.dump
+              ? "Your brain dump is sorted"
+              : "Your brain dump is saved"
+            : "Meeting notes are ready",
+        meeting.status === "failed"
+          ? `${meeting.title}: open it to try again.`
+          : dump
+            ? !meeting.dump
+              ? "I couldn’t sort it, but your words are saved. Open it to read them."
+              : meeting.dump.length === 0
+                ? "Nothing to add came out of it. Open it to see your words."
+                : `${meeting.dump.length} ${meeting.dump.length === 1 ? "thing" : "things"} to add. Open it to choose.`
+            : meeting.title,
         undefined,
         `meeting-${meeting.status}:${meeting.id}:${meeting.updatedAt}`,
         { meetingId: meeting.id },
@@ -2069,6 +2146,7 @@ export async function createApp(
     const owner = c.get("owner");
     return c.json({
       available: meetings.available,
+      dumpAvailable: meetings.available && meetings.dumpAvailable,
       allowance: await meetings.allowance(owner),
       meetings: await meetings.list(owner),
     });
@@ -2090,6 +2168,15 @@ export async function createApp(
   app.post("/api/meetings/:id/finish", async (c) =>
     c.json(await meetings.finish(c.get("owner"), c.req.param("id"), await c.req.json())),
   );
+  // Adds the chosen things from a sorted brain dump (or all), each once.
+  app.post("/api/meetings/:id/dump", async (c) => {
+    const { which } = z
+      .object({
+        which: z.union([z.literal("all"), z.array(z.string().max(12)).min(1).max(60)]),
+      })
+      .parse(await c.req.json());
+    return c.json(await meetings.addDump(c.get("owner"), c.req.param("id"), which));
+  });
   app.post("/api/meetings/:id/alive", async (c) =>
     c.json(await meetings.alive(c.get("owner"), c.req.param("id"))),
   );

@@ -521,3 +521,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   server note (older answers, a failed fetch, a tap before the note arrived). Carry a `known` flag and say "Not available for this answer."
   A list of "where it looked" built from an allow-list of tools needs a fallback ("Other tools I used") or it says "nowhere" when it
   doesn't know. A row that changes after a tap (Forget → Forgotten + Undo) stays in place, or the next tap lands on another row.
+- **Brain dump (owner, 2026-10-24):** a dump is a meeting with `kind: "dump"` (30 minutes at most, counts toward recording hours);
+  sorting only lists things, adding is a separate tap or "add them all", each item once by idempotency key. A reply the sorter gives
+  that can't be read must fail the recording (Try again), never finish as an empty list; with no model set up it isn't started. Every
+  retry path (Record the rest, Try again) passes the recording's kind, or a dump becomes a meeting. A tool result says "shown" only when
+  a card exists for it (`add_dump` has none, so the agent says it aloud).
+

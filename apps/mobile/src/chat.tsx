@@ -1810,7 +1810,7 @@ export function ChatScreen({
         )}
         {picking && (
           <Card style={{ marginBottom: 12, padding: 15, flexShrink: 1, minHeight: 0 }}>
-            <Text style={s.heading}>Add a photo or file</Text>
+            <Text style={s.heading}>Add something</Text>
             <View style={[s.row, { gap: 8, flexWrap: "wrap", marginVertical: 10 }]}>
               <Button
                 small
@@ -1841,6 +1841,18 @@ export function ChatScreen({
                   }}
                 >
                   Record a meeting
+                </Button>
+              )}
+              {recorder.supported && (
+                <Button
+                  small
+                  icon={AudioLines}
+                  onPress={() => {
+                    setPicking(false);
+                    startRecording("dump");
+                  }}
+                >
+                  Brain dump
                 </Button>
               )}
             </View>

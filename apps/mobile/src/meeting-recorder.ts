@@ -22,6 +22,8 @@ export type RecorderPhase =
   | "error";
 export interface RecorderState {
   phase: RecorderPhase;
+  /** A brain dump (talking to yourself, sorted afterwards) or a meeting; meeting when not set. */
+  kind?: "meeting" | "dump";
   meetingId?: string;
   /** Seconds recorded so far (pauses aren't counted). */
   seconds: number;
@@ -200,17 +202,18 @@ export class MeetingRecorder {
   }
 
   /** Asks for the microphone, starts the meeting on the server, and starts recording. */
-  async start() {
+  async start(kind: "meeting" | "dump" = "meeting") {
     if (this.state.phase !== "idle" && this.state.phase !== "error") return;
     if (!canRecord()) {
       this.set({
         ...IDLE,
         phase: "error",
+        kind,
         error: "This browser can’t record. Try Chrome, Edge or Safari.",
       });
       return;
     }
-    this.set({ ...IDLE, phase: "starting" });
+    this.set({ ...IDLE, phase: "starting", kind });
     this.type = recordingType();
     this.part = 0;
     this.piece = 0;
@@ -226,6 +229,7 @@ export class MeetingRecorder {
       await this.openMicrophone();
       const started = await this.api.request<MeetingStarted>("/api/meetings", {
         mime: this.type,
+        kind,
       });
       this.set({ meetingId: started.meeting.id, maxSeconds: started.maxSeconds });
       this.watchUploads(started.meeting.id);
