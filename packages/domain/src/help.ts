@@ -1474,7 +1474,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "On a phone, keep the app open on screen while you record (it keeps the screen from turning off). If you switch apps or lock the phone, nothing is recorded until you’re back: the recorder then says how long was missed, and the meeting’s words show where the gap is. After a pause the people are counted again, so **Speaker 1 (after pause)** may be someone else; tap the name to say who. What was already recorded is never lost. Recording works in the web app in Chrome, Edge or Safari.",
       "On a call, saying “Record a meeting” shows a button that ends the call and starts recording, because the phone can’t do both at once.",
       "If the recorder shows **Not reaching the server**, your recording is still kept on your device and sends by itself when it can. See **A recording says it isn’t sending**.",
-      "Each person can record a set number of hours a month (10 unless your admin changed it); **Files › Meetings** shows how much you’ve used. The audio is kept for 30 days so you can listen again; the words and notes stay until you delete the meeting.",
+      "Each person can record a set number of hours a month (10 unless your admin changed it); **Files › Meetings** shows how much you’ve used. A brain dump uses the same hours. The audio is kept for 30 days so you can listen again; the words and notes stay until you delete the meeting.",
     ],
     say: [
       "Record a meeting",
@@ -1504,7 +1504,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     group: "files",
     title: "Brain dump: think out loud, get a list",
     summary:
-      "Talk on your own for as long as you like; {agent} sorts it into reminders, notes, jobs for {agent} to do and things about you, and you choose what to add.",
+      "Talk on your own for as long as you like; {agent} sorts it into reminders, notes, jobs for {agent} to do and things about you, and you choose what to add. It uses the same recording minutes as a meeting.",
     shot: "braindump",
     place: "meetings",
     more: ["home"],
@@ -1517,7 +1517,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "A reminder is only made when you gave a day or a time; if you didn’t, it comes back as a note. Notes are kept under **About you › Other things I remember**, where you can change or forget them. A job for {agent} starts like any job from **New job**, and anything {agent} wants to send or buy still waits for your OK. About you facts are saved to your About you page.",
       "If one thing can’t be added, it says why and stays in the list so you can try it again; the rest go in. Things you’ve added are marked **Added** and are never added twice.",
-      "It counts toward your recording hours, like a meeting, and your words are written down and kept with it until you delete it (the audio for 30 days). Card numbers, passwords and the like are hidden from the AI before it sorts your words (it can miss some), but your saved words keep what you said. Phones record only while the app is on screen, as with meetings. Sorting can miss or misjudge things, so look at the list before you add.",
+      "**It counts toward your meeting minutes**, the same as a recorded meeting: your plan’s allowance for the month, shown under **Your plan** as **Meetings and brain dumps**. A brain dump stops by itself at half an hour. Your words are written down and kept with it until you delete it (the audio for 30 days). Card numbers, passwords and the like are hidden from the AI before it sorts your words (it can miss some), but your saved words keep what you said. Phones record only while the app is on screen, as with meetings. Sorting can miss or misjudge things, so look at the list before you add.",
     ],
     say: [
       "I need to dump my thoughts",

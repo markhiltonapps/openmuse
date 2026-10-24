@@ -265,3 +265,6 @@ memories in every prompt), focus move after the last add, the + panel hiding Bra
 Lesson: a sort-then-add flow needs three honest states (nothing sorted, couldn't sort, sorted): "done with an empty list" for a bad reply
 is a dead end; make it fail so retry exists. A button that starts the same recorder must carry its kind through every retry path.
 Lesson: `pkill -f` ended my own shell again; find the process with ps in a separate command.
+Owner follow-up (2026-10-24): brain dumps count toward the plan's meeting minutes/hours. Said in Help (brain-dump summary and body, record-meeting body),
+in the app (Your plan row is now "Meetings and brain dumps"), on pricing.html (the meeting-hour line) and neddy.html. The home page now lists
+"See what he used for an answer" as its own privacy item and the brain dump paragraph has its own spacing; checked at 390x844 and 1280x800.

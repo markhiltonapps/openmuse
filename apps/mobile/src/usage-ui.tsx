@@ -299,7 +299,7 @@ function PlanBlock() {
         unit={plural(limit.messages ?? plan.messages, "message", "messages")}
       />
       <PlanRow
-        label="Recorded meetings"
+        label="Meetings and brain dumps"
         used={shortMeetings ? plan.meetingMinutesUsed : plan.meetingMinutesUsed / 60}
         of={
           shortMeetings && limit.meetingHours !== null
