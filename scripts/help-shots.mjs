@@ -820,6 +820,58 @@ const SHOTS = [
     },
   },
   {
+    // Voice settings: the microphone and speaker lists. Mocked: this headless browser has no devices.
+    id: "audiodevices",
+    height: 1500,
+    go: async (p) => {
+      await p.addInitScript(() => {
+        const device = (kind, label, deviceId) => ({
+          kind,
+          label,
+          deviceId,
+          groupId: label,
+          toJSON() {
+            return this;
+          },
+        });
+        navigator.mediaDevices.enumerateDevices = async () => [
+          device("audioinput", "Default", "default"),
+          device("audioinput", "Speakerphone", "mic-speaker"),
+          device("audioinput", "Headset earpiece", "mic-ear"),
+          device("audioinput", "Bluetooth headset", "mic-bt"),
+          device("audiooutput", "Default", "default"),
+          device("audiooutput", "Speakerphone", "out-speaker"),
+          device("audiooutput", "Bluetooth headset", "out-bt"),
+        ];
+        if (!("setSinkId" in HTMLMediaElement.prototype))
+          HTMLMediaElement.prototype.setSinkId = async () => {};
+      });
+      await p.reload();
+      await appsTab(p, /Agent/);
+      await p.getByRole("radio", { name: "Bluetooth headset" }).nth(1).waitFor({ timeout: 30000 });
+      await p.getByRole("radio", { name: "Bluetooth headset" }).first().click();
+      await p.getByRole("radio", { name: "Bluetooth headset" }).nth(1).click();
+      // The page scrolls inside its own container: bring the lists up.
+      await p.evaluate(() => {
+        const label = [...document.querySelectorAll("div, span")].find(
+          (n) => n.children.length === 0 && n.textContent === "Microphone",
+        );
+        label?.scrollIntoView({ block: "start" });
+      });
+      await p.waitForTimeout(800);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByRole("radio", { name: "Bluetooth headset" }).first(),
+        side: "inside-right",
+      },
+      2: {
+        find: (p) => p.getByRole("radio", { name: "Bluetooth headset" }).nth(1),
+        side: "inside-right",
+      },
+    },
+  },
+  {
     id: "files",
     go: async (p) => {
       await tab(p, "Files & media").click();

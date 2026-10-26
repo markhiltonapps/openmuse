@@ -13,7 +13,14 @@ import {
   type VoiceOption,
   voiceSettings,
 } from "./voice";
-import { dictate, dictationAvailable, isIos, microphones } from "./web-app";
+import {
+  dictate,
+  dictationAvailable,
+  isIos,
+  microphones,
+  speakerChoiceAvailable,
+  speakers,
+} from "./web-app";
 
 /** "Say it" for an answer box: what's heard is added to the box, to check before sending. */
 export function DictateButton({
@@ -72,9 +79,12 @@ export function VoiceCard({ name }: { name: string }) {
   const [showAll, setShowAll] = useState(false);
   const [mics, setMics] = useState<{ id: string; name: string; named: boolean }[]>([]);
   const [micError, setMicError] = useState("");
+  const [outputs, setOutputs] = useState<{ id: string; name: string; named: boolean }[]>([]);
+  const [outputError, setOutputError] = useState("");
   useEffect(() => {
     void listVoices().then(setVoices);
     if (dictationAvailable()) void microphones().then(setMics, () => undefined);
+    if (speakerChoiceAvailable()) void speakers().then(setOutputs, () => undefined);
     return () => stopSpeaking();
   }, []);
   async function showMicrophones() {
@@ -83,6 +93,14 @@ export function VoiceCard({ name }: { name: string }) {
       setMics(await microphones(true));
     } catch {
       setMicError("Allow microphone access in your browser to choose one.");
+    }
+  }
+  async function showSpeakers() {
+    setOutputError("");
+    try {
+      setOutputs(await speakers(true));
+    } catch {
+      setOutputError("Allow microphone access in your browser to see your speakers and headsets.");
     }
   }
   if (!speechAvailable()) return null;
@@ -206,10 +224,52 @@ export function VoiceCard({ name }: { name: string }) {
         </>
       )}
       <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>Speaker</Text>
+      {speakerChoiceAvailable() && (
+        <>
+          {[{ id: "", name: "Device default", named: true }, ...outputs].map((speaker) => (
+            <Pressable
+              key={speaker.id || "default"}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: (settings.speaker ?? "") === speaker.id }}
+              onPress={() => updateVoiceSettings({ speaker: speaker.id || undefined })}
+              style={({ pressed }) => [
+                s.row,
+                {
+                  paddingVertical: 9,
+                  paddingHorizontal: 12,
+                  borderRadius: 14,
+                  backgroundColor:
+                    (settings.speaker ?? "") === speaker.id
+                      ? colors.sky
+                      : pressed
+                        ? colors.subtle
+                        : "transparent",
+                },
+              ]}
+            >
+              <Text style={[s.text, { flex: 1 }]} numberOfLines={1}>
+                {speaker.name}
+              </Text>
+            </Pressable>
+          ))}
+          {!outputs.some((speaker) => speaker.named) && (
+            <Button small onPress={() => void showSpeakers()}>
+              Show my speakers
+            </Button>
+          )}
+          <ErrorNotice error={outputError} />
+          <Text style={s.small}>
+            This sets where {name}’s voice plays on a live call. It changes at once, even during a
+            call. Spoken replies you tap Listen on use the device default.
+          </Text>
+        </>
+      )}
       <Text style={s.small}>
         {isIos()
           ? "Replies play through the iPhone's current audio output, such as its speaker, AirPods or a car."
-          : "Browsers play spoken replies through the device's default speaker. On Windows, pick it in Settings → System → Sound → Output, or give your browser its own speaker under Volume mixer."}
+          : speakerChoiceAvailable()
+            ? "If your speaker or headset isn’t listed, the device default is used. On Windows, pick it in Settings → System → Sound → Output."
+            : "This browser can’t choose a speaker, so replies play through the device’s default. On Android, use the media output switcher under the volume slider to send them to a headset. On Windows, pick it in Settings → System → Sound → Output, or give your browser its own speaker under Volume mixer."}
       </Text>
       <Text style={s.small}>
         {isIos()

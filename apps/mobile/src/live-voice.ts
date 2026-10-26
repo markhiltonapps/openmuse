@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import type { CallDetail, RehearsalAsk } from "../../../packages/domain/src/voice";
 import type { MuseApi } from "./api";
-import { setLiveSpeaking, voiceSettings } from "./voice";
+import { onVoiceSettings, setLiveSpeaking, voiceSettings } from "./voice";
 
 /**
  * Live voice in the browser: the microphone goes straight to OpenAI over WebRTC and the agent's
@@ -175,6 +175,16 @@ export async function startLive(
   const timer = turnTimer(peer, stream.getAudioTracks()[0]);
   const player = new Audio();
   player.autoplay = true;
+  // Where the agent's voice plays: the speaker or headset chosen in Voice settings, if this
+  // browser can route to it. A device that's gone falls back to the default.
+  const route = () => {
+    const sink = (player as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> })
+      .setSinkId;
+    if (typeof sink !== "function") return;
+    void sink.call(player, voiceSettings().speaker ?? "").catch(() => undefined);
+  };
+  route();
+  const stopRouting = onVoiceSettings(route);
   let context: AudioContext | undefined;
   let meter: ReturnType<typeof setInterval> | undefined;
   let sessionId = "";
@@ -220,6 +230,7 @@ export async function startLive(
         .request(`/api/voice/live/${encodeURIComponent(sessionId)}/turns`, { ms: turns })
         .catch(() => undefined);
     player.srcObject = null;
+    stopRouting();
     void context?.close().catch(() => undefined);
     void wakeLock?.release().catch(() => undefined);
     document.removeEventListener("visibilitychange", onVisible);

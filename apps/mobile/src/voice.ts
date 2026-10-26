@@ -11,6 +11,8 @@ export interface VoiceSettings {
   rate: number;
   /** deviceId of the chosen microphone; the device default when unset. */
   microphone?: string;
+  /** deviceId of the chosen speaker for live calls; the device default when unset. */
+  speaker?: string;
 }
 export interface VoiceOption {
   id: string;
@@ -33,6 +35,7 @@ function load(): VoiceSettings {
       readAloud: saved.readAloud === true,
       voice: typeof saved.voice === "string" ? saved.voice : undefined,
       microphone: typeof saved.microphone === "string" ? saved.microphone : undefined,
+      speaker: typeof saved.speaker === "string" ? saved.speaker : undefined,
       rate: typeof saved.rate === "number" && saved.rate >= 0.5 && saved.rate <= 2 ? saved.rate : 1,
     };
   } catch {
@@ -55,6 +58,10 @@ function subscribe(listener: () => void) {
   return () => {
     listeners.delete(listener);
   };
+}
+/** Called when a setting changes (outside React), such as the speaker during a live call. */
+export function onVoiceSettings(listener: () => void) {
+  return subscribe(listener);
 }
 const snapshot = () => settings;
 export const voiceSettings = snapshot;

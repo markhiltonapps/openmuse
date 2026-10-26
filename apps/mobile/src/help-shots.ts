@@ -6,6 +6,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   agentaddress: { width: 720, height: 1558 },
   approve: { width: 720, height: 1558 },
   apps: { width: 720, height: 1558 },
+  audiodevices: { width: 720, height: 2769 },
   backdrop: { width: 720, height: 4246 },
   braindump: { width: 720, height: 1558 },
   call: { width: 720, height: 1558 },

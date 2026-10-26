@@ -342,6 +342,37 @@ export async function microphones(askPermission = false) {
     }));
 }
 
+/** Whether this browser lets a page choose where a sound plays (not Safari, not most Android). */
+export function speakerChoiceAvailable() {
+  return (
+    web() &&
+    typeof HTMLMediaElement !== "undefined" &&
+    "setSinkId" in HTMLMediaElement.prototype &&
+    !!navigator.mediaDevices?.enumerateDevices
+  );
+}
+
+/** Speakers (and headsets) this browser can play to; names appear once microphone access is allowed. */
+export async function speakers(askPermission = false) {
+  if (!speakerChoiceAvailable()) return [];
+  if (askPermission) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    for (const track of stream.getTracks()) track.stop();
+  }
+  return (await navigator.mediaDevices.enumerateDevices())
+    .filter(
+      (device) =>
+        device.kind === "audiooutput" &&
+        device.deviceId !== "default" &&
+        device.deviceId !== "communications",
+    )
+    .map((device, index) => ({
+      id: device.deviceId,
+      name: device.label || `Speaker ${index + 1}`,
+      named: Boolean(device.label),
+    }));
+}
+
 /** Text shared to the installed app from another app (Android share sheet). */
 export function takeSharedText() {
   if (!web()) return "";

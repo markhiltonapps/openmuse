@@ -311,3 +311,18 @@ useWeather remembers its last answer per session (weather-ui.tsx lastResult) and
 within a few pixels of the real card) while the first forecast loads on a device that normally gets one.
 Help: home topic text and `greet` picture; agent-email steps and `agentaddress` picture retaken. Review: one combined pass found the
 pop-in (fixed). Not checked: 320px width in a real browser, the "Night" case in a picture.
+
+== SPEAKER PICKER (2026-10-26) ==
+Owner on an Android phone: the Bluetooth microphone could be chosen but the agent's voice still came out of the phone speaker. Added a
+Speaker list under Apps › Agent › Voice, shown only when the browser can route sound to a chosen device (`speakerChoiceAvailable`:
+HTMLMediaElement.setSinkId plus enumerateDevices; Chrome on desktop and some Android builds, not Safari). The choice (`speaker` in voice
+settings, saved on the device) is applied to the live call's audio player (`route` in live-voice.ts) when a call starts and again at once
+when changed mid-call; a device that has gone falls back to the default. It does NOT apply to Listen/read-aloud (speechSynthesis can't
+be routed). Where the browser can't choose, the card says so and points to Android's media output switcher.
+Not verified on a real phone: whether Chrome on Android lists audio outputs and honours setSinkId (the owner's phone will tell us).
+Help: topic `microphone` is now "Choose a microphone and speaker" with the new picture `audiodevices` (mocked device lists).
+No website change (a settings detail, not a feature people would notice on the home page).
+Also: the Inworld TTS ran out of credit on 2026-10-26, and every call ended with "Something went wrong on AI Todd's side" (reason
+"unavailable"). Added to to-do, not built: say "the voice provider is out of credit" instead.
+Lesson: this container started without node_modules and with a broken system Pillow; `pnpm install --frozen-lockfile` and a venv with
+pillow (PATH first) fix both. A stale checkout can be behind the pushed branch: `git fetch` and fast-forward before working.

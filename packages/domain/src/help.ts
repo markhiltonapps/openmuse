@@ -2076,14 +2076,33 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: "microphone",
     group: "settings",
-    title: "Choose a microphone",
-    summary: "Pick which microphone {agent} hears, like a headset instead of your laptop.",
+    title: "Choose a microphone and speaker",
+    summary:
+      "Pick which microphone {agent} hears, and where its voice plays on a call, like a headset instead of your laptop or phone.",
+    shot: "audiodevices",
     place: "agent-settings",
     steps: [
-      "Open **Apps › Agent › Voice**, or, where live talk isn’t on, the arrow next to the mic in the chat.",
-      "Speak: the bars move next to each microphone that hears you. Pick that one.",
+      "Open **Apps › Agent › Voice** and find **Microphone**. Where live talk isn’t on, the arrow next to the mic in the chat opens a picker with live bars: speak, and pick the one whose bars move.",
+      "Choose your headset’s microphone (1). If your headset isn’t listed, connect it first, make sure its call audio is on in the phone’s Bluetooth settings, and tap **Show my microphones**.",
+      "Under **Speaker**, choose where {agent}’s voice plays on a call (2). It changes at once, even during a call. If the Speaker list isn’t there, your browser can’t choose a speaker (see below).",
     ],
-    keywords: ["microphone", "mic", "headset", "audio", "input", "can't hear"],
+    body: [
+      "The speaker choice is for live calls. Replies you tap **Listen** on use the device’s default speaker. Safari and many Android browsers can’t pick a speaker; there, the phone decides. On Android, press a volume key and use the media output switcher under the slider to send the call to your headset, and make sure **Media audio** is on for it in Bluetooth settings.",
+      "If a speaker you chose is unplugged or switched off, the call falls back to the default.",
+    ],
+    keywords: [
+      "microphone",
+      "mic",
+      "headset",
+      "audio",
+      "input",
+      "can't hear",
+      "speaker",
+      "bluetooth",
+      "headphones",
+      "output",
+      "earbuds",
+    ],
     related: ["fix-call", "speak-and-listen"],
   },
   {
