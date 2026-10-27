@@ -196,6 +196,80 @@ export function fitContext<T extends { role: string }>(
   return messages.slice(start);
 }
 
+/** The most a call should read, in estimated tokens; the Claude models stop at 200,000. */
+export const READ_BUDGET = 150_000;
+/** How much of an older tool result stays once it's shortened. */
+const KEPT_OF_OLD_RESULT = 1_500;
+/** The newest tool results are never shortened: the agent is still working from them. */
+const NEWEST_KEPT_WHOLE = 3;
+/** JSON and mail text run nearer three characters a token than four. */
+const guess = (value: unknown) => Math.ceil((JSON.stringify(value ?? "")?.length ?? 0) / 3);
+
+/**
+ * Keeps one long run of tool calls (cleaning an inbox: dozens of Gmail look-ups, each a page of
+ * mail) from growing past what the model can read. Past `budget` estimated tokens, the oldest
+ * tool results are cut to their first lines, then to a note, oldest first, until the call fits;
+ * the newest few stay whole. The saved conversation isn't changed, only what's sent this time.
+ */
+export function shrinkToolResults<
+  T extends { role: string; content: unknown; toolCallId?: string },
+>(messages: T[], fixed: number, budget = READ_BUDGET): T[] {
+  let total = fixed + messages.reduce((sum, message) => sum + guess(message), 0);
+  if (total <= budget) return messages;
+  const results = messages.flatMap((message, index) => (message.role === "tool" ? [index] : []));
+  const old = results.slice(0, Math.max(0, results.length - NEWEST_KEPT_WHOLE));
+  const out = [...messages];
+  let shortened = 0;
+  // Older results first, to a page and then to a note; only if that isn't enough do the newest
+  // few give up some of theirs too.
+  const newest = results.slice(old.length);
+  for (const [keep, group] of [
+    [KEPT_OF_OLD_RESULT, old],
+    [150, old],
+    [20_000, newest],
+  ] as const) {
+    for (const index of group) {
+      if (total <= budget) break;
+      const message = out[index] as T;
+      const text =
+        typeof message.content === "string"
+          ? message.content
+          : JSON.stringify(message.content ?? "");
+      if (text.length <= keep) continue;
+      const cut = {
+        ...message,
+        content: `${text.slice(0, keep)}\n[The rest of this result was left out to keep the conversation within the model's limit. Look it up again if it's needed.]`,
+      };
+      total -= guess(message) - guess(cut);
+      out[index] = cut;
+      shortened++;
+    }
+  }
+  if (shortened)
+    console.warn(
+      `[OpenMuse] Shortened ${shortened} older tool results so a call reads about ${Math.min(total, budget).toLocaleString("en-US")} tokens or fewer.`,
+    );
+  return out;
+}
+
+/** Applies shrinkToolResults before every model call of a run, to what the model is sent. */
+function readLimit(fixed: number) {
+  return {
+    name: "read-limit",
+    onConfig: (
+      _ctx: unknown,
+      config: { messages: never[]; providerMessages?: never[] | undefined },
+    ) => {
+      const source = (config.providerMessages ?? config.messages) as {
+        role: string;
+        content: unknown;
+      }[];
+      const shrunk = shrinkToolResults(source, fixed);
+      return shrunk === source ? undefined : { providerMessages: shrunk as never };
+    },
+  };
+}
+
 /**
  * One reply without tools, for small background jobs such as writing ideas. A call that fails is
  * tried once on the plan's `fallback` (the server's own model); one that comes back empty is
@@ -521,9 +595,10 @@ export function tanstackAgent(options: {
           ),
         ],
         agentLoopStrategy: maxIterations(options.maxSteps),
-        ...(options.onUsage
-          ? { middleware: [usageMiddleware(() => current.model, options.onUsage)] }
-          : {}),
+        middleware: [
+          readLimit(fixed),
+          ...(options.onUsage ? [usageMiddleware(() => current.model, options.onUsage)] : []),
+        ] as never,
         abortController,
       });
     },

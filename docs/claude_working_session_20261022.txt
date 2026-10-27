@@ -352,3 +352,15 @@ chat, and never claim it's done before the job's result. Help: routines topic (o
 runs once, pauses, is refused when past (tests/routines.test.ts). Not built: a form for one-time jobs in the app (voice/chat covers it); a
 Help picture (the routines topic has none); the day shown in a pushed result.
 Lesson: a "scheduled job" used by chat needs its prompt to stand alone: the run starts from nothing but the prompt.
+
+== "PROMPT IS TOO LONG: 227034 TOKENS > 200000" (2026-10-27) ==
+Owner asked the agent to clean the Gmail inbox; the chat stopped with that error. Cause: inside one run the agent calls Gmail look-ups over
+and over (each result up to 30,000 characters, ~10,000 tokens), and every result stays in the next call's context; the history trimming
+(`fitContext`, chat summaries) only works before a run, and `contextLimit` is only set for OpenRouter models, never for Claude. 20 steps of
+big results passed Claude's 200,000-token limit. Fix: `shrinkToolResults` + a `read-limit` middleware (engine/tanstack-agent.ts) on every
+run (chat and background jobs): before each model call, past ~150,000 estimated tokens (3 characters a token), older tool results are cut
+to their first 1,500 characters, then 150, then (only if still too big) the newest three to 20,000; the saved conversation is untouched.
+Warns "Shortened N older tool results" in the logs. Tests: tests/read-limit.test.ts (the function, and a real run of eight 120,000-character
+look-ups through the model fixture). Retry response now works on the failed chat (the stuck history is shortened the same way).
+Not done: the agent could clean an inbox with fewer, narrower look-ups (labels/queries) — a prompt change for another day.
+Lesson: any loop that appends tool results needs a guard inside the loop; trimming history before the run doesn't cover it.
