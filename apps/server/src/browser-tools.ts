@@ -11,7 +11,7 @@ import { AppError } from "./errors.ts";
  * like Muse's attended browser tasks. Passwords are never typed by the agent.
  */
 const FINAL =
-  /\b(buy|purchase|pay|place (your |my )?order|order now|check ?out|book|reserve|confirm|submit|send|sign up|register|subscribe|delete|remove|cancel|unsubscribe|donate|transfer|complete|finish|agree|accept|apply|post|publish|save changes)\b/i;
+  /\b(buy|purchase|pay|place (your |my )?order|order now|check ?out|book|reserve|confirm|submit|send|sign up|register|subscribe|delete|remove|cancel|unsubscribe|donate|transfer|complete|finish|agree|accept|apply|post|publish|save changes|join|wait ?list|call[- ]?ahead|request (a |my )?(table|reservation|booking))\b/i;
 
 /** Whether a step commits to something and needs the person's OK first. */
 export function commits(step: Pick<PageStep, "action" | "value">, element: PageElement) {

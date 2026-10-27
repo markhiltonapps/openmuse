@@ -408,7 +408,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "**Plans:** “Keep track of my dentist appointment on the 12th.”",
       "**Research:** “Compare the three best-reviewed robot vacuums and make me a one-page document.”",
       "**Places:** “Find good breakfast tacos near me.”",
-      "**Restaurants:** “Find a table for 4 at Nobu on Friday at 7:30.”",
+      "**Restaurants:** “Book a table for 4 at Nobu on Friday at 7:30.” (see **Book a table**)",
       "**Shopping:** “Buy the shoes in this photo, under $120.”",
       "**Money:** “Find my subscriptions.”",
       "**Health:** “I had a chicken salad for lunch.” “I weighed 173 this morning.”",
@@ -1732,7 +1732,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Tap **Answer a few questions** and {agent} fills it in with you.",
     ],
     body: [
-      "Your **Home address** lives here (under Home and family). {agent} uses it only when something you asked for needs it, like a delivery or directions; anything sent or bought still waits for your OK.",
+      "Your **Mobile number** (under You) is used when a booking or form asks for one, so {agent} doesn’t have to ask each time. Your **Home address** lives here too (under Home and family). {agent} uses it only when something you asked for needs it, like a delivery or directions; anything sent or bought still waits for your OK.",
       "It never keeps health conditions, religion, politics, account numbers or passwords here.",
     ],
     say: [
@@ -2247,12 +2247,47 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["fix-reconnect", "gmail-two"],
   },
   {
+    id: "book-table",
+    group: "chat",
+    title: "Book a table",
+    summary:
+      "Ask {agent} to book a restaurant. It finds where the restaurant takes bookings, fills in the form in its own browser, and waits for your OK before the last click.",
+    steps: [
+      "Say or type what you want: “Book a table for 4 at Nobu on Friday at 7:30,” with the place if there are several.",
+      "{agent} finds the restaurant’s own booking page (or OpenTable, Resy or Tock) and asks for anything missing, such as your name and mobile number. Save them once in **Apps › About you** and it won’t ask again.",
+      "Watch the **Browser** card in the chat: it shows each page as {agent} fills it in. Tap **Open browser** to see it larger or take over.",
+      "At the last step ({agent} never clicks **Book**, **Reserve** or **Join waitlist** on its own) an **Approve** card appears with what was set up. Tap **Approve** to book, or say “yes, go ahead” on a call.",
+      "Once the site shows a confirmation, {agent} tells you and offers to set a reminder.",
+    ],
+    body: [
+      "Some chains don’t take reservations at all: they use a waitlist or call-ahead page on their own site. {agent} uses that, and still stops for your OK before joining.",
+      "Some sites turn away automated browsers (OpenTable often does). {agent} then gives you a link with the details filled in, or the restaurant’s phone number, so you can finish yourself.",
+      "A deposit or card details are never typed by {agent}: it stops and tells you.",
+    ],
+    say: [
+      "Book a table for 4 at Texas Roadhouse on Saturday at 6.",
+      "Find a table for two at Uchi on Friday around 7:30.",
+    ],
+    keywords: [
+      "book",
+      "reservation",
+      "reserve",
+      "table",
+      "restaurant",
+      "opentable",
+      "dinner",
+      "waitlist",
+      "call ahead",
+    ],
+    related: ["approvals", "website-jobs", "fix-website-blocked", "about-you"],
+  },
+  {
     id: "fix-website-blocked",
     group: "fix",
     title: "A website turned {agent} away",
     summary: "Some sites block automated browsers; you can finish on your phone.",
     body: [
-      "Some sites, like OpenTable, block automated browsers. {agent} gives you a link with the details filled in; tap it to finish on your phone.",
+      "Some sites, like OpenTable, block automated browsers. When that happens {agent} gives you a link with the details filled in (or the restaurant’s phone number); tap it to finish on your phone.",
       "In a job, tap **Open browser** and do the step yourself, then answer “Done”.",
     ],
     keywords: ["blocked", "captcha", "robot", "website", "denied", "opentable"],

@@ -39,6 +39,10 @@ test("steps that commit to something need approval; getting there doesn't", () =
   assert.equal(commits({ action: "click" }, el("Place your order")), true);
   assert.equal(commits({ action: "click" }, el("Cancel subscription")), true);
   assert.equal(commits({ action: "click" }, el("Send")), true);
+  // Restaurants that take a waitlist or call-ahead instead of a reservation.
+  assert.equal(commits({ action: "click" }, el("Join Waitlist")), true);
+  assert.equal(commits({ action: "click" }, el("Call-Ahead Seating")), true);
+  assert.equal(commits({ action: "click" }, el("Request a table")), true);
   assert.equal(commits({ action: "click" }, el("See the menu", "link")), false);
   assert.equal(commits({ action: "click" }, el("Next")), false);
   assert.equal(commits({ action: "fill" }, el("Your name", "textbox")), false);

@@ -18,6 +18,11 @@ export type PersonaGroup = (typeof PERSONA_GROUPS)[number];
 
 export const PERSONA_FACTS = {
   "you.name": { label: "What I call you", group: "You", hint: "First name or nickname" },
+  "you.phone": {
+    label: "Your mobile number",
+    group: "You",
+    hint: "Used when a booking or form asks for one",
+  },
   "you.focus": { label: "What you want help with", group: "You", hint: "Home, work or both" },
   "work.occupation": { label: "What you do", group: "Work", hint: "Nurse, landscaper, teacher" },
   "work.hours": { label: "When you work", group: "Work", hint: "Weekdays 9 to 5, or shifts" },

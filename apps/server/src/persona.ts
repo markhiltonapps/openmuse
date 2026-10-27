@@ -18,6 +18,7 @@ const MAX_CONTEXT = 1500;
 /** How each fact reads to the agent, where "they" is the person. */
 const AGENT_LABEL: Record<PersonaKey, string> = {
   "you.name": "Call them",
+  "you.phone": "Their mobile number (for bookings and forms they ask you to fill in)",
   "you.focus": "They want help with",
   "work.occupation": "Their work",
   "work.hours": "When they work",

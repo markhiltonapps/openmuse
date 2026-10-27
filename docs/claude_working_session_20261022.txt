@@ -326,3 +326,17 @@ Also: the Inworld TTS ran out of credit on 2026-10-26, and every call ended with
 "unavailable"). Added to to-do, not built: say "the voice provider is out of credit" instead.
 Lesson: this container started without node_modules and with a broken system Pillow; `pnpm install --frozen-lockfile` and a venv with
 pillow (PATH first) fix both. A stale checkout can be behind the pushed branch: `git fetch` and fast-forward before working.
+
+== BOOKING IN THE BROWSER (2026-10-27) ==
+Owner compared us with Meta's Muse (it booked Texas Roadhouse in its browser, and phoned a dentist on Monday and sent back the visit
+and a transcript). Agreed build order: 1) booking in the browser, 2) ask once / remember / do it later (one-time jobs),
+3) phone calls to businesses (Twilio, one shared Neddy number, transcript only; see docs/PHONE-CALLS-PLAN.md).
+Slice 1 (done): the chat's restaurant instructions (restaurants.ts) now say: find where the place takes bookings (own site, Resy, Tock or
+OpenTable; chains like Texas Roadhouse use their own waitlist), ask for the missing details once, fill the form in the agent's browser
+(browse_web, look_at_page, use_page), stop at the last button for an Approve card, never say it's booked until the site confirms, never type
+a card, fall back to a link or the phone number when a site turns the browser away. find_table is now the OpenTable first step only.
+The "commits to something" list (browser-tools.ts FINAL) also covers Join waitlist, Call-ahead and Request a table, so those wait for OK.
+New About you fact "Your mobile number" (you.phone) so bookings don't ask each time. Help: new topic book-table (text only, no picture:
+a believable picture needs a mocked browser run plus an Approve card, which I haven't built; say if you want it), about-you, things-to-ask
+and fix-website-blocked updated. Website not changed: not verified against a real site from this sandbox (egress is blocked), so I won't
+claim it yet. Tests: commits() cases for the waitlist words. Not verified live: a real booking on a real site; try Texas Roadhouse after deploy.
