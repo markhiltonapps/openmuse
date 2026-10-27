@@ -594,6 +594,34 @@ test("the workspace reports the browser offline while its worker's health check 
   }
 });
 
+test("the workspace reports Google as not set up when the server has no Google login", async (t) => {
+  const { db, config } = await browserFixture(t, () => ({ data: { status: "ok" } }));
+  for (const [googleClientId, expected] of [
+    [undefined, "unconfigured"],
+    ["client-id", "disconnected"],
+  ] as const) {
+    const live = {
+      ...config,
+      mode: "live" as const,
+      accessKey: "a-private-test-key-with-enough-characters",
+      googleClientId,
+      googleClientSecret: googleClientId ? "secret" : undefined,
+      encryptionKey: googleClientId ? "0".repeat(43) + "=" : undefined,
+    };
+    const { app, auth, agent } = await createApp(db, live);
+    t.after(() => agent.stop());
+    const { token } = await auth.session(live.accessKey);
+    const response = await app.request("/api/workspace", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
+    const { connections } = (await response.json()) as {
+      connections: { id: string; status: string }[];
+    };
+    assert.equal(connections.find((c) => c.id === "google")?.status, expected);
+  }
+});
+
 test("the worker says why a page didn't load", async () => {
   const { navigationFailure } = await import("../apps/worker/src/browser.ts");
   assert.match(

@@ -146,7 +146,9 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
   const events = todaysEvents([...w.events, ...(appDay?.events ?? [])], now);
   const calendarConnected =
     !!appDay?.checked.length ||
-    w.connections.some((c) => c.id === "google" && c.status !== "disconnected");
+    w.connections.some(
+      (c) => c.id === "google" && (c.status === "connected" || c.status === "sample"),
+    );
   const shown = events.slice(0, 3);
   const more = events.length - shown.length;
   // Full time for the screen reader; the card drops AM/PM to fit.

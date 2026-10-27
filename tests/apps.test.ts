@@ -11,6 +11,7 @@ import {
   appToolSpecs,
   ComposioConnector,
   readOnlyAction,
+  userLabels,
 } from "../apps/server/src/apps.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
@@ -916,4 +917,90 @@ test("a Gmail change is saved only with message ids that were really read", asyn
     ),
     /weren't in any email/,
   );
+});
+
+test("move_gmail_to_folder finds the label and always takes INBOX off", async () => {
+  // The agent, given the raw batch action, twice added the Jobs label and left the mail in the
+  // inbox, then said it had moved it. This tool can't leave INBOX out.
+  const labels = [
+    { id: "INBOX", name: "INBOX" },
+    { id: "Label_44", name: "INBOX/Jobs" },
+    { id: "Label_25", name: "Marketing-Newsletters" },
+    { id: "Label_3", name: "INBOX/Chaparral Management" },
+    { id: "Label_9", name: "INBOX/Chaparral Management/HP" },
+  ];
+  const { apps } = fakeApps({
+    tool: async (_owner, slug) => ({
+      slug,
+      name: slug,
+      description: "",
+      app: "gmail",
+      readOnly: slug === "GMAIL_LIST_LABELS" || slug === "GMAIL_FETCH_EMAILS",
+    }),
+    execute: async (_owner, slug) =>
+      slug === "GMAIL_LIST_LABELS"
+        ? { data: { labels } }
+        : {
+            messages: [
+              {
+                messageId: "18f3a2b4c5d6e7f8",
+                sender: "Dan",
+                subject: "Applied",
+                messageText: "x",
+              },
+            ],
+          },
+  });
+  const proposed: AppAction[] = [];
+  const specs = appToolSpecs(apps, "mover", async (action) => {
+    proposed.push(action);
+    return { id: "a1", title: action.summary, hash: "h" };
+  });
+  const call = (name: string) =>
+    specs.find((s) => s.name === name)?.execute as (
+      args: unknown,
+    ) => Promise<Record<string, unknown>>;
+  const move = call("move_gmail_to_folder");
+  // Nothing read yet: refused, nothing saved.
+  assert.match(
+    String((await move({ messageIds: ["18f3a2b4c5d6e7f8"], folder: "jobs" })).error),
+    /weren't in any email you've read/,
+  );
+  await call("use_app")({ tool: "GMAIL_FETCH_EMAILS", arguments: {}, summary: "Read" });
+  // The folder is found by its last name, ignoring case, and the move has both halves.
+  const moved = await move({ messageIds: ["18f3a2b4c5d6e7f8"], folder: "jobs" });
+  assert.equal(moved.status, "awaiting_review");
+  assert.equal(moved.folder, "INBOX/Jobs");
+  assert.equal(proposed.length, 1);
+  assert.equal(proposed[0]?.tool, "GMAIL_BATCH_MODIFY_MESSAGES");
+  assert.deepEqual(proposed[0]?.arguments, {
+    userId: "me",
+    messageIds: ["18f3a2b4c5d6e7f8"],
+    addLabelIds: ["Label_44"],
+    removeLabelIds: ["INBOX"],
+  });
+  // A folder that doesn't exist, or is ambiguous, moves nothing and says why.
+  const none = await move({ messageIds: ["18f3a2b4c5d6e7f8"], folder: "Receipts" });
+  assert.match(String(none.error), /no Gmail folder called “Receipts”.*INBOX\/Jobs/);
+  const two = await move({ messageIds: ["18f3a2b4c5d6e7f8"], folder: "HP" });
+  assert.equal(two.status, "awaiting_review", "one match by its last name");
+  assert.equal(proposed.length, 2);
+  assert.equal(proposed.filter((p) => p.tool === "GMAIL_CREATE_LABEL").length, 0);
+});
+
+test("userLabels lists only the person's own folders", () => {
+  assert.deepEqual(
+    userLabels({
+      data: {
+        labels: [
+          { id: "INBOX", name: "INBOX", type: "system" },
+          { id: "CATEGORY_UPDATES", name: "CATEGORY_UPDATES" },
+          { id: "Label_44", name: "INBOX/Jobs", type: "user" },
+        ],
+      },
+    }),
+    [{ id: "Label_44", name: "INBOX/Jobs" }],
+  );
+  assert.deepEqual(userLabels(null), []);
+  assert.deepEqual(userLabels("labels"), []);
 });

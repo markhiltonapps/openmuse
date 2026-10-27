@@ -296,11 +296,15 @@ export class WorkspaceService {
         {
           id: "google",
           name: "Google",
+          // Without Google's login set up on this server there is nothing to connect: the app
+          // hides the Google rows then, instead of a Connect button that only shows an error.
           status: connected
             ? this.config.mode === "sample"
               ? "sample"
               : "connected"
-            : "disconnected",
+            : this.config.mode === "live" && !this.googleAuth.configured()
+              ? "unconfigured"
+              : "disconnected",
           account:
             tokens?.account ?? (this.config.mode === "sample" ? "alex@example.com" : undefined),
           capabilities:

@@ -1747,7 +1747,10 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       connected: false,
       group: "openbot",
     },
-  ].filter((row) => `${row.name} ${row.group}`.toLowerCase().includes(query.toLowerCase()));
+  ]
+    // No Google login on this server: the rows would only lead to a setup error.
+    .filter((row) => !(row.group === "google" && google?.status === "unconfigured"))
+    .filter((row) => `${row.name} ${row.group}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <View style={{ gap: 22 }}>
       {[true, false].map((isConnected) => {

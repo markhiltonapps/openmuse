@@ -104,6 +104,8 @@ export function toolActivity(name: string, args: Record<string, unknown> = {}): 
       const app = appName(args.app) || slugApp(args.tool);
       return { kind: "apps", label: app ? `Working in ${app}…` : "Working in your apps…" };
     }
+    case "move_gmail_to_folder":
+      return { kind: "mail", label: "Moving your email…" };
     case "delegate_task":
       return { kind: "plan", label: "Starting a job…" };
     case "set_reminder":

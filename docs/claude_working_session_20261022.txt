@@ -444,3 +444,24 @@ Read the mailbox through the Claude Gmail connector (labels, senders, subjects/s
   OR ashbyhq.com OR taleo.net) -subject:(code OR verify OR verification OR "sign in" OR password). The connector can't create filters.
 Changed in the app: mailMoveInstructions offers a Gmail filter for "always / from now on" and says a move now won't catch later mail
 (tests/mail-move.test.ts). Help unchanged. Pending: owner creates the filter in Gmail (or asks Neddy), and "push it" for the prompt change.
+
+----- 2026-10-27 (night): why the agent's moves left mail in the inbox; Google rows -----
+Question: is it a Composio setting or our side? Ours. Composio did what it was asked. The api log (new argument-shape lines) showed
+two approved calls at 18:36 and 18:38 with [messageIds×8, addLabelIds×1] and [messageIds×10, addLabelIds×1]: the Jobs label added,
+no removeLabelIds, so the mail was labelled but stayed in the inbox, and the agent then said "moved". (Another call at 18:46 used
+`ids` and removed one label only.) Prompt wording had not been enough for the model to include INBOX every time.
+Changed:
+- apps.ts `move_gmail_to_folder` (messageIds + folder name): finds the person's label (GMAIL_LIST_LABELS; exact name, else last
+  path segment, ignoring case; missing or ambiguous names move nothing and list the folders), then saves ONE GMAIL_BATCH_MODIFY_MESSAGES
+  with addLabelIds [label] and removeLabelIds ["INBOX"], through use_app (same read-ids guard, card-id swap, Approve card).
+  `userLabels` lists only user labels (system labels have id == name).
+- The chat draws its Approve card for the new tool name (chat.tsx), plus progress/receipt labels (voice-brain, job-words, activity,
+  receipt-text). The prompt (`mailMoveInstructions`) says Gmail moves always use it.
+- Google rows: the workspace reports Google `unconfigured` when live and the server has no Google login (GOOGLE_CLIENT_ID/SECRET +
+  TOKEN_ENCRYPTION_KEY); the Apps screen then hides the Gmail/Google Calendar rows (they only led to a setup error). home.tsx and
+  feed.tsx now treat only connected/sample as connected (they treated everything but "disconnected" as connected).
+Tests: 679 pass (new: move tool, userLabels, Google unconfigured in live mode). Biome warnings only; tsc server/mobile/worker clean.
+Help: the move paragraph under "Your email and calendar apps" still holds (two Approves for a new folder). No new screen.
+Not verified: no live run of the new tool against Gmail (the label list shape from Composio is handled by a recursive reader);
+the Apps screen change was not screenshotted. Pending: "push it" (two local commits), then retry a move and read the log line
+([userId, messageIds×N, addLabelIds×1, removeLabelIds×1] is what a correct move now logs).

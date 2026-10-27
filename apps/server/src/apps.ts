@@ -772,7 +772,7 @@ export function appToolSpecs(
     get?(owner: string, id: string): Promise<{ messageId: string } | null | undefined>;
   },
 ) {
-  return [
+  const tools = [
     {
       name: "find_app_actions",
       description:
@@ -952,4 +952,79 @@ export function appToolSpecs(
       },
     },
   ];
+  const useApp = tools.find((tool) => tool.name === "use_app")?.execute as (request: {
+    tool: string;
+    arguments: Record<string, unknown>;
+    summary: string;
+  }) => Promise<Record<string, unknown>>;
+  /**
+   * Moving Gmail mail is two changes in one call (add the folder's label, take INBOX off). The
+   * agent, given the raw batch action, added the label and left the mail in the inbox (twice in
+   * one afternoon) and then said it had moved it, so a move is its own tool that can't leave
+   * INBOX out and finds the label's id itself.
+   */
+  const moveGmail = {
+    name: "move_gmail_to_folder",
+    description:
+      "Move Gmail emails into a folder (a Gmail label) in one step: it adds the folder's label and takes the emails out of the inbox. Use this, not use_app, to move Gmail mail. Pass each email's messageId (from emails you read, never invented) and the folder's name. It saves one Approve card; nothing moves until the person taps Approve, and Gmail's answer is not proof, so search again afterwards. If the folder doesn't exist it says so: make it once with use_app (create label), then call this again.",
+    parameters: z.object({
+      messageIds: z.array(z.string().trim().min(1).max(100)).min(1).max(500),
+      folder: z.string().trim().min(1).max(200).describe("The folder's name, e.g. Jobs"),
+      summary: z.string().trim().min(1).max(500).optional(),
+    }),
+    execute: async (request: { messageIds: string[]; folder: string; summary?: string }) => {
+      let labels: { id: string; name: string }[];
+      try {
+        labels = userLabels(await apps.execute(owner, "GMAIL_LIST_LABELS", {}));
+      } catch (error) {
+        return {
+          error: `Couldn't list their Gmail folders (${error instanceof Error ? error.message : "an error"}). Nothing was moved.`,
+        };
+      }
+      const wanted = request.folder.trim().toLowerCase();
+      const exact = labels.filter((label) => label.name.toLowerCase() === wanted);
+      const nested = labels.filter(
+        (label) => label.name.toLowerCase().split("/").pop()?.trim() === wanted,
+      );
+      const found = exact.length ? exact : nested;
+      if (found.length !== 1)
+        return {
+          error: found.length
+            ? `More than one folder fits “${request.folder}”: ${found.map((l) => l.name).join(", ")}. Ask which one they mean. Nothing was moved.`
+            : `They have no Gmail folder called “${request.folder}”. Their folders: ${labels.map((l) => l.name).join(", ") || "none"}. Ask before making a new one; to make it, use use_app (create label) once, then call this again. Nothing was moved.`,
+        };
+      const label = found[0] as { id: string; name: string };
+      const saved = await useApp({
+        tool: "GMAIL_BATCH_MODIFY_MESSAGES",
+        arguments: {
+          userId: "me",
+          messageIds: request.messageIds,
+          addLabelIds: [label.id],
+          removeLabelIds: ["INBOX"],
+        },
+        summary:
+          request.summary ??
+          `Move ${request.messageIds.length} Gmail email${request.messageIds.length === 1 ? "" : "s"} to ${label.name}`,
+      });
+      return saved.status === "awaiting_review" || saved.status === "done"
+        ? {
+            ...saved,
+            folder: label.name,
+            next: "After it runs, search that folder and the inbox again and tell them the real counts; Gmail says accepted even for ids it skips.",
+          }
+        : saved;
+    },
+  };
+  return [...tools, moveGmail];
+}
+
+/** The person's own Gmail folders (labels) in a GMAIL_LIST_LABELS answer, however it wraps them. */
+export function userLabels(data: unknown, depth = 0): { id: string; name: string }[] {
+  if (depth > 6 || !data || typeof data !== "object") return [];
+  if (Array.isArray(data)) return data.flatMap((item) => userLabels(item, depth + 1));
+  const record = data as Record<string, unknown>;
+  // System labels (INBOX, SENT, CATEGORY_UPDATES…) have an id equal to their name.
+  if (typeof record.id === "string" && typeof record.name === "string")
+    return record.id === record.name ? [] : [{ id: record.id, name: record.name }];
+  return Object.values(record).flatMap((item) => userLabels(item, depth + 1));
 }

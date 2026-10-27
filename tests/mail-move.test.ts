@@ -35,14 +35,14 @@ test("the log shows which arguments a step carried and how many, never their val
 });
 
 test("the move instructions cover what a mail move needs", () => {
-  // Gmail: list the labels first, one create, ids not names, take INBOX off, check afterwards.
-  assert.match(mailMoveInstructions, /list the labels/);
-  assert.match(mailMoveInstructions, /one create call, never two/);
-  assert.match(mailMoveInstructions, /the label's id[^.]*not its name/);
-  assert.match(mailMoveInstructions, /“INBOX” to remove/);
+  // Gmail: one tool that adds the label and takes INBOX off; ids from a read, never a card's.
+  assert.match(mailMoveInstructions, /always use move_gmail_to_folder/);
+  assert.match(mailMoveInstructions, /never build the move yourself with use_app/);
   assert.match(mailMoveInstructions, /not thread ids/);
+  assert.match(mailMoveInstructions, /never an email card's `id`/);
+  assert.match(mailMoveInstructions, /one create call, never two/);
   // Outlook: the folder's id, in batches.
-  assert.match(mailMoveInstructions, /Outlook, list the mail folders/);
+  assert.match(mailMoveInstructions, /Outlook: list the mail folders/);
   // It says what really happened.
   assert.match(mailMoveInstructions, /real counts/);
   assert.match(mailMoveInstructions, /never say it's done on a guess/);

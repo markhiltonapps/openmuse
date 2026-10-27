@@ -421,7 +421,9 @@ export function FeedScreen() {
               Couldn’t read {unread.join(" or ")} just now. Ask in chat what’s on it today.
             </Text>
           ) : events.length ? null : !appDay.checked.length &&
-            !w.connections.some((c) => c.id === "google" && c.status !== "disconnected") ? (
+            !w.connections.some(
+              (c) => c.id === "google" && (c.status === "connected" || c.status === "sample"),
+            ) ? (
             <Pressable accessibilityRole="button" onPress={() => navigate("apps")}>
               <Text style={[s.text, { textDecorationLine: "underline" }]}>
                 Connect your calendar to see your day here

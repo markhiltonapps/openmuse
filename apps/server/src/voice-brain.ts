@@ -146,6 +146,8 @@ export function voiceNote(tool: string, args: unknown) {
     case "list_app_events":
     case "list_connected_apps":
       return "Checking your connected apps";
+    case "move_gmail_to_folder":
+      return "Getting your email move ready";
     case "browse_web":
       return "Reading a web page";
     case "get_food_log":

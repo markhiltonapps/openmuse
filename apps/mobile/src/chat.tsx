@@ -214,6 +214,15 @@ export function WorkspaceTools() {
       <ToolAppResult result={result} loading={status !== "complete"} />
     ),
   });
+  // Moving Gmail mail into a folder saves one app action, so its Approve card shows the same way.
+  useRenderTool({
+    name: "move_gmail_to_folder",
+    description: "Show the Gmail move waiting for approval",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolAppResult result={result} loading={status !== "complete"} />
+    ),
+  });
   useRenderTool({
     name: "email_from_agent",
     description: "Show an email waiting for approval",
