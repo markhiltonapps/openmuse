@@ -430,3 +430,17 @@ Changed (on top of 2eef0ac):
   person's reading doesn't count.
 Limit: the list of read ids is in the server's memory, so after a restart the agent is told to read again.
 Tests: 676 pass. Not verified live. Pending: "push it" (check for a live call first).
+
+----- 2026-10-27 (evening): checked the owner's real Gmail, moved leftovers -----
+Read the mailbox through the Claude Gmail connector (labels, senders, subjects/snippets only). Findings, correcting earlier notes:
+- INBOX/Jobs (Label_44) held 232 messages; the earlier moves DID work. My earlier "moved nothing" guess was wrong, and my first
+  "none left in the inbox" search used a label query that matched nothing (label:INBOX-Jobs); label:"INBOX/Jobs" is the one that works.
+- What looked like "never moves": new confirmations keep arriving (ISG, Accenture, GameStop, Kforce) after each sweep; a later message in
+  an existing thread (Accenture) lands in the inbox without the label; one message (TribalScale) had the label but still INBOX.
+- Moved by hand now (update_message_labels: add Label_44, remove INBOX; Gmail's reply showed the new labels for each): ISG, Accenture 2nd
+  message, GameStop, TribalScale, Kforce. Left in the inbox on purpose: account verification mails, a security code, an interview-reminder.
+- A sender-based rule tested against 30 days of mail caught only job mail (nearly all already in Jobs): from:(myworkday.com OR
+  notifications.ukg.net OR jobvite.com OR greenhouse-mail.io OR smartrecruiters.com OR kforce.com OR breezy-mail.com OR icims.com OR lever.co
+  OR ashbyhq.com OR taleo.net) -subject:(code OR verify OR verification OR "sign in" OR password). The connector can't create filters.
+Changed in the app: mailMoveInstructions offers a Gmail filter for "always / from now on" and says a move now won't catch later mail
+(tests/mail-move.test.ts). Help unchanged. Pending: owner creates the filter in Gmail (or asks Neddy), and "push it" for the prompt change.

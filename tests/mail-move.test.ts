@@ -46,6 +46,9 @@ test("the move instructions cover what a mail move needs", () => {
   // It says what really happened.
   assert.match(mailMoveInstructions, /real counts/);
   assert.match(mailMoveInstructions, /never say it's done on a guess/);
+  // Mail that arrives later needs a lasting rule, not another move.
+  assert.match(mailMoveInstructions, /offer a Gmail filter/);
+  assert.match(mailMoveInstructions, /won't catch mail that arrives later/);
 });
 
 test("a card's own id given as an email id is swapped for the mailbox's real id", async () => {
