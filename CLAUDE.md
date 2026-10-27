@@ -532,3 +532,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   end (End on the screen or the bar, the cap, quiet, minutes gone) must lead back to "See how it went" in true words, never "Talk
   again". `Button selected` only sets aria-pressed: pass `primary={selected}` to show it. A call started together with the call screen
   must set the phase first, or the screen starts a second call. The Pipecat rehearse mode was untested live when it shipped.
+- **Moving mail needs its steps spelled out (2026-10-27):** a Gmail "folder" is a label, so a move is a
+  list-labels look-up, one create if missing (its id exists only after the person approves), then one batch change that
+  adds the label's id and removes INBOX; Outlook needs the destination folder's id. People said mail wasn't moving, and
+  the log only had the action's name. The "Approved step ran" line now shows argument names and counts (`argumentShape`),
+  never values; an action that answers `successful: false` inside a 200 is a failure (`declinedInside`). The prompt
+  (`mailMoveInstructions`) says to search again and report real counts before saying "moved".

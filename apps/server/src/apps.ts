@@ -105,6 +105,19 @@ export function readOnlyAction(slug: string, app: string, tags: string[]) {
   return READ_VERBS.test(action.split("_")[0]?.toUpperCase() ?? "");
 }
 
+/**
+ * An action's own answer that says it didn't work (`successful: false` with a reason) inside a
+ * request that itself went through, or undefined. Without this, a mail move the app refused was
+ * recorded as done.
+ */
+export function declinedInside(data: unknown): string | undefined {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+  const found = data as { successful?: unknown; error?: unknown; message?: unknown };
+  if (found.successful !== false) return undefined;
+  const reason = [found.error, found.message].find((v) => typeof v === "string" && v.trim());
+  return String(reason ?? "The app said it didn't work.").slice(0, 2000);
+}
+
 /** Bounds untrusted connector output before it reaches the model. */
 export function bounded(value: unknown, limit = 30000) {
   // Cleaned before it's cut, so a card number is never left half there.
@@ -466,7 +479,12 @@ export class ComposioConnector implements AppConnector {
           { write: !tool.readOnly },
         ),
       );
-      if (!result.error) return result.data;
+      if (!result.error) {
+        // Some actions answer 200 with `successful: false` inside; that's a refusal, not a result.
+        const failed = declinedInside(result.data);
+        if (failed) throw new AppError(failed, 502);
+        return result.data;
+      }
       // The app refused the request, so trying again can't do it twice.
       if (RATE_LIMITED.test(result.error) && attempt < RETRIES) {
         await this.wait(1000 * 2 ** (attempt - 1));

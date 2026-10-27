@@ -66,7 +66,12 @@ import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
 import { whereaboutsToolSpecs } from "../whereabouts.ts";
 import { answerLayoutInstructions } from "./answer-layout.ts";
 import { localNow } from "./clock.ts";
-import { builtInMailOff, inboxCheckInstructions, mailContext } from "./mailboxes.ts";
+import {
+  builtInMailOff,
+  inboxCheckInstructions,
+  mailContext,
+  mailMoveInstructions,
+} from "./mailboxes.ts";
 import { errandInstructions } from "./routines.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
@@ -1419,6 +1424,7 @@ export class ConversationAgent extends AbstractAgent {
         chatToolInstructions +
         showInAppInstructions +
         inboxCheckInstructions +
+        (apps ? mailMoveInstructions : "") +
         " If an email is from this app itself (something waiting for their OK, a job waiting for their answer), say what's waiting instead of pointing them to the email, and for something waiting for their OK call show_approvals so its card appears." +
         answerLayoutInstructions,
     });

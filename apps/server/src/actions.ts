@@ -15,6 +15,18 @@ export const usesGoogle = (kind: ProposalInput["kind"]) =>
   kind !== "browser.step" &&
   kind !== "browser.signin";
 
+/**
+ * Which arguments an app step carried and how many of each, never their values: enough to see in
+ * the log that a mail move had message ids and a label to add, without the log holding mail.
+ */
+export function argumentShape(args: unknown) {
+  if (!args || typeof args !== "object") return "[]";
+  const parts = Object.entries(args).map(([name, value]) =>
+    Array.isArray(value) ? `${name}×${value.length}` : name,
+  );
+  return `[${parts.join(", ").slice(0, 200)}]`;
+}
+
 /** Given with an approval and used once, never stored: a one-time code for a sign-in. */
 export interface Approval {
   code?: string;
@@ -229,7 +241,7 @@ export class ActionService {
     // How each approved step ended, in the server's log (what it was, never what it carried).
     const what =
       finished.kind === "app.action"
-        ? `${finished.data.tool} (${finished.data.app})`
+        ? `${finished.data.tool} (${finished.data.app}) ${argumentShape(finished.data.arguments)}`
         : finished.kind;
     if (finished.status === "succeeded")
       console.log(`[OpenMuse] Approved step ran: ${what}${finished.taskId ? " in a job" : ""}`);

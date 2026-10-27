@@ -364,3 +364,35 @@ Warns "Shortened N older tool results" in the logs. Tests: tests/read-limit.test
 look-ups through the model fixture). Retry response now works on the failed chat (the stuck history is shortened the same way).
 Not done: the agent could clean an inbox with fewer, narrower look-ups (labels/queries) — a prompt change for another day.
 Lesson: any loop that appends tool results needs a guard inside the loop; trimming history before the run doesn't cover it.
+
+----- 2026-10-27: Email not moving to folders -----
+Report: a couple of people, including the owner, asked for email to be moved to folders and it wasn't.
+
+What the Railway log showed (api, since 10-20):
+- The only mail-changing steps that ever ran were the owner's on 10-27: GMAIL_BATCH_MODIFY_MESSAGES x4 (12:12-12:47),
+  then GMAIL_CREATE_LABEL x2 at 12:54:51 (the same label asked for twice, in one go). No move followed the labels;
+  the chat's next calls (12:57, 12:58) failed with "prompt is too long: 227034 tokens" (fixed in e2c49d4, the read limit).
+- No Outlook move, and no other person's move, appears in the log, so what the others saw could not be traced.
+  The log holds only an app + action name; it never held the arguments, so what each move carried was not visible.
+
+Likely causes, in order: (1) a Gmail move is two approved steps (make the label, then move) and the second never came
+(the chat died on the long-prompt error); (2) nothing told the agent how to move mail: Gmail wants the label's id, not its
+name, and INBOX must be removed or the mail stays in the inbox too; thread ids vs message ids; (3) a step that the app
+answered "successful: false" inside a 200 was recorded as done; (4) nothing checked the result.
+
+Changed:
+- engine/mailboxes.ts `mailMoveInstructions`: list labels/folders first, create only if missing (one create, never two),
+  tell the person there are two approvals, batch per folder with message ids + label id + remove INBOX; Outlook folder id
+  and batches of 20; search again and report real counts; say exactly what didn't move. In the chat prompt and the jobs'
+  prompt (only when apps are on).
+- apps.ts `declinedInside`: an action's own `successful: false` is now a failure with its reason, not a result.
+- actions.ts `argumentShape`: the "Approved step ran" log line now lists the argument names and counts
+  (e.g. GMAIL_BATCH_MODIFY_MESSAGES (gmail) [messageIds×14, addLabelIds×1, removeLabelIds×1]), never values.
+  After the next deploy, that line shows whether a move had ids, a label to add and INBOX to remove.
+- Help: "Your email and calendar apps" topic got a move paragraph + a tappable example (text only, no new screen).
+- tests/mail-move.test.ts (3), model-worker.test.ts (job prompt carries the move steps).
+
+Tests: 674 pass (was 671). Biome: warnings only (existing html); tsc server + mobile clean.
+Not verified: no live Gmail/Outlook here, so the move steps are untested against real mailboxes. Ask the people who reported
+it for the exact words they used and which mailbox, then read the new log line after they try again.
+Pending: owner's go-ahead to push (check for a live call first).

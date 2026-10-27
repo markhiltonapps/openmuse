@@ -33,6 +33,15 @@ export const jobMailContext = (builtIn: boolean, apps: boolean) =>
       : "No mailbox or calendar is connected.";
 
 /**
+ * "Move these to a folder": Gmail has labels, not folders, so a move is two changes (add the label,
+ * take INBOX off), and the label's id (not its name) is what Gmail wants. People asked for mail to
+ * be moved and it wasn't: a label was made twice, nothing followed, and nobody was told it hadn't
+ * moved. Every step below is what a move needs, and the check at the end is what makes "done" true.
+ */
+export const mailMoveInstructions =
+  " Moving or sorting email into a folder: find the exact actions with find_app_actions (for example “move messages to a folder” or “add label to messages”). Never say mail moved until you've checked it. In Gmail a folder is a label: first list the labels (a look-up that runs now) and use one that already exists, matching its name ignoring case; only if none matches, create it once (one create call, never two, and a label's id is only known after the person approves the create, so tell them there are two approvals, make the label, then the move, and carry on with the move as soon as the create is done). Then move all the messages for that folder in one batch call: the message ids (not thread ids; email cards and searches give both) as the ids to change, the label's id (like “Label_12”, not its name) to add, and “INBOX” to remove, or the mail stays in the inbox as well. Several folders means one batch per folder. In Outlook, list the mail folders for the destination folder's id (create the folder first if it's missing), then use the move-messages action with that id (a batch of up to 20 at a time, in as many calls as it takes). Ask the person once, up front, for anything you can't work out (which messages, which folder); a mailbox with many matching messages should be searched narrowly (the sender or subject, a small number at a time), not read in bulk. After an approved move runs, search that folder and the inbox again for the same messages and tell them the real counts (“moved 14 of 14”), or what's left and why. If an action fails or an approval is declined, say exactly what didn't move; never say it's done on a guess.";
+
+/**
  * "Do I have any emails I need to respond to?": every mailbox, sent mail before saying a reply is
  * owed, and things to do that need no reply. Checking only Gmail once missed the person's Outlook,
  * called a reply they'd already sent from Outlook still owed, and waved away a declined payment and

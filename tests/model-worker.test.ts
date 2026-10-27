@@ -177,6 +177,8 @@ test("with Gmail connected under Apps, a job reads email there, not from the bui
         "The built-in Google mailbox and calendar aren't connected, so read_workspace has no email",
       ),
     );
+    // Moving mail has its steps (label ids, taking INBOX off, checking afterwards).
+    assert.ok(requests[0].body.includes("Moving or sorting email into a folder"));
     // Each built-in tool says the same, instead of an empty inbox or "Google is disconnected".
     const results = requests.map((request) => request.body).join("\n");
     assert.match(
