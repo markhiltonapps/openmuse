@@ -2673,7 +2673,17 @@ function IdeaCard({ idea }: { idea: Idea }) {
   );
 }
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-function scheduleLabel(r: Pick<Routine, "time" | "days">) {
+function scheduleLabel(r: Pick<Routine, "time" | "days" | "date">) {
+  // A one-time job reads as its day ("Once on Mon, Oct 28 at 09:00").
+  if (r.date) {
+    const [year = 0, month = 1, day = 1] = r.date.split("-").map(Number);
+    const when = new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    return `Once on ${when} at ${r.time}`;
+  }
   const days = [...r.days].sort().join(",");
   const when =
     days === "0,1,2,3,4,5,6"

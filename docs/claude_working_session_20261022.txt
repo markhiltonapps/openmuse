@@ -340,3 +340,15 @@ New About you fact "Your mobile number" (you.phone) so bookings don't ask each t
 a believable picture needs a mocked browser run plus an Approve card, which I haven't built; say if you want it), about-you, things-to-ask
 and fix-website-blocked updated. Website not changed: not verified against a real site from this sandbox (egress is blocked), so I won't
 claim it yet. Tests: commits() cases for the waitlist words. Not verified live: a real booking on a real site; try Texas Roadhouse after deploy.
+
+== ASK ONCE, REMEMBER, DO IT LATER (2026-10-27) ==
+Slice 2 of the "be as forward-thinking as Muse" work. A routine can now be one-time: `date` (YYYY-MM-DD, local) on the routine and in
+routineInputSchema. nextRun gives that day's time; runDueRoutines switches a one-time job off as it claims it (so it runs once), and it
+stays listed as paused ("Once on Mon, Oct 28 at 09:00" in Goals › Tracking). A time that's already passed is refused; only enabled
+routines count toward the limit of 30. `create_routine` (chat, voice) takes `date`; on a call it's said back first (routineWords says
+"On 2030-01-07 at 9 AM"). New chat instructions (`errandInstructions`, engine/routines.ts): ask for all missing details in one message,
+save lasting ones to About you, offer to set a one-time job for when a closed place opens, write its prompt so it works later without the
+chat, and never claim it's done before the job's result. Help: routines topic (one-time jobs). Tests: nextRun with a date; a one-time job
+runs once, pauses, is refused when past (tests/routines.test.ts). Not built: a form for one-time jobs in the app (voice/chat covers it); a
+Help picture (the routines topic has none); the day shown in a pushed result.
+Lesson: a "scheduled job" used by chat needs its prompt to stand alone: the run starts from nothing but the prompt.

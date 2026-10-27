@@ -127,6 +127,8 @@ export interface Routine {
   time: string;
   /** Days it runs, 0 = Sunday. */
   days: number[];
+  /** A one-time job: the local day (YYYY-MM-DD) it runs on, at `time`; `days` is then ignored. */
+  date?: string;
   timeZone: string;
   enabled: boolean;
   nextRunAt: string;
@@ -155,6 +157,8 @@ export const routineInputSchema = z.object({
     .max(7)
     .transform((days) => [...new Set(days)].sort())
     .default([0, 1, 2, 3, 4, 5, 6]),
+  /** Runs once, on this local day, instead of repeating. */
+  date: z.iso.date().optional(),
   timeZone: timeZoneSchema.optional(),
   enabled: z.boolean().default(true),
 });

@@ -25,8 +25,15 @@ const quoted = (text: string) => {
   return trimmed.length > 160 ? `${trimmed.slice(0, 157).trimEnd()}…` : trimmed;
 };
 
-export function routineWords(rule: { prompt: string; time: string; days?: number[] }) {
-  return `${spokenDays(rule.days)} at ${spokenTime(rule.time)}, I’ll run this request: “${quoted(rule.prompt)}”.`.replace(
+export function routineWords(rule: {
+  prompt: string;
+  time: string;
+  days?: number[];
+  date?: string;
+}) {
+  // A one-time job says its day ("On 2026-10-31"); a repeating one says which days.
+  const when = rule.date ? `On ${rule.date}` : spokenDays(rule.days);
+  return `${when} at ${spokenTime(rule.time)}, I’ll run this request: “${quoted(rule.prompt)}”.`.replace(
     /^./,
     (c) => c.toUpperCase(),
   );

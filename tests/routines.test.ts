@@ -95,3 +95,40 @@ test("due routines start one task per occurrence and skip long-missed runs", asy
   await agent.deleteRoutine("routine-user", routine.id);
   assert.equal((await agent.snapshot("routine-user")).routines.length, 0);
 });
+
+test("a one-time job has its own day and time, runs once, then waits paused", async () => {
+  // Monday 2030-01-07 at 09:00 in New York is 14:00 UTC; "days" doesn't matter for a dated job.
+  assert.equal(
+    nextRun({ time: "09:00", days: [3], date: "2030-01-07", timeZone: "America/New_York" }),
+    "2030-01-07T14:00:00.000Z",
+  );
+  const agent = server.agent;
+  await agent.setTimeZone("once-user", "America/New_York");
+  await assert.rejects(
+    agent.createRoutine("once-user", {
+      title: "Too late",
+      prompt: "x",
+      time: "09:00",
+      date: "2020-01-06",
+    }),
+    /already passed/,
+  );
+  const once = await agent.createRoutine("once-user", {
+    title: "Call the dentist",
+    prompt: "Call the dentist about the next cleaning.",
+    time: "09:00",
+    date: "2030-01-07",
+  });
+  assert.equal(once.date, "2030-01-07");
+  assert.equal(once.nextRunAt, "2030-01-07T14:00:00.000Z");
+
+  const now = Date.parse("2030-01-07T14:00:30Z");
+  await Promise.all([agent.runDueRoutines(now), agent.runDueRoutines(now)]);
+  const tasks = await db.list<AgentTask>("once-user", "tasks");
+  assert.equal(tasks.length, 1, "it runs once");
+  assert.match(tasks[0]?.prompt ?? "", /scheduled one-time job “Call the dentist”/);
+  const after = await db.get<Routine>("once-user", "routines", once.id);
+  assert.equal(after?.enabled, false, "and then it's paused, not rescheduled");
+  await agent.runDueRoutines(Date.parse("2030-01-08T14:00:30Z"));
+  assert.equal((await db.list<AgentTask>("once-user", "tasks")).length, 1);
+});

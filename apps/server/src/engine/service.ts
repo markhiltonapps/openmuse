@@ -1688,15 +1688,19 @@ export class AgentService {
   }
   async createRoutine(owner: string, raw: unknown, idempotencyKey?: string) {
     const input = routineInputSchema.parse(raw);
-    if ((await this.db.list<Routine>(owner, "routines")).length >= 30)
+    // One-time jobs that have run stay listed as paused; only live ones count toward the limit.
+    if ((await this.db.list<Routine>(owner, "routines")).filter((r) => r.enabled).length >= 30)
       throw new AppError("Remove a routine before adding more", 409);
     const timeZone = input.timeZone ?? (await this.timeZone(owner));
+    if (input.date && input.enabled && Date.parse(nextRun({ ...input, timeZone })) <= Date.now())
+      throw new AppError("That time has already passed", 400);
     const routine: Routine = {
       id: idempotencyKey ? hash(`routine:${idempotencyKey}`) : randomUUID(),
       title: input.title,
       prompt: input.prompt,
       time: input.time,
       days: input.days,
+      ...(input.date ? { date: input.date } : {}),
       timeZone,
       enabled: input.enabled,
       nextRunAt: nextRun({ ...input, timeZone }),
@@ -1709,6 +1713,8 @@ export class AgentService {
     if (!current) throw new AppError("Routine not found", 404);
     const input = routineInputSchema.parse({ ...current, ...(raw as object) });
     const timeZone = input.timeZone ?? current.timeZone;
+    if (input.date && input.enabled && Date.parse(nextRun({ ...input, timeZone })) <= Date.now())
+      throw new AppError("That time has already passed", 400);
     return this.db.put(owner, "routines", {
       ...current,
       ...input,
@@ -1753,12 +1759,13 @@ export class AgentService {
     for (const { owner, value } of await this.db.scan<Routine>("routines")) {
       if (!value.enabled || Date.parse(value.nextRunAt) > now || (await this.removed(owner)))
         continue;
+      // A one-time job is switched off as it's claimed, so it can't run twice.
       const claimed = await this.db.compareAndSwap<Routine>(
         owner,
         "routines",
         value.id,
         { nextRunAt: value.nextRunAt },
-        { nextRunAt: nextRun(value, now) },
+        value.date ? { enabled: false } : { nextRunAt: nextRun(value, now) },
       );
       // A run missed by more than a day (server down) is skipped rather than replayed.
       if (!claimed || now - Date.parse(value.nextRunAt) > 24 * 60 * 60 * 1000) continue;

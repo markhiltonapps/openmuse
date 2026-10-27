@@ -802,13 +802,21 @@ export const HELP_TOPICS: HelpTopic[] = [
       "See, pause or remove them in **Goals › Tracking**.",
     ],
     body: [
+      "**One-time jobs:** ask for something to happen once, later: “Check with the dentist office on Monday morning,” or, when a place is closed, “Do it when they open.” {agent} asks for all the details it needs in one go, saves lasting ones (like your mobile number) to **About you**, and, once you say yes, sets a one-time job for that day and time. It shows under **Goals › Tracking** as **Once on …**, runs by itself, then pauses. Its result comes back as an update.",
       "Email rules work the same way: “When Dana at Acme emails me about an invoice, save the PDF and tell me the total.”",
     ],
-    say: ["Every Friday at 4, check my inbox for anything I haven’t answered."],
+    say: [
+      "Every Friday at 4, check my inbox for anything I haven’t answered.",
+      "Do that on Monday at 9 when they open.",
+    ],
     keywords: [
       "routine",
       "schedule",
       "recurring",
+      "one time",
+      "later",
+      "when they open",
+      "on monday",
       "every day",
       "daily",
       "weekly",

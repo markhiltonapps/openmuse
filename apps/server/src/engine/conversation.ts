@@ -67,6 +67,7 @@ import { whereaboutsToolSpecs } from "../whereabouts.ts";
 import { answerLayoutInstructions } from "./answer-layout.ts";
 import { localNow } from "./clock.ts";
 import { builtInMailOff, inboxCheckInstructions, mailContext } from "./mailboxes.ts";
+import { errandInstructions } from "./routines.ts";
 import type { AgentService } from "./service.ts";
 import { tanstackAgent } from "./tanstack-agent.ts";
 
@@ -840,7 +841,7 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "create_routine",
         description:
-          "Schedule a recurring job the person asked for (for example a weekday morning brief at 07:30, or a Friday follow-up check). Each run becomes a task in Activity and notifies them. time is 24-hour HH:MM in their time zone; days use 0 = Sunday. On a call it's said back to them first: set confirmed only after they've said yes to it.",
+          "Schedule a job the person asked for: recurring (a weekday morning brief at 07:30, a Friday follow-up check) or, with date (YYYY-MM-DD in their time zone), once on that day, such as “call the dentist on Monday at 9” or “book it when they open”. For a one-time job write the prompt so it can be done later without this chat: what to do, with every detail needed (names, numbers, what they want). Each run becomes a task in Activity and notifies them. time is 24-hour HH:MM in their time zone; days use 0 = Sunday and are ignored when date is set. On a call it's said back to them first: set confirmed only after they've said yes to it.",
         parameters: routineInputSchema.extend({ confirmed: z.boolean().optional() }),
         execute: async ({ confirmed, ...args }) =>
           onCall && !confirmed
@@ -1395,6 +1396,7 @@ export class ConversationAgent extends AbstractAgent {
         personaInstructions +
         (this.service.commitments ? commitmentInstructions : "") +
         restaurantInstructions +
+        errandInstructions +
         browserToolInstructions +
         richCardInstructions +
         miniAppInstructions +

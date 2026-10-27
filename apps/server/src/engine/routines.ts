@@ -39,10 +39,15 @@ export function localInstant(local: string, timeZone: string) {
 
 /** Next run strictly after `after` on one of `days` (0 = Sunday) at `time` (HH:MM). */
 export function nextRun(
-  routine: Pick<Routine, "time" | "days" | "timeZone">,
+  routine: Pick<Routine, "time" | "days" | "timeZone"> & { date?: string },
   after: number = Date.now(),
 ): string {
   const [hour = 0, minute = 0] = routine.time.split(":").map(Number);
+  // A one-time job: its own day and time, whether or not that's still ahead.
+  if (routine.date)
+    return new Date(
+      localInstant(`${routine.date}T${routine.time}`, routine.timeZone),
+    ).toISOString();
   const local = new Date(after + offset(after, routine.timeZone));
   for (let add = 0; add <= 8; add++) {
     const day = new Date(
@@ -62,7 +67,8 @@ export function nextRun(
 }
 
 export function routinePrompt(routine: Routine) {
-  return `${routine.prompt}\n\nThis is the scheduled routine “${routine.title}”. Work from current data: mail, calendar, connected apps, goals and tasks as relevant. Keep the result short and skimmable, then call finish_task with it. Anything that sends, creates, changes or deletes still needs the person's review.`;
+  const kind = routine.date ? "one-time job" : "routine";
+  return `${routine.prompt}\n\nThis is the scheduled ${kind} “${routine.title}”. Work from current data: mail, calendar, connected apps, goals and tasks as relevant. Keep the result short and skimmable, then call finish_task with it. Anything that sends, creates, changes or deletes still needs the person's review.`;
 }
 
 export const routineTemplates = [
@@ -95,3 +101,7 @@ export const routineTemplates = [
     days: [0],
   },
 ];
+
+/** Errands that need details, or can only happen later (a place that's closed until Monday). */
+export const errandInstructions =
+  " When a request needs details you don't have (an errand, a booking, a form), ask for all of the missing ones together in one short message, never one at a time. Save lasting ones (such as their mobile number) to About you with save_about_person; never save a one-off detail there. If the thing can only happen later (a business that is closed right now, which you can check from its hours with search_web, or something they want done on a day), say so and offer to set it up for when it can happen: once they say yes, call create_routine with date and time (for example the next morning when the place opens), and write its prompt with every detail needed to do the job later without this chat. Say in one line what will happen and when, and that the result will come back to them in the app. Never say it has been done until the job's result says so.";
