@@ -543,3 +543,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   mail and Gmail answered "Invalid ids value". Cards now carry `messageId`/`threadId`, and `use_app` swaps a card id found in
   a Gmail/Outlook call's arguments for the real one (`unwrapCardIds`). Two ids side by side in one result is a trap: name
   the one the model must use, or don't show the other.
+- **"Accepted" is not "done" for Gmail (2026-10-27):** Gmail's batch change answers success and silently skips ids that
+  don't exist, so a move built on ids the agent made up (or took from a cut-off result) moved nothing while the chat said
+  "117 moved". A Gmail change is refused before it reaches review unless its message ids were returned by a read this
+  person's chat made (`rememberMailIds`/`unreadMailIds`, in memory), and the prompt says to search again before saying moved.

@@ -6,7 +6,13 @@ import { ADMIN_OWNER } from "./auth.ts";
 import { fileLinks } from "./cloud-import.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
-import { type EmailCardItem, emailsIn, unwrapCardIds } from "./email-views.ts";
+import {
+  type EmailCardItem,
+  emailsIn,
+  rememberMailIds,
+  unreadMailIds,
+  unwrapCardIds,
+} from "./email-views.ts";
 import { AppError } from "./errors.ts";
 import { isPurchase, statedAmount } from "./spending.ts";
 
@@ -855,8 +861,21 @@ export function appToolSpecs(
           request.arguments = (await unwrapCardIds(request.arguments, (id) =>
             get.call(emailViews, owner, id).catch(() => undefined),
           )) as Record<string, unknown>;
+        if (tool.app === "gmail" && !tool.readOnly) {
+          const unread = unreadMailIds(owner, request.arguments);
+          if (unread.length)
+            return {
+              error: `${unread.length} of these message ids (${unread
+                .slice(0, 3)
+                .map((id) => JSON.stringify(String(id).slice(0, 40)))
+                .join(
+                  ", ",
+                )}) weren't in any email you've read, so Gmail would skip them and still say it worked. Nothing was saved. Don't write ids from memory: read the emails again (search Gmail by sender or subject, a page at a time) and use each email's messageId.`,
+            };
+        }
         if (tool.readOnly) {
           const data = await apps.execute(owner, tool.slug, request.arguments);
+          if (tool.app === "gmail") rememberMailIds(owner, data);
           const files = fileLinks(data);
           // Emails read from Gmail or Outlook show as cards the person can open in full.
           const mail = tool.app === "gmail" || tool.app === "outlook" ? tool.app : undefined;

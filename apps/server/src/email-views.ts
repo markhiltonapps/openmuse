@@ -30,6 +30,52 @@ export type EmailCardItem = Pick<EmailView, "id" | "app" | "from" | "subject" | 
   threadId?: string;
 };
 
+/**
+ * Gmail message ids the agent has really read, per person. Gmail quietly skips a message id that
+ * doesn't exist ("silently skipped", while answering success), so a move built on ids the agent
+ * made up looked done and moved nothing. A change to mail is only sent with ids that were read.
+ */
+const seenIds = new Map<string, Set<string>>();
+const MAX_SEEN = 20000;
+const GMAIL_ID = /^[0-9a-f]{10,20}$/i;
+
+/** Notes every Gmail message id in an answer (the full answer, not the part the agent saw). */
+export function rememberMailIds(owner: string, data: unknown, depth = 0) {
+  const ids = seenIds.get(owner) ?? new Set<string>();
+  seenIds.set(owner, ids);
+  const visit = (value: unknown, level: number) => {
+    if (level > 8 || ids.size >= MAX_SEEN) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, level + 1);
+      return;
+    }
+    if (!record(value)) return;
+    for (const [key, item] of Object.entries(value)) {
+      if ((key === "messageId" || key === "message_id" || key === "id") && typeof item === "string")
+        ids.add(item);
+      else visit(item, level + 1);
+    }
+  };
+  visit(data, depth);
+}
+
+/** The message ids in a Gmail call's arguments that weren't in anything read for this person. */
+export function unreadMailIds(owner: string, args: unknown): string[] {
+  const read = seenIds.get(owner);
+  const wrong: string[] = [];
+  const visit = (value: unknown, level: number) => {
+    if (level > 4 || !record(value)) return;
+    for (const [key, item] of Object.entries(value)) {
+      if (/^(ids|messageIds|message_ids|messageId|message_id)$/.test(key)) {
+        for (const id of Array.isArray(item) ? item : [item])
+          if (typeof id === "string" && !(GMAIL_ID.test(id) && read?.has(id))) wrong.push(id);
+      } else visit(item, level + 1);
+    }
+  };
+  visit(args, 0);
+  return wrong;
+}
+
 /** What a card's id stands for: Gmail and Outlook never see it. */
 const CARD_ID = /^[0-9a-f]{32}$/;
 /**

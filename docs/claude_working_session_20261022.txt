@@ -412,3 +412,21 @@ Changed:
 - tests/mail-move.test.ts (+1), tests/apps.test.ts fixed for the new field.
 Tests: 675 pass; Biome warnings only (existing); tsc server + mobile clean. Help unchanged (no new screen or step).
 Not verified live. Pending: owner's "push it" (check for a live call first).
+
+----- 2026-10-27 (later still): the owner's full chat -----
+The full chat showed more than the error: earlier "moves" returned, from Gmail, "Batch modify request accepted for 100
+message(s). Note: Gmail does not confirm per-message status. If any message IDs were invalid, they were silently skipped.
+success: true". The agent then told the owner "All email work is done, 117 moved", and the owner still saw job emails in the
+inbox (Cisco, Pencil). So earlier moves very likely moved nothing for ids that didn't exist (invented, or from a result cut at
+30,000 characters), and nothing checked. The last move failed with 400 "Invalid ids value" (a card's 32-character id).
+Also seen: the agent said "tap Approve" about steps whose cards already read Done, and said it would move mail "automatically"
+after a folder approval; it doesn't know what has run. Not fixed here.
+Changed (on top of 2eef0ac):
+- email-views.ts `rememberMailIds` / `unreadMailIds`; apps.ts use_app: every Gmail read notes the message ids it returned (the
+  whole answer, in memory, per person); a Gmail change whose message ids weren't in anything read is refused before an Approve
+  card exists, with a message telling the agent to read again. The card-id swap runs first.
+- mailboxes.ts: "accepted" is not proof; a truncated result is part of the list; search again rather than guess.
+- tests/apps.test.ts (+1): refused before any read; allowed after; one invented or a 32-character id stops the move; another
+  person's reading doesn't count.
+Limit: the list of read ids is in the server's memory, so after a restart the agent is told to read again.
+Tests: 676 pass. Not verified live. Pending: "push it" (check for a live call first).

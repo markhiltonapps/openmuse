@@ -854,3 +854,66 @@ test("connect_app on an app that's already connected says to go ahead and use it
   assert.match(String(result.next), /use it now with find_app_actions and use_app/);
   assert.match(String(result.next), /Don't ask them to connect it again/);
 });
+
+test("a Gmail change is saved only with message ids that were really read", async () => {
+  // Gmail answers "success" and quietly skips ids that don't exist, so a move built on ids the
+  // agent invented looked done and moved nothing; a card's own 32-character id is refused too.
+  const { apps } = fakeApps({
+    tool: async (_owner, slug) => ({
+      slug,
+      name: slug,
+      description: "",
+      app: "gmail",
+      readOnly: slug === "GMAIL_FETCH_EMAILS",
+    }),
+    execute: async () => ({
+      messages: [
+        { messageId: "18f3a2b4c5d6e7f8", sender: "Dan", subject: "Q3", messageText: "Hi" },
+        { messageId: "18f3a2b4c5d6e7f9", sender: "Sam", subject: "Q4", messageText: "Hi" },
+      ],
+    }),
+  });
+  const proposed: AppAction[] = [];
+  const specs = appToolSpecs(apps, "reader", async (action) => {
+    proposed.push(action);
+    return { id: "a1", title: action.summary, hash: "h" };
+  });
+  const run = specs.find((s) => s.name === "use_app")?.execute as (
+    args: unknown,
+  ) => Promise<Record<string, unknown>>;
+  const move = (ids: string[]) =>
+    run({
+      tool: "GMAIL_BATCH_MODIFY_MESSAGES",
+      arguments: { messageIds: ids, addLabelIds: ["Label_44"], removeLabelIds: ["INBOX"] },
+      summary: "Move to jobs",
+    });
+  // Before anything was read, nothing is saved.
+  const early = await move(["18f3a2b4c5d6e7f8"]);
+  assert.match(String(early.error), /weren't in any email you've read/);
+  assert.equal(proposed.length, 0);
+  await run({ tool: "GMAIL_FETCH_EMAILS", arguments: {}, summary: "Read Gmail" });
+  // An id from the read goes to review.
+  assert.equal((await move(["18f3a2b4c5d6e7f8", "18f3a2b4c5d6e7f9"])).status, "awaiting_review");
+  assert.equal(proposed.length, 1);
+  // One invented id, or a card's 32-character code, stops the whole move.
+  const invented = await move(["18f3a2b4c5d6e7f8", "0123456789abcdef"]);
+  assert.match(String(invented.error), /1 of these message ids/);
+  assert.match(String((await move(["a".repeat(32)])).error), /1 of these message ids/);
+  assert.equal(proposed.length, 1);
+  // Someone else's reading doesn't count for this person.
+  const other = appToolSpecs(apps, "someone-else", async () => ({ id: "b", title: "b" })).find(
+    (s) => s.name === "use_app",
+  )?.execute as (args: unknown) => Promise<Record<string, unknown>>;
+  assert.match(
+    String(
+      (
+        await other({
+          tool: "GMAIL_BATCH_MODIFY_MESSAGES",
+          arguments: { messageIds: ["18f3a2b4c5d6e7f8"] },
+          summary: "Move",
+        })
+      ).error,
+    ),
+    /weren't in any email/,
+  );
+});
