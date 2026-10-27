@@ -396,3 +396,19 @@ Tests: 674 pass (was 671). Biome: warnings only (existing html); tsc server + mo
 Not verified: no live Gmail/Outlook here, so the move steps are untested against real mailboxes. Ask the people who reported
 it for the exact words they used and which mailbox, then read the new log line after they try again.
 Pending: owner's go-ahead to push (check for a live call first).
+
+----- 2026-10-27 (later): Gmail move failed with "Invalid ids value" -----
+The owner sent a screenshot of the real error from a move: Gmail 400 INVALID_ARGUMENT "Invalid ids value".
+Cause (found by reading email-views.ts / apps.ts): when the agent reads Gmail, its tool result holds the full Gmail data
+(with the real messageId, ~16 characters) AND an `emails` card list whose `id` is this app's own 32-character hash. The
+agent used the card `id` as the email id in GMAIL_BATCH_MODIFY_MESSAGES, and Gmail refused it. (My earlier push, a3c9814,
+did not cover this.)
+Changed:
+- email-views.ts: each card item now carries `messageId` (and `threadId`); `unwrapCardIds` swaps any 32-hex card id found
+  in a use_app call's arguments for the email's real messageId (Gmail and Outlook calls only, looked up in the saved views).
+- apps.ts: use_app runs `unwrapCardIds` before the call/proposal; the "shown" note says a card's id is only the app's own and
+  to use messageId.
+- mailboxes.ts: move instructions say to use each email's messageId, never a card's `id`.
+- tests/mail-move.test.ts (+1), tests/apps.test.ts fixed for the new field.
+Tests: 675 pass; Biome warnings only (existing); tsc server + mobile clean. Help unchanged (no new screen or step).
+Not verified live. Pending: owner's "push it" (check for a live call first).

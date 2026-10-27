@@ -812,6 +812,7 @@ test("emails a Gmail look-up reads come back as cards to open, and connect_app n
           from: email.from,
           subject: email.subject,
           preview: email.body,
+          messageId: email.messageId,
         }));
       },
     },
@@ -821,7 +822,14 @@ test("emails a Gmail look-up reads come back as cards to open, and connect_app n
   ) => Promise<Record<string, unknown>>;
   const read = await run({ tool: "GMAIL_FETCH_EMAILS", arguments: {}, summary: "Read Gmail" });
   assert.deepEqual(read.emails, [
-    { id: "v0", app: "gmail", from: "Dan", subject: "Q3", preview: "Numbers attached." },
+    {
+      id: "v0",
+      app: "gmail",
+      from: "Dan",
+      subject: "Q3",
+      preview: "Numbers attached.",
+      messageId: "m1",
+    },
   ]);
   assert.match(String(read.shown), /on the person's screen as cards/);
   assert.equal(saved.length, 1);

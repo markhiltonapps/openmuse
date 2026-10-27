@@ -538,3 +538,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   the log only had the action's name. The "Approved step ran" line now shows argument names and counts (`argumentShape`),
   never values; an action that answers `successful: false` inside a 200 is a failure (`declinedInside`). The prompt
   (`mailMoveInstructions`) says to search again and report real counts before saying "moved".
+- **A card's `id` is not the email's id (2026-10-27):** the tool result for a Gmail/Outlook read carries the mailbox's data
+  (`messageId`) and an `emails` card list whose `id` is the app's own 32-character hash. The agent used the card's id to move
+  mail and Gmail answered "Invalid ids value". Cards now carry `messageId`/`threadId`, and `use_app` swaps a card id found in
+  a Gmail/Outlook call's arguments for the real one (`unwrapCardIds`). Two ids side by side in one result is a trap: name
+  the one the model must use, or don't show the other.

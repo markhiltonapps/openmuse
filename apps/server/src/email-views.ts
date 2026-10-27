@@ -22,7 +22,41 @@ export interface EmailView {
  */
 export type EmailCardItem = Pick<EmailView, "id" | "app" | "from" | "subject" | "date" | "link"> & {
   preview: string;
+  /**
+   * The mailbox's own ids for this email. `id` above is only this app's card id (a 32-character
+   * code); the agent once passed it to Gmail as a message id and Gmail answered "Invalid ids value".
+   */
+  messageId: string;
+  threadId?: string;
 };
+
+/** What a card's id stands for: Gmail and Outlook never see it. */
+const CARD_ID = /^[0-9a-f]{32}$/;
+/**
+ * The same arguments with any card id (from an email card) swapped for the email's own message id,
+ * so a move, label or delete that was given the card's id still reaches the right email.
+ */
+export async function unwrapCardIds(
+  value: unknown,
+  find: (id: string) => Promise<{ messageId: string } | null | undefined>,
+  depth = 0,
+): Promise<unknown> {
+  if (depth > 6) return value;
+  if (typeof value === "string")
+    return CARD_ID.test(value) ? ((await find(value))?.messageId ?? value) : value;
+  if (Array.isArray(value))
+    return Promise.all(value.map((item) => unwrapCardIds(item, find, depth + 1)));
+  if (record(value))
+    return Object.fromEntries(
+      await Promise.all(
+        Object.entries(value).map(async ([key, item]) => [
+          key,
+          await unwrapCardIds(item, find, depth + 1),
+        ]),
+      ),
+    );
+  return value;
+}
 
 const KEEP_DAYS = 7;
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -143,6 +177,8 @@ export class EmailViews {
         ...(email.date ? { date: email.date } : {}),
         ...(email.link ? { link: email.link } : {}),
         preview: email.body.replace(/\s+/g, " ").trim().slice(0, 160),
+        messageId: email.messageId,
+        ...(email.threadId ? { threadId: email.threadId } : {}),
       });
     }
     void this.prune(owner).catch(() => undefined);

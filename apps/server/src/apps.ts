@@ -6,7 +6,7 @@ import { ADMIN_OWNER } from "./auth.ts";
 import { fileLinks } from "./cloud-import.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
-import { type EmailCardItem, emailsIn } from "./email-views.ts";
+import { type EmailCardItem, emailsIn, unwrapCardIds } from "./email-views.ts";
 import { AppError } from "./errors.ts";
 import { isPurchase, statedAmount } from "./spending.ts";
 
@@ -762,6 +762,8 @@ export function appToolSpecs(
   /** Keeps emails read from Gmail or Outlook, so the chat's card can open one in full. */
   emailViews?: {
     save(owner: string, emails: ReturnType<typeof emailsIn>): Promise<EmailCardItem[]>;
+    /** A saved email by its card id, so a card id given as an email id can be put right. */
+    get?(owner: string, id: string): Promise<{ messageId: string } | null | undefined>;
   },
 ) {
   return [
@@ -847,6 +849,12 @@ export function appToolSpecs(
         amountUsd?: number;
       }) => {
         const tool = await apps.tool(owner, request.tool);
+        // An email card's own id is not the mailbox's: put the email's real id in its place.
+        const get = emailViews?.get;
+        if ((tool.app === "gmail" || tool.app === "outlook") && get)
+          request.arguments = (await unwrapCardIds(request.arguments, (id) =>
+            get.call(emailViews, owner, id).catch(() => undefined),
+          )) as Record<string, unknown>;
         if (tool.readOnly) {
           const data = await apps.execute(owner, tool.slug, request.arguments);
           const files = fileLinks(data);
@@ -862,7 +870,7 @@ export function appToolSpecs(
               ? {
                   emails,
                   shown:
-                    "These emails are on the person's screen as cards they can open; don't list every one in your reply.",
+                    "These emails are on the person's screen as cards they can open; don't list every one in your reply. A card's id is only the app's own; to move, label or delete an email use its messageId (the mailbox's own id).",
                 }
               : {}),
             ...(files.length

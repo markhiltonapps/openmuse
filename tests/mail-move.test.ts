@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { argumentShape } from "../apps/server/src/actions.ts";
 import { declinedInside } from "../apps/server/src/apps.ts";
+import { unwrapCardIds } from "../apps/server/src/email-views.ts";
 import { mailMoveInstructions } from "../apps/server/src/engine/mailboxes.ts";
 
 test("an app's own 'it didn't work' is not recorded as done", () => {
@@ -45,4 +46,26 @@ test("the move instructions cover what a mail move needs", () => {
   // It says what really happened.
   assert.match(mailMoveInstructions, /real counts/);
   assert.match(mailMoveInstructions, /never say it's done on a guess/);
+});
+
+test("a card's own id given as an email id is swapped for the mailbox's real id", async () => {
+  const card = "a".repeat(32);
+  const asked: string[] = [];
+  const find = async (id: string) => {
+    asked.push(id);
+    return id === card ? { messageId: "18f3a2b4c5d6e7f8" } : undefined;
+  };
+  const fixed = await unwrapCardIds(
+    { ids: [card, "18f3a2b4c5d6e7f9"], addLabelIds: ["Label_12"], removeLabelIds: ["INBOX"] },
+    find,
+  );
+  assert.deepEqual(fixed, {
+    ids: ["18f3a2b4c5d6e7f8", "18f3a2b4c5d6e7f9"],
+    addLabelIds: ["Label_12"],
+    removeLabelIds: ["INBOX"],
+  });
+  // Only 32-character codes are looked up; real ids and label names are never touched.
+  assert.deepEqual(asked, [card]);
+  // An unknown card id is left as it was.
+  assert.equal(await unwrapCardIds("b".repeat(32), find), "b".repeat(32));
 });
