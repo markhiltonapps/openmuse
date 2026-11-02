@@ -553,3 +553,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   (two parts made differently, checked with ffprobe), not a fake, and skip when it's missing. A download link opened after a long
   `await` is blocked on an installed iPhone app: wait for a tap (`Save the MP3`). The slow call is a POST that returns a signed link;
   the browser then downloads the cached file at once.
+- **Meeting transcript file (owner, 2026-11-02):** it's built on the device from the meeting screen's own data (`meeting-text.ts`, no React so
+  a test can run it), so it can't disagree with the screen: the names, times and pauses come from the same helpers the screen uses. A
+  download can't be confirmed from the page (a blocked or cancelled one looks the same), so the note says "Started downloading", never
+  "Saved". An installed iPhone app ignores downloads: use the share sheet (`navigator.share({files})`), and clear a "saved" note when what it
+  describes changes (a renamed speaker).

@@ -105,23 +105,7 @@ export function canRecord() {
     !!recordingType()
   );
 }
-/** "12:05", or "1:02:05" past an hour. */
-export function clock(seconds: number) {
-  const s = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const two = (n: number) => String(n).padStart(2, "0");
-  return h ? `${h}:${two(m)}:${two(s % 60)}` : `${m}:${two(s % 60)}`;
-}
-/** "12 minutes" / "1 hour 5 minutes", for screen readers and the bar's name. */
-export function spokenLength(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  const part = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-  if (!minutes) return part(Math.floor(seconds), "second");
-  return h ? `${part(h, "hour")}${m ? ` ${part(m, "minute")}` : ""}` : part(m, "minute");
-}
+export { clock, spokenLength } from "./meeting-text";
 
 export class MeetingRecorder {
   private state: RecorderState = IDLE;

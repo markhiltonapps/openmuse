@@ -41,6 +41,7 @@ import {
   stoppedAtLimit,
 } from "./meeting-recorder";
 import { indexedStore } from "./meeting-store";
+import { missedLength, speakerName, transcriptFileName, transcriptText } from "./meeting-text";
 import { MeetingUploader, type Unsent } from "./meeting-uploader";
 import { dark } from "./theme";
 import { tipProps } from "./tips";
@@ -126,22 +127,6 @@ export function meetingLine(meeting: Pick<MeetingView, "startedAt" | "seconds">)
   const time = at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const minutes = Math.max(1, Math.round(meeting.seconds / 60));
   return `${day} · ${time} · ${minutes} min`;
-}
-/** "40 seconds", "about 3 minutes": how long nothing was recorded. */
-export function missedLength(seconds: number) {
-  return seconds < 90
-    ? spokenLength(Math.round(seconds))
-    : `about ${spokenLength(Math.round(seconds / 60) * 60)}`;
-}
-/** "Speaker 2", or the name they were given. */
-export function speakerName(speakers: Record<string, string>, label: string) {
-  const named = speakers[label]?.trim();
-  if (named) return named;
-  // "2:1" is a speaker heard after the first pause: maybe someone else, so it says so.
-  const later = label.match(/^(\d+):(.+)$/);
-  if (!later) return `Speaker ${label}`;
-  const pause = Number(later[1]) - 1;
-  return `Speaker ${later[2]} (after pause${pause > 1 ? ` ${pause}` : ""})`;
 }
 
 /**
@@ -1489,6 +1474,37 @@ function startDownload(url: string) {
   link.remove();
   return true;
 }
+/**
+ * Saves text as a file from a tap. An installed iPhone app ignores downloads, so it opens the share
+ * sheet (Save to Files lives there) or, failing that, shows the text in a tab. `after` hears how the
+ * share sheet ended (nobody can tell from outside whether a download was kept).
+ */
+function saveTextFile(
+  name: string,
+  text: string,
+  after: (ended: "cancelled" | "failed") => void,
+): "started" | "shared" | "tab" | "failed" {
+  if (typeof window === "undefined" || typeof document === "undefined") return "failed";
+  const file = new File([text], name, { type: "text/plain;charset=utf-8" });
+  if (isInstalled() && isIos()) {
+    if (navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file], title: name }).catch((problem: unknown) => {
+        after(problem instanceof Error && problem.name === "AbortError" ? "cancelled" : "failed");
+      });
+      return "shared";
+    }
+    return window.open(URL.createObjectURL(file), "_blank") ? "tab" : "failed";
+  }
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return "started";
+}
 /** One meeting: its notes, the audio while it's kept, and every word with who said it. */
 export function MeetingSheet({ id }: { id: string }) {
   const { api, close, draft } = useWorkspace();
@@ -1509,6 +1525,14 @@ export function MeetingSheet({ id }: { id: string }) {
     busy: false,
     note: "",
   });
+  // The transcript file: what happened when it was tapped.
+  const [saved, setSaved] = useState("");
+  const speakersKey = JSON.stringify(meeting?.speakers ?? {});
+  // A name changed after saving: that file has the old names, so its note no longer applies.
+  useEffect(() => {
+    void speakersKey;
+    setSaved("");
+  }, [speakersKey]);
   const open = useRef(true);
   useEffect(() => {
     open.current = true;
@@ -1916,6 +1940,38 @@ export function MeetingSheet({ id }: { id: string }) {
               </Text>
               <Text style={s.small}>Tap a name to say who it is.</Text>
             </View>
+            {Platform.OS === "web" && (
+              <View style={{ gap: 6 }}>
+                <Button
+                  icon={Download}
+                  style={{ alignSelf: "flex-start" }}
+                  onPress={() => {
+                    const name = transcriptFileName(meeting.title);
+                    const failed =
+                      "Couldn’t save the file. Try again, or open the app in your browser.";
+                    const result = saveTextFile(
+                      name,
+                      transcriptText(meeting, meetingLine(meeting)),
+                      // A cancelled share sheet isn't a problem; anything else is.
+                      (ended) => setSaved(ended === "cancelled" ? "" : failed),
+                    );
+                    setSaved(
+                      result === "started"
+                        ? `Started downloading “${name}”. Look in your downloads.`
+                        : result === "shared"
+                          ? `Use the share sheet to keep “${name}”.`
+                          : result === "tab"
+                            ? `“${name}” opened in a new tab. Use the share button there to keep it.`
+                            : failed,
+                    );
+                  }}
+                >
+                  Download transcript
+                </Button>
+                <StatusLine text={saved} />
+                {!!saved && <Text style={s.small}>{saved}</Text>}
+              </View>
+            )}
             {meeting.segments.map((segment, index) => {
               const who = speakerName(meeting.speakers, segment.speaker);
               // Pauses that fall between the turn before this one and this one.

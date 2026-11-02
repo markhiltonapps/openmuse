@@ -975,6 +975,68 @@ const SHOTS = [
     },
   },
   {
+    // An opened meeting's words, with the button that saves them as a text file. Mocked: the meeting.
+    id: "meetingtranscript",
+    go: async (p) => {
+      const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+      const meeting = {
+        id: "help-m1",
+        kind: "meeting",
+        title: "Kitchen remodel kickoff",
+        status: "done",
+        startedAt: ago(1500),
+        endedAt: ago(1452),
+        seconds: 2880,
+        summary: "They agreed the budget and a start date.",
+        decisions: [],
+        actionItems: [],
+        speakers: { 1: "Dana" },
+        words: 5400,
+        audio: false,
+        segments: [
+          {
+            speaker: "1",
+            start: 0,
+            end: 6000,
+            text: "So the island gives you the prep space you wanted.",
+          },
+          {
+            speaker: "2",
+            start: 7000,
+            end: 11000,
+            text: "Let’s do the island. What does that do to the number?",
+          },
+          { speaker: "1", start: 12000, end: 16000, text: "With quartz, about thirty-eight." },
+        ],
+        gaps: [],
+        audioParts: [],
+      };
+      await p.route(/\/api\/meetings$/, (route) =>
+        route.fulfill({
+          json: {
+            available: true,
+            allowance: { usedMinutes: 95, limitHours: 10, leftSeconds: 30300 },
+            meetings: [{ ...meeting, segments: undefined, audioParts: undefined }],
+          },
+        }),
+      );
+      await p.route(/\/api\/meetings\/help-m1$/, (route) => route.fulfill({ json: meeting }));
+      await tab(p, "Files & media").click();
+      await p.waitForTimeout(2500);
+      await p
+        .getByRole("button", { name: /^Open Kitchen remodel kickoff/ })
+        .first()
+        .click();
+      await button(p, "Download transcript").waitFor({ timeout: 20000 });
+      await p.waitForTimeout(800);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: { find: (p) => button(p, "Download transcript"), side: "top-right" },
+      2: { find: (p) => button(p, /^Speaker 2\. Change this name/), side: "top-right" },
+    },
+  },
+  {
     // Rehearse a talk: the part, what it's about, the goal. Mocked: the last rehearsal's row.
     id: "rehearse",
     go: async (p) => {

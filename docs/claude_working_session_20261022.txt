@@ -497,3 +497,26 @@ Browser check: scripted Chromium click-through on a rebuilt web app (busy label,
 Not verified: the Docker build with ffmpeg, a real phone (Android Chrome / iPhone), a real long recording's conversion time.
 Known gap (owner's voice-first rule): the agent can't deliver the MP3; the Help topic says so. Smallest fix if wanted: a chat tool that
 returns a card with a Save the MP3 button. Pending: "push it" (3 local commits including the earlier two).
+
+----- 2026-11-02 (later): Download a meeting's transcript as a text file -----
+Owner asked for a way to download the transcript from the meetings; chose plain text (.txt) with the notes plus every word.
+Built (all on the device, no server change, nothing new to install):
+- apps/mobile/src/meeting-text.ts (pure, no React): `transcriptText` = title, when, SUMMARY, DECISIONS, ACTION ITEMS (sections left out when
+  empty), then EVERY WORD as "[12:41] Dana: ..." with "--- Paused: about 3 minutes not recorded ---" where the recording paused (same
+  rule as the screen); `transcriptFileName` ("Kickoff Q4 plan transcript.txt"). `clock`, `spokenLength`, `missedLength` and `speakerName`
+  moved here so the file says exactly what the screen says (meeting-recorder re-exports clock/spokenLength; meetings-ui imports the rest).
+- meetings-ui.tsx: "Download transcript" under Every word (web only; shows once words exist; works for brain dumps). `saveTextFile`: a normal
+  download; on an installed iPhone app the share sheet (Save to Files), else a tab; notes are honest ("Started downloading...", cancel
+  clears, failure says so); the note clears if a speaker is renamed (the file would have old names).
+- Help: new topic "meeting-transcript" with picture `meetingtranscript` (light/dark; mark 1 the button, mark 2 the Speaker 2 name);
+  record-meeting and meeting-mp3 link to it. Website: the meetings paragraph now says the words can be downloaded as a text file (checked
+  earlier at 390x844 and 1280x800 with the MP3 sentence; this added clause is in the same paragraph).
+- Design review: visual, usability and copy all SIGN OFF in round 1 with nits; applied the wording/accuracy ones (overclaim "Saved" ->
+  "Started downloading", share-sheet outcome, "words never expire" -> "stay until you delete the meeting"). Left as a possible v2: a
+  "Copy transcript" button (pasting into an email is the main use) and a one-line "what's in the file" under the button.
+Tests: 689 pass (new apps/mobile/test/meeting-text.test.ts: shared time/name helpers, the full file text, empty sections, pauses, file names).
+Browser check: scripted Chromium click on a rebuilt web app saved "Kickoff Q4 plan transcript.txt" and the file's contents were read back
+and are exactly the expected text.
+Not verified: a real phone or an installed iPhone app (share sheet path), very long transcripts.
+Known gap (voice-first rule): the agent can't deliver the file; Help says so. Smallest fix: a Copy action or a chat card.
+Pending: "push it" (one local commit).

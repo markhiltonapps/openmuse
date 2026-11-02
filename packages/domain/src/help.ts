@@ -1494,7 +1494,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "On a phone, keep the app open on screen while you record (it keeps the screen from turning off). If you switch apps or lock the phone, nothing is recorded until you’re back: the recorder then says how long was missed, and the meeting’s words show where the gap is. After a pause the people are counted again, so **Speaker 1 (after pause)** may be someone else; tap the name to say who. What was already recorded is never lost. Recording works in the web app in Chrome, Edge or Safari.",
       "On a call, saying “Record a meeting” shows a button that ends the call and starts recording, because the phone can’t do both at once.",
       "If the recorder shows **Not reaching the server**, your recording is still kept on your device and sends by itself when it can. See **A recording says it isn’t sending**.",
-      "Each person can record a set number of hours a month (10 unless your admin changed it); **Files › Meetings** shows how much you’ve used. A brain dump uses the same hours. The audio is kept for 30 days so you can listen again or download it as an MP3 (see **Download a meeting’s audio as an MP3**); the words and notes stay until you delete the meeting.",
+      "Each person can record a set number of hours a month (10 unless your admin changed it); **Files › Meetings** shows how much you’ve used. A brain dump uses the same hours. The audio is kept for 30 days so you can listen again or download it as an MP3 (see **Download a meeting’s audio as an MP3**). The words and notes stay until you delete the meeting, and you can download them as a text file (see **Download a meeting’s transcript**).",
     ],
     say: [
       "Record a meeting",
@@ -1524,6 +1524,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "recording-not-sending",
       "brain-dump",
       "meeting-mp3",
+      "meeting-transcript",
     ],
   },
   {
@@ -1556,7 +1557,38 @@ export const HELP_TOPICS: HelpTopic[] = [
       "export",
       "listen",
     ],
-    related: ["record-meeting", "files"],
+    related: ["record-meeting", "meeting-transcript", "files"],
+  },
+  {
+    id: "meeting-transcript",
+    group: "files",
+    title: "Download a meeting’s transcript",
+    summary:
+      "Save a recorded meeting as a text file: the notes, then every word with who said it and when.",
+    shot: "meetingtranscript",
+    place: "meetings",
+    steps: [
+      "Open **Files › Meetings**, tap a meeting, and under **Every word** tap **Download transcript**. Your browser saves a text file named after the meeting.",
+      "To get real names in the file, tap a speaker’s name (like **Speaker 2**) first and say who it is, then download it.",
+    ],
+    body: [
+      "The file has the title and when it was, the summary, the decisions and the action items, then every word with each speaker’s name and the time of each turn, like “[12:41] Dana: …”. Where nothing was recorded (a locked phone, a switched app), it says “Paused” with how long.",
+      "It’s a plain text file, so it opens on any phone or computer and pastes straight into an email or a document. It’s made on your device from what’s on the screen: nothing is sent anywhere, and it works for a brain dump too.",
+      "There’s no button until the words have been written down (a minute or two after you stop). It’s in the web app. On an iPhone with {agent} added to your Home Screen, a sheet opens: choose **Save to Files**. If a new tab opens instead, use the share button there.",
+      "Unlike the audio, the words stay until you delete the meeting, so you can download them any time. {agent} can’t save the file for you yet: it’s a button on the meeting. To hear or read what was said, ask in the chat: “What did we decide about the budget?”",
+    ],
+    keywords: [
+      "transcript",
+      "download",
+      "text file",
+      "txt",
+      "save the words",
+      "export",
+      "every word",
+      "meeting",
+      "notes",
+    ],
+    related: ["record-meeting", "meeting-mp3", "files"],
   },
   {
     id: "brain-dump",
