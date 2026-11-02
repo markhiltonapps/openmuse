@@ -547,3 +547,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   don't exist, so a move built on ids the agent made up (or took from a cut-off result) moved nothing while the chat said
   "117 moved". A Gmail change is refused before it reaches review unless its message ids were returned by a read this
   person's chat made (`rememberMailIds`/`unreadMailIds`, in memory), and the prompt says to search again before saying moved.
+- **Meeting MP3s (owner, 2026-11-02):** a download name and a file made on demand are server work: ffmpeg is installed in
+  `infra/api.Dockerfile` (the log says "MP3 downloads on/off"; no ffmpeg = the button isn't offered, `Meetings.mp3` undefined). The MP3 is
+  cached at `meetings/<id>/audio.mp3`, so `erase` and the 30-day cleanup remove it with the audio. Test conversion with REAL ffmpeg
+  (two parts made differently, checked with ffprobe), not a fake, and skip when it's missing. A download link opened after a long
+  `await` is blocked on an installed iPhone app: wait for a tap (`Save the MP3`). The slow call is a POST that returns a signed link;
+  the browser then downloads the cached file at once.

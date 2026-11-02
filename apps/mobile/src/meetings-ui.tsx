@@ -45,6 +45,7 @@ import { MeetingUploader, type Unsent } from "./meeting-uploader";
 import { dark } from "./theme";
 import { tipProps } from "./tips";
 import { Button, Card, CheckRow, Chip, colors, ErrorNotice, glassSurface, Sheet, s } from "./ui";
+import { isInstalled, isIos } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 /** The record colour for dots and words: a clear red that reads on light, dark and glass. */
@@ -90,6 +91,8 @@ interface MeetingRead extends MeetingView {
   /** Where the recording paused, in ms from the start, and for how long. */
   gaps?: { at: number; seconds: number }[];
   audioParts: { index: number; url: string }[];
+  /** The audio can be downloaded as an MP3 (it's kept, and this server can make one). */
+  mp3?: boolean;
 }
 interface MeetingsList {
   available: boolean;
@@ -1461,6 +1464,31 @@ function failText(detail?: string) {
   return /^couldn/i.test(detail) ? `${detail} Try again.` : `Couldn’t add: ${detail}`;
 }
 
+/** A file's size in a few words (“380 KB”, “24 MB”). */
+function fileSize(bytes: number) {
+  if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1000))} KB`;
+  const megabytes = bytes / 1_000_000;
+  return `${megabytes < 10 ? megabytes.toFixed(1) : Math.round(megabytes)} MB`;
+}
+/**
+ * Starts a download of a link that answers with a file; false when the browser wouldn't (an
+ * installed iPhone app ignores downloads and would lose its page, so it opens the link in a tab).
+ */
+function startDownload(url: string) {
+  if (typeof window === "undefined") return false;
+  if (isInstalled() && isIos()) {
+    const page = window.open(url, "_blank");
+    if (page) page.opener = null;
+    return page !== null;
+  }
+  const link = document.createElement("a");
+  link.href = url;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return true;
+}
 /** One meeting: its notes, the audio while it's kept, and every word with who said it. */
 export function MeetingSheet({ id }: { id: string }) {
   const { api, close, draft } = useWorkspace();
@@ -1476,6 +1504,18 @@ export function MeetingSheet({ id }: { id: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const seen = useRef<MeetingStatus>(undefined);
   const [news, setNews] = useState("");
+  // The MP3: being made, what happened, and its link if the browser wouldn't start the download.
+  const [mp3, setMp3] = useState<{ busy: boolean; note: string; url?: string; failed?: boolean }>({
+    busy: false,
+    note: "",
+  });
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
   const unsent = useUnsent(id);
   const load = useCallback(
     () =>
@@ -1539,6 +1579,49 @@ export function MeetingSheet({ id }: { id: string }) {
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Couldn’t delete it.");
       setBusy("");
+    }
+  };
+  const makeMp3 = async () => {
+    setMp3({ busy: true, note: "A long meeting can take a minute." });
+    const slow = setTimeout(
+      () =>
+        setMp3((now) =>
+          now.busy ? { ...now, note: "Still working. A long meeting takes a bit longer." } : now,
+        ),
+      45_000,
+    );
+    try {
+      const made = await api.request<{ url: string; name: string; bytes: number }>(
+        `/api/meetings/${encodeURIComponent(id)}/mp3`,
+        {},
+      );
+      // Closed while it was being made: no file arrives on another screen. It's kept, so the next
+      // tap is instant.
+      if (!open.current) return;
+      // An installed iPhone app can only open it in a tab, and only from a tap (not after the wait).
+      const tapNeeded = isInstalled() && isIos();
+      const started = !tapNeeded && startDownload(made.url);
+      setMp3({
+        busy: false,
+        note: started
+          ? `Downloading “${made.name}” (${fileSize(made.bytes)}). Check your downloads.`
+          : `Your MP3 is ready (${fileSize(made.bytes)}). Tap Save the MP3.`,
+        ...(started ? {} : { url: made.url }),
+      });
+    } catch (problem) {
+      if (!open.current) return;
+      setMp3({
+        busy: false,
+        failed: true,
+        note:
+          problem instanceof TypeError
+            ? "Lost the connection. Tap Download as MP3 again."
+            : problem instanceof Error
+              ? problem.message
+              : "Couldn’t make the MP3. Try again.",
+      });
+    } finally {
+      clearTimeout(slow);
     }
   };
   if (meeting === undefined)
@@ -1788,7 +1871,41 @@ export function MeetingSheet({ id }: { id: string }) {
                 }
               />
             ))}
-            {!!kept && <Text style={s.small}>The audio is kept until {kept}; the words stay.</Text>}
+            {meeting.mp3 && (
+              <View style={{ gap: 6 }}>
+                <Button
+                  icon={Download}
+                  busy={mp3.busy}
+                  style={{ alignSelf: "flex-start" }}
+                  onPress={() => void makeMp3()}
+                >
+                  {mp3.busy ? "Making your MP3…" : "Download as MP3"}
+                </Button>
+                <StatusLine text={mp3.note} />
+                {mp3.failed ? (
+                  <ErrorNotice error={mp3.note} />
+                ) : (
+                  !!mp3.note && <Text style={s.small}>{mp3.note}</Text>
+                )}
+                {!!mp3.url && (
+                  <Button
+                    icon={Download}
+                    style={{ alignSelf: "flex-start" }}
+                    onPress={() => mp3.url && startDownload(mp3.url)}
+                  >
+                    Save the MP3
+                  </Button>
+                )}
+                {!!kept && (
+                  <Text style={s.small}>
+                    The audio and its MP3 are kept until {kept}; the words stay.
+                  </Text>
+                )}
+              </View>
+            )}
+            {!meeting.mp3 && !!kept && (
+              <Text style={s.small}>The audio is kept until {kept}; the words stay.</Text>
+            )}
           </View>
         )}
         {meeting.segments.length > 0 && (

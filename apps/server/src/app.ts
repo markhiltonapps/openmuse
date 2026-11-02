@@ -80,6 +80,7 @@ import {
 import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.ts";
 import { ModelChoices, SERVER_MODEL } from "./model-choices.ts";
 import { monitorChecks } from "./monitor-history.ts";
+import { ffmpegAvailable, ffmpegMp3 } from "./mp3.ts";
 import { PastChats } from "./past-chats.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
 import { PushService } from "./push.ts";
@@ -870,9 +871,13 @@ export async function createApp(
     (config.sonioxApiKey
       ? new SonioxTranscriber(config.sonioxApiKey, fetch, config.sonioxBaseUrl)
       : undefined);
+  const mp3 = (await ffmpegAvailable()) ? ffmpegMp3 : undefined;
+  if (config.mode === "live")
+    console.log(`[OpenMuse] MP3 downloads ${mp3 ? "on" : "off (ffmpeg isn't installed here)"}`);
   const meetings = new Meetings(db, blobs, auth, {
     soniox,
     usage,
+    mp3,
     monthlyHours: config.meetingMonthlyHours ?? 10,
     plans,
     timeZone: (owner) => agent.timeZone(owner),
@@ -1263,7 +1268,7 @@ export async function createApp(
   });
   app.use("/api/*", async (c, next) => {
     const signedRoute =
-      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$/.test(
+      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$|^\/api\/meetings\/[^/]+\/mp3\/file$/.test(
         c.req.path,
       );
     const owner =
@@ -2258,6 +2263,22 @@ export async function createApp(
       c.header("Content-Range", `bytes ${start}-${end}/${size}`);
       return c.body(Buffer.from(bytes.subarray(start, end + 1)), 206);
     }
+    return c.body(Buffer.from(bytes));
+  });
+  // The recording as one MP3: made on the first ask (it can take a minute for a long meeting),
+  // then a link that downloads it. The link is signed, like the audio's, and short-lived.
+  app.post("/api/meetings/:id/mp3", async (c) =>
+    c.json(await meetings.mp3(c.get("owner"), c.req.param("id"))),
+  );
+  app.get("/api/meetings/:id/mp3/file", async (c) => {
+    const { bytes, name } = await meetings.mp3File(c.get("owner"), c.req.param("id"));
+    const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+    c.header("Content-Type", "audio/mpeg");
+    c.header(
+      "Content-Disposition",
+      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    );
+    c.header("Cache-Control", "private, no-store");
     return c.body(Buffer.from(bytes));
   });
   app.get("/api/app-alerts", async (c) =>

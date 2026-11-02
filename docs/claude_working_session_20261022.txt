@@ -465,3 +465,35 @@ Help: the move paragraph under "Your email and calendar apps" still holds (two A
 Not verified: no live run of the new tool against Gmail (the label list shape from Composio is handled by a recursive reader);
 the Apps screen change was not screenshotted. Pending: "push it" (two local commits), then retry a move and read the log line
 ([userId, messageIds×N, addLabelIds×1, removeLabelIds×1] is what a correct move now logs).
+
+----- 2026-11-02: Download a meeting's audio as an MP3 (Files > meeting) -----
+Owner asked: when someone opens a recorded meeting from Files, let them download the audio as an MP3. Owner chose server-side
+conversion with ffmpeg (over converting on the phone, or offering the original M4A/WebM).
+Built:
+- apps/server/src/mp3.ts: `ffmpegMp3` joins every part (WebM, M4A or Ogg, whatever the phone made) into ONE mono MP3 (64 kbps, 44.1 kHz,
+  about 30 MB an hour; each part is resampled first so parts recorded differently still join) with the meeting title as the ID3 title;
+  15-minute cap; temp files are removed. `ffmpegAvailable` probes ffmpeg + the MP3 encoder once.
+- meetings.ts: `Meetings.mp3` / `mp3File`: made on the first ask, kept at meetings/<id>/audio.mp3 (so deleting the meeting deletes it,
+  and the 30-day audio cleanup removes it), re-made if the parts changed (signature), one conversion at a time per meeting
+  (in-process map). Refused while recording (409) and after the audio expired (404). `read()` says `mp3: true` only when it can be made.
+  `fileSafe` makes the download name from the title.
+- app.ts: POST /api/meetings/:id/mp3 (session) returns {url, name, bytes}; GET /api/meetings/:id/mp3/file is a signed link (attachment).
+  Startup log (live): "MP3 downloads on/off (ffmpeg isn't installed here)".
+- infra/api.Dockerfile installs ffmpeg (apt, final stage). NOT built here (no Docker): the first Railway build will show it.
+- meetings-ui.tsx: "Download as MP3" under Recording (web only, like the player): "Making your MP3…", then the browser downloads;
+  failure in the red notice; on an installed iPhone app it waits for a tap on "Save the MP3" (opens a tab); closing the sheet skips the
+  automatic download; "Still working…" after 45 s; "Lost the connection…" for a network failure; kept-until line says "audio and its MP3".
+- Help: new topic "meeting-mp3" with picture `meetingmp3` (light/dark, 2 marks: the button, the kept-until line), record-meeting links
+  to it, admin-meetings explains ffmpeg and the storage (about 30 MB per recorded hour). Website: one sentence in the meetings band
+  (checked at 390x844 and 1280x800).
+- Design review (visual, usability, copy): round 1 found a 44px touch target, duplicated words, iPhone download behaviour described
+  wrongly, an overpromise ("small enough to send"), admin jargon in a user topic; all fixed; round 2 visual and copy SIGN OFF, usability
+  signed off in round 1 with nits (applied except "say why there's no button while recording": Help covers it).
+Tests: 684 pass (new: file names, a REAL ffmpeg join of WebM stereo 48k + M4A mono 16k checked with ffprobe (codec mp3, mono, 44.1k, 1.5 s,
+title tag), service (once for two taps, parts in order, cache, remake on change, expiry and delete remove it, no ffmpeg = no button,
+recording = 409), and the routes (signed link, attachment headers, 401 without a signature)). The ffmpeg tests skip where ffmpeg is missing.
+Also changed: "This recording's audio isn't kept any more." replaces "...is no longer kept" (the old test updated).
+Browser check: scripted Chromium click-through on a rebuilt web app (busy label, a real download named "Kickoff Q4 plan.mp3", error notice).
+Not verified: the Docker build with ffmpeg, a real phone (Android Chrome / iPhone), a real long recording's conversion time.
+Known gap (owner's voice-first rule): the agent can't deliver the MP3; the Help topic says so. Smallest fix if wanted: a chat tool that
+returns a card with a Save the MP3 button. Pending: "push it" (3 local commits including the earlier two).

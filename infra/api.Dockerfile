@@ -15,6 +15,11 @@ RUN pnpm build:server
 
 FROM mirror.gcr.io/library/node:24-slim
 WORKDIR /app
+# ffmpeg turns a recorded meeting's audio into the MP3 people can download (the server checks it
+# works when it starts; without it the Download MP3 button simply isn't offered).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps/mobile/package.json apps/mobile/

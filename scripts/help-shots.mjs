@@ -924,6 +924,57 @@ const SHOTS = [
     },
   },
   {
+    // An opened meeting with its recording: play it, or download it as an MP3. Mocked: the meeting
+    // (its audio is kept, and the server can make an MP3).
+    id: "meetingmp3",
+    go: async (p) => {
+      const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+      const meeting = {
+        id: "help-m1",
+        kind: "meeting",
+        title: "Kitchen remodel kickoff",
+        status: "done",
+        startedAt: ago(1500),
+        endedAt: ago(1452),
+        seconds: 2880,
+        summary: "They agreed the budget and a start date, and who orders what.",
+        decisions: ["Start on March 3"],
+        actionItems: [],
+        speakers: {},
+        words: 5400,
+        audio: true,
+        audioUntil: new Date(Date.now() + 29 * 86_400_000).toISOString(),
+        mp3: true,
+        segments: [],
+        gaps: [],
+        audioParts: [{ index: 0, url: "http://127.0.0.1:8787/help-audio" }],
+      };
+      await p.route(/\/api\/meetings$/, (route) =>
+        route.fulfill({
+          json: {
+            available: true,
+            allowance: { usedMinutes: 95, limitHours: 10, leftSeconds: 30300 },
+            meetings: [{ ...meeting, segments: undefined, audioParts: undefined }],
+          },
+        }),
+      );
+      await p.route(/\/api\/meetings\/help-m1$/, (route) => route.fulfill({ json: meeting }));
+      await tab(p, "Files & media").click();
+      await p.waitForTimeout(2500);
+      await p
+        .getByRole("button", { name: /^Open Kitchen remodel kickoff/ })
+        .first()
+        .click();
+      await button(p, "Download as MP3").waitFor({ timeout: 20000 });
+      await p.waitForTimeout(800);
+    },
+    clip: (p) => p.getByRole("dialog").first(),
+    marks: {
+      1: (p) => button(p, "Download as MP3"),
+      2: words((p) => p.getByText(/^The audio and its MP3 are kept until/)),
+    },
+  },
+  {
     // Rehearse a talk: the part, what it's about, the goal. Mocked: the last rehearsal's row.
     id: "rehearse",
     go: async (p) => {

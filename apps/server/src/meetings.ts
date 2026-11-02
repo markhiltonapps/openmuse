@@ -5,6 +5,7 @@ import type { Auth } from "./auth.ts";
 import type { Blobs } from "./blobs.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import type { AudioPart, Mp3Encoder } from "./mp3.ts";
 import type { Plans } from "./plans.ts";
 import { hideText } from "./redaction.ts";
 import type { UsageMeter } from "./usage.ts";
@@ -101,6 +102,8 @@ export interface Meeting {
   /** Until when the audio is kept; gone after. */
   audioUntil?: string;
   audio?: boolean;
+  /** The parts joined into one MP3, made the first time it's asked for and kept with the audio. */
+  mp3?: { signature: string; bytes: number };
   speakers?: Record<string, string>;
   summary?: string;
   decisions?: string[];
@@ -406,6 +409,15 @@ export function parseNotes(text: string): MeetingNotes | undefined {
 const SAFE_ID = /^[0-9a-f-]{36}$/;
 const extOf = (mime: string) =>
   /mp4|m4a|aac/.test(mime) ? "m4a" : /ogg/.test(mime) ? "ogg" : "webm";
+/** A meeting's title as a file name: no characters a phone or computer refuses. */
+export const fileSafe = (title: string) =>
+  title
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what's removed
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80)
+    .replace(/[. ]+$/, "");
 const chunkKey = (id: string, part: number, n: number) =>
   `meetings/${id}/c-${String(part).padStart(2, "0")}-${String(n).padStart(4, "0")}`;
 
@@ -452,6 +464,8 @@ export interface MeetingsOptions {
   timeZone?: (owner: string) => Promise<string>;
   /** People the admin removed: their recordings aren't finished in the background. */
   removed?: (owner: string) => Promise<boolean>;
+  /** Turns the audio into an MP3; undefined when this server has no ffmpeg (no MP3 button then). */
+  mp3?: Mp3Encoder;
   now?: () => number;
   /** Waits between checks on Soniox; shortened in tests. */
   pollMs?: number;
@@ -463,6 +477,8 @@ export class Meetings {
   private readonly now: () => number;
   /** Write-ups running in this process, so a second ask waits for the same one. */
   private readonly working = new Map<string, Promise<void>>();
+  /** MP3s being made in this process, so a second tap waits for the same conversion. */
+  private readonly converting = new Map<string, Promise<{ bytes: Uint8Array; name: string }>>();
   constructor(
     private readonly db: Store,
     private readonly blobs: Blobs,
@@ -473,6 +489,10 @@ export class Meetings {
   }
   get available() {
     return Boolean(this.options.soniox);
+  }
+  /** Whether the audio can be downloaded as an MP3 here. */
+  get mp3Available() {
+    return Boolean(this.options.mp3);
   }
   /** Whether a model is set up to sort a brain dump (true when nothing says otherwise). */
   get dumpAvailable() {
@@ -794,14 +814,74 @@ export class Meetings {
             url: this.auth.sign(owner, `/api/meetings/${meeting.id}/audio/${part.index}`),
           }))
         : [],
+      // Whether the audio can be downloaded as an MP3 (it's kept, and this server can make one).
+      mp3: Boolean(meeting.audio && meeting.status !== "recording" && this.options.mp3),
     };
+  }
+  /**
+   * The whole recording as one MP3, with a link to download it. It's made the first time and kept
+   * with the audio (so it goes after the same 30 days, or when the meeting is deleted).
+   */
+  async mp3(owner: string, id: string) {
+    const file = await this.mp3File(owner, id);
+    return {
+      name: file.name,
+      bytes: file.bytes.length,
+      url: this.auth.sign(owner, `/api/meetings/${id}/mp3/file`),
+    };
+  }
+  /** The MP3's bytes and the file name to give it. */
+  async mp3File(owner: string, id: string) {
+    const running = this.converting.get(`${owner}/${id}`);
+    if (running) return running;
+    const work = this.makeMp3(owner, id).finally(() => this.converting.delete(`${owner}/${id}`));
+    this.converting.set(`${owner}/${id}`, work);
+    return work;
+  }
+  private async makeMp3(owner: string, id: string) {
+    const meeting = await this.get(owner, id);
+    if (!this.options.mp3)
+      throw new AppError("MP3 downloads aren’t available right now. Ask your admin.", 503);
+    if (meeting.status === "recording")
+      throw new AppError("This is still being recorded. Download it once it’s finished.", 409);
+    const parts = meeting.audio ? (meeting.parts ?? []) : [];
+    if (!parts.length) throw new AppError("This recording’s audio isn’t kept any more.", 404);
+    const name = `${fileSafe(meeting.title) || "Meeting"}.mp3`;
+    const key = `meetings/${meeting.id}/audio.mp3`;
+    // Parts and their sizes: if the recording was added to, the old MP3 is out of date.
+    const signature = parts.map((part) => `${part.index}:${part.bytes}`).join(",");
+    if (meeting.mp3?.signature === signature) {
+      const kept = await this.blobs.get(key);
+      if (kept) return { bytes: kept, name };
+    }
+    const audio: AudioPart[] = [];
+    for (const part of [...parts].sort((a, b) => a.index - b.index)) {
+      const bytes = await this.blobs.get(part.key);
+      if (!bytes) throw new AppError("This recording’s audio isn’t kept any more.", 404);
+      audio.push({ bytes, mime: meeting.mime });
+    }
+    let mp3: Uint8Array;
+    try {
+      mp3 = await this.options.mp3(audio, meeting.title);
+    } catch {
+      throw new AppError("The audio couldn’t be turned into an MP3. Try again in a minute.", 502);
+    }
+    await this.blobs.put(key, mp3, "audio/mpeg");
+    await this.db.compareAndSwap<Meeting>(
+      owner,
+      "meetings",
+      id,
+      { audio: true },
+      { mp3: { signature, bytes: mp3.length } },
+    );
+    return { bytes: mp3, name };
   }
   /** A part's audio, and its type, while it's kept. */
   async audio(owner: string, id: string, index: number) {
     const meeting = await this.get(owner, id);
     const part = meeting.audio ? meeting.parts?.find((p) => p.index === index) : undefined;
     const bytes = part ? await this.blobs.get(part.key) : null;
-    if (!bytes) throw new AppError("This recording’s audio is no longer kept", 404);
+    if (!bytes) throw new AppError("This recording’s audio isn’t kept any more.", 404);
     return { bytes, mime: meeting.mime };
   }
   /** Meetings whose words or notes have all of these words, with a line where each was found. */
@@ -885,6 +965,7 @@ export class Meetings {
       }
       if (value.audio && value.audioUntil && Date.parse(value.audioUntil) < now) {
         for (const part of value.parts ?? []) await this.blobs.remove(part.key);
+        await this.blobs.remove(`meetings/${value.id}/audio.mp3`).catch(() => undefined);
         await this.db.compareAndSwap(
           owner,
           "meetings",

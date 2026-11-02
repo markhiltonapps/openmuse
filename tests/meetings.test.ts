@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -9,6 +10,7 @@ import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
 import {
   type DumpItem,
+  fileSafe,
   type Meeting,
   Meetings,
   parseDump,
@@ -17,6 +19,12 @@ import {
   SonioxTranscriber,
   segmentsOf,
 } from "../apps/server/src/meetings.ts";
+import {
+  type AudioPart,
+  ffmpegAvailable,
+  ffmpegMp3,
+  type Mp3Encoder,
+} from "../apps/server/src/mp3.ts";
 import { UsageMeter } from "../apps/server/src/usage.ts";
 
 let directory: string;
@@ -88,6 +96,7 @@ async function setup(
     dump?: boolean;
     dumpOff?: boolean;
     dumpBad?: { on: boolean };
+    mp3?: Mp3Encoder;
   } = {},
 ) {
   const db = await createStore();
@@ -108,6 +117,7 @@ async function setup(
       monthlyHours: options.hours ?? 10,
       now: () => clock.now,
       pollMs: 1,
+      mp3: options.mp3,
       timeZone: async () => "America/New_York",
       writeNotes:
         options.notes === false
@@ -301,7 +311,7 @@ test("a meeting in two parts is joined, written up, timed and noted; Soniox keep
   assert.equal(later.audio, false);
   assert.deepEqual(later.audioParts, []);
   assert.equal(later.segments.length, 3);
-  await assert.rejects(meetings.audio("p1", meeting.id, 0), /no longer kept/);
+  await assert.rejects(meetings.audio("p1", meeting.id, 0), /isn’t kept any more/);
   assert.equal((await db.list("p1", "meetings")).length, 1);
 
   await meetings.remove("p1", meeting.id);
@@ -676,4 +686,261 @@ test("a reply that can't be read fails the dump so Try again works", async () =>
   const again = await meetings.read("p1", meeting.id);
   assert.equal(again.status, "done");
   assert.equal(again.dump?.length, 6);
+});
+
+/** A short real recording, made with ffmpeg: a tone of this pitch, in this container. */
+function tone(name: string, seconds: number, hz: number, extra: string[]) {
+  const path = join(directory, name);
+  execFileSync("ffmpeg", [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=${hz}:duration=${seconds}`,
+    ...extra,
+    path,
+  ]);
+  return path;
+}
+
+test("a meeting's file name drops what phones and computers refuse", () => {
+  assert.equal(fileSafe("Q4 launch: plan/notes?"), "Q4 launch plannotes");
+  assert.equal(fileSafe('  "Budget" <review> | 2026...  '), "Budget review 2026");
+  assert.equal(fileSafe("Standup\u0000\u001f"), "Standup");
+  assert.equal(fileSafe("???"), "");
+  assert.equal(fileSafe("é".repeat(100)).length, 80);
+});
+
+test("ffmpeg joins parts made differently into one mono MP3 of the full length", async (t) => {
+  if (!(await ffmpegAvailable())) return t.skip("ffmpeg isn't installed here");
+  // Part 0 is WebM/Opus in stereo at 48 kHz; part 1 is M4A/AAC in mono at 16 kHz (a phone that
+  // came back after a lock may record differently), and both must join.
+  const first = await readFile(
+    tone("p0.webm", 1, 440, ["-ac", "2", "-ar", "48000", "-c:a", "libopus"]),
+  );
+  const second = await readFile(
+    tone("p1.m4a", 0.5, 880, ["-ac", "1", "-ar", "16000", "-c:a", "aac"]),
+  );
+  const parts: AudioPart[] = [
+    { bytes: first, mime: "audio/webm;codecs=opus" },
+    { bytes: second, mime: "audio/mp4" },
+  ];
+  const mp3 = await ffmpegMp3(parts, "Q4 launch plan");
+  const out = join(directory, "joined.mp3");
+  await import("node:fs/promises").then((fs) => fs.writeFile(out, mp3));
+  const info = JSON.parse(
+    execFileSync("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration:format_tags=title:stream=codec_name,channels,sample_rate",
+      "-of",
+      "json",
+      out,
+    ]).toString(),
+  ) as {
+    streams: { codec_name: string; channels: number; sample_rate: string }[];
+    format: { duration: string; tags?: { title?: string } };
+  };
+  assert.equal(info.streams[0]?.codec_name, "mp3");
+  assert.equal(info.streams[0]?.channels, 1);
+  assert.equal(info.streams[0]?.sample_rate, "44100");
+  assert.ok(Math.abs(Number(info.format.duration) - 1.5) < 0.2, `length ${info.format.duration}`);
+  assert.equal(info.format.tags?.title, "Q4 launch plan");
+  await assert.rejects(ffmpegMp3([]), /no audio/);
+  await assert.rejects(
+    ffmpegMp3([{ bytes: new Uint8Array([1, 2, 3]), mime: "audio/webm" }]),
+    /couldn’t be turned into an MP3/,
+  );
+});
+
+test("the MP3 is made once from every part in order, kept with the audio, and goes with it", async () => {
+  const made: AudioPart[][] = [];
+  const encoder: Mp3Encoder = async (parts) => {
+    made.push(parts);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return new Uint8Array([0x49, 0x44, 0x33, 7, 7, 7]);
+  };
+  const { db, blobs, clock, meetings } = await setup([[...words("1", "Hello there.", 0)]], {
+    mp3: encoder,
+  });
+  const { meeting } = await meetings.start("p1", { mime: "audio/webm;codecs=opus" });
+  await meetings.chunk("p1", meeting.id, 0, 0, new Uint8Array([1, 2, 3]));
+  await meetings.chunk("p1", meeting.id, 1, 0, new Uint8Array([4, 5]));
+  // Still being recorded: no MP3 button, and asking says why.
+  assert.equal((await meetings.read("p1", meeting.id)).mp3, false);
+  await assert.rejects(meetings.mp3("p1", meeting.id), /still being recorded/);
+  await meetings.finish("p1", meeting.id, {
+    seconds: 60,
+    parts: [
+      { index: 0, seconds: 30 },
+      { index: 1, seconds: 30 },
+    ],
+  });
+  await meetings.process("p1", meeting.id);
+  assert.equal((await meetings.read("p1", meeting.id)).mp3, true);
+
+  // Two taps at once make one MP3, named for the meeting, with a signed link.
+  const [a, b] = await Promise.all([
+    meetings.mp3("p1", meeting.id),
+    meetings.mp3("p1", meeting.id),
+  ]);
+  assert.equal(made.length, 1);
+  assert.deepEqual(
+    made[0]?.map((part) => [...part.bytes]),
+    [
+      [1, 2, 3],
+      [4, 5],
+    ],
+    "part 0 then part 1",
+  );
+  assert.equal(
+    a.name,
+    "Q4 launch plan.mp3".replace("Q4 launch plan", (await meetings.read("p1", meeting.id)).title),
+  );
+  assert.equal(a.bytes, 6);
+  assert.match(a.url, /\/api\/meetings\/.+\/mp3\/file\?owner=p1/);
+  assert.equal(b.bytes, 6);
+  // Asked again, it's the kept one.
+  await meetings.mp3("p1", meeting.id);
+  assert.equal(made.length, 1);
+  assert.ok(await blobs.get(`meetings/${meeting.id}/audio.mp3`));
+  // If the recording changed (another part), the old MP3 is out of date and is made again.
+  const stored = await db.get<Meeting>("p1", "meetings", meeting.id);
+  assert.ok(stored);
+  await db.put("p1", "meetings", { ...stored, mp3: { signature: "old", bytes: 1 } });
+  await meetings.mp3("p1", meeting.id);
+  assert.equal(made.length, 2);
+  // After the 30 days the audio is gone, and the MP3 with it.
+  clock.now += 31 * 86_400_000;
+  await meetings.maintain();
+  assert.equal(await blobs.get(`meetings/${meeting.id}/audio.mp3`), null);
+  assert.equal((await meetings.read("p1", meeting.id)).mp3, false);
+  await assert.rejects(meetings.mp3("p1", meeting.id), /isn’t kept any more/);
+});
+
+test("deleting a meeting deletes its MP3, and a server without ffmpeg offers none", async () => {
+  const withMp3 = await setup([[...words("1", "Hello.", 0)]], {
+    mp3: async () => new Uint8Array([1, 2, 3]),
+  });
+  const { meeting } = await withMp3.meetings.start("p1", { mime: "audio/webm" });
+  await withMp3.meetings.chunk("p1", meeting.id, 0, 0, new Uint8Array([1]));
+  await withMp3.meetings.finish("p1", meeting.id, { seconds: 5 });
+  await withMp3.meetings.process("p1", meeting.id);
+  await withMp3.meetings.mp3("p1", meeting.id);
+  assert.ok(await withMp3.blobs.get(`meetings/${meeting.id}/audio.mp3`));
+  await withMp3.meetings.remove("p1", meeting.id);
+  assert.equal(await withMp3.blobs.get(`meetings/${meeting.id}/audio.mp3`), null);
+
+  const without = await setup([[...words("1", "Hello.", 0)]]);
+  const started = await without.meetings.start("p1", { mime: "audio/webm" });
+  await without.meetings.chunk("p1", started.meeting.id, 0, 0, new Uint8Array([1]));
+  await without.meetings.finish("p1", started.meeting.id, { seconds: 5 });
+  await without.meetings.process("p1", started.meeting.id);
+  assert.equal((await without.meetings.read("p1", started.meeting.id)).mp3, false);
+  assert.equal(without.meetings.mp3Available, false);
+  await assert.rejects(
+    without.meetings.mp3("p1", started.meeting.id),
+    /aren’t available right now/,
+  );
+});
+
+test("the MP3 routes: make it, then download it with the signed link", async (t) => {
+  if (!(await ffmpegAvailable())) return t.skip("ffmpeg isn't installed here");
+  db = await createStore();
+  const config: Config = {
+    mode: "sample",
+    port: 8787,
+    host: "127.0.0.1",
+    publicUrl: "http://localhost:8787",
+    dataDir: await mkdtemp(join(directory, "api-")),
+    agentBackend: "sample",
+    intelligenceApiKey: "test-project-key-never-sent",
+    googleRedirectUri: "http://localhost:8787/api/google/callback",
+    allowedOrigins: [],
+  };
+  server = await createApp(db, config, {
+    soniox: fakeSoniox([words("1", "Hello from the room.", 0)]).soniox,
+  });
+  try {
+    const session = await server.app.request("/api/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    token = (await session.json()).token;
+    const started = await server.app.request("/api/meetings", {
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ mime: "audio/webm" }),
+    });
+    const { meeting } = await started.json();
+    const recording = await readFile(
+      tone("route.webm", 1, 440, ["-ac", "1", "-ar", "48000", "-c:a", "libopus"]),
+    );
+    await server.app.request(`/api/meetings/${meeting.id}/chunks/0/0`, {
+      method: "PUT",
+      headers: { ...auth(), "Content-Type": "audio/webm" },
+      body: recording,
+    });
+    await server.app.request(`/api/meetings/${meeting.id}`, {
+      method: "PATCH",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Kickoff: Q4 / plan" }),
+    });
+    await server.app.request(`/api/meetings/${meeting.id}/finish`, {
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ seconds: 1 }),
+    });
+    let read: { status: string; mp3: boolean };
+    for (let i = 0; ; i++) {
+      read = await (
+        await server.app.request(`/api/meetings/${meeting.id}`, { headers: auth() })
+      ).json();
+      if (read.status === "done" || i > 200) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(read.status, "done");
+    assert.equal(read.mp3, true);
+    // Asking needs a session; the answer has a signed link, a file name and a size.
+    const anonymous = await server.app.request(`/api/meetings/${meeting.id}/mp3`, {
+      method: "POST",
+    });
+    assert.equal(anonymous.status, 401);
+    const made = await server.app.request(`/api/meetings/${meeting.id}/mp3`, {
+      method: "POST",
+      headers: auth(),
+    });
+    assert.equal(made.status, 200);
+    const { url, name, bytes } = (await made.json()) as {
+      url: string;
+      name: string;
+      bytes: number;
+    };
+    assert.equal(name, "Kickoff Q4 plan.mp3");
+    assert.ok(bytes > 1000);
+    const link = new URL(url);
+    const file = await server.app.request(`${link.pathname}${link.search}`);
+    assert.equal(file.status, 200);
+    assert.equal(file.headers.get("content-type"), "audio/mpeg");
+    assert.match(
+      file.headers.get("content-disposition") ?? "",
+      /^attachment; filename="Kickoff Q4 plan\.mp3"/,
+    );
+    const body = new Uint8Array(await file.arrayBuffer());
+    assert.equal(body.length, bytes);
+    assert.ok(
+      (body[0] === 0x49 && body[1] === 0x44 && body[2] === 0x33) || body[0] === 0xff,
+      "starts like an MP3",
+    );
+    // The link alone is the key; without its signature the file isn't handed out.
+    assert.equal((await server.app.request(link.pathname)).status, 401);
+  } finally {
+    await server.agent.stop();
+    await db.close();
+  }
 });
