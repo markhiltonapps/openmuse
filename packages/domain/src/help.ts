@@ -1148,10 +1148,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       "If {agent} ever says it can’t reach an app you connected, see “{agent} says it can’t reach an app I connected”.",
       "Ask “Do I have any emails I need to respond to?” {agent} checks every mailbox you’ve connected (Gmail, Outlook or both) and what you’ve already sent. It tells you what needs action, including security alerts and failed payments, and what doesn’t.",
       "Ask “Move my receipts into a Receipts folder” and {agent} looks at your folders, makes the one you named only if it’s missing, then moves the mail. In Gmail a folder is a label, so making one is a first **Approve** and the move is a second; tap each as its card appears. {agent} then looks again and tells you how many really moved. If something didn’t move, it says what.",
+      "It doesn’t matter how many there are. In Gmail, {agent} finds every email that fits (up to 4,000 at a time), shows you a few so you can check they’re the right ones, and one **Approve** card moves them all, for example “Move 312 Gmail emails to Jobs”. For more than 4,000, it moves those first, then does the rest.",
     ],
     say: [
       { text: "Do I have any emails I need to respond to?", send: true },
       "Move my receipts into a Receipts folder.",
+      "Move all my job application emails into Jobs.",
     ],
     keywords: [
       "gmail",
@@ -1175,6 +1177,9 @@ export const HELP_TOPICS: HelpTopic[] = [
       "organize",
       "sort my email",
       "clean up inbox",
+      "move all",
+      "bulk",
+      "hundreds of emails",
     ],
     related: ["connect-apps", "fix-no-access"],
   },

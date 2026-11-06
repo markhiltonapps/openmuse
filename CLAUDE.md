@@ -558,3 +558,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   download can't be confirmed from the page (a blocked or cancelled one looks the same), so the note says "Started downloading", never
   "Saved". An installed iPhone app ignores downloads: use the share sheet (`navigator.share({files})`), and clear a "saved" note when what it
   describes changes (a renamed speaker).
+- **Bulk work belongs on the server, not in the model's hands (2026-11-06):** a Gmail search reached the agent
+  cut to 30,000 characters (about 25 emails), and a move needed the agent to copy every id, so nothing past 25
+  could move. find_gmail_matching pages ids-only on the server (up to 4,000) and hands the agent a selection id;
+  the move takes the selection, and approved Gmail batch changes over 1,000 ids run in parts (`runAppAction`).
+  Anything that acts on "all of them" should work this way: the agent describes, the server collects.

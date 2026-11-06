@@ -37,3 +37,28 @@ Open questions waiting on the owner
 - Earlier: Copy transcript button; MP3 slowness questions; upstream cherry-pick batch.
 
 Tests: none run (no code changed). Help/site: no visible app change, nothing to update.
+
+Bulk email moves (the "25 at a time" limit)
+-------------------------------------------
+- Why it happened: a Gmail search reached the agent cut to 30,000 characters (about 20-25 emails
+  with their text; email cards were capped at 25 too), and a move needed the agent to copy every
+  email's id itself; the read-ids guard (27 Oct) only accepts ids it saw. So it couldn't move more.
+- Fix: new tool find_gmail_matching (apps.ts). The agent writes a Gmail search; the server pages
+  GMAIL_FETCH_EMAILS 500 at a time with ids_only (falls back without it if the action refuses it),
+  up to 4,000 ids, shows 5 example cards and returns a selection id (in memory, 3 hours, per person).
+  move_gmail_to_folder now takes `selection` (or messageIds for a few): one Approve card
+  ("Move 1,800 Gmail emails to Jobs"). Approved Gmail batch changes over 1,000 ids run in parts
+  (runAppAction, app.ts executor); a failed part says how many changed and that approving again is
+  safe. The read-ids memory now forgets its oldest ids past 20,000 instead of filling up for good.
+- Agent instructions (mailMoveInstructions, shared by chat and jobs): use find_gmail_matching for
+  anything more than a handful, check the examples, move by selection, count again afterwards.
+- Labels for the new tool in voice, jobs, Activity, receipts and chat (cards show a few examples).
+  The Approve card no longer lists camelCase id fields (messageIds, addLabelIds, userId).
+- Help: "Your email and calendar apps" explains moves of any size (up to 4,000 at a time) and has a
+  new example phrase. No picture for this topic (it never had one; a real move needs a live Gmail).
+  Website: unchanged (a fix to an existing feature, not a new one).
+- Not done: Outlook still moves 20 at a time through the agent; selections live in one server's
+  memory (lost on a restart; part of the scaling work in ~2 months, along with the read-ids memory).
+- Tests: tests/mail-bulk.test.ts (paging, cap, ids_only fallback, batches of 1,000, partial
+  failure, find→move flow, 4,000 ids fit one action), mail-move instructions test extended.
+- Owner's scale plan: about 2 months away, then 100 → 1,000 → 10,000 people. No design wanted yet.

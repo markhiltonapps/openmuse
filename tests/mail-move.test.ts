@@ -38,6 +38,9 @@ test("the move instructions cover what a mail move needs", () => {
   // Gmail: one tool that adds the label and takes INBOX off; ids from a read, never a card's.
   assert.match(mailMoveInstructions, /always use move_gmail_to_folder/);
   assert.match(mailMoveInstructions, /never build the move yourself with use_app/);
+  // Big moves: the server finds every match; the agent passes a selection, not 25 ids at a time.
+  assert.match(mailMoveInstructions, /find_gmail_matching/);
+  assert.match(mailMoveInstructions, /pass that selection/);
   assert.match(mailMoveInstructions, /not thread ids/);
   assert.match(mailMoveInstructions, /never an email card's `id`/);
   assert.match(mailMoveInstructions, /one create call, never two/);

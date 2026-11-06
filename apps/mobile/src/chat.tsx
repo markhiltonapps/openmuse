@@ -214,6 +214,15 @@ export function WorkspaceTools() {
       <ToolAppResult result={result} loading={status !== "complete"} />
     ),
   });
+  // A Gmail search for a move shows a few of the emails it found.
+  useRenderTool({
+    name: "find_gmail_matching",
+    description: "Show a few of the Gmail emails a search found",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ToolAppResult result={result} loading={status !== "complete"} />
+    ),
+  });
   // Moving Gmail mail into a folder saves one app action, so its Approve card shows the same way.
   useRenderTool({
     name: "move_gmail_to_folder",

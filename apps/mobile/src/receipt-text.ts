@@ -35,6 +35,7 @@ const LOOKUPS: Record<string, string> = {
   find_app_actions: "An app you connected",
   use_app: "An app you connected",
   move_gmail_to_folder: "Your Gmail",
+  find_gmail_matching: "Your Gmail",
   get_help: "The Help guide",
   where_am_i: "Where you are",
   look_at_image: "A picture you sent",

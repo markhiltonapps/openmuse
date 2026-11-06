@@ -94,6 +94,8 @@ export function nowDoing(
     case "use_app":
     case "find_app_actions":
       return say("Using your apps", "apps");
+    case "find_gmail_matching":
+      return say("Finding your emails", "mail");
     case "move_gmail_to_folder":
       return say("Moving your email", "mail");
     case "run_code":

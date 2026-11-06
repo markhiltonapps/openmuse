@@ -37,14 +37,20 @@ export type EmailCardItem = Pick<EmailView, "id" | "app" | "from" | "subject" | 
  */
 const seenIds = new Map<string, Set<string>>();
 const MAX_SEEN = 20000;
-const GMAIL_ID = /^[0-9a-f]{10,20}$/i;
+/** Adds an id as the newest; past the cap the oldest one is forgotten, so new reads always count. */
+function keep(ids: Set<string>, id: string) {
+  ids.delete(id);
+  ids.add(id);
+  if (ids.size > MAX_SEEN) ids.delete(ids.values().next().value as string);
+}
+export const GMAIL_ID = /^[0-9a-f]{10,20}$/i;
 
 /** Notes every Gmail message id in an answer (the full answer, not the part the agent saw). */
 export function rememberMailIds(owner: string, data: unknown, depth = 0) {
   const ids = seenIds.get(owner) ?? new Set<string>();
   seenIds.set(owner, ids);
   const visit = (value: unknown, level: number) => {
-    if (level > 8 || ids.size >= MAX_SEEN) return;
+    if (level > 8) return;
     if (Array.isArray(value)) {
       for (const item of value) visit(item, level + 1);
       return;
@@ -52,11 +58,18 @@ export function rememberMailIds(owner: string, data: unknown, depth = 0) {
     if (!record(value)) return;
     for (const [key, item] of Object.entries(value)) {
       if ((key === "messageId" || key === "message_id" || key === "id") && typeof item === "string")
-        ids.add(item);
+        keep(ids, item);
       else visit(item, level + 1);
     }
   };
   visit(data, depth);
+}
+
+/** Notes Gmail message ids the server itself found for this person (a search it ran). */
+export function rememberIds(owner: string, found: string[]) {
+  const ids = seenIds.get(owner) ?? new Set<string>();
+  seenIds.set(owner, ids);
+  for (const id of found) if (GMAIL_ID.test(id)) keep(ids, id);
 }
 
 /** The message ids in a Gmail call's arguments that weren't in anything read for this person. */

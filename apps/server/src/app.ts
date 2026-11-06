@@ -23,7 +23,7 @@ import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { AppEvents } from "./app-events.ts";
 import { ApprovalRules } from "./approval-rules.ts";
-import { type AppConnector, ComposioConnector } from "./apps.ts";
+import { type AppConnector, ComposioConnector, runAppAction } from "./apps.ts";
 import { Areas, nominatimPlaces } from "./area.ts";
 import { ADMIN_OWNER, createAuth } from "./auth.ts";
 import { AvatarMedia } from "./avatar-media.ts";
@@ -212,7 +212,11 @@ export async function createApp(
       if (input.kind !== "app.action")
         return workspace.execute(owner, input, connectionId, targetVersion);
       if (!connected) throw new AppError("Connected apps are not configured on this server", 409);
-      const data = await connected.execute(owner, input.data.tool, input.data.arguments);
+      const data = await runAppAction(
+        (slug, args) => connected.execute(owner, slug, args),
+        input.data.tool,
+        input.data.arguments,
+      );
       // A meeting added or moved shows on the Feed's day card straight away.
       if (/calendar|outlook/i.test(input.data.app)) calendarToday.forget(owner);
       if (isPurchase(input.data.tool) && input.data.amountUsd)

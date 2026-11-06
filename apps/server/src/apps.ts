@@ -9,6 +9,8 @@ import type { Store } from "./db.ts";
 import {
   type EmailCardItem,
   emailsIn,
+  GMAIL_ID,
+  rememberIds,
   rememberMailIds,
   unreadMailIds,
   unwrapCardIds,
@@ -966,13 +968,36 @@ export function appToolSpecs(
   const moveGmail = {
     name: "move_gmail_to_folder",
     description:
-      "Move Gmail emails into a folder (a Gmail label) in one step: it adds the folder's label and takes the emails out of the inbox. Use this, not use_app, to move Gmail mail. Pass each email's messageId (from emails you read, never invented) and the folder's name. It saves one Approve card; nothing moves until the person taps Approve, and Gmail's answer is not proof, so search again afterwards. If the folder doesn't exist it says so: make it once with use_app (create label), then call this again.",
+      "Move Gmail emails into a folder (a Gmail label) in one step: it adds the folder's label and takes the emails out of the inbox. Use this, not use_app, to move Gmail mail. Pass either `selection` (from find_gmail_matching: every email a search found, however many) or `messageIds` (a few emails you read, never invented), and the folder's name. It saves one Approve card; nothing moves until the person taps Approve, and Gmail's answer is not proof, so count again afterwards with find_gmail_matching. If the folder doesn't exist it says so: make it once with use_app (create label), then call this again.",
     parameters: z.object({
-      messageIds: z.array(z.string().trim().min(1).max(100)).min(1).max(500),
+      selection: z
+        .string()
+        .trim()
+        .max(40)
+        .optional()
+        .describe("The selection id find_gmail_matching returned"),
+      messageIds: z.array(z.string().trim().min(1).max(100)).max(500).optional(),
       folder: z.string().trim().min(1).max(200).describe("The folder's name, e.g. Jobs"),
       summary: z.string().trim().min(1).max(500).optional(),
     }),
-    execute: async (request: { messageIds: string[]; folder: string; summary?: string }) => {
+    execute: async (request: {
+      selection?: string;
+      messageIds?: string[];
+      folder: string;
+      summary?: string;
+    }) => {
+      const chosen = request.selection ? selectionFor(owner, request.selection) : undefined;
+      if (request.selection && !chosen)
+        return {
+          error:
+            "That selection has expired or isn't this person's. Run find_gmail_matching again and use the new selection. Nothing was moved.",
+        };
+      const messageIds = chosen ? chosen.ids : (request.messageIds ?? []);
+      if (!messageIds.length)
+        return {
+          error:
+            "No emails to move: pass the selection from find_gmail_matching (or messageIds). Nothing was moved.",
+        };
       let labels: { id: string; name: string }[];
       try {
         labels = userLabels(await apps.execute(owner, "GMAIL_LIST_LABELS", {}));
@@ -998,24 +1023,217 @@ export function appToolSpecs(
         tool: "GMAIL_BATCH_MODIFY_MESSAGES",
         arguments: {
           userId: "me",
-          messageIds: request.messageIds,
+          messageIds,
           addLabelIds: [label.id],
           removeLabelIds: ["INBOX"],
         },
         summary:
           request.summary ??
-          `Move ${request.messageIds.length} Gmail email${request.messageIds.length === 1 ? "" : "s"} to ${label.name}`,
+          `Move ${messageIds.length.toLocaleString("en-US")} Gmail email${messageIds.length === 1 ? "" : "s"} to ${label.name}`,
       });
       return saved.status === "awaiting_review" || saved.status === "done"
         ? {
             ...saved,
             folder: label.name,
-            next: "After it runs, search that folder and the inbox again and tell them the real counts; Gmail says accepted even for ids it skips.",
+            count: messageIds.length,
+            next: `After it runs, count again with find_gmail_matching (the same search plus in:inbox, and label:"${label.name}") and tell them the real numbers; Gmail says accepted even for ids it skips.`,
           }
         : saved;
     },
   };
-  return [...tools, moveGmail];
+  const findGmail = {
+    name: "find_gmail_matching",
+    description:
+      "Find every Gmail email that matches a Gmail search, however many there are (up to 4,000 at a time), without reading them one by one. Write the search in Gmail's own syntax, e.g. `in:inbox from:(greenhouse.io OR lever.co OR workday.com) subject:(application OR applied)`. Returns how many match, a few examples (shown on the person's screen) and a selection id; to move them all, pass that selection to move_gmail_to_folder. Use this for any move of more than a handful of emails, and afterwards to count what's left.",
+    parameters: z.object({
+      query: z
+        .string()
+        .trim()
+        .min(1)
+        .max(1500)
+        .describe("A Gmail search, as typed in Gmail's search box"),
+    }),
+    execute: async (request: { query: string }) => {
+      const run = (slug: string, args: Record<string, unknown>) => apps.execute(owner, slug, args);
+      let found: { ids: string[]; more: boolean };
+      try {
+        found = await findGmailIds(run, request.query);
+      } catch (error) {
+        return {
+          error: `Gmail search failed (${error instanceof Error ? error.message : "an error"}). Nothing was changed.`,
+        };
+      }
+      if (!found.ids.length)
+        return {
+          count: 0,
+          query: request.query,
+          message:
+            "No emails match that search. Check the search (Gmail syntax) or try a broader one.",
+        };
+      rememberIds(owner, found.ids);
+      const selection = keepSelection(owner, request.query, found.ids);
+      // A few examples, so the person (and the agent) can see it found the right mail.
+      let examples: ReturnType<typeof emailsIn> = [];
+      try {
+        const sample = await run("GMAIL_FETCH_EMAILS", {
+          query: request.query,
+          max_results: 5,
+          include_payload: false,
+          verbose: false,
+        });
+        examples = emailsIn(sample, "gmail").slice(0, 5);
+      } catch {
+        // The count still stands without examples.
+      }
+      const emails = examples.length
+        ? await emailViews?.save(owner, examples).catch(() => undefined)
+        : undefined;
+      const count = found.ids.length;
+      return {
+        count,
+        ...(found.more ? { more: true } : {}),
+        query: request.query,
+        selection,
+        examples: examples.map((email) => ({
+          from: email.from,
+          subject: email.subject,
+          ...(email.date ? { date: email.date } : {}),
+        })),
+        ...(emails?.length
+          ? {
+              emails,
+              shown:
+                "A few of these emails are on the person's screen as cards. Say how many match; don't list them all.",
+            }
+          : {}),
+        message: found.more
+          ? `More than ${count.toLocaleString("en-US")} emails match; this selection has the newest ${count.toLocaleString("en-US")}. Move these first, then search again for the rest.`
+          : `${count.toLocaleString("en-US")} email${count === 1 ? "" : "s"} match. To move them all, call move_gmail_to_folder with selection ${selection} (it lasts 3 hours).`,
+      };
+    },
+  };
+  return [...tools, findGmail, moveGmail];
+}
+
+/** The most emails one search collects for a move; their ids must fit in one Approve card. */
+export const GMAIL_SELECTION_MAX = 4000;
+/** Gmail's own limit on ids in one batch change. */
+export const GMAIL_BATCH_LIMIT = 1000;
+const SELECTION_TTL = 3 * 60 * 60_000;
+/** Emails a search found, kept briefly so a move can use all of them without the agent copying ids. */
+const selections = new Map<string, { owner: string; query: string; ids: string[]; at: number }>();
+function keepSelection(owner: string, query: string, ids: string[], now = Date.now()) {
+  for (const [key, value] of selections) if (now - value.at > SELECTION_TTL) selections.delete(key);
+  const id = `sel_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  selections.set(id, { owner, query, ids, at: now });
+  return id;
+}
+function selectionFor(owner: string, id: string, now = Date.now()) {
+  const found = selections.get(id.trim());
+  return found && found.owner === owner && now - found.at <= SELECTION_TTL ? found : undefined;
+}
+
+/** The message ids and next page in a GMAIL_FETCH_EMAILS answer, however it wraps them. */
+export function gmailPage(data: unknown): { ids: string[]; next?: string } {
+  const ids = new Set<string>();
+  let next: string | undefined;
+  const visit = (value: unknown, level: number) => {
+    if (level > 8 || value === null || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value)
+        if (typeof item === "string") {
+          if (GMAIL_ID.test(item)) ids.add(item);
+        } else visit(item, level + 1);
+      return;
+    }
+    for (const [key, item] of Object.entries(value)) {
+      if (/^(nextPageToken|next_page_token)$/.test(key)) {
+        if (typeof item === "string" && item) next = item;
+      } else if (/^(messageId|message_id|id)$/.test(key)) {
+        if (typeof item === "string" && GMAIL_ID.test(item)) ids.add(item);
+      } else if (!/^(labelIds|label_ids|threadId|thread_id|historyId)$/.test(key))
+        visit(item, level + 1);
+    }
+  };
+  visit(data, 0);
+  return { ids: [...ids], ...(next ? { next } : {}) };
+}
+
+/**
+ * Every Gmail message matching a search, page by page, ids only (no bodies, so hundreds a page).
+ * The agent only ever saw about 25 emails at a time, so bigger moves couldn't be built at all.
+ */
+export async function findGmailIds(
+  run: (slug: string, args: Record<string, unknown>) => Promise<unknown>,
+  query: string,
+  max = GMAIL_SELECTION_MAX,
+): Promise<{ ids: string[]; more: boolean }> {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  let token: string | undefined;
+  let idsOnly = true;
+  for (let page = 0; page < Math.ceil(max / 500) + 2; page++) {
+    const args: Record<string, unknown> = {
+      query,
+      max_results: 500,
+      include_payload: false,
+      verbose: false,
+      ...(idsOnly ? { ids_only: true } : {}),
+      ...(token ? { page_token: token } : {}),
+    };
+    let data: unknown;
+    try {
+      data = await run("GMAIL_FETCH_EMAILS", args);
+    } catch (error) {
+      // An older form of the action may not know ids_only: ask once more without it.
+      if (!idsOnly || page > 0) throw error;
+      idsOnly = false;
+      page--;
+      continue;
+    }
+    const found = gmailPage(data);
+    for (const id of found.ids)
+      if (!seen.has(id) && ids.length < max) {
+        seen.add(id);
+        ids.push(id);
+      }
+    token = found.next;
+    if (!token || !found.ids.length) return { ids, more: false };
+    if (ids.length >= max) return { ids, more: true };
+  }
+  return { ids, more: !!token };
+}
+
+/**
+ * Runs an approved app action. A Gmail batch change over Gmail's 1,000-id limit is sent in parts;
+ * repeating one is harmless (a label already added or removed stays so), so a failed part can be
+ * approved again in full.
+ */
+export async function runAppAction(
+  run: (slug: string, args: Record<string, unknown>) => Promise<unknown>,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const ids = args.messageIds ?? args.ids;
+  const key = Array.isArray(args.messageIds) ? "messageIds" : "ids";
+  if (!/^GMAIL_BATCH_(MODIFY|DELETE)_MESSAGES$/.test(tool) || !Array.isArray(ids))
+    return run(tool, args);
+  if (ids.length <= GMAIL_BATCH_LIMIT) return run(tool, args);
+  let done = 0;
+  for (let start = 0; start < ids.length; start += GMAIL_BATCH_LIMIT) {
+    const part = ids.slice(start, start + GMAIL_BATCH_LIMIT);
+    try {
+      await run(tool, { ...args, [key]: part });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "an error";
+      throw new AppError(
+        `Changed ${done} of ${ids.length} emails, then a batch failed (${reason}). Approving it again is safe: emails already changed stay that way.`,
+        error instanceof AppError ? error.status : 502,
+      );
+    }
+    done += part.length;
+  }
+  return { emails: ids.length, batches: Math.ceil(ids.length / GMAIL_BATCH_LIMIT) };
 }
 
 /** The person's own Gmail folders (labels) in a GMAIL_LIST_LABELS answer, however it wraps them. */

@@ -68,7 +68,8 @@ function whatItDoes(action: ActionProposal) {
             value !== null &&
             value !== "" &&
             !(typeof value === "string" && value.length > 80) &&
-            !/(^|_)(mime_?type|id|ids|url|uri|type)$/i.test(key),
+            !/(^|_)(mime_?type|id|ids|url|uri|type)$/i.test(key) &&
+            !/[a-z](Id|Ids)$/.test(key),
         )
         .slice(0, 3)
         .map(([key, value]) =>
