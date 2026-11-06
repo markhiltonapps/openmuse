@@ -1,0 +1,39 @@
+Claude working session — 2026-11-06
+=====================================
+
+Neddy pendant (planning only, no code changed)
+----------------------------------------------
+- Owner wants Neddy on a wearable: Waveshare ESP32-S3-Touch-AMOLED-1.75C in the aluminum case
+  (SKU 33691), button first, wake word optional/later, prototype for owner + testers.
+- Wrote and published two private pages (claude.ai artifacts, owner's account):
+  - Plan: https://claude.ai/artifact/3X3Mwwd1VkGVVTPQvZzfPn
+    How it works (pendant -> Neddy's Pipecat voice service over Wi-Fi; Bluetooth relay through
+    the phone app as backup), honest limits, phases 0-8, skills with sample prompts, software
+    and costs, shopping list, decisions for later.
+  - Phase 0 setup guide for Windows: https://claude.ai/artifact/V2LfYHr5KpKgbDHVMeFmDF
+    Git, VS Code, Espressif EIM (offline installer, ESP-IDF v6.0.2 or v5.5.5 per Waveshare;
+    "Easy Installation" picks a newer version the demos don't list), ESP-IDF extension,
+    Claude Code (irm https://claude.ai/install.ps1 | iex), Waveshare demos 01_AXP2101 and
+    02_lvgl_demo_v9, Claude Code started from "ESP-IDF: Open ESP-IDF Terminal".
+- Decisions from the owner today:
+  - Android first for the installed phone app (owner has Android, no iPhone). APK sideload
+    needs no store account; Google Play $25 when testers join; Apple $99/yr when iPhone is added.
+  - Radio certification: owner believes the board is already certified; plan now says check
+    for an FCC ID / CE declaration for this exact product before selling.
+  - Wake word optional.
+- Inspiration: Lumi (lumi.nuvproj.org, NuvolaProject) runs on the same board. Useful facts from
+  their specs: 32 MB flash, 1 W speaker, ~14 h from a 500 mAh cell with screen off and iPhone
+  linked. Borrowed: setup with the pendant's own Wi-Fi network + QR + 6-digit pairing code (no app
+  needed), hold-to-talk with live words and an edge ring, face changes before speaking, install
+  from the browser, OTA with rollback. Their iPhone app is "coming soon" (unproven).
+- Likeness flag: LUMI is also a pale robot with orange arc eyes in a black visor and rocket
+  thrusters. Neddy's renders have been in the repo since 2026-09-27 (apps/mobile/public/home).
+  Suggested leaning on his teal band, atom badge and egg shape.
+
+Open questions waiting on the owner
+-----------------------------------
+- Pendant setup: Lumi-style no-app setup (recommended) or QR scanned in the Neddy app over BLE.
+- Animation: art body + eyes/hover/flame in code (recommended) vs fully procedural.
+- Earlier: Copy transcript button; MP3 slowness questions; upstream cherry-pick batch.
+
+Tests: none run (no code changed). Help/site: no visible app change, nothing to update.
