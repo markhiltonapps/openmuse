@@ -452,3 +452,12 @@ Describe a voice (owner: Muse asks what kind of voice, then finds it); voice pre
   long reply, with news waiting (See it), after the call ended by itself, and with a backdrop on. Asked
   the owner what the bar looked like and on which device. Production log for the 15:37-15:39 UTC call:
   four chat hand-offs, no errors.
+- Owner's answer on the minimized call: Android phone; he saw the transcript, Neddy said it would show
+  voices that never appeared, he minimized the call thinking they were behind it, and couldn't get back to
+  the transcript. Still not reproduced: a Pixel 7 profile with touch taps, the CPU slowed 6x and 12x and
+  words streaming in every 60 ms, still reopened the call screen 8 times out of 8 from the bar. Notes for
+  next time: the bar's main button, Home's "Back to the call with Neddy" and the chat's headset button all
+  reopen the call. With cards now arriving on a call, the call screen switches to Details by itself and a
+  "Conversation | Details" switch appears, which is the back-and-forth he asked for; before the fix there
+  were no details, so no switch. If it happens again on his phone: ask what the top bar showed and whether
+  the Home Talk button said "Back to the call".
