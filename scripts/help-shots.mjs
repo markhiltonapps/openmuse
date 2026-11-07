@@ -729,6 +729,108 @@ const SHOTS = [
     },
   },
   {
+    // "Will it rain on my walk?": the answer for where they are, sunrise and sunset included.
+    id: "weather-here",
+    height: 700,
+    go: async (p, state) => {
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "Will it rain on my walk in the next hour?" },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "No rain where you are, in Midtown, for the next 12 hours. It’s 72°F and mostly sunny. Sunset is at 5:31 PM, about three hours from now.",
+          toolCalls: [
+            {
+              id: "help-call-1",
+              type: "function",
+              function: { name: "get_weather", arguments: JSON.stringify({ here: true }) },
+            },
+          ],
+        },
+        { id: "help-r1", role: "tool", toolCallId: "help-call-1", content: "{}" },
+      ];
+      // The chat connected before this exchange was set: open it again.
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await p.getByText(/^No rain where you are/).waitFor({ timeout: 20000 });
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      2: {
+        find: (p) => p.getByText("Will it rain on my walk in the next hour?"),
+        side: "top-right",
+        tight: true,
+      },
+      3: { find: (p) => p.getByText(/^No rain where you are/), side: "top-right", tight: true },
+    },
+  },
+  {
+    // "I parked here": the parked-car card in the chat, with Directions and Found it.
+    id: "park-car",
+    height: 1000,
+    go: async (p, state) => {
+      const parked = {
+        lat: 29.7547,
+        lng: -95.3677,
+        place: "Main Street, Midtown, Houston",
+        note: "Level 3 by the elevator",
+        at: Date.now() - 35 * 60_000,
+      };
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "I parked here, level 3 by the elevator." },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "Saved: Main Street in Midtown, level 3 by the elevator. Ask me “where did I park?” any time.",
+          toolCalls: [
+            {
+              id: "help-call-1",
+              type: "function",
+              function: {
+                name: "park_car",
+                arguments: JSON.stringify({ do: "save", note: parked.note }),
+              },
+            },
+          ],
+        },
+        {
+          id: "help-r1",
+          role: "tool",
+          toolCallId: "help-call-1",
+          content: JSON.stringify({ parked }),
+        },
+      ];
+      // The chat connected before this exchange was set: open it again.
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await p.getByRole("button", { name: /^Directions to your car/ }).waitFor({ timeout: 20000 });
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: { find: (p) => p.getByPlaceholder(/^Message/), side: "inside-right" },
+      2: {
+        find: (p) => p.getByText("Main Street, Midtown, Houston", { exact: true }).last(),
+        also: (p) => p.getByText("Parked 35 minutes ago", { exact: true }),
+        side: "top-right",
+      },
+      3: {
+        find: (p) => p.getByText("Level 3 by the elevator", { exact: true }).last(),
+        side: "left",
+      },
+      5: {
+        find: (p) => button(p, /^Directions to your car/),
+        also: (p) => button(p, /^Found it/),
+        side: "left",
+      },
+    },
+  },
+  {
     // "Make me a picture of…": the picture card in the chat (still here: the motion is drawn live).
     id: "pictures",
     height: 1200,
@@ -871,11 +973,28 @@ const SHOTS = [
   {
     id: "location",
     go: async (p) => {
+      // A parked car is saved, as it shows on this screen.
+      await p.route(/\/api\/location$/, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({
+              json: {
+                enabled: true,
+                sharedAt: new Date().toISOString(),
+                parked: { at: Date.now() - 35 * 60_000, place: "Main Street, Midtown, Houston" },
+              },
+            })
+          : route.fallback(),
+      );
       await appsTab(p, /Account/);
       await reveal(p.getByText("Your location", { exact: true }).first());
     },
     marks: {
       1: (p) => p.getByRole("checkbox", { name: /^Share where I am/ }),
+      4: {
+        find: (p) => p.getByText("Parked car saved", { exact: true }),
+        side: "top-right",
+        tight: true,
+      },
     },
   },
   {
@@ -1622,7 +1741,7 @@ const sizes = (() => {
     // One "  id: { width: 720, height: 1558 }," a line, as written below (not JSON).
     const text = readFileSync(SIZES, "utf8");
     return Object.fromEntries(
-      [...text.matchAll(/^\s+([\w-]+): \{ width: (\d+), height: (\d+) \},$/gm)].map(
+      [...text.matchAll(/^\s+"?([\w-]+)"?: \{ width: (\d+), height: (\d+) \},$/gm)].map(
         ([, id, width, height]) => [id, { width: Number(width), height: Number(height) }],
       ),
     );
@@ -1702,7 +1821,8 @@ await browser.close();
 const sorted = Object.fromEntries(Object.entries(sizes).sort(([a], [b]) => a.localeCompare(b)));
 // One shot a line, as Biome formats it, so lint stays clean after a retake.
 const lines = Object.entries(sorted).map(
-  ([id, size]) => `  ${id}: { width: ${size.width}, height: ${size.height} },`,
+  ([id, size]) =>
+    `  ${/^[A-Za-z_$][\w$]*$/.test(id) ? id : JSON.stringify(id)}: { width: ${size.width}, height: ${size.height} },`,
 );
 writeFileSync(
   SIZES,

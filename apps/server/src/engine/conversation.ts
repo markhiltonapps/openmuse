@@ -1071,11 +1071,12 @@ export class ConversationAgent extends AbstractAgent {
     const weather = this.service.weather;
     if (weather)
       tools.push(
-        ...weatherToolSpecs(weather, this.owner).map((spec) =>
+        ...weatherToolSpecs(weather, this.owner, { where: this.service.whereabouts }).map((spec) =>
           defineTool({
             ...spec,
             parameters: spec.parameters as z.ZodObject,
-            execute: async () => spec.execute(),
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
           }),
         ),
       );

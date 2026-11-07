@@ -1346,6 +1346,25 @@ export async function createApp(
   app.post("/api/location", async (c) =>
     c.json(await whereabouts.report(c.get("owner"), await c.req.json())),
   );
+  // The parked-car card's "Found it": clears that parking only (a newer one is left alone).
+  app.post("/api/location/parked/clear", async (c) => {
+    const { at } = z.object({ at: z.number().int().optional() }).parse(await c.req.json());
+    return c.json({ result: await whereabouts.clearParked(c.get("owner"), at) });
+  });
+  // The card's Undo after Found it: puts the same spot back unless they've parked somewhere new.
+  app.post("/api/location/parked/restore", async (c) => {
+    const car = z
+      .object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+        place: z.string().max(200).optional(),
+        note: z.string().max(120).optional(),
+        at: z.number().int(),
+        accuracy: z.number().min(0).max(100_000).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json({ restored: await whereabouts.restoreParked(c.get("owner"), car) });
+  });
   app.post("/api/location/sharing", async (c) => {
     const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());
     await whereabouts.setEnabled(c.get("owner"), on);

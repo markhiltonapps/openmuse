@@ -20,6 +20,7 @@ import { EmailCards, emailItems } from "./email-cards";
 import { fileLabel } from "./file-kinds";
 import { HelpAnswerCard } from "./help-ui";
 import { MeetingsToolCard } from "./meetings-ui";
+import { ParkedCarToolCard } from "./parked-car-card";
 import { PictureToolCard } from "./picture-card";
 import { RehearseToolCard } from "./rehearsal-ui";
 import { PlacesCard, ProductsCard, SearchPicturesCard } from "./rich-cards";
@@ -173,6 +174,8 @@ export function CallDetails({
                   return <CalendarCard key={key} result={result} onCall={onCall} wide />;
                 case "get_help":
                   return <HelpAnswerCard key={key} result={result} onCall={onCall} />;
+                case "park_car":
+                  return <ParkedCarToolCard key={key} result={result} />;
                 case "call_voice":
                   return <CallVoiceToolCard key={key} result={result} loading={false} />;
                 case "make_picture":

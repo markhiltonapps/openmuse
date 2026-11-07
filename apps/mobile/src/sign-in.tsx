@@ -98,8 +98,8 @@ export function SignInCard({
               Request sent
             </Text>
             <Text style={s.muted}>
-              The person who runs Neddy will see your request. If they approve, an invite
-              arrives at {requested}. It works for 3 days.
+              The person who runs Neddy will see your request. If they approve, an invite arrives at{" "}
+              {requested}. It works for 3 days.
             </Text>
             <Text style={s.small}>
               Already have an account? Your usual sign-in email is on its way instead.
@@ -178,8 +178,8 @@ export function SignInCard({
         <>
           <Text style={s.heading}>Check your email</Text>
           <Text style={s.muted}>
-            If {sentTo} has a Neddy account, a 6-digit sign-in code is on its way. It works
-            once and expires in 15 minutes.
+            If {sentTo} has a Neddy account, a 6-digit sign-in code is on its way. It works once and
+            expires in 15 minutes.
           </Text>
           <Field
             label="Sign-in code"
@@ -274,8 +274,7 @@ export function SignInCard({
         </Pressable>
       ) : (
         <Text style={s.small}>
-          Local workspaces open without a key. Make sure your Neddy server is running at{" "}
-          {API_URL}.
+          Local workspaces open without a key. Make sure your Neddy server is running at {API_URL}.
         </Text>
       )}
       <Pressable

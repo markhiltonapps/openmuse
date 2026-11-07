@@ -618,3 +618,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   call-details.tsx that draws it, and a `shown` claim in the tool's result only when those exist. The voice
   search had a chat card but none of the three on a call, so the agent said "it's on your screen" and
   nothing appeared. A test in tests/voice-brain.test.ts feeds the tool's result through `voiceAnswer`.
+- **Location features (owner, 2026-11-07, eight ideas, a round or two at a time):** where the person is lives in
+  `Whereabouts` (memory only, an hour, only while the app is open). The one thing saved for good is a parked car (they ask
+  for it; one spot, 7 days, clearable by the card's own parking time). Weather at their spot is the same National Weather
+  Service path as the home city (`forSpot`), sunrise and sunset are computed (`sun.ts`), never fetched. Distances, walking
+  times and "35 minutes ago" wording are in packages/domain/src/location.ts so cards and tools say the same thing. A
+  hyphenated Help shot id needs a quoted key in help-shots.ts (the script now does it).

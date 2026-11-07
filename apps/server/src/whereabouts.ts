@@ -1,5 +1,14 @@
 import { z } from "zod";
+import {
+  agoWords,
+  directionsLink,
+  mapLink,
+  metersBetween,
+  walkingWords,
+} from "../../../packages/domain/src/location.ts";
 import type { Store } from "./db.ts";
+
+export { agoWords, directionsLink, mapLink, metersBetween, walkingWords };
 
 /**
  * Where the person is right now (owner, 2026-10-08), for "where am I", "what's near me" and help
@@ -9,6 +18,13 @@ import type { Store } from "./db.ts";
  * (never saved), and it's forgotten after an hour or as soon as they turn it off.
  */
 const FORGET_AFTER = 60 * 60_000;
+/**
+ * A parked car is the one thing saved for good (owner, 2026-11-07: they ask for it, it is theirs to
+ * clear): one spot, kept until they clear it or this long has passed.
+ */
+const PARKED_FOR = 7 * 24 * 60 * 60_000;
+/** A spot older than this isn't taken as "here" when they say they've parked. */
+const PARK_FRESH_MINUTES = 5;
 
 export const spotSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -17,6 +33,19 @@ export const spotSchema = z.object({
   accuracy: z.number().min(0).max(100_000).optional(),
 });
 type Spot = z.infer<typeof spotSchema> & { at: number; place?: string };
+
+/** Where the person left their car. */
+export interface ParkedCar {
+  id: "parked-car";
+  lat: number;
+  lng: number;
+  place?: string;
+  note?: string;
+  /** Milliseconds since 1970 when they parked. */
+  at: number;
+  /** Meters, as the phone knew the spot. */
+  accuracy?: number;
+}
 
 /** "Main Street, Midtown, Houston": a street-level name for a spot. Undefined when not found. */
 export type StreetFinder = (lat: number, lng: number) => Promise<string | undefined>;
@@ -117,13 +146,75 @@ export class Whereabouts {
       minutesAgo: Math.round((this.now() - fresh.at) / 60_000),
     };
   }
+  /** Remembers where the car is: where they are right now, with an optional note ("level 3"). */
+  async park(owner: string, note?: string) {
+    const here = await this.current(owner);
+    if (!here)
+      return { reason: (await this.enabled(owner)) ? ("unknown" as const) : ("off" as const) };
+    // The app reports only while it's open: an older spot may be where they last stopped, not where the car is.
+    if (here.minutesAgo > PARK_FRESH_MINUTES)
+      return { reason: "stale" as const, minutesAgo: here.minutesAgo };
+    const replaced = await this.parkedCar(owner);
+    const car: ParkedCar = {
+      id: "parked-car",
+      lat: here.lat,
+      lng: here.lng,
+      ...(here.place ? { place: here.place } : {}),
+      ...(note?.trim() ? { note: note.trim().slice(0, 120) } : {}),
+      at: this.now(),
+      ...(here.accuracyMeters ? { accuracy: here.accuracyMeters } : {}),
+    };
+    await this.db.put<ParkedCar>(owner, "agent-settings", car);
+    return { car, ...(replaced ? { replaced } : {}) };
+  }
+  /** Puts a cleared spot back (the card's Undo), unless they've parked somewhere new since. */
+  async restoreParked(owner: string, car: Omit<ParkedCar, "id">) {
+    if (await this.parkedCar(owner)) return false;
+    if (this.now() - car.at > PARKED_FOR) return false;
+    await this.db.put<ParkedCar>(owner, "agent-settings", { ...car, id: "parked-car" });
+    return true;
+  }
+  /** The parked car, unless it was cleared or is over a week old. */
+  async parkedCar(owner: string) {
+    const car = await this.db.get<ParkedCar>(owner, "agent-settings", "parked-car");
+    if (!car) return undefined;
+    if (this.now() - car.at > PARKED_FOR) {
+      await this.db.remove(owner, "agent-settings", "parked-car");
+      return undefined;
+    }
+    return car;
+  }
+  /**
+   * Clears it. With `at`, only that parking: a card seen later must not clear a newer spot.
+   * "replaced" means they've parked somewhere else since.
+   */
+  async clearParked(owner: string, at?: number): Promise<"cleared" | "none" | "replaced"> {
+    const car = await this.parkedCar(owner);
+    if (!car) return "none";
+    if (at !== undefined && car.at !== at) return "replaced";
+    await this.db.remove(owner, "agent-settings", "parked-car");
+    return "cleared";
+  }
+  /** Milliseconds since a moment, on the service's clock. */
+  since(at: number) {
+    return this.now() - at;
+  }
   /** Settings for the app's switch. */
   async view(owner: string) {
     const spot = this.spots.get(owner);
+    const car = await this.parkedCar(owner);
     return {
       enabled: await this.enabled(owner),
       sharedAt:
         spot && this.now() - spot.at <= FORGET_AFTER ? new Date(spot.at).toISOString() : null,
+      // The one thing kept for good, shown on the Account screen with a way to remove it.
+      parked: car
+        ? {
+            at: car.at,
+            ...(car.place ? { place: car.place } : {}),
+            ...(car.note ? { note: car.note } : {}),
+          }
+        : null,
     };
   }
 }
@@ -134,7 +225,7 @@ export function whereaboutsToolSpecs(where: Whereabouts, owner: string) {
     {
       name: "where_am_i",
       description:
-        "Where the person is right now, from their phone (while the app is open and they've allowed it): a street-level place and coordinates. Use it for 'where am I', anything 'near me' or 'nearby' (search near this place, not their home city), and directions. Their home area is separate and only for weather and local news.",
+        "Where the person is right now, from their phone (while the app is open and they've allowed it): a street-level place and coordinates. Use it for 'where am I', anything 'near me' or 'nearby' (search near this place, not their home city), and directions. Their home area is separate: the default for weather (get_weather with here true uses where they are) and local news.",
       parameters: z.object({}),
       execute: async () => {
         const here = await where.current(owner);
@@ -154,6 +245,80 @@ export function whereaboutsToolSpecs(where: Whereabouts, owner: string) {
               message:
                 "Location sharing is off. Offer to turn it on with set_location_sharing, or ask where they are.",
             };
+      },
+    },
+    {
+      name: "park_car",
+      description:
+        "Remember where they parked, and find it again. save: they've just parked (“I parked here”, “remember where my car is”); uses where their phone is right now, with an optional note such as “level 3 by the elevator”. find: “where did I park?”: says where, how long ago and how far, as a card with a Directions button. clear: “found it”, “forget my parking spot”. One spot is kept until they clear it or a week passes.",
+      parameters: z.object({
+        do: z.enum(["save", "find", "clear"]),
+        note: z.string().max(120).optional().describe("For save: where in the lot or garage"),
+      }),
+      execute: async ({ do: what, note }: { do: "save" | "find" | "clear"; note?: string }) => {
+        const card = (car: ParkedCar, extra: Record<string, unknown> = {}) => ({
+          parked: {
+            lat: car.lat,
+            lng: car.lng,
+            ...(car.place ? { place: car.place } : {}),
+            ...(car.note ? { note: car.note } : {}),
+            at: car.at,
+            ...(car.accuracy ? { accuracyMeters: car.accuracy } : {}),
+          },
+          shown: "On their screen as a card with a Directions button.",
+          ...extra,
+        });
+        if (what === "clear") {
+          const result = await where.clearParked(owner);
+          return result === "none"
+            ? { none: true, message: "They had no parked car saved." }
+            : { cleared: true, message: "Cleared. Say it in a few words; don’t offer a card." };
+        }
+        if (what === "save") {
+          const saved = await where.park(owner, note);
+          if ("reason" in saved && saved.reason === "stale")
+            return {
+              stale: true,
+              message: `Their phone last shared where it was ${saved.minutesAgo} minutes ago, which may not be where the car is, so nothing was saved. Ask them to open the app and wait a few seconds, then say “I parked here” again.`,
+            };
+          if ("reason" in saved)
+            return saved.reason === "off"
+              ? {
+                  off: true,
+                  message:
+                    "Location sharing is off, so they can’t save a spot yet. Offer to turn it on with set_location_sharing; once their phone allows it (the app asks the next time it’s open), they can say “I parked here” again.",
+                }
+              : {
+                  unknown: true,
+                  message:
+                    "Their phone hasn't shared a location in the last hour (the app shares it only while it's open). Ask them to open the app, then say “I parked here” again.",
+                };
+          const rough = (saved.car.accuracy ?? 0) > 150;
+          const replaced = saved.replaced
+            ? ` This replaced the spot they saved earlier${saved.replaced.place ? ` at ${saved.replaced.place}` : ""}: say so.`
+            : "";
+          const roughNote = rough
+            ? `. Say the spot is rough: the phone only knew it to within about ${Math.round((saved.car.accuracy ?? 0) / 10) * 10} meters`
+            : "";
+          return card(saved.car, {
+            message: `Saved.${replaced} Say where in a few words (the street${saved.car.note ? " and their note" : ""}), and that they can ask “where did I park?” any time${roughNote}. Don’t read coordinates out.`,
+          });
+        }
+        const car = await where.parkedCar(owner);
+        if (!car)
+          return {
+            none: true,
+            message:
+              "They haven't saved a parked car (or it was cleared, or it's over a week old). If they're at their car now, offer to save the spot.",
+          };
+        const here = await where.current(owner);
+        const far = here ? metersBetween(here, car) : undefined;
+        return card(car, {
+          parkedAgo: agoWords(where.since(car.at)),
+          ...(far !== undefined ? { fromThem: walkingWords(far) } : {}),
+          message:
+            "Say where it is in a few words, how long ago they parked and, if given, how far it is. Don’t read coordinates out; the card has the Directions button.",
+        });
       },
     },
     {

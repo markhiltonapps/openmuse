@@ -314,3 +314,82 @@ test("the service finds the city once, shares forecasts, and says why when there
   assert.match(background.unavailable, /Don't stop to ask/);
   await db.remove("nia", "agent-settings", "area");
 });
+
+test("the forecast where the person is: their shared spot, sunrise and sunset, and when it isn't shared", async () => {
+  const asked: string[] = [];
+  const fetcher = (async (url: string) => {
+    asked.push(url.replace("https://api.weather.gov", ""));
+    if (url.includes("/points/51.5")) return new Response("{}", { status: 404 });
+    if (url.includes("/points/"))
+      return Response.json({
+        properties: {
+          forecast: "https://api.weather.gov/gridpoints/HGX/65,97/forecast",
+          forecastHourly: "https://api.weather.gov/gridpoints/HGX/65,97/forecast/hourly",
+          timeZone: "America/Chicago",
+        },
+      });
+    if (url.endsWith("/forecast/hourly")) return Response.json({ properties: { periods: HOURLY } });
+    if (url.endsWith("/forecast")) return Response.json({ properties: { periods: DAILY } });
+    if (url.includes("/alerts/active")) return Response.json({ features: [] });
+    return new Response("{}", { status: 404 });
+  }) as unknown as typeof fetch;
+  const weather = new WeatherService({
+    areas: new Areas(db),
+    userAgent: "test",
+    fetcher,
+    now: () => NOW.getTime(),
+  });
+  let spot: { lat: number; lng: number; place?: string; minutesAgo: number } | undefined = {
+    lat: 29.76043,
+    lng: -95.36979,
+    place: "Main Street, Midtown, Houston",
+    minutesAgo: 2,
+  };
+  let sharing = true;
+  const where = { current: async () => spot, enabled: async () => sharing };
+  const [tool] = weatherToolSpecs(weather, "wx", { where });
+  assert.ok(tool);
+  const run = (here?: boolean) =>
+    tool.execute({ here } as never) as Promise<Record<string, unknown>>;
+
+  // Where they are: asked at their spot (rounded to about 100 m), no city lookup, with the sun.
+  const here = await run(true);
+  assert.equal(here.place, "Main Street, Midtown, Houston");
+  assert.match(String(here.forWhere), /where they are now/);
+  assert.equal(asked[0], "/points/29.7600,-95.3700");
+  assert.match(String(here.sunrise), /^\d{1,2}:\d{2} AM$/);
+  assert.match(String(here.sunset), /^\d{1,2}:\d{2} PM$/);
+  // The showers an hour or so ahead are said plainly.
+  assert.match(String(here.rainSoon), /rain|showers/i);
+
+  // Not shared (an hour old, or off): it says so and the agent can fall back to the home city.
+  spot = undefined;
+  assert.match(String((await run(true)).unavailable), /hasn't shared a location/);
+  sharing = false;
+  assert.match(String((await run(true)).unavailable), /Location sharing is off/);
+
+  // Outside the US the Weather Service has nothing: said as such.
+  spot = { lat: 51.5, lng: -0.12, minutesAgo: 1 };
+  sharing = true;
+  assert.match(String((await run(true)).unavailable), /US only/);
+
+  // A job can't ask where they are: here is ignored and the home city is used.
+  const [job] = weatherToolSpecs(weather, "wx", { background: true, where });
+  assert.ok(job);
+  assert.match(
+    String(((await job.execute({ here: true } as never)) as { unavailable: string }).unavailable),
+    /No home city is saved/,
+  );
+  // Without a location service the tool says it can't.
+  const [alone] = weatherToolSpecs(weather, "wx");
+  assert.match(
+    String(
+      (
+        (await (alone as NonNullable<typeof alone>).execute({ here: true } as never)) as {
+          unavailable: string;
+        }
+      ).unavailable,
+    ),
+    /isn't available here/,
+  );
+});

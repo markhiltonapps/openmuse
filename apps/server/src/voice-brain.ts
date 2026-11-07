@@ -122,6 +122,11 @@ function shown(tool: CallDetailTool, raw: string) {
         ? voices
         : undefined;
     }
+    case "park_car":
+      // Where the car is, with its Directions button; clearing and "none" are said, not shown.
+      return result.parked && typeof result.parked === "object"
+        ? { parked: result.parked }
+        : undefined;
     case "make_picture":
       // The picture, moving, on the call screen.
       return result.picture && typeof result.picture === "object"
@@ -231,6 +236,10 @@ export function voiceNote(tool: string, args: unknown) {
       return "Changing my voice";
     case "get_weather":
       return "Checking the weather";
+    case "park_car":
+      return (args as { do?: string } | undefined)?.do === "save"
+        ? "Saving where you parked"
+        : "Finding your car";
     case "delegate_task":
       return "Starting a job";
     case "email_from_agent":

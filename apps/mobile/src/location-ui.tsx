@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
+import { agoWords } from "../../../packages/domain/src/location";
 import { HIDDEN } from "./job-working-ui";
-import { Card, CheckRow, colors, ErrorNotice, SectionHeading, s } from "./ui";
+import { Button, Card, CheckRow, colors, ErrorNotice, SectionHeading, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /**
@@ -104,14 +105,22 @@ const ago = (iso: string) => {
 /** The switch, on the Account screen. */
 export function LocationCard() {
   const { api } = useWorkspace();
-  const [view, setView] = useState<{ enabled: boolean; sharedAt: string | null }>();
+  const [view, setView] = useState<{
+    enabled: boolean;
+    sharedAt: string | null;
+    parked?: { at: number; place?: string; note?: string } | null;
+  }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [news, setNews] = useState("");
   const load = useCallback(
     () =>
       api
-        .request<{ enabled: boolean; sharedAt: string | null }>("/api/location")
+        .request<{
+          enabled: boolean;
+          sharedAt: string | null;
+          parked?: { at: number; place?: string; note?: string } | null;
+        }>("/api/location")
         .then(setView, () => undefined),
     [api],
   );
@@ -154,6 +163,22 @@ export function LocationCard() {
       setBusy(false);
     }
   };
+  // A parked car is the one thing kept for good: it's shown here, with a way to remove it.
+  const removeParked = async () => {
+    const at = view.parked?.at;
+    if (at === undefined) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.request("/api/location/parked/clear", { at });
+      setNews("Parked car removed.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const turnOn = () => {
     // Asked during the tap, so the browser shows its question.
     geo()?.getCurrentPosition(
@@ -185,8 +210,9 @@ export function LocationCard() {
       <SectionHeading title="Your location" />
       <Text style={s.muted}>
         Shared only while the app is open. Only your latest spot is kept, and it’s forgotten after
-        an hour. To name the street, your spot is sent to OpenStreetMap. Weather and local news
-        still use your home city.
+        an hour. The exception is a parked car, when you ask to remember it. To name the street,
+        your spot is sent to OpenStreetMap. Weather and local news use your home city, unless you
+        ask for the weather where you are.
       </Text>
       <CheckRow
         label="Share where I am while the app is open"
@@ -202,6 +228,19 @@ export function LocationCard() {
         checked={view.enabled}
         onPress={() => (busy ? undefined : view.enabled ? void save(false) : turnOn())}
       />
+      {view.parked && (
+        <View style={{ gap: 6 }}>
+          <Text style={[s.text, { fontWeight: "600" }]}>Parked car saved</Text>
+          <Text style={s.muted}>
+            {`${view.parked.place ?? "Your car"} · parked ${agoWords(Date.now() - view.parked.at)}. Kept until you remove it or a week passes, even if you turn sharing off.`}
+          </Text>
+          <View style={{ alignSelf: "flex-start" }}>
+            <Button busy={busy} onPress={() => void removeParked()}>
+              Remove
+            </Button>
+          </View>
+        </View>
+      )}
       <Text style={s.small}>You can also say “Where am I?” or “Turn off my location.”</Text>
       <ErrorNotice error={error} />
       <View>

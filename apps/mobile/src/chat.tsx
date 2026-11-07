@@ -76,6 +76,7 @@ import { MealCheckInCard } from "./meal-checkins-ui";
 import { MeetingsToolCard, useRecorder, useStartRecording } from "./meetings-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
+import { ParkedCarToolCard } from "./parked-car-card";
 import { PictureToolCard } from "./picture-card";
 import { lookedAt } from "./receipt-text";
 import { type ReceiptInfo, useReceipts } from "./receipt-ui";
@@ -356,6 +357,15 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <RehearseToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  // "I parked here" / "where did I park?": where the car is, with Directions and Found it.
+  useRenderTool({
+    name: "park_car",
+    description: "Show where the car is parked",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ParkedCarToolCard result={result} loading={status !== "complete"} />
     ),
   });
   // "Make me a picture of…": the picture, moving, with Open, Share, Try another, Make it better.

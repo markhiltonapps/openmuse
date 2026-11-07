@@ -461,3 +461,43 @@ Describe a voice (owner: Muse asks what kind of voice, then finds it); voice pre
   "Conversation | Details" switch appears, which is the back-and-forth he asked for; before the fix there
   were no details, so no switch. If it happens again on his phone: ask what the top bar showed and whether
   the Home Talk button said "Back to the call".
+
+LOCATION IDEAS (owner, 2026-11-07: "I like all of your ideas and I'd like to implement all of them ... start with the easy
+ones first and do one or two at a time"; and "make sure as you make all these updates you update the online help and
+whenever possible show screenshots with the directions"). Eight ideas, all free to run (plain rules and free data, no
+model call per location update): 1 Park my car, 2 Weather where you are, 3 I'm running late / share where I am, 4 What's
+near me with walking time, 5 Driving mode, 6 Leave-by heads-ups, 7 Place reminders, 8 Mileage trips. Each one gets its
+Help topic with a picture, the site line, tests and a review round in the same commit.
+Round 1 (park my car + weather where you are):
+- Weather where you are: get_weather takes `here: true` (chat and calls only; jobs ignore it). It asks the US National
+  Weather Service for the person's shared spot (WeatherService.forSpot, rounded to ~100 m, same cache as the home city),
+  adds "rainSoon" (first hour at 40% or more, else a small chance, else none) and sunrise, sunset and daylight left,
+  worked out on the server from the coordinates (packages/domain/src/sun.ts, the standard sunrise equation, within a
+  minute or two of the published times; tests/sun.test.ts). Not shared / off / outside the US each say so. The Feed and
+  jobs still use the home city. UV and air quality are NOT included: the Weather Service doesn't give them and the free
+  sources I know of restrict commercial use (checked with the owner's list: said so in the Help topic).
+  Correction to an earlier remark: the weather already comes from the National Weather Service (free, fine for a paid
+  app), not Open-Meteo, so the fair-use caveat only concerns OpenStreetMap's public servers (street names, and later
+  "near me") at scale.
+- Park my car: tool park_car (save / find / clear) in whereabouts.ts. The spot is the one thing saved for good (agent-
+  settings "parked-car": street, note, time, accuracy), one spot, kept until cleared or 7 days; sharing itself still
+  forgets after an hour. Card (apps/mobile/src/parked-car-card.tsx): "Your car", street and "Parked 35 minutes ago", the
+  note, a rough-spot warning over 150 m, Directions (Google Maps walking directions, which know where they are now) and
+  Found it (POST /api/location/parked/clear with the parking's time, so an old card can't clear a newer spot). On a call
+  too (CALL_DETAIL_TOOLS, voice-brain shown(), call-details). Distance and time wording shared in
+  packages/domain/src/location.ts. Tests: whereabouts.test.ts, voice-brain.test.ts.
+- Help: new topics "Remember where you parked" (park-car) and "Weather where you are" (weather-here), each with a screenshot
+  and numbered marks; "Share your location" steps and say lines updated. help-shots.mjs now quotes hyphenated ids when it
+  writes help-shots.ts (an unquoted park-car broke the web build).
+- Site: neddy.html has a paragraph under the pictures one.
+- Review round on round 1 (visual, usability, copy; all three: no blockers). Fixed from their should-fixes: buttons are
+  the full 44 px (not `small`), the street is the main text and the time is muted, the note sits in the text column, the
+  icon lines up with the title; a location older than 5 minutes isn't saved as "where the car is" (it says to open the app
+  and try again); parking again tells them it replaced the earlier spot; Found it has an Undo (POST
+  /api/location/parked/restore, only if nothing newer is saved); You › Account › Your location shows "Parked car saved"
+  with Remove (the screen's /api/location answer now carries `parked`); weather says when the phone last shared over 10
+  minutes ago; Help and site corrected (a parked car is the one exception to "only the latest spot is kept", the National
+  Weather Service gets the spot rounded to about a city block, Google Maps named, "yet" dropped from UV/traffic lines).
+  Checked in a browser with mocked routes: Found it sends the parking's time, Undo sends the whole spot back, the card
+  returns. Help pictures retaken: park-car, weather-here (shorter), location (now shows the saved-spot row, mark 4).
+- Tests 732 pass; lint clean on what changed (three older test-file optional-chain errors fixed on the way). Not pushed.

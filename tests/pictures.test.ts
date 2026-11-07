@@ -180,7 +180,10 @@ test("the chat tool returns the card and says on-screen only off a call", async 
   assert.equal(said.shown, undefined);
   const [off] = pictureToolSpecs(undefined, "sam");
   assert.match(
-    String(((await off?.execute({ prompt: "x" })) as { error: string }).error),
+    String(
+      ((await (off as NonNullable<typeof off>).execute({ prompt: "x" })) as { error: string })
+        .error,
+    ),
     /aren’t set up/,
   );
   await t.close();

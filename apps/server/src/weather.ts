@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sunTimes } from "../../../packages/domain/src/sun.ts";
 import {
   precipWord,
   type Weather,
@@ -277,11 +278,12 @@ export class WeatherService {
     if (area.country && area.country !== "US") return { unavailable: "outside-us" };
     const geocode = this.options.geocode;
     if (!geocode) return { unavailable: "off" };
+    let where: { lat: number; lng: number };
     try {
       const query = [area.city, area.region, area.country].filter(Boolean).join(", ") || area.label;
       // A miss throws NotFound, so it isn't kept here (the geocoder remembers real misses itself);
       // a busy lookup throws too and shows as "didn't answer".
-      const { value: where } = await this.cached(
+      ({ value: where } = await this.cached(
         `city:${query.toLowerCase()}`,
         7 * 24 * HOUR,
         async () => {
@@ -290,8 +292,27 @@ export class WeatherService {
           if (!found) throw new NotFound();
           return found;
         },
+      ));
+    } catch (error) {
+      if (error instanceof NotFound) return { unavailable: "not-found" };
+      console.warn(
+        `[OpenMuse] Weather for ${area.label} unavailable: ${error instanceof Error ? error.message : String(error)}`,
       );
-      const at = `${where.lat.toFixed(4)},${where.lng.toFixed(4)}`;
+      return { unavailable: "unreachable" };
+    }
+    return this.forPoint(where.lat, where.lng, area.label);
+  }
+  /**
+   * The forecast where the person is right now (their shared spot). The spot is rounded to about
+   * 100 m, so people near each other share one lookup; the Weather Service's own grid is far
+   * coarser. A place outside the US comes back "not-found".
+   */
+  async forSpot(lat: number, lng: number, label: string): Promise<WeatherResult> {
+    return this.forPoint(Number(lat.toFixed(3)), Number(lng.toFixed(3)), label);
+  }
+  private async forPoint(lat: number, lng: number, label: string): Promise<WeatherResult> {
+    try {
+      const at = `${lat.toFixed(4)},${lng.toFixed(4)}`;
       // A place the Weather Service doesn't cover is asked about again the next day.
       const { value: point } = await this.cached(
         `point:${at}`,
@@ -310,7 +331,7 @@ export class WeatherService {
       ]);
       return {
         weather: shapeWeather({
-          place: area.label,
+          place: label,
           timeZone: point.timeZone,
           daily: daily.value,
           hourly: hourly.value,
@@ -322,7 +343,7 @@ export class WeatherService {
     } catch (error) {
       if (error instanceof NotFound) return { unavailable: "not-found" };
       console.warn(
-        `[OpenMuse] Weather for ${area.label} unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        `[OpenMuse] Weather for ${label} unavailable: ${error instanceof Error ? error.message : String(error)}`,
       );
       return { unavailable: "unreachable" };
     }
@@ -445,24 +466,107 @@ function unavailable(reason: WeatherUnavailable, place: string | undefined, back
   return `The forecast isn't set up here. ${elsewhere}`;
 }
 
+/** Where the person is right now, as the Whereabouts service answers. */
+export interface WhereNow {
+  current(
+    owner: string,
+  ): Promise<{ lat: number; lng: number; place?: string; minutesAgo: number } | undefined>;
+  enabled(owner: string): Promise<boolean>;
+}
+
+/** "Rain likely from Wed 3 PM (60%)", or that none is expected in the hours ahead. */
+export function rainOutlook(hours: Weather["hours"]) {
+  const wet = hours.find((h) => (h.rain ?? 0) >= 40);
+  if (wet) return `${precipWord(wet.sky)} likely from ${hourOf(wet.time)} (${wet.rain}% chance)`;
+  const maybe = hours.find((h) => (h.rain ?? 0) >= 20);
+  if (maybe)
+    return `A small chance of ${precipWord(maybe.sky)} around ${hourOf(maybe.time)} (${maybe.rain}%)`;
+  return `No rain expected in the next ${hours.length} hours`;
+}
+
+/** "6:44 AM" in the spot's clock. */
+const timeIn = (ms: number, timeZone: string) =>
+  new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
+
+/** Sunrise and sunset at a spot, today, in its own clock. */
+export function sunToday(lat: number, lng: number, timeZone: string, now: Date) {
+  const day = now.toLocaleDateString("en-CA", { timeZone });
+  const sun = sunTimes(lat, lng, day);
+  if (sun.always)
+    return {
+      sun:
+        sun.always === "up" ? "The sun stays up all day here" : "The sun stays down all day here",
+    };
+  if (sun.sunrise === undefined || sun.sunset === undefined) return {};
+  const left = sun.sunset - now.getTime();
+  return {
+    sunrise: timeIn(sun.sunrise, timeZone),
+    sunset: timeIn(sun.sunset, timeZone),
+    ...(left > 0 && now.getTime() >= sun.sunrise
+      ? {
+          daylightLeft: `${Math.floor(left / 3_600_000)} h ${Math.round((left % 3_600_000) / 60_000)} min`,
+        }
+      : {}),
+  };
+}
+
 export const weatherInstructions =
-  " For the weather in the person's home city, or anything that depends on it (what to wear, rain at school pickup, outdoor plans, the morning brief, the family rundown), call get_weather: it has conditions now, the next 12 hours, 7 days and any severe-weather alerts, from the US National Weather Service, in the city's own clock. It covers the home city and the next 7 days only; for anywhere else or further out, search the web. Temperatures are °F. When it returns unavailable, do what that says.";
+  " For the weather in the person's home city, or anything that depends on it (what to wear, rain at school pickup, outdoor plans, the morning brief, the family rundown), call get_weather: it has conditions now, the next 12 hours, 7 days and any severe-weather alerts, from the US National Weather Service, in the city's own clock. For the weather right where they are now (“will it rain on my walk”, “when's sunset here”, they're travelling or out), call get_weather with here true: it uses their shared location and also gives sunrise and sunset. It covers the home city or where they are, and the next 7 days, in the US only; for anywhere else or further out, search the web. Temperatures are °F. When it returns unavailable, do what that says.";
 
 export function weatherToolSpecs(
   weather: WeatherService,
   owner: string,
   /** A scheduled or background task, which can't stop to ask the person anything. */
-  options: { background?: boolean } = {},
+  options: {
+    background?: boolean;
+    /** Lets get_weather answer for where the person is now (chat and calls only). */
+    where?: WhereNow;
+  } = {},
 ) {
   return [
     {
       name: "get_weather",
       description:
-        "The forecast for the person's home city (US only) from the US National Weather Service: now, the next 12 hours, 7 days and any severe-weather alerts. Not for other places. No arguments.",
-      parameters: z.object({}),
-      execute: async () => {
-        const result = await weather.forOwner(owner);
+        "The forecast (US only) from the US National Weather Service: now, the next 12 hours, 7 days and any severe-weather alerts. By default for the person's home city. With here true, for where they are right now, from their shared location (it also gives sunrise and sunset there). Not for other places.",
+      parameters: z.object({
+        here: z
+          .boolean()
+          .optional()
+          .describe("True for the weather where they are right now, instead of their home city"),
+      }),
+      execute: async (args?: { here?: boolean }) => {
+        const here = args?.here === true && !options.background;
+        let spot: Awaited<ReturnType<WhereNow["current"]>>;
+        if (here) {
+          const where = options.where;
+          if (!where)
+            return {
+              unavailable:
+                "Where they are isn't available here. Use their home city (call again without here), or ask where they are and search the web.",
+            };
+          spot = await where.current(owner);
+          if (!spot)
+            return (await where.enabled(owner))
+              ? {
+                  unavailable:
+                    "Their phone hasn't shared a location in the last hour (the app shares it only while it's open). Ask where they are or ask them to open the app; or give their home city's weather (call again without here).",
+                }
+              : {
+                  unavailable:
+                    "Location sharing is off. Offer to turn it on with set_location_sharing (their phone asks the next time the app is open), or ask where they are; or give their home city's weather (call again without here).",
+                };
+        }
+        const result = spot
+          ? await weather.forSpot(spot.lat, spot.lng, spot.place ?? "where they are")
+          : await weather.forOwner(owner);
         if ("unavailable" in result) {
+          if (spot)
+            return {
+              unavailable:
+                result.unavailable === "not-found"
+                  ? "This forecast covers the US only, and the Weather Service has none for where they are. If you can search the web, search for the weather there; otherwise say it isn't available."
+                  : "Couldn't get the forecast for where they are just now. If you can search the web, search for the weather there; otherwise say the forecast isn't available right now.",
+            };
           const place = await weather.place(owner);
           return {
             unavailable: unavailable(result.unavailable, place, Boolean(options.background)),
@@ -485,6 +589,18 @@ export function weatherToolSpecs(
             .filter(Boolean)
             .join(", ")
             .replace(/^./, (c) => c.toUpperCase()),
+          rainSoon: rainOutlook(w.hours),
+          ...(spot
+            ? {
+                forWhere: "where they are now (from their phone's shared location)",
+                ...(spot.minutesAgo > 10
+                  ? {
+                      spotAge: `their phone last shared where they are ${spot.minutesAgo} minutes ago: say so`,
+                    }
+                  : {}),
+                ...sunToday(spot.lat, spot.lng, w.timeZone, new Date()),
+              }
+            : {}),
           nextHours: w.hours.map(
             (h) =>
               `${hourOf(h.time)}: ${h.temp}°F, ${h.sky.toLowerCase()}${h.rain ? `, ${chanceOf(h.rain, h.sky)}` : ""}`,

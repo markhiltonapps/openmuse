@@ -307,6 +307,49 @@ test("voices found on a call go on the call screen; a voice just chosen and the 
   ]);
 });
 
+test("the parked-car card goes on the call screen; clearing it and finding none are only said", async () => {
+  const tool = (id: string, name: string, result: unknown) => [
+    { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,
+    { type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent,
+    {
+      type: EventType.TOOL_CALL_RESULT,
+      toolCallId: id,
+      messageId: randomUUID(),
+      content: JSON.stringify(result),
+    } as BaseEvent,
+  ];
+  const parked = {
+    lat: 29.7547,
+    lng: -95.3677,
+    place: "Main Street, Midtown, Houston",
+    note: "Level 3",
+    at: 1_794_000_000_000,
+  };
+  const { brain } = await brainFixture([
+    ...tool("p1", "park_car", { parked, shown: "On their screen.", parkedAgo: "2 hours ago" }),
+    ...tool("p2", "park_car", { cleared: true, message: "Cleared." }),
+    ...tool("p3", "park_car", { none: true, message: "Nothing saved." }),
+    ...tool("p4", "park_car", { off: true, message: "Location sharing is off." }),
+    {
+      type: EventType.TEXT_MESSAGE_CHUNK,
+      messageId: "r",
+      delta: "It's on Main Street.",
+    } as BaseEvent,
+  ]);
+  const shown: { items: CallDetail["items"] }[] = [];
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d1",
+    turns: [{ role: "user", text: "Where did I park?" }],
+    progress: () => {},
+    show: (items) => shown.push({ items }),
+    signal: new AbortController().signal,
+  });
+  assert.equal(shown.length, 1);
+  assert.deepEqual(shown[0]?.items, [{ tool: "park_car", result: { parked } }]);
+});
+
 test("a long answer goes on screen: shown results are collected for the call, failures and plain searches aren't", async () => {
   const tool = (id: string, name: string, result: unknown) => [
     { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,
