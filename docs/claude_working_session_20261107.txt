@@ -400,3 +400,28 @@ Starter 10, Neddy 30, Max 100 clips; 10–25¢ each).
   the prompt isn't read twice; Help marks 1–4 and the call-screen note (only Share there); site and
   pricing wording ("drawn by your device", "About 25 a day", compare's small line). Left as is: the
   GL draw stretches to the requested aspect (pictures come back at that ratio).
+
+Describe a voice (owner: Muse asks what kind of voice, then finds it); voice previews
+--------------------------------------------------------------------------------------
+- Anyone can now say "change your voice" and describe it: the chat tool's `browse` is open to
+  everyone (app.ts `browseCallVoices`; add/remove/listening stay the admin's), ranks Inworld's
+  voices by how many of the person's words their description matches, with synonyms (`SAME` /
+  `ALIASES` in voice-pipecat.ts: deeper/low/baritone, older/mature/elderly, British/English/posh,
+  warm/friendly/gentle, lively/upbeat/cheerful…), returns the voices matching every word, or the
+  nearest with `nearest: true` when none does. `choose` and `chosen` accept any of Inworld's voices,
+  not only the admin's list (a saved voice Inworld no longer has falls back to the usual one). The
+  prompt tells the agent to ask ONE question (a man's or a woman's voice, accent, age, deep or light,
+  calm or lively), browse with their words, name the closest two or three, and choose on their pick
+  (at once on a call). The chat card shows "Voices like that" with Play and a choice for everyone
+  (the admin keeps Add/Remove under "Inworld voices"); "Nothing matched every word; these come
+  closest." when nearest. Help call-voice topic step 4 + say line; the site's "Make him yours" line.
+  Tests: browse ranking by description, choosing a catalog voice. Playwright (scratchpad
+  voice-find-check.mjs): the card as a member, Play fetches Craig's sample, choosing saves.
+- Voice previews not playing on the owner's Android: Railway's http log shows every tap at
+  12:42, 12:48 and 13:44 UTC only loaded /api/call-voices; no /sample request ever left the phone,
+  so the fetch wasn't reached (locally, in a Pixel-emulating Chromium, Play fetches and plays).
+  Two things hardened without a sure diagnosis: the device-voice Preview (speechSynthesis) no
+  longer calls cancel() right before speak() unless something is being said (Chrome on Android
+  drops the utterance after a cancel), and a Play that the browser blocks (NotAllowedError) now
+  says "Your browser blocked the sound. Tap Play once more." instead of a generic line. Asked the
+  owner which card he tapped and what he saw.

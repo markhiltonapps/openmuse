@@ -71,6 +71,16 @@ test("people choose a voice by its name; anything else is turned down with the c
   await db.close();
 });
 
+test("anyone can choose a voice found among Inworld's, not only the list", async () => {
+  const db = await createStore();
+  const voices = new CallVoices(db, "http://voice", "token", "admin", voiceService().fetcher);
+  assert.deepEqual(await voices.choose("p1", "craig"), { voice: CATALOG.voices[5] });
+  assert.equal(await voices.chosen("p1"), "Craig", "kept while Inworld has it");
+  const wrong = await voices.choose("p1", "Gandalf");
+  assert.ok("error" in wrong && /describe the one you want/.test(wrong.error));
+  await db.close();
+});
+
 test("a chosen voice that's no longer offered falls back to the usual one", async () => {
   const db = await createStore();
   await db.put("p1", "agent-settings", { id: "call-voice", value: "Olivia" });
@@ -233,6 +243,18 @@ test("browsing finds voices by words, and a man's voice isn't a woman's", async 
     "and “female” finds ours",
   );
   assert.equal((await voices.browse("")).voices.length, 7);
+  // A description in the person's own words: the nearest voices, best first, and said to be nearest.
+  const described = await voices.browse("an older British man, warm and unhurried");
+  assert.equal(described.nearest, true);
+  assert.equal(described.voices[0]?.id, "Craig", "older + British + man");
+  // Nothing is both deep and a man's in this sample: every voice that is one or the other, nearest.
+  const deep = await voices.browse("a deeper man's voice");
+  assert.equal(deep.nearest, true);
+  assert.deepEqual(
+    [...deep.voices.map((v) => v.id)].sort(),
+    ["Craig", "Hades", "Theodore"],
+    "“deeper” finds “Deep and unhurried”; “man” finds the men",
+  );
   assert.equal((await voices.browse("ashley")).voices[0]?.onList, true);
   assert.equal((await voices.browse("pixie")).voices[0]?.onList, false);
   await db.close();

@@ -87,12 +87,16 @@ function useSamples() {
         if (audio.current === sound) setPlaying("");
       };
       await sound.play();
-    } catch {
+    } catch (problem) {
       setPlaying("");
+      // A browser that wants a tap right before any sound: the next tap plays it (it's kept).
+      const blocked = (problem as { name?: string } | undefined)?.name === "NotAllowedError";
       setError(
-        kind === "sample"
-          ? `${voice}’s sample couldn’t be played just now.`
-          : "The listening sounds couldn’t be played just now.",
+        blocked
+          ? "Your browser blocked the sound. Tap Play once more."
+          : kind === "sample"
+            ? `${voice}’s sample couldn’t be played just now.`
+            : "The listening sounds couldn’t be played just now.",
       );
     }
   }
@@ -552,6 +556,7 @@ export function CallVoiceCard({ name }: { name: string }) {
 export function CallVoiceToolCard({ result, loading }: { result: unknown; loading: boolean }) {
   const { data } = useAgentWorkspace();
   const name = data?.identity.name || "Neddy";
+  const admin = useIsAdmin();
   if (loading) return null;
   // The chat passes the tool's result as JSON text.
   let raw = result;
@@ -566,6 +571,8 @@ export function CallVoiceToolCard({ result, loading }: { result: unknown; loadin
     voice?: string;
     sounds?: string;
     browse?: boolean;
+    chosen?: string;
+    nearest?: boolean;
     usual?: string;
     matched?: number;
     added?: boolean;
@@ -599,11 +606,19 @@ export function CallVoiceToolCard({ result, loading }: { result: unknown; loadin
     if (!found.length) return null;
     return (
       <Card style={{ gap: 4, maxWidth: 520 }}>
-        <SectionHeading title="Inworld voices" />
+        <SectionHeading title={admin ? "Inworld voices" : "Voices like that"} />
+        {value.nearest ? (
+          <Text style={s.small}>Nothing matched every word; these come closest.</Text>
+        ) : null}
         {value.matched && value.matched > found.length ? (
           <Text style={s.small}>{`The first ${found.length} of ${value.matched}`}</Text>
         ) : null}
-        <BrowseRows voices={found} usual={value.usual ?? ""} />
+        {admin ? (
+          <BrowseRows voices={found} usual={value.usual ?? ""} />
+        ) : (
+          // Anyone: hear each one and choose it for their calls.
+          <VoiceRows name={name} voices={found} initial={value.chosen ?? ""} />
+        )}
       </Card>
     );
   }

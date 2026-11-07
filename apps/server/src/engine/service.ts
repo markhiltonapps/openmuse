@@ -1461,13 +1461,16 @@ export class AgentService {
       owner: string,
       voice: string | null,
     ) => Promise<{ voice: string; sounds: string; onCallNow: boolean } | { error: string }>;
-    /** The admin's: all of Inworld's voices matching the words, each with whether it's listed. */
+    /** All of Inworld's voices matching the words (anyone's), each with whether it's listed. */
     browse: (
       owner: string,
       query?: string,
     ) => Promise<
       | {
           usual: string;
+          chosen?: string;
+          /** Nothing matched every word: these match the most of them. */
+          nearest?: boolean;
           voices: { id: string; description: string; onList: boolean }[];
         }
       | { error: string }

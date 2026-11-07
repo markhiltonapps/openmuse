@@ -478,7 +478,7 @@ export class ConversationAgent extends AbstractAgent {
       defineTool({
         name: "call_voice",
         description:
-          "The voice you speak with on their live calls (the new voice; OpenAI’s can’t be changed here). list gives the voices, each with how it sounds, and which one they use; names narrows it to the ones they asked about (“let me hear Theodore”). choose switches to one by its name: when they describe one (“a deeper voice”, “a man’s voice”), list first and pick the closest; voice null goes back to the usual one. On a live call the new voice is used from your next words, so they can try one and switch again. Then say which voice it is now, in a few words; never read out the whole list unless they ask. When the result says it’s on their screen, they can play each voice there; say so in a sentence. The listening sounds (“mm-hmm”) can’t be turned off yet: never promise to stop them. Admin only: browse searches all of Inworld’s voices by words (“british man”; up to 8 shown), and add or remove puts a voice on the list everyone chooses from, or takes it off. When a remove result says people use that voice, tell them how many, that they’d go back to the usual voice, and ask; only if they say yes, call remove again with confirm true. listening plays the soft murmurs calls make while listening (in their voice, or the one named): in the chat they’re on their screen to play; on a call, say they’ll hear them as they talk.",
+          "The voice you speak with on their live calls (the new voice; OpenAI’s can’t be changed here). list gives the voices, each with how it sounds, and which one they use; names narrows it to the ones they asked about (“let me hear Theodore”). choose switches to one by its name (any of Inworld’s voices, found with browse or on the list); voice null goes back to the usual one. When they want a different voice and don’t name one (“change your voice”, “can you sound different”), ask ONE question first: a man’s or a woman’s voice, and anything about it (accent, age, deep or light, calm or lively); then browse with their words (“an older British man, warm”): the result is on their screen with Play and Choose for each (up to 8); name the two or three closest in a sentence each, say they can tap Play to hear them, and choose when they pick one. When the result says nearest, say nothing matched exactly and these are the closest. On a live call, choose at once so they hear it, and offer another if it isn’t right. On a live call the new voice is used from your next words, so they can try one and switch again. Then say which voice it is now, in a few words; never read out the whole list unless they ask. When the result says it’s on their screen, they can play each voice there; say so in a sentence. The listening sounds (“mm-hmm”) can’t be turned off yet: never promise to stop them. Admin only: add or remove puts a voice on the list everyone sees first, or takes it off. When a remove result says people use that voice, tell them how many, that they’d go back to the usual voice, and ask; only if they say yes, call remove again with confirm true. listening plays the soft murmurs calls make while listening (in their voice, or the one named): in the chat they’re on their screen to play; on a call, say they’ll hear them as they talk.",
         parameters: z.object({
           do: z.enum(["list", "choose", "browse", "add", "remove", "listening"]),
           confirm: z
@@ -529,9 +529,15 @@ export class ConversationAgent extends AbstractAgent {
             return {
               browse: true,
               usual: found.usual,
+              chosen: found.chosen,
               voices: some,
               matched: found.voices.length,
-              ...(some.length ? shown : {}),
+              ...(found.nearest ? { nearest: true } : {}),
+              ...(some.length
+                ? shown
+                : {
+                    note: "Nothing in Inworld’s voices matches those words; ask for other words.",
+                  }),
             };
           }
           if (what === "listening") {

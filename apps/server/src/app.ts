@@ -739,11 +739,24 @@ export async function createApp(
     if (!voice) return { error: `Inworld has no voice called “${name}”.` };
     return { listening: true as const, voice };
   };
-  const browseCallVoices = async (owner: string, query?: string) => {
-    if (!callVoices) return { error: "The new voice isn’t set up on this server." };
-    if (!(await accounts.isAdmin(owner).catch(() => false)))
-      return { error: "Only the admin can browse all of Inworld’s voices." };
-    return callVoices.browse(query);
+  // Anyone can describe a voice and pick from what's found (owner, 2026-11-07); the list the
+  // card offers by default is still the admin's.
+  const browseCallVoices = async (
+    owner: string,
+    query?: string,
+  ): Promise<
+    | { error: string }
+    | {
+        usual: string;
+        chosen: string;
+        nearest?: boolean;
+        voices: { id: string; description: string; onList: boolean }[];
+      }
+  > => {
+    if (!callVoices || (await voiceProviderFor(db, config, owner)) !== "pipecat")
+      return { error: "Their calls aren’t on the new voice, so a voice can’t be chosen." };
+    const found = await callVoices.browse(query);
+    return { ...found, chosen: await callVoices.chosen(owner) };
   };
   agent.callVoices = {
     list: callVoiceView,

@@ -123,7 +123,8 @@ export function speak(text: string, override?: Partial<VoiceSettings>): Promise<
   if (!speechAvailable()) return Promise.resolve();
   const synth = window.speechSynthesis;
   const current = ++generation;
-  synth.cancel();
+  // Only when something is being said: on Android, Chrome drops words spoken right after a cancel.
+  if (synth.speaking || synth.pending) synth.cancel();
   const chunks = speakableChunks(text);
   const { voice, rate } = { ...settings, ...override };
   const voices = ranked();
@@ -167,7 +168,7 @@ export function readAsWritten(onSpeaking?: (speaking: boolean) => void): ReplyRe
   if (!speechAvailable()) return { update: () => undefined, finish: async () => true };
   const synth = window.speechSynthesis;
   const current = ++generation;
-  synth.cancel();
+  if (synth.speaking || synth.pending) synth.cancel();
   const reply = new SpokenReply();
   const voices = ranked();
   const chosen = voices.find((v) => v.voiceURI === settings.voice) ?? voices[0];

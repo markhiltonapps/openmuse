@@ -446,6 +446,141 @@ interface Offered {
  * any Inworld no longer has. Lists and samples are kept a while: they rarely change, and a sample
  * costs a little to make.
  */
+/** Words that say nothing about a voice. */
+const SKIP_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "voice",
+  "voices",
+  "with",
+  "sounds",
+  "sound",
+  "like",
+  "that",
+  "who",
+  "kind",
+  "of",
+  "and",
+  "something",
+  "someone",
+  "please",
+  "bit",
+  "little",
+  "more",
+  "very",
+  "really",
+]);
+/** Ways people say the same thing about a voice; Inworld's descriptions use one or another. */
+const SAME: Record<string, RegExp> = {
+  woman: /\bwom[ae]n\b|\bfemale\b|\bgirl\b|\blady\b/,
+  man: /[^o]man\b|\bmale\b|\bmen\b|\bguy\b|\bgentleman\b/,
+  deep: /\bdeep(er)?\b|\blow(er)?\b|\bbass\b|\bbaritone\b|\brich\b|\bresonant\b/,
+  high: /\bhigh(er)?\b|\blight\b|\bbright\b|\bairy\b/,
+  old: /\bold(er)?\b|\bmature\b|\belderly\b|\bsenior\b|\bseasoned\b|\bgrandfather\b|\bgrandmother\b|\bmiddle-aged\b/,
+  young: /\byoung(er)?\b|\byouthful\b|\bteen\b|\bboyish\b|\bgirlish\b/,
+  british: /\bbritish\b|\benglish\b|\buk\b|\blondon\b|\bposh\b|\brp\b/,
+  american: /\bamerican\b|\bus\b|\bmidwest\w*\b|\bsouthern\b|\bnew york\b|\bcalifornia\b/,
+  australian: /\baustralian\b|\baussie\b/,
+  irish: /\birish\b|\bscottish\b|\bscots\b|\bwelsh\b/,
+  calm: /\bcalm\b|\brelaxed\b|\bsteady\b|\bsoothing\b|\bunhurried\b|\bmellow\b|\beven\b/,
+  warm: /\bwarm\b|\bfriendly\b|\bkind\b|\bgentle\b|\bcaring\b|\bencouraging\b|\bcomforting\b/,
+  soft: /\bsoft\b|\bgentle\b|\bquiet\b|\bwhisper\w*\b|\bbreathy\b|\bsmooth\b/,
+  lively:
+    /\blively\b|\benergetic\b|\bupbeat\b|\bcheerful\b|\bplayful\b|\bbubbly\b|\bexpressive\b|\bquick\b|\bbright\b/,
+  confident: /\bconfident\b|\bassured\b|\bauthoritative\b|\bcommanding\b|\bbold\b|\bstrong\b/,
+  serious: /\bserious\b|\bformal\b|\bprofessional\b|\bbusiness\b|\bnewsreader\b|\bnarrator\b/,
+  gravelly: /\bgravel\w*\b|\brasp\w*\b|\bhusky\b|\bsmoky\b|\brough\b/,
+  clear: /\bclear\b|\bcrisp\b|\barticulate\b|\bprecise\b|\bneutral\b/,
+};
+/** The words people use for each of the above, so "deeper" or "elderly" finds the same voices. */
+const ALIASES: Record<string, string> = {
+  women: "woman",
+  female: "woman",
+  girl: "woman",
+  lady: "woman",
+  feminine: "woman",
+  men: "man",
+  male: "man",
+  guy: "man",
+  gentleman: "man",
+  masculine: "man",
+  deeper: "deep",
+  low: "deep",
+  lower: "deep",
+  bass: "deep",
+  baritone: "deep",
+  rich: "deep",
+  higher: "high",
+  light: "high",
+  lighter: "high",
+  older: "old",
+  mature: "old",
+  elderly: "old",
+  senior: "old",
+  grandfatherly: "old",
+  grandmotherly: "old",
+  younger: "young",
+  youthful: "young",
+  teen: "young",
+  teenage: "young",
+  english: "british",
+  uk: "british",
+  london: "british",
+  posh: "british",
+  aussie: "australian",
+  scottish: "irish",
+  scots: "irish",
+  welsh: "irish",
+  relaxed: "calm",
+  soothing: "calm",
+  steady: "calm",
+  mellow: "calm",
+  chill: "calm",
+  friendly: "warm",
+  kind: "warm",
+  gentle: "warm",
+  caring: "warm",
+  nice: "warm",
+  comforting: "warm",
+  quiet: "soft",
+  whispery: "soft",
+  breathy: "soft",
+  smooth: "soft",
+  energetic: "lively",
+  upbeat: "lively",
+  cheerful: "lively",
+  playful: "lively",
+  bubbly: "lively",
+  happy: "lively",
+  fun: "lively",
+  peppy: "lively",
+  excited: "lively",
+  assured: "confident",
+  authoritative: "confident",
+  commanding: "confident",
+  bold: "confident",
+  strong: "confident",
+  formal: "serious",
+  professional: "serious",
+  business: "serious",
+  newsreader: "serious",
+  narrator: "serious",
+  raspy: "gravelly",
+  husky: "gravelly",
+  smoky: "gravelly",
+  rough: "gravelly",
+  gruff: "gravelly",
+  crisp: "clear",
+  articulate: "clear",
+  neutral: "clear",
+};
+function wordMatches(word: string, text: string) {
+  const key = ALIASES[word] ?? word;
+  const same = SAME[key];
+  return same ? same.test(text) : text.includes(word);
+}
+
 /** A line said outside a call is at most this long, and this many are kept. */
 export const SAY_LIMIT = 300;
 const SAID_KEPT = 200;
@@ -511,13 +646,21 @@ export class CallVoices {
     const real = new Set(all.map((v) => v.id));
     return { voices: list.filter((v) => real.has(v.id)), default: ours.default };
   }
-  /** The voice this person's calls use: their choice while it's offered, else the usual one. */
+  /**
+   * The voice this person's calls use: their choice while it's one of the offered voices or any
+   * of Inworld's (owner, 2026-11-07: people describe a voice and pick from what's found), else
+   * the usual one.
+   */
   async chosen(owner: string) {
     const [{ voices, default: usual }, saved] = await Promise.all([
       this.offered(),
       this.db.get<{ value?: string }>(owner, "agent-settings", "call-voice").catch(() => null),
     ]);
-    return voices.some((v) => v.id === saved?.value) ? (saved?.value as string) : usual;
+    const pick = saved?.value;
+    if (!pick) return usual;
+    if (voices.some((v) => v.id === pick)) return pick;
+    const { voices: all } = await this.catalog();
+    return all.some((v) => v.id === pick) ? pick : usual;
   }
   private static wanted(name: string) {
     return name
@@ -538,17 +681,17 @@ export class CallVoices {
       (await this.catalog()).voices.find((v) => v.id.toLowerCase() === wanted)
     );
   }
-  /** Saves their choice; null goes back to the usual voice. */
+  /** Saves their choice (one of the list, or any of Inworld's); null goes back to the usual voice. */
   async choose(
     owner: string,
     name: string | null,
   ): Promise<{ voice: CallVoice } | { error: string }> {
     const { voices, default: usual } = await this.offered();
     if (!voices.length) return { error: "Voices can’t be chosen just now." };
-    const voice = name === null ? voices.find((v) => v.id === usual) : await this.find(name);
+    const voice = name === null ? voices.find((v) => v.id === usual) : await this.findAny(name);
     if (!voice)
       return {
-        error: `There’s no voice called “${name}”. The voices are ${voices.map((v) => v.id).join(", ")}.`,
+        error: `There’s no voice called “${name}”. The voices are ${voices.map((v) => v.id).join(", ")}, or describe the one you want.`,
       };
     await this.db.put(owner, "agent-settings", { id: "call-voice", value: voice.id });
     return { voice };
@@ -567,22 +710,26 @@ export class CallVoices {
       .toLowerCase()
       .replace(/[’']s\b/g, "")
       .split(/[^a-z0-9]+/)
-      .filter((w) => w && !["a", "an", "the", "voice", "voices", "with"].includes(w));
-    const matches = (v: CallVoice) => {
+      .filter((w) => w && !SKIP_WORDS.has(w));
+    const hits = (v: CallVoice) => {
       const text = ` ${v.id} ${v.description} `.toLowerCase();
-      return words.every((w) => {
-        // Ours say "a man's/woman's voice", Inworld's "male/female": either finds both.
-        if (["woman", "women", "female", "girl"].includes(w))
-          return /\bwom[ae]n\b|\bfemale\b|\bgirl\b/.test(text);
-        // "man" mustn't find every "woman" or "female".
-        if (["man", "men", "male", "guy"].includes(w))
-          return /[^o]man\b|\bmale\b|\bmen\b/.test(text);
-        return text.includes(w);
-      });
+      return words.filter((w) => wordMatches(w, text)).length;
     };
+    // Voices matching every word first; when none does, the ones matching most of them (a
+    // description like "an older British man with a warm voice" rarely matches word for word).
+    const scored = all
+      .map((v) => ({ v, hits: hits(v) }))
+      .filter((entry) => entry.hits > 0 || !words.length);
+    const best = Math.max(0, ...scored.map((entry) => entry.hits));
+    const keep = words.length && best < words.length ? Math.max(1, best) : words.length;
     return {
       usual,
-      voices: all.filter(matches).map((v) => ({ ...v, onList: on.has(v.id) })),
+      voices: scored
+        .filter((entry) => entry.hits >= keep)
+        .sort((a, b) => b.hits - a.hits)
+        .map(({ v }) => ({ ...v, onList: on.has(v.id) })),
+      // Nothing matched every word: say so, so the agent offers the nearest instead of "exactly".
+      ...(words.length && best < words.length ? { nearest: true } : {}),
     };
   }
   /** The admin adds one of Inworld's voices to the list everyone chooses from. */

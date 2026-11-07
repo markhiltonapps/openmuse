@@ -350,6 +350,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Open **You › Agent** and find **Voice on live calls**.",
       "Tap **Play** next to a voice to hear a short hello, or tap the voice itself to choose it (it plays the hello too).",
       "Or just say it, on a call or in the chat: “Switch to Theodore”, or “Use a deeper voice”. On a call, the new voice speaks straight away, so you can try a few. In the chat, “Let me hear Theodore” shows it with a **Play** button.",
+      "Or describe the voice you want: “Change your voice.” {agent} asks what kind (a man’s or a woman’s, an accent, deep or light, calm or lively), finds the closest among hundreds of voices, and shows them with **Play** and a choice; or say the name of the one you like.",
     ],
     body: [
       "Choosing is for the new voice. If your calls use OpenAI’s voice, the card isn’t there; the admin can move you to the new voice under **You › Account › People**.",
@@ -359,6 +360,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: "What voices can you use on calls?", send: true },
       { text: "Let me hear Theodore", send: true },
       { text: "Switch to Theodore", where: "on a call" },
+      { text: "Change your voice to an older British man, warm and unhurried.", send: true },
       "Go back to the usual voice",
     ],
     keywords: [
