@@ -24,7 +24,11 @@ RUN npm install -g pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY apps/mobile/package.json apps/mobile/
 COPY apps/worker/package.json apps/worker/
-RUN pnpm install --frozen-lockfile --prod --filter openmuse
+RUN pnpm install --frozen-lockfile --prod --filter openmuse \
+ && find node_modules/.pnpm -path '*onnxruntime-node*' \( -name 'libonnxruntime_providers_cuda.so' -o -name 'libonnxruntime_providers_tensorrt.so' \) -delete
+# The depth model for the living-photo motion on pictures (27 MB): baked in so the api never
+# waits on Hugging Face at run time (depth.ts fetches it once if this layer is missing).
+ADD https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_quantized.onnx models/depth-anything-v2-small.onnx
 COPY --from=build /app/dist ./dist
 # Runs as root so a mounted volume at DATA_DIR stays writable on hosts that mount volumes root-owned.
 # Sample mode refuses a non-loopback HOST; a reachable container must use WORKSPACE_MODE=live.

@@ -340,3 +340,63 @@ isn't needed since Neddy can already search the web.
 - Checks: Biome, pnpm typecheck, `env -u OPENROUTER_API_KEY pnpm test` 718 pass; Playwright
   (scratchpad dismiss-anim.mjs): stop → row gone + line + Undo; undo → row back; stopping the last
   row keeps the card with the line and focus on Undo.
+
+Pictures (owner: "go with that")
+--------------------------------
+Decisions: Free 10 pictures a month (Starter 50, Neddy 150, Max 750 so Max stays exactly five times
+Neddy), OpenRouter only, new pictures only (no editing yet), the standard limits (no real people, no
+one who looks under 18, nothing sexual or violent), every picture animates as a living photo for
+free, and "make it a real video" comes next as its own step with a small allowance (Free 2,
+Starter 10, Neddy 30, Max 100 clips; 10–25¢ each).
+- Prices found today on OpenRouter's image endpoint (per picture, 1K): Recraft v4.1 flash 0.7¢, Flux 3
+  Klein 0.8–0.9¢, Seedream 5 flash 1.8¢, Qwen 2.1 turbo 1.8¢; Nano Banana and GPT Image are priced per
+  token (a few cents). Defaults: Draft = black-forest-labs/flux-3-image-klein (0.9¢), Good =
+  bytedance-seed/seedream-5-0-flash (1.8¢); the admin can change both.
+- Server: `pictures.ts` (`Pictures.make`: refuses the plain cases of the limits by words before paying,
+  `Plans.claimPicture` counts it (a Good one also against a cap of a fifth of the plan's pictures,
+  `goodPictures()` in plans.ts), POST `{base}/images` with the server's key, saves the answer to
+  Files as "Made by Neddy", records the call's reported cost with `usage.recordCost` (a new `dollars`
+  field on a usage line), makes the depth map and keeps it at `files/<id>.depth.png`, and keeps the
+  prompt in "pictures"). `depth.ts`: Depth Anything v2 small (quantized ONNX, 27 MB) on the CPU with
+  onnxruntime-node + sharp, ~0.6 s a picture, one at a time; the model is baked into the api image
+  (Dockerfile `ADD` from Hugging Face; the CUDA/TensorRT provider libraries, 285 MB, are deleted from
+  node_modules) and fetched once into DATA_DIR if missing; without it pictures still work, just not
+  moving. Routes: GET /api/pictures (available + this month's room), GET/POST /api/pictures/settings
+  (admin: enabled, draft, good), GET /api/files/:id/depth, GET /api/files/:id/picture. The chat tool
+  `make_picture` (picture-tools.ts; prompt line `pictureToolInstructions`), its card on calls too
+  (voice-brain `make_picture`, CALL_DETAIL_TOOLS).
+- App: `picture-card.tsx` (the card: picture, prompt, "Made with AI · Draft · in your Files", Open,
+  Share (share sheet with the file, else copies the 15-minute link), Try another and Make it better
+  put the words in the message box (a new picture counts, so never sent by a tap alone); a fresh link
+  and the depth map are fetched when the card is drawn) and `living-photo.tsx` (WebGL: the depth map
+  moves near and far parts apart around two slow swings and a zoom; a plain drift without a map or
+  WebGL; still with reduced motion, on a live call, off screen or in a hidden tab). The admin's
+  Pictures card (pictures-admin-ui.tsx) under You › Money by the AI models card. Pictures in the
+  admin's people counters and extras (100 for $1).
+- Help topic "pictures" with a picture of the card in the chat; site: a sentence under "He gets things
+  done", pricing page (five things, each plan's pictures, the extra pack, what a picture is), compare
+  page row; docs/pricing_math.md and docs/IMAGES-PLAN.md carry the decisions and costs.
+- Checks: tests/pictures.test.ts (made + saved + depth + counted; the monthly and Good caps; retries
+  counted once; refusals before paying; provider refusals/outages/credit in plain words; the admin's
+  switch and model ids; the tool's card and on-call shape), plans tests updated; `scripts/picture-try.mts`
+  made one through a fake OpenRouter with the REAL depth model in 0.7 s (deleted after); Playwright
+  (scratchpad shot-debug.mjs): the card renders in a mocked chat, a canvas is drawn and frames differ
+  (the motion runs in headless Chromium).
+- Not tested live: a real OpenRouter image call (the sandbox has the key but the rule is no real
+  calls without the owner's OK). First real picture on Railway: watch the log for "Model call:
+  pictures · … · 1 made · $0.00xx" and any "A picture couldn't be made (…)".
+- PWA icon: the three icon files were already Neddy; the owner's phone kept the capybara from the
+  old install. The manifest now says "Neddy" (name, short_name, id "/", cream colours) and the iPhone
+  title too, so Chrome refreshes the installed shortcut; removing and adding it again from
+  neddy.neatoventures.com is the sure way.
+- Review round (visual, usability, copy) on the card: the good-only limit card used to say "No more
+  pictures" over "I can still make a draft" and gave no come-back date (now "No more good ones this
+  month" with the date, `PictureLimit` carries `goodOnly`); the word filter refused "blood orange",
+  "a murder of crows" and "a topless jeep" and blamed "real people" it never checks (now a narrower
+  list that names the tripped word); the buttons wrap 2×2 with Make it better first and lit; the
+  card hugs its picture (a long prompt no longer leaves a wide empty card on a desktop); no cream
+  flash before the picture in dark mode; the share note is announced (always-mounted status line);
+  "Made with AI · a quick draft · saved in Files"; the image is labelled "Picture, made with AI" so
+  the prompt isn't read twice; Help marks 1–4 and the call-screen note (only Share there); site and
+  pricing wording ("drawn by your device", "About 25 a day", compare's small line). Left as is: the
+  GL draw stretches to the requested aspect (pictures come back at that ratio).

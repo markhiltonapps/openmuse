@@ -2,6 +2,7 @@ import {
   COUNTED,
   type Counted,
   EXTRAS,
+  goodPictures,
   isPlanId,
   limitText,
   PLANS,
@@ -25,6 +26,9 @@ interface Counts {
   id: string;
   messages: number;
   jobs: number;
+  /** Pictures made, and how many of them were the Good kind (capped at a fifth of the plan's). */
+  pictures?: number;
+  goodPictures?: number;
   seen: string[];
 }
 const SEEN = 60;
@@ -129,7 +133,12 @@ export class Plans {
   }
   async counts(owner: string) {
     const found = await this.db.get<Counts>(owner, "plan-counts", this.month());
-    return { messages: found?.messages ?? 0, jobs: found?.jobs ?? 0 };
+    return {
+      messages: found?.messages ?? 0,
+      jobs: found?.jobs ?? 0,
+      pictures: found?.pictures ?? 0,
+      goodPictures: found?.goodPictures ?? 0,
+    };
   }
   /** What a limit says, in words, with the day it comes back. */
   async limitMessage(owner: string, kind: Counted) {
@@ -148,7 +157,12 @@ export class Plans {
    * Asking again with the same id, a retry, is never counted twice. Returns what to say instead
    * when it can't go ahead.
    */
-  private claim(owner: string, kind: "messages" | "jobs", id: string) {
+  private claim(
+    owner: string,
+    kind: "messages" | "jobs" | "pictures",
+    id: string,
+    options: { good?: boolean } = {},
+  ) {
     return this.serial(owner, async () => {
       const month = this.month();
       const current = (await this.db.get<Counts>(owner, "plan-counts", month)) ?? {
@@ -161,11 +175,27 @@ export class Plans {
       if (current.seen.includes(key)) return { ok: true as const };
       const { limit } = await this.limits(owner);
       const cap = limit[kind];
-      if (cap !== null && current[kind] >= cap)
+      const count = current[kind] ?? 0;
+      if (cap !== null && count >= cap)
         return { ok: false as const, text: await this.limitMessage(owner, kind) };
+      // Good pictures cost about twice a draft: a fifth of the month's pictures may be Good.
+      if (kind === "pictures" && options.good && cap !== null) {
+        const goodCap = goodPictures(cap);
+        if ((current.goodPictures ?? 0) >= goodCap) {
+          const zone = (await this.options.timeZone?.(owner).catch(() => "UTC")) ?? "UTC";
+          return {
+            ok: false as const,
+            good: true as const,
+            text: `You’ve used this month’s ${goodCap} good ${goodCap === 1 ? "picture" : "pictures"}. They come back on ${nextMonthDay(zone, this.now())}. I can still make a draft.`,
+          };
+        }
+      }
       await this.db.put(owner, "plan-counts", {
         ...current,
-        [kind]: current[kind] + 1,
+        [kind]: count + 1,
+        ...(kind === "pictures" && options.good
+          ? { goodPictures: (current.goodPictures ?? 0) + 1 }
+          : {}),
         seen: [...current.seen, key].slice(-SEEN),
       } satisfies Counts);
       return { ok: true as const };
@@ -176,6 +206,10 @@ export class Plans {
   }
   claimJob(owner: string, taskId: string) {
     return this.claim(owner, "jobs", taskId);
+  }
+  /** One picture (a Good one counts against its own smaller cap too); same id, counted once. */
+  claimPicture(owner: string, pictureId: string, good = false) {
+    return this.claim(owner, "pictures", pictureId, { good });
   }
   /** A person's plan, limits and this month's counts, for the app and the admin. */
   async view(owner: string) {

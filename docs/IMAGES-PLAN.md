@@ -1,6 +1,14 @@
 # Pictures in Neddy (plan)
 
-Status: proposal only, nothing built. Written 2026-10-27 after the owner asked about Meta Muse's images.
+Status: built 2026-11-07 (owner's decisions: Free 10 drafts a month, OpenRouter only, new pictures only, the
+standard limits; every picture animates as a living photo for free; "make it a real video" is a separate step
+with its own small allowance, planned next). What shipped: `apps/server/src/pictures.ts` (OpenRouter's image
+endpoint, Draft = Flux 3 Klein 0.9¢, Good = Seedream 5 Flash 1.8¢, saved to Files, counted by `Plans.claimPicture`,
+priced from the call's reported cost), `depth.ts` (Depth Anything v2 small on the CPU, a 256px depth map beside
+each picture), the `make_picture` chat tool, the app's `picture-card.tsx` and `living-photo.tsx` (WebGL
+parallax, a plain drift without a depth map), the admin's Pictures card (switch and models), the Help topic
+"pictures", and the plan numbers (Max is 750 so it stays five times Neddy). Written 2026-10-27 after the owner
+asked about Meta Muse's images.
 
 ## What Meta actually does
 

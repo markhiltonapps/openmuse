@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "app.openmuse.mobile" },
     "android": { "package": "app.openmuse.mobile" },
-    "web": { "bundler": "metro", "name": "Neato_Muse" },
+    "web": { "bundler": "metro", "name": "Neddy" },
     "plugins": [
       "expo-document-picker",
       "@config-plugins/react-native-blob-util",

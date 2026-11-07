@@ -30,6 +30,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   models: { width: 720, height: 2400 },
   money: { width: 720, height: 1558 },
   newjob: { width: 720, height: 1558 },
+  pictures: { width: 720, height: 2215 },
   privacy: { width: 720, height: 492 },
   receipt: { width: 720, height: 1558 },
   recordertrouble: { width: 720, height: 1558 },

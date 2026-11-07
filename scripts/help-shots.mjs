@@ -729,6 +729,76 @@ const SHOTS = [
     },
   },
   {
+    // "Make me a picture of…": the picture card in the chat (still here: the motion is drawn live).
+    id: "pictures",
+    height: 1200,
+    go: async (p, state) => {
+      const picture = {
+        fileId: "help-picture-1",
+        name: "a-poodle-astronaut-floating-above-earth.webp",
+        url: `${APP}home/neddy-wave-hero.webp`,
+        prompt: "A poodle astronaut floating above Earth, soft morning light",
+        quality: "draft",
+        aspect: "square",
+        moving: false,
+      };
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "Make me a picture of a poodle astronaut." },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content: "Here’s a first draft. Want it sharper? Tap Make it better.",
+          toolCalls: [
+            {
+              id: "help-call-1",
+              type: "function",
+              function: {
+                name: "make_picture",
+                arguments: JSON.stringify({ prompt: picture.prompt }),
+              },
+            },
+          ],
+        },
+        {
+          id: "help-r1",
+          role: "tool",
+          toolCallId: "help-call-1",
+          content: JSON.stringify({ picture }),
+        },
+      ];
+      await p.route(/\/api\/files\/help-picture-1$/, (route) =>
+        route.fulfill({
+          json: {
+            id: picture.fileId,
+            name: picture.name,
+            mimeType: "image/webp",
+            size: 36670,
+            pageCount: 1,
+            url: picture.url,
+            createdAt: new Date().toISOString(),
+            source: "Made by Neddy",
+          },
+        }),
+      );
+      // The chat connected before this exchange was set: open it again.
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await p
+        .getByRole("button", { name: "Make it better", exact: true })
+        .waitFor({ timeout: 20000 });
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: { find: (p) => p.getByPlaceholder(/^Message/), side: "inside-right" },
+      2: { find: (p) => p.getByRole("img", { name: "Picture, made with AI" }), side: "top-right" },
+      3: { find: (p) => button(p, "Share"), side: "top-right" },
+      // Step 4 names both buttons; the mark goes on the one with clear room above it.
+      4: { find: (p) => button(p, "Try another"), side: "top-right" },
+    },
+  },
+  {
     // "What I used" under an answer, and its sheet: where it looked, what was kept out of view, and
     // what Neddy knows, with Forget. No number of any kind is in the picture.
     id: "receipt",

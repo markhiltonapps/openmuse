@@ -39,8 +39,9 @@ Haiku 4.5 only caches prompts of 4,096 tokens or more; these are far over that.
 | Typed messages (ceiling) | 500 | 1,000 | 5,000 |
 | Meeting hours | 1 | 3 | 15 |
 | Background jobs | 2 | 5 | 25 |
+| Pictures | 50 | 150 | 750 |
 
-Max is exactly five times Neddy on all four counts and on price. The page says "generous", never
+Max is exactly five times Neddy on all five counts and on price. The page says "generous", never
 "unlimited": a hard ceiling isn't unlimited, and the pricing page's copy reviewer would object.
 
 ### The Free plan (owner, 2026-10-21)
@@ -51,8 +52,15 @@ Max is exactly five times Neddy on all four counts and on price. The page says "
 | Typed messages | 100 |
 | Recorded meetings | 30 minutes |
 | Background jobs | 1 |
+| Pictures | 10 |
 
-At the ceilings a Free person costs about **$1.81 a month** (100 messages × 1.5¢ = $1.50, 5 minutes × 2¢ = 10¢,
+Pictures (owner, 2026-11-07): a draft is Flux 3 Klein at 1K on OpenRouter's image endpoint (0.9¢ a
+picture as listed 2026-11-07); the good kind is Seedream 5 Flash (1.8¢). A fifth of a plan's pictures
+may be good ones, so the worst case is Free 10 × ~1.1¢ = 11¢, Neddy 150 (120 drafts + 30 good) =
+$1.62, Max 750 = $8.10 against $100. The motion (a depth map made on the api's CPU, drawn by the
+device) costs nothing per picture. The extra pack, 100 for $1, is about 10% over the worst case.
+
+At the ceilings a Free person costs about **$1.92 a month** (100 messages × 1.5¢ = $1.50, 5 minutes × 2¢ = 10¢,
 half an hour of meetings × 12¢ an hour = 6¢, one job at 15¢) and pays nothing, so Free is a cost of getting
 people to try Neddy, not a product with a margin. It is by invite like everything else, so the total is the
 number of invited people × about $1.80 at most; in practice most use far less. **Watch it:** if 100 people sit on

@@ -1,15 +1,24 @@
 {
-  "name": "Neato_Muse",
-  "short_name": "Neato_Muse",
-  "description": "A personal agent for your mail, calendar, apps and errands.",
+  "name": "Neddy",
+  "short_name": "Neddy",
+  "id": "/",
+  "description": "Neddy: a personal agent for your mail, calendar, apps and errands.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#FBFBFB",
-  "theme_color": "#FBFBFB",
+  "background_color": "#F8F3EA",
+  "theme_color": "#F8F3EA",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
     {
       "src": "/icon-maskable-512.png",
       "sizes": "512x512",
@@ -20,6 +29,10 @@
   "share_target": {
     "action": "/",
     "method": "GET",
-    "params": { "title": "share-title", "text": "share-text", "url": "share-url" }
+    "params": {
+      "title": "share-title",
+      "text": "share-text",
+      "url": "share-url"
+    }
   }
 }

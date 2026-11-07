@@ -43,6 +43,7 @@ import { assertApiDeploymentConfig, type Config } from "./config.ts";
 import { DataControls, type ThreadStore } from "./data-controls.ts";
 import { withOwnCalendar } from "./day-tools.ts";
 import type { Store } from "./db.ts";
+import { Depth, depthModelPath } from "./depth.ts";
 import { EmailViews } from "./email-views.ts";
 import { emojiPicture } from "./emoji.ts";
 import { ConversationAgent, localNow } from "./engine/conversation.ts";
@@ -83,6 +84,7 @@ import { monitorChecks } from "./monitor-history.ts";
 import { ffmpegAvailable, ffmpegMp3 } from "./mp3.ts";
 import { historyStepsEmail } from "./onboarding.ts";
 import { PastChats } from "./past-chats.ts";
+import { Pictures } from "./pictures.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
 import { PushService } from "./push.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
@@ -278,6 +280,23 @@ export async function createApp(
     timeZone: (owner) => agent.timeZone(owner),
   });
   agent.plans = plans;
+  // Pictures (owner, 2026-11-07): made through OpenRouter's image endpoint with the server's key,
+  // saved to Files with a depth map for the app's living-photo motion. Off without the key.
+  const depth = new Depth(depthModelPath(config.dataDir));
+  const pictures = new Pictures(db, files, blobs, {
+    usage,
+    plans,
+    depth,
+    agentName: async (owner) =>
+      (await db.get<{ name?: string }>(owner, "agent-settings", "identity").catch(() => null))
+        ?.name || "Neddy",
+  });
+  if (process.env.OPENROUTER_API_KEY?.trim()) {
+    agent.pictures = pictures;
+    console.log(
+      `Pictures on (OpenRouter; depth model ${depth.present ? "ready" : "fetched on first use"})`,
+    );
+  } else console.log("Pictures off: OPENROUTER_API_KEY isn't set");
   /** Live-talk minutes against the person's plan; plans count both voices, early access only ours. */
   const callAllowance = async (owner: string) => {
     const { plan, limit } = await plans.limits(owner);
@@ -2184,6 +2203,47 @@ export async function createApp(
       ),
       201,
     );
+  });
+  // Pictures: whether they can be made here and this month's room; the admin's switch and models.
+  app.get("/api/pictures", async (c) => {
+    const owner = c.get("owner");
+    const [available, view] = await Promise.all([pictures.available(), plans.view(owner)]);
+    return c.json({
+      available: Boolean(agent.pictures) && available,
+      limit: view.limit.pictures,
+      made: view.pictures,
+    });
+  });
+  app.get("/api/pictures/settings", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can set up pictures", 403);
+    return c.json({ ...(await pictures.settings()), keySet: Boolean(agent.pictures) });
+  });
+  app.post("/api/pictures/settings", async (c) => {
+    if (!(await accounts.isAdmin(c.get("owner"))))
+      throw new AppError("Only the admin can set up pictures", 403);
+    const body = z
+      .object({
+        enabled: z.boolean().optional(),
+        draft: z.string().max(200).optional(),
+        good: z.string().max(200).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json({ ...(await pictures.save(body)), keySet: Boolean(agent.pictures) });
+  });
+  // A picture's depth map (grey PNG, near is light), for the living-photo motion.
+  app.get("/api/files/:id/depth", async (c) => {
+    const map = await pictures.depth(c.get("owner"), c.req.param("id"));
+    if (!map) throw new AppError("No depth map for this file", 404);
+    c.header("Content-Type", "image/png");
+    c.header("Cache-Control", "private, max-age=86400");
+    return c.body(Buffer.from(map));
+  });
+  // What a picture file was made from (its prompt and kind); 404 for other files.
+  app.get("/api/files/:id/picture", async (c) => {
+    const about = await pictures.about(c.get("owner"), c.req.param("id"));
+    if (!about) throw new AppError("Not a picture Neddy made", 404);
+    return c.json(about);
   });
   // One file, with a fresh signed link (links from earlier expire).
   app.get("/api/files/:id", async (c) => {

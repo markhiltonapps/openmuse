@@ -17,6 +17,8 @@ export interface Plan {
   /** Hours of recorded meetings; Free gets half an hour. */
   meetingHours: number;
   jobs: number | null;
+  /** Pictures made a month (owner, 2026-11-07); a fifth of them may be the Good kind. */
+  pictures: number | null;
 }
 
 export const PLANS: Record<PlanId, Plan> = {
@@ -30,6 +32,7 @@ export const PLANS: Record<PlanId, Plan> = {
     messages: 100,
     meetingHours: 0.5,
     jobs: 1,
+    pictures: 10,
   },
   starter: {
     id: "starter",
@@ -39,6 +42,7 @@ export const PLANS: Record<PlanId, Plan> = {
     messages: 500,
     meetingHours: 1,
     jobs: 2,
+    pictures: 50,
   },
   neddy: {
     id: "neddy",
@@ -48,6 +52,7 @@ export const PLANS: Record<PlanId, Plan> = {
     messages: 1000,
     meetingHours: 3,
     jobs: 5,
+    pictures: 150,
   },
   // Exactly five times Neddy on price and on every count.
   max: {
@@ -58,6 +63,7 @@ export const PLANS: Record<PlanId, Plan> = {
     messages: 5000,
     meetingHours: 15,
     jobs: 25,
+    pictures: 750,
   },
   // Anyone the admin hasn't given a plan keeps what early access always had: 200 call minutes and
   // 10 meeting hours, with messages and jobs not counted. Never shown on the website.
@@ -69,6 +75,7 @@ export const PLANS: Record<PlanId, Plan> = {
     messages: null,
     meetingHours: 10,
     jobs: null,
+    pictures: null,
   },
 };
 /** The plans people can choose, cheapest first; Free first because it costs nothing. */
@@ -82,9 +89,11 @@ export function nextPlan(id: PlanId): Plan | undefined {
   return next ? PLANS[next] : undefined;
 }
 
-/** The four things that are counted. */
-export type Counted = "callMinutes" | "messages" | "meetingHours" | "jobs";
-export const COUNTED: Counted[] = ["callMinutes", "messages", "meetingHours", "jobs"];
+/** The five things that are counted. */
+export type Counted = "callMinutes" | "messages" | "meetingHours" | "jobs" | "pictures";
+export const COUNTED: Counted[] = ["callMinutes", "messages", "meetingHours", "jobs", "pictures"];
+/** How many of a plan's pictures may be the Good kind (about 2¢ each; a draft is under 1¢). */
+export const goodPictures = (pictures: number) => Math.ceil(pictures / 5);
 
 /** Extras, bought in these packs on any plan (owner: at a limit, offer to add more). */
 export const EXTRAS: Record<Counted, { amount: number; price: number; label: string }> = {
@@ -92,6 +101,7 @@ export const EXTRAS: Record<Counted, { amount: number; price: number; label: str
   messages: { amount: 50, price: 4, label: "50 more messages" },
   meetingHours: { amount: 1, price: 0.8, label: "another meeting hour" },
   jobs: { amount: 1, price: 1.5, label: "another background job" },
+  pictures: { amount: 100, price: 1, label: "100 more pictures" },
 };
 
 /** Where people write to for more room until billing is switched on. */
@@ -114,6 +124,7 @@ const WHAT: Record<Counted, (limit: number) => string> = {
       ? `${Math.round(n * 60)} minutes of recorded meetings`
       : `${n} ${plural(n, "hour", "hours")} of recorded meetings`,
   jobs: (n) => (n === 1 ? "background job" : `${n} background jobs`),
+  pictures: (n) => `${n} ${plural(n, "picture", "pictures")}`,
 };
 
 /**

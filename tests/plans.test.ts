@@ -22,7 +22,14 @@ test("the paid plans are final and Max is exactly five times Neddy", () => {
     [PLANS.starter, PLANS.neddy, PLANS.max].map((p) => p.price),
     [10, 20, 100],
   );
-  for (const key of ["price", "callMinutes", "messages", "meetingHours", "jobs"] as const)
+  for (const key of [
+    "price",
+    "callMinutes",
+    "messages",
+    "meetingHours",
+    "jobs",
+    "pictures",
+  ] as const)
     assert.equal(PLANS.max[key], (PLANS.neddy[key] as number) * 5, key);
   // Free costs real money, so it stays small.
   assert.ok((PLANS.free.messages as number) <= 100 && PLANS.free.callMinutes <= 5);
@@ -36,7 +43,13 @@ test("someone with no plan keeps today's limits and nothing is counted", async (
   const plans = new Plans(db, { early });
   const { plan, limit } = await plans.limits("sam");
   assert.equal(plan.id, "early");
-  assert.deepEqual(limit, { callMinutes: 200, messages: null, meetingHours: 10, jobs: null });
+  assert.deepEqual(limit, {
+    callMinutes: 200,
+    messages: null,
+    meetingHours: 10,
+    jobs: null,
+    pictures: null,
+  });
   for (let i = 0; i < 300; i++) assert.equal((await plans.claimMessage("sam", `m${i}`)).ok, true);
   // A limit of 0 from the old variables still means no limit.
   const open = new Plans(db, { early: { callMinutes: 0, meetingHours: 0 } });

@@ -88,6 +88,7 @@ import { MailAlertsCard } from "./mail-alerts-ui";
 import { ModelsCard } from "./models-ui";
 import { blankTab, OwnAppsCard, openPage } from "./own-apps";
 import { PeopleNotesCard } from "./people-ui";
+import { PicturesAdminCard } from "./pictures-admin-ui";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import { PasswordsCard } from "./sign-in-ui";
 import { SubscriptionsCard } from "./subscriptions-ui";
@@ -4010,6 +4011,7 @@ export function AppsScreen() {
           <SpendingCard />
           <UsageCard />
           <ModelsCard />
+          <PicturesAdminCard />
         </>
       )}
       {tab === "account" && (

@@ -76,6 +76,7 @@ import { MealCheckInCard } from "./meal-checkins-ui";
 import { MeetingsToolCard, useRecorder, useStartRecording } from "./meetings-ui";
 import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui";
 import { MiniAppToolCard } from "./mini-apps-ui";
+import { PictureToolCard } from "./picture-card";
 import { lookedAt } from "./receipt-text";
 import { type ReceiptInfo, useReceipts } from "./receipt-ui";
 import { RehearseToolCard } from "./rehearsal-ui";
@@ -355,6 +356,15 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <RehearseToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  // "Make me a picture of…": the picture, moving, with Open, Share, Try another, Make it better.
+  useRenderTool({
+    name: "make_picture",
+    description: "Show the picture the agent made",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <PictureToolCard result={result} loading={status !== "complete"} />
     ),
   });
   // "How do I…?": the help topic's steps, with a button to it in Help.

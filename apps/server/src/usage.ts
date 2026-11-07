@@ -194,6 +194,8 @@ interface UsageLine extends Tokens {
   seconds?: number;
   /** Characters spoken by a text-to-speech voice. */
   characters?: number;
+  /** Dollars the provider reported itself (pictures are priced per picture, not per token). */
+  dollars?: number;
 }
 interface UsageMonth {
   /** The month in UTC, "2026-09". */
@@ -249,6 +251,7 @@ export class UsageMeter {
   }
   /** What a line cost: live voice by the minute, models by the token. */
   private lineCost(line: UsageLine) {
+    if (line.dollars !== undefined) return line.dollars;
     if (line.characters !== undefined) {
       const name = modelName(line.model);
       const key = Object.keys(this.characterPrices).find((k) => name.startsWith(k));
@@ -277,6 +280,16 @@ export class UsageMeter {
   recordCharacters(owner: string, model: string, characters: number): Promise<void> {
     return this.update(owner, "voice", model, (line) => {
       line.characters = (line.characters ?? 0) + Math.max(0, Math.round(characters));
+    });
+  }
+  /** Adds one call whose cost the provider reported in dollars (a picture made). */
+  recordCost(owner: string, kind: UsageKind, model: string, dollars: number): Promise<void> {
+    console.log(
+      `[OpenMuse] Model call: ${kind} · ${modelName(model)} · 1 made · $${dollars.toFixed(4)}`,
+    );
+    return this.update(owner, kind, model, (line) => {
+      line.calls++;
+      line.dollars = (line.dollars ?? 0) + Math.max(0, dollars);
     });
   }
   /** What one line of usage would cost, in dollars; undefined without a known price. */

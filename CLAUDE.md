@@ -604,3 +604,11 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   Kill those, then check the new start's log for EADDRINUSE: an old server that keeps the port runs
   old code, and zod silently drops a field the old schema doesn't know (a save that "works" but
   never lands).
+- **Pictures (owner, 2026-11-07):** made through OpenRouter's image endpoint (`POST {base}/images`,
+  priced per picture, `usage.cost` in the answer) in `pictures.ts`, saved to Files at once, counted by
+  `Plans.claimPicture` (Good ones also against a fifth of the plan's pictures), and every picture
+  gets a depth map (`depth.ts`, onnxruntime-node on the CPU; delete the CUDA/TensorRT `.so` files in
+  the Docker image or it grows by 285 MB) that the app's `living-photo.tsx` turns into motion for
+  free. Card buttons that would make another picture put words in the message box (`draft`), never
+  send. Biome reads WebGL's `gl.useProgram` as a React hook: ignore that line. In a Playwright chat
+  mock, set the exchange BEFORE the chat connects (reload and reopen Chat after setting it).

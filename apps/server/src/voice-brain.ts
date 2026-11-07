@@ -112,6 +112,11 @@ function shown(tool: CallDetailTool, raw: string) {
         return { meeting: result.meeting, speakers: result.speakers };
       return some("meetings") ? { meetings: result.meetings } : undefined;
     }
+    case "make_picture":
+      // The picture, moving, on the call screen.
+      return result.picture && typeof result.picture === "object"
+        ? { picture: result.picture }
+        : undefined;
     case "get_help":
       // The help topics found, as cards that open them in Help.
       return some("topics")
@@ -222,6 +227,8 @@ export function voiceNote(tool: string, args: unknown) {
       return "Writing the email";
     case "check_agent_inbox":
       return "Checking your agent’s inbox";
+    case "make_picture":
+      return "Making the picture";
     case "get_help":
       return "Looking it up in Help";
     case "manage_chats":

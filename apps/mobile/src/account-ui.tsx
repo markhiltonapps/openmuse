@@ -27,6 +27,7 @@ interface Person {
     limit: Record<Counted, number | null>;
     messages: number;
     jobs: number;
+    pictures?: number;
   };
 }
 type VoiceChoice = "openai" | "pipecat";
@@ -59,12 +60,14 @@ const EXTRA_SHORT: Record<Counted, string> = {
   messages: "50 messages",
   meetingHours: "1 meeting hour",
   jobs: "1 job",
+  pictures: "100 pictures",
 };
 const EXTRA_BUTTON: Record<Counted, string> = {
   callMinutes: `Add ${EXTRA_SHORT.callMinutes}`,
   messages: `Add ${EXTRA_SHORT.messages}`,
   meetingHours: `Add ${EXTRA_SHORT.meetingHours}`,
   jobs: `Add ${EXTRA_SHORT.jobs}`,
+  pictures: `Add ${EXTRA_SHORT.pictures}`,
 };
 /** People and requests shown at first, and added by "Show more". */
 const PAGE = 8;
@@ -551,6 +554,9 @@ export function PeopleCard() {
                         person.plan.limit.jobs !== null
                           ? `${person.plan.jobs} of ${person.plan.limit.jobs} ${person.plan.limit.jobs === 1 ? "job" : "jobs"}`
                           : "",
+                        person.plan.limit.pictures !== null && person.plan.pictures !== undefined
+                          ? `${person.plan.pictures} of ${person.plan.limit.pictures} pictures`
+                          : "",
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -583,34 +589,34 @@ export function PeopleCard() {
                     </View>
                     <Text style={[s.small, { marginTop: 4 }]}>Add for this month</Text>
                     <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-                      {(["callMinutes", "messages", "meetingHours", "jobs"] as const).map(
-                        (kind) => (
-                          <Button
-                            key={kind}
-                            small
-                            busy={busy === `${person.id}:extra:${kind}`}
-                            accessibilityLabel={`${EXTRA_BUTTON[kind]} for ${person.name} this month`}
-                            onPress={() =>
-                              void run(
-                                `${person.id}:extra:${kind}`,
-                                () =>
-                                  api.request(`/api/accounts/${person.id}/extras`, {
-                                    kind,
-                                    packs: 1,
-                                  }),
-                                (result) => {
-                                  const total = (
-                                    result as { limit?: Partial<Record<Counted, number | null>> }
-                                  ).limit?.[kind];
-                                  return `Added ${EXTRA_SHORT[kind]} for ${person.name} this month${typeof total === "number" ? `: ${person.name} now has ${total}` : ""}.`;
-                                },
-                              )
-                            }
-                          >
-                            {EXTRA_BUTTON[kind]}
-                          </Button>
-                        ),
-                      )}
+                      {(
+                        ["callMinutes", "messages", "meetingHours", "jobs", "pictures"] as const
+                      ).map((kind) => (
+                        <Button
+                          key={kind}
+                          small
+                          busy={busy === `${person.id}:extra:${kind}`}
+                          accessibilityLabel={`${EXTRA_BUTTON[kind]} for ${person.name} this month`}
+                          onPress={() =>
+                            void run(
+                              `${person.id}:extra:${kind}`,
+                              () =>
+                                api.request(`/api/accounts/${person.id}/extras`, {
+                                  kind,
+                                  packs: 1,
+                                }),
+                              (result) => {
+                                const total = (
+                                  result as { limit?: Partial<Record<Counted, number | null>> }
+                                ).limit?.[kind];
+                                return `Added ${EXTRA_SHORT[kind]} for ${person.name} this month${typeof total === "number" ? `: ${person.name} now has ${total}` : ""}.`;
+                              },
+                            )
+                          }
+                        >
+                          {EXTRA_BUTTON[kind]}
+                        </Button>
+                      ))}
                     </View>
                   </View>
                 )}

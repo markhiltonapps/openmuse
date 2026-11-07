@@ -67,6 +67,7 @@ import { MiniApps } from "../mini-apps.ts";
 import type { ModelChoices, ModelJob } from "../model-choices.ts";
 import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
+import type { Pictures } from "../pictures.ts";
 import type { Plans } from "../plans.ts";
 import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
@@ -1418,6 +1419,8 @@ export class AgentService {
   logins?: Logins;
   /** Looks at pictures in Files; set when a vision model is configured. */
   look?: LookAtImage;
+  /** Pictures people ask for, made through OpenRouter and saved to Files; set with the key. */
+  pictures?: Pictures;
   /** Model usage per person, for costs and plan limits. */
   usage?: UsageMeter;
   /** When reminders last checked their calendar events. */
