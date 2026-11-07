@@ -599,3 +599,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   the device's speechSynthesis when the api answers 503 (calls not on our own voice). Lines are
   short (≤ 300 chars), made once per voice and kept; play a silent clip inside the starting tap so
   iPhones allow the fetched audio. The voice tests need the scratchpad venv with pipecat installed.
+- **Restarting a local tsx server (2026-11-07):** `ps aux | grep "[t]sx apps/server"` lists the
+  wrapper; the listener is `node … tsx/dist/cli.mjs apps/server/src/index.ts` (and its child).
+  Kill those, then check the new start's log for EADDRINUSE: an old server that keeps the port runs
+  old code, and zod silently drops a field the old schema doesn't know (a save that "works" but
+  never lands).

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import type { AvatarImage } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
-import { AVATAR_COLORS, type AvatarColor, Mascot } from "./avatar";
+import { AVATAR_COLORS, type AvatarColor, Mascot, type NeddyEyes } from "./avatar";
 import { CHARACTERS, type CharacterId } from "./avatar-art";
 import { Button, colors, ErrorNotice, Field, s } from "./ui";
 import { pickImage } from "./web-app";
@@ -19,16 +19,21 @@ const colourName = (color: AvatarColor) => (color === "sky" ? "sky blue" : color
 export function AvatarPicker({
   character,
   color,
+  eyes = "amber",
   agentName,
   onCharacter,
   onColor,
+  onEyes,
 }: {
   character: Character;
   color: AvatarColor;
+  /** Neddy's eye colour; shown only while Neddy is the character. */
+  eyes?: NeddyEyes;
   /** The agent's saved name, for the note after a save. */
   agentName: string;
   onCharacter: (value: Character) => void;
   onColor: (value: AvatarColor) => void;
+  onEyes?: (value: NeddyEyes) => void;
 }) {
   const { api, notify } = useWorkspace();
   const { mutate } = useAgentWorkspace();
@@ -67,16 +72,24 @@ export function AvatarPicker({
    * A tapped character or background is the avatar straight away; a failed save puts it back.
    * Only the avatar is sent, so a name being edited below isn't touched.
    */
-  async function pick(next: { character?: Character; color?: AvatarColor }, label: string) {
-    const before = { character, color };
+  async function pick(
+    next: { character?: Character; color?: AvatarColor; eyes?: NeddyEyes },
+    label: string,
+  ) {
+    const before = { character, color, eyes };
     if (next.character) onCharacter(next.character);
     if (next.color) onColor(next.color);
+    if (next.eyes) onEyes?.(next.eyes);
     setBusy("pick");
     setPickError("");
     try {
       await mutate(
         "/identity",
-        next.character ? { character: next.character } : { avatar: next.color },
+        next.character
+          ? { character: next.character }
+          : next.eyes
+            ? { eyes: next.eyes }
+            : { avatar: next.color },
       );
       // Naming the choice makes each save its own note, read out again by screen readers.
       notify(
@@ -84,11 +97,14 @@ export function AvatarPicker({
           ? label.toLowerCase() === agentName.toLowerCase()
             ? `${agentName}’s avatar is now the ${label} character.`
             : `${agentName}’s avatar is now ${label}.`
-          : `${agentName}’s background is now ${label}.`,
+          : next.eyes
+            ? `${agentName}’s eyes are now ${label}.`
+            : `${agentName}’s background is now ${label}.`,
       );
     } catch (e) {
       onCharacter(before.character);
       onColor(before.color);
+      onEyes?.(before.eyes);
       setPickError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(undefined);
@@ -197,6 +213,43 @@ export function AvatarPicker({
           );
         })}
       </View>
+      {character === "neddy" && (
+        <View
+          role="radiogroup"
+          aria-label="Neddy’s eyes"
+          style={[s.row, { gap: 10, justifyContent: "center" }]}
+        >
+          {(["amber", "teal"] as const).map((item) => {
+            const picked = eyes === item;
+            const label = item === "amber" ? "Amber eyes" : "Teal eyes";
+            return (
+              <Pressable
+                key={item}
+                role="radio"
+                aria-label={label}
+                aria-checked={picked}
+                disabled={!!busy}
+                onPress={() => !picked && void pick({ eyes: item }, item)}
+                style={{
+                  alignItems: "center",
+                  minWidth: 84,
+                  gap: 4,
+                  padding: 6,
+                  borderRadius: 18,
+                  borderWidth: 2,
+                  borderColor: picked ? colors.blueDark : "transparent",
+                  opacity: busy && !picked ? 0.5 : 1,
+                }}
+              >
+                <Mascot size={56} variant={color} character="neddy" eyes={item} animated={false} />
+                <Text style={[s.small, picked && { color: colors.text, fontWeight: "600" }]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
       {photo && (
         <Text id="avatar-photo-background" style={[s.small, { textAlign: "center" }]}>
           {own?.designAvailable

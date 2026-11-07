@@ -1604,7 +1604,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "meetingtranscript",
     place: "meetings",
     steps: [
-      "Open **Files › Meetings**, tap a meeting, and under **Every word** tap **Download transcript**. Your browser saves a text file named after the meeting.",
+      "Open **Files › Meetings**, tap a meeting, and under **Every word** tap **Copy transcript** to paste the words into an email or a note, or **Download transcript** to have your browser save a text file named after the meeting.",
       "To get real names in the file, tap a speaker’s name (like **Speaker 2**) first and say who it is, then download it.",
     ],
     body: [
@@ -2124,10 +2124,23 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Open **You › Agent**.",
       "Pick a character and colour; it saves straight away.",
+      "With Neddy, pick the eyes: **Amber** (Neddy’s own) or **Teal**. The change shows everywhere at once.",
       "Change the **Name** and **Tone** (Warm, Concise or Thoughtful).",
       "Tap **Save name and settings**.",
     ],
-    keywords: ["name", "avatar", "look", "tone", "personality", "rename", "character"],
+    keywords: [
+      "name",
+      "avatar",
+      "look",
+      "tone",
+      "personality",
+      "rename",
+      "character",
+      "eyes",
+      "eye colour",
+      "amber",
+      "teal",
+    ],
     related: ["appearance"],
   },
   {

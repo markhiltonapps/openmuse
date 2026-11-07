@@ -268,3 +268,38 @@ heard wasn't the one that talks on calls.
   service's "A line in …'s voice couldn't be made".
 - Checks: Biome clean (one pre-existing unused import warning in app.ts), pnpm typecheck, worker
   tsc, `env -u OPENROUTER_API_KEY pnpm test` 718 pass.
+
+Pushed 39cf578 (old address redirect) and 04acfc6 (setup questions in the call voice) on "push it";
+no call was on (the api log showed only feed calls since 12:00 UTC). Railway's api is on our own
+voice by default ("Our own voice on … default voice pipecat"), so the setup questions come from
+Inworld there; a 503 on /api/call-voices/say in the log would mean the fallback ran.
+
+Copy transcript, Neddy's eyes, the hovering Neddy on the Talk bar
+-----------------------------------------------------------------
+Owner: likes the Copy transcript button; wants people to pick Neddy's eye colour (amber or teal);
+wants the pictures feature (decisions still open, asked below); the Neddy on Home's Talk bar must
+animate (sent a screenshot with an arrow at him). Phone calls (Twilio) wait.
+- Copy transcript (meetings-ui.tsx): next to Download transcript under Every word; copies the same
+  text the download makes (`transcriptText`), reads "Copied" for 2 s, and says "Copied. Paste it
+  into an email or a note." in the status line; off the web it hands the text to the share sheet.
+  Help meeting-transcript step and picture updated (mark 1 now covers both buttons).
+- Neddy's eyes: `identity.eyes` ("amber" | "teal", `neddyEyes` in packages/domain/src/agent.ts),
+  accepted by POST /api/agent/identity (routes.ts; tests/agent-api checks teal saves and "purple"
+  is 422). The picture is a second asset, apps/mobile/assets/neddy-full-teal.webp, made once from
+  neddy-full.webp with Pillow (inside the visor's box, warm saturated pixels below cream's lightness
+  recoloured to hue 170° with a soft edge; scratchpad has the script's output). `NEDDY_PICTURE` in
+  avatar.tsx picks it; `Mascot` takes `eyes`, `AgentAvatar` passes the identity's; the picker
+  (avatar-settings.tsx) shows an "Neddy’s eyes" radiogroup (Amber eyes / Teal eyes, each a small
+  Neddy) only while Neddy is the character, saved on tap like the character. Help agent-settings
+  has the step (marks shifted: 3 eyes, 4 name, 5 save; picture retaken); site's "Make him yours"
+  says "Pick his eyes, amber or teal."
+- Home's Talk bar: the still picture is now `Mascot … flying` (the same hover and jet flames as the
+  one at the top), paused during a live call and with reduced motion. Checked at 390×844 light and
+  with a backdrop, and 1280×800: he hovers at the bar's left with the flames ending at its bottom.
+- A stale local api cost half an hour: `kill` on the pids from `ps aux | grep "[t]sx apps/server"`
+  killed only the wrappers; the real listener (node … tsx/dist/cli.mjs) kept port 8787, the new
+  start died with EADDRINUSE (visible only in the log), and the old code silently dropped `eyes`
+  (zod strips unknown fields). Check the log for EADDRINUSE after every restart.
+- Checks: Biome, pnpm typecheck, `env -u OPENROUTER_API_KEY pnpm test` 718 pass; Playwright: teal
+  saves, shows on Home (both Neddys) and survives a reload; Copy puts the transcript on the
+  clipboard and the button reads Copied then Copy transcript again.

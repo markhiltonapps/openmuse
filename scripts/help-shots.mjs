@@ -906,8 +906,9 @@ const SHOTS = [
     go: (p) => appsTab(p, /Agent/),
     marks: {
       2: (p) => p.getByRole("radiogroup", { name: "Character" }),
-      3: { find: (p) => p.getByLabel("Name"), side: "inside-right" },
-      4: { find: (p) => button(p, "Save name and settings"), side: "inside-right" },
+      3: (p) => p.getByRole("radiogroup", { name: "Neddy’s eyes" }),
+      4: { find: (p) => p.getByLabel("Name"), side: "inside-right" },
+      5: { find: (p) => button(p, "Save name and settings"), side: "inside-right" },
     },
   },
   {
@@ -1123,7 +1124,8 @@ const SHOTS = [
     },
     clip: (p) => p.getByRole("dialog").first(),
     marks: {
-      1: { find: (p) => button(p, "Download transcript"), side: "top-right" },
+      // Both buttons: Copy for pasting, Download for a file.
+      1: { find: (p) => button(p, "Copy transcript").locator(".."), side: "top-right" },
       2: { find: (p) => button(p, /^Speaker 2\. Change this name/), side: "top-right" },
     },
   },

@@ -8,6 +8,7 @@ import {
   type AvatarImage,
   avatarCharacters,
   avatarColors,
+  neddyEyes,
 } from "../../../../packages/domain/src/agent.ts";
 import { designAvatar } from "../avatar-designer.ts";
 import { AppError } from "../errors.ts";
@@ -191,6 +192,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
         tone: z.enum(["warm", "concise", "thoughtful"]).optional(),
         avatar: z.enum(avatarColors).optional(),
         character: z.enum(avatarCharacters).optional(),
+        eyes: z.enum(neddyEyes).optional(),
         showChatUpdates: z.boolean().optional(),
         updatesDisplay: z.enum(["popup", "bell", "chat"]).optional(),
         emailJobUpdates: z.boolean().optional(),

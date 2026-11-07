@@ -206,12 +206,16 @@ export const avatarCharacters = [
   "custom",
 ] as const;
 export const avatarColors = ["sky", "sand", "lilac", "mint", "peach"] as const;
+/** Neddy's eye colour (owner, 2026-11-07: people pick it): his own amber, or teal like his trim. */
+export const neddyEyes = ["amber", "teal"] as const;
 export interface AgentIdentity {
   name: string;
   tone: "warm" | "concise" | "thoughtful";
   /** Background color behind the avatar. */
   avatar?: (typeof avatarColors)[number];
   character?: (typeof avatarCharacters)[number];
+  /** Neddy's eyes: amber (his own) unless they chose teal. Only the Neddy character has them. */
+  eyes?: (typeof neddyEyes)[number];
   /** Changes whenever a custom picture or design is saved. */
   avatarImageVersion?: string;
   /** Older setting: false kept updates out of chat. `updatesDisplay` replaces it. */

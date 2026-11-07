@@ -256,6 +256,11 @@ test("memories can be edited and forgotten while identity changes persist", asyn
     (await request("/identity", { name: "Nova", tone: "warm", avatar: "invalid" })).status,
     422,
   );
+  assert.equal(
+    (await read<AgentWorkspace["identity"]>("/identity", { eyes: "teal" })).eyes,
+    "teal",
+  );
+  assert.equal((await request("/identity", { eyes: "purple" })).status, 422);
   assert.equal(snapshot.memories.find((item) => item.id === memory.id)?.text, updated.text);
   assert.deepEqual(await db.get("other-user", "agent-settings", "identity"), privateIdentity);
   assert.deepEqual(await read(`/memories/${memory.id}/forget`, {}), { ok: true });

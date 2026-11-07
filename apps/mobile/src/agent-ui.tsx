@@ -3893,6 +3893,7 @@ export function AppsScreen() {
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [character, setCharacter] = useState(data?.identity.character || "neddy");
+  const [eyes, setEyes] = useState(data?.identity.eyes || "amber");
   const [display, setDisplay] = useState<UpdatesDisplay>(updatesDisplay(data?.identity));
   const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
@@ -3920,8 +3921,14 @@ export function AppsScreen() {
     if (data?.identity) {
       setAvatar(data.identity.avatar || "sky");
       setCharacter(data.identity.character || "neddy");
+      setEyes(data.identity.eyes || "amber");
     }
-  }, [data?.identity.avatar, data?.identity.character, data?.identity.avatarImageVersion]);
+  }, [
+    data?.identity.avatar,
+    data?.identity.character,
+    data?.identity.eyes,
+    data?.identity.avatarImageVersion,
+  ]);
   async function save(path: string, body: unknown, done?: string) {
     setBusy(true);
     setError("");
@@ -4096,9 +4103,11 @@ export function AppsScreen() {
             <AvatarPicker
               character={character}
               color={avatar}
+              eyes={eyes}
               agentName={data?.identity.name || "Your agent"}
               onCharacter={setCharacter}
               onColor={setAvatar}
+              onEyes={setEyes}
             />
             {/* The avatar saves on its own; everything below waits for the button. */}
             <View style={s.divider} />

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleStop,
   CloudOff,
+  Copy,
   Download,
   ListChecks,
   Mic,
@@ -27,7 +28,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Share, Text, TextInput, View } from "react-native";
 import { PERSONA_FACTS, type PersonaKey } from "../../../packages/domain/src/persona";
 import { PlaceAnchor } from "./app-places-ui";
 import { useCallControls } from "./live-call";
@@ -1527,6 +1528,22 @@ export function MeetingSheet({ id }: { id: string }) {
   });
   // The transcript file: what happened when it was tapped.
   const [saved, setSaved] = useState("");
+  // Copy transcript: the button reads "Copied" for a moment after it worked.
+  const [copied, setCopied] = useState(false);
+  const copyTranscript = async () => {
+    if (!meeting) return;
+    const text = transcriptText(meeting, meetingLine(meeting));
+    try {
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setSaved("Copied. Paste it into an email or a note.");
+        setTimeout(() => open.current && setCopied(false), 2000);
+      } else await Share.share({ message: text });
+    } catch {
+      setSaved("Couldn’t copy the words. Select them on the screen instead.");
+    }
+  };
   const speakersKey = JSON.stringify(meeting?.speakers ?? {});
   // A name changed after saving: that file has the old names, so its note no longer applies.
   useEffect(() => {
@@ -1942,32 +1959,37 @@ export function MeetingSheet({ id }: { id: string }) {
             </View>
             {Platform.OS === "web" && (
               <View style={{ gap: 6 }}>
-                <Button
-                  icon={Download}
-                  style={{ alignSelf: "flex-start" }}
-                  onPress={() => {
-                    const name = transcriptFileName(meeting.title);
-                    const failed =
-                      "Couldn’t save the file. Try again, or open the app in your browser.";
-                    const result = saveTextFile(
-                      name,
-                      transcriptText(meeting, meetingLine(meeting)),
-                      // A cancelled share sheet isn't a problem; anything else is.
-                      (ended) => setSaved(ended === "cancelled" ? "" : failed),
-                    );
-                    setSaved(
-                      result === "started"
-                        ? `Started downloading “${name}”. Look in your downloads.`
-                        : result === "shared"
-                          ? `Use the share sheet to keep “${name}”.`
-                          : result === "tab"
-                            ? `“${name}” opened in a new tab. Use the share button there to keep it.`
-                            : failed,
-                    );
-                  }}
-                >
-                  Download transcript
-                </Button>
+                <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                  {/* Most people paste the words into an email or a note: Copy first. */}
+                  <Button icon={copied ? Check : Copy} onPress={() => void copyTranscript()}>
+                    {copied ? "Copied" : "Copy transcript"}
+                  </Button>
+                  <Button
+                    icon={Download}
+                    onPress={() => {
+                      const name = transcriptFileName(meeting.title);
+                      const failed =
+                        "Couldn’t save the file. Try again, or open the app in your browser.";
+                      const result = saveTextFile(
+                        name,
+                        transcriptText(meeting, meetingLine(meeting)),
+                        // A cancelled share sheet isn't a problem; anything else is.
+                        (ended) => setSaved(ended === "cancelled" ? "" : failed),
+                      );
+                      setSaved(
+                        result === "started"
+                          ? `Started downloading “${name}”. Look in your downloads.`
+                          : result === "shared"
+                            ? `Use the share sheet to keep “${name}”.`
+                            : result === "tab"
+                              ? `“${name}” opened in a new tab. Use the share button there to keep it.`
+                              : failed,
+                      );
+                    }}
+                  >
+                    Download transcript
+                  </Button>
+                </View>
                 <StatusLine text={saved} />
                 {!!saved && <Text style={s.small}>{saved}</Text>}
               </View>

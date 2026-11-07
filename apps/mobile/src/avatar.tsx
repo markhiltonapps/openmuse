@@ -15,6 +15,12 @@ import { useWorkspace } from "./workspace";
 
 export type Mood = "idle" | "working" | "attention" | "celebrate";
 export type AvatarColor = NonNullable<AgentIdentity["avatar"]>;
+export type NeddyEyes = NonNullable<AgentIdentity["eyes"]>;
+/** Whole Neddy with amber eyes (his own) or teal ones: the same picture, recoloured once. */
+export const NEDDY_PICTURE: Record<NeddyEyes, number> = {
+  amber: require("../assets/neddy-full.webp"),
+  teal: require("../assets/neddy-full-teal.webp"),
+};
 export const AVATAR_COLORS: Record<AvatarColor, string> = {
   sky: "#ECF5FA",
   sand: "#FAF0DF",
@@ -212,10 +218,13 @@ export function Mascot({
   speaking = false,
   quiet = false,
   flying = false,
+  eyes = "amber",
 }: {
   size?: number;
   variant?: AvatarColor;
   character?: CharacterId | "custom";
+  /** Neddy's eye colour (the person's choice); other characters ignore it. */
+  eyes?: NeddyEyes;
   image?: AvatarImage | null;
   mood?: Mood;
   /** Shown with a small prop while working: a laptop, magnifying glass, page and so on. */
@@ -326,7 +335,7 @@ export function Mascot({
     ) : null
   ) : whole ? (
     <Image
-      source={require("../assets/neddy-full.webp")}
+      source={NEDDY_PICTURE[eyes] ?? NEDDY_PICTURE.amber}
       accessible={false}
       resizeMode="contain"
       style={{ width: size, height: size }}
@@ -513,6 +522,7 @@ export function AgentAvatar({
       size={size}
       variant={identity?.avatar}
       character={identity?.character ?? "neddy"}
+      eyes={identity?.eyes}
       image={image}
       mood={mood}
       activity={activity}

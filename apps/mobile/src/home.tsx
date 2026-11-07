@@ -16,7 +16,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import { type ReactNode, useEffect, useState } from "react";
-import { Image, Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src";
 import type { Weather } from "../../../packages/domain/src/weather";
 import { taskActivity } from "./activity";
@@ -25,12 +25,14 @@ import { updateOpens, useOpenUpdate } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { PlaceAnchor, usePlace } from "./app-places-ui";
 import { ApprovalCard } from "./approval-card";
+import { Mascot, useReducedMotion } from "./avatar";
 import { type AppDay, todaysEvents } from "./calendar-apps";
 import { Emoji } from "./emoji";
 import { GlossFill, OnGloss } from "./gloss";
 import { comingUp, countWords as count, recentFew, scheduleWords, whenWords } from "./home-lists";
 import { useCallControls } from "./live-call";
 import { useLiveVoice } from "./live-talk-ui";
+import { useLiveCallOn } from "./live-voice";
 import { HomeRecordButton, useRecording } from "./meetings-ui";
 import { glass } from "./theme";
 import { tipProps } from "./tips";
@@ -863,6 +865,9 @@ function Waiting({
 export function HomeTalkRow({ desktop }: { desktop: boolean }) {
   const { navigate, draft } = useWorkspace();
   const { data } = useAgentWorkspace();
+  // During a live call the phone's attention goes to the voice: the hover pauses.
+  const onCall = useLiveCallOn();
+  const reduce = useReducedMotion();
   const agent = data?.identity.name || "Neddy";
   const live = useLiveVoice();
   const call = useCallControls();
@@ -933,13 +938,21 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
         >
           <GlossFill id="talk" from={TEAL[0]} to={TEAL[1]} radius={31} />
         </View>
-        {/* He stands in the bar, his head rising above it. */}
-        <Image
-          source={require("../assets/neddy-full.webp")}
-          accessibilityIgnoresInvertColors
-          resizeMode="contain"
-          style={{ position: "absolute", left: 10, bottom: 4, width: 58, height: 78 }}
-        />
+        {/* He hovers in the bar on his jets, his head rising above it (owner, 2026-11-07: he
+            moves like the one at the top of the screen, never a still picture). */}
+        <View
+          pointerEvents="none"
+          style={{ position: "absolute", left: 0, bottom: 12, width: 78, height: 78 }}
+        >
+          <Mascot
+            size={78}
+            character="neddy"
+            eyes={data?.identity.eyes}
+            flying
+            quiet={onCall}
+            animated={!reduce}
+          />
+        </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, position: "relative" }}>
           <Text
             numberOfLines={1}
