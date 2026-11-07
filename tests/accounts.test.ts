@@ -239,7 +239,7 @@ test("people can ask to join from the sign-in screen; the admin approves or decl
   const nadiaMail = adminMail.find((m) => m.subject === "Nadia asked to join Neddy");
   assert.match(
     nadiaMail?.text ?? "",
-    /Apps & settings › Account › People\. 2 people are waiting for an answer in all/,
+    /You › Account › People\. 2 people are waiting for an answer in all/,
   );
   const notes = await notified();
   assert.equal(notes.length, 2);

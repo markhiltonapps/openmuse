@@ -25,7 +25,7 @@ export function setThemeChoice(choice: ThemeChoice) {
 const BACKDROP_KEY = "openmuse.backdrop";
 /**
  * The backdrop scene this device last knew (the server's choice, kept so the app opens straight
- * into it). A new device starts on the beach, like a new account.
+ * into it). A new device starts with no backdrop, on the cream look, like a new account.
  */
 export function savedBackdrop(): string {
   try {
@@ -54,71 +54,83 @@ const choice = themeChoice();
 export const dark =
   glass || choice === "dark" || (choice === "system" && Appearance.getColorScheme() === "dark");
 
+/**
+ * Neddy's own colours (owner, 2026-11-07): the cream of his shell for the page, the teal of his
+ * band for the one accent, the amber of his eyes only for what needs the person, and the night
+ * blue of his visor for dark mode. The token names stay ("blue" is the accent).
+ */
 const light = {
-  canvas: "#FCFCFC",
-  card: "#FFFFFF",
-  text: "#11191C",
-  muted: "#697176",
+  canvas: "#F8F3EA",
+  card: "#FFFDF9",
+  text: "#1B2430",
+  muted: "#6B7480",
   /** Small grey text on tinted surfaces, where muted falls short of AA. */
-  mutedStrong: "#565E63",
-  line: "#EEEEF0",
+  mutedStrong: "#525B66",
+  line: "#E6E0D4",
   /** The edge of a small control that must stand out from the card, such as a colour swatch. */
-  edge: "#8A9196",
-  blue: "#C8E7FF",
-  blueDark: "#1473C8",
-  /** Small blue text on grey or sky tiles: blueDark is a touch light for it in light mode. */
-  blueText: "#1269B8",
-  sky: "#EDF7FD",
+  edge: "#8B9492",
+  /** The accent's tint (a selected chip, a pill): Neddy's teal, light. */
+  blue: "#D4ECE8",
+  /** The accent: Neddy's teal. */
+  blueDark: "#2A6C66",
+  /** Small accent text on grey or cream tiles. */
+  blueText: "#24605A",
+  sky: "#EDF6F3",
   green: "#E3F3E8",
   greenDark: "#189A58",
   /** Green text on the page or a card: greenDark is too light for text in light mode. */
   greenText: "#147A45",
-  lavender: "#F0EEFA",
-  orange: "#FDF0DF",
+  lavender: "#F2ECE0",
+  orange: "#FBEFD8",
+  /** Neddy's amber: the count on his picture, and nothing else that isn't his. */
+  amber: "#C7760F",
+  amberText: "#9A6200",
   danger: "#AA4A45",
   /** Inputs, the tab bar and round buttons. */
-  surface: "#FFFFFF",
+  surface: "#FFFDF9",
   /** Secondary buttons, pressed rows and the selected tab. */
-  subtle: "#F1F2F3",
+  subtle: "#F0EAE0",
   /** The agent's chat bubbles and tool cards. */
-  bubble: "#EEEEF0",
+  bubble: "#F1ECE2",
   /** A dividing line inside a chat bubble (line is the bubble's own colour in light mode). */
-  bubbleLine: "#D6D8DB",
+  bubbleLine: "#DCD4C6",
   errorBg: "#FBEFED",
   /** Toasts and checked boxes: the opposite of the page. */
-  inverse: "#11191C",
-  onInverse: "#FFFFFF",
+  inverse: "#1B2430",
+  onInverse: "#FFFDF9",
   /** "Live" on the inverse (a call's ring on its bar): the other theme's green. */
   liveOnInverse: "#2BD46E",
   /** A quiet fill on the inverse (the call bar's Mute and its See it row). */
   onInverseSubtle: "rgba(128,128,128,0.27)",
-  shade: "rgba(35,48,44,0.25)",
+  shade: "rgba(27,36,48,0.25)",
 };
 const night: typeof light = {
-  canvas: "#000000",
-  card: "#151517",
-  text: "#F3F3F5",
-  muted: "#9C9CA3",
-  mutedStrong: "#ADADB4",
-  line: "#26262A",
-  edge: "#77777F",
-  blue: "#1C4E7D",
-  blueDark: "#55AAFF",
-  blueText: "#55AAFF",
-  sky: "#0E2130",
+  canvas: "#0E131B",
+  card: "#17202B",
+  text: "#F3EFE6",
+  muted: "#98A2AD",
+  mutedStrong: "#B3BCC6",
+  line: "#273240",
+  edge: "#7A8591",
+  blue: "#1F4A47",
+  blueDark: "#5FC6BB",
+  blueText: "#72D2C7",
+  sky: "#13282A",
   green: "#0F2619",
   greenDark: "#2BD46E",
   greenText: "#2BD46E",
-  lavender: "#1C1930",
-  orange: "#2B2012",
+  lavender: "#232E3A",
+  orange: "#3A2A14",
+  amber: "#E89A2E",
+  amberText: "#F6B55A",
   danger: "#FF8F85",
-  surface: "#1C1C1F",
-  subtle: "#2A2A2E",
-  bubble: "#1C1C1F",
-  bubbleLine: "#2E2E33",
+  surface: "#1B2430",
+  subtle: "#263241",
+  bubble: "#1B2430",
+  bubbleLine: "#33404F",
   errorBg: "#3A1D1B",
-  inverse: "#F3F3F5",
-  onInverse: "#000000",
+  inverse: "#F3EFE6",
+  onInverse: "#0E131B",
   liveOnInverse: "#189A58",
   onInverseSubtle: "rgba(128,128,128,0.27)",
   shade: "rgba(0,0,0,0.6)",
@@ -139,7 +151,7 @@ const glassNight: typeof light = {
   muted: "#B4B4BC",
   mutedStrong: "#C4C4CB",
   bubbleLine: "rgba(255,255,255,0.18)",
-  sky: "rgba(22,60,96,0.72)",
+  sky: "rgba(20,56,54,0.72)",
   green: "rgba(15,40,26,0.78)",
   lavender: "rgba(30,26,52,0.78)",
   orange: "rgba(46,33,17,0.78)",

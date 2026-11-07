@@ -32,7 +32,7 @@ import { comingUp, countWords as count, recentFew, scheduleWords, whenWords } fr
 import { useCallControls } from "./live-call";
 import { useLiveVoice } from "./live-talk-ui";
 import { HomeRecordButton, useRecording } from "./meetings-ui";
-import { dark, glass } from "./theme";
+import { glass } from "./theme";
 import { tipProps } from "./tips";
 import { Button, colors, glassSurface, s } from "./ui";
 import { dayName, lastShown, todayIn, useWeather } from "./weather-ui";
@@ -40,6 +40,8 @@ import { isInstalled } from "./web-app";
 import { useWorkspace } from "./workspace";
 
 const NAME_KEY = "openmuse.you-name";
+/** Neddy's teal, as a gradient for the glossy buttons and card icons. */
+const TEAL: [string, string] = ["#3A8A82", "#1F5B55"];
 const ADDRESS_KEY = "openmuse.agent-email";
 function rememberedAddress() {
   try {
@@ -229,7 +231,6 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
             <HomeCard
               title="Needs you"
               icon={Check}
-              tint={["#3fd0a3", "#0b8a6c"]}
               badge={needs}
               badgeWords={`${count(needs).toLowerCase()} ${needs === 1 ? "thing" : "things"}`}
             >
@@ -270,7 +271,6 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
             <HomeCard
               title="Today"
               icon={CalendarDays}
-              tint={["#ffbe6e", "#e8591a"]}
               onPress={() => navigate("feed")}
               // A button's name replaces what's in it, so it carries what the card says.
               label={`Today: ${shown
@@ -284,7 +284,7 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
                 <View key={`${e.id}-${e.start}`} style={{ flexDirection: "row", gap: 10 }}>
                   <Text
                     style={{
-                      color: glass ? "#FFD9A8" : dark ? "#FFC58A" : "#B4530F",
+                      color: ink(),
                       fontWeight: "700",
                       fontSize: 14,
                       minWidth: 44,
@@ -308,7 +308,6 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
             <HomeCard
               title="Working on"
               icon={Globe}
-              tint={["#b49cff", "#6a3fd6"]}
               onPress={() =>
                 current ? open({ type: "task", taskId: current.id }) : open({ type: "delegate" })
               }
@@ -331,7 +330,12 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
                   </Text>
                   <View style={{ flexDirection: "row", gap: 7, alignItems: "center" }}>
                     <View
-                      style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#7DD8FF" }}
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: colors.greenDark,
+                      }}
                     />
                     <Text style={{ color: soft(), fontSize: 13, flex: 1 }} numberOfLines={2}>
                       {jobLine}
@@ -355,7 +359,7 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
           )}
           <AddressCard agent={agent} />
           {upcoming.length > 0 && (
-            <HomeCard title="Coming up" icon={CalendarClock} tint={["#7fd4ff", "#2f7be0"]}>
+            <HomeCard title="Coming up" icon={CalendarClock}>
               {upcoming.map((routine, index) => (
                 <Row
                   key={routine.id}
@@ -372,7 +376,6 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
           <HomeCard
             title="Recent"
             icon={Bell}
-            tint={["#ffbe6e", "#e8591a"]}
             badge={unread || undefined}
             badgeWords={`${count(unread).toLowerCase()} new`}
             more="See all"
@@ -402,7 +405,7 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
             ))}
           </HomeCard>
           <PlaceAnchor id="about-neddy" label={`About ${agent}`} radius={24}>
-            <HomeCard title={`About ${agent}`} icon={Bot} tint={["#b49cff", "#6a3fd6"]}>
+            <HomeCard title={`About ${agent}`} icon={Bot}>
               <Row
                 first
                 title="Name, look and voice"
@@ -501,7 +504,7 @@ function Row({
 function WeatherRoom() {
   return (
     <View aria-hidden>
-      <HomeCard title="Weather" icon={CloudSun} tint={["#7fd4ff", "#2f7be0"]}>
+      <HomeCard title="Weather" icon={CloudSun}>
         <View style={{ height: 121 }} />
       </HomeCard>
     </View>
@@ -525,7 +528,6 @@ function WeatherCard({ weather, onPress }: { weather: Weather; onPress: () => vo
     <HomeCard
       title="Weather"
       icon={CloudSun}
-      tint={["#7fd4ff", "#2f7be0"]}
       onPress={onPress}
       label={`Weather in ${weather.place}: ${weather.now.temp} degrees, ${weather.now.sky.toLowerCase()}. ${spoken}. Opens the forecast in Feed`}
     >
@@ -617,7 +619,7 @@ function AddressCard({ agent }: { agent: string }) {
     setNote(`Contact card downloaded. Open it to add ${agent} to your contacts.`);
   };
   return (
-    <HomeCard title={`Email ${agent}`} icon={Mail} tint={["#6ec3ff", "#2a62d9"]}>
+    <HomeCard title={`Email ${agent}`} icon={Mail}>
       {/* The note replaces this line, high in the card, so it can't end up under the Talk bar and the
           card never changes size. Mounted all the time so a change is read out. */}
       <Text role="status" aria-live="polite" style={{ color: soft(), fontSize: 13 }}>
@@ -667,7 +669,6 @@ function AddressCard({ agent }: { agent: string }) {
 function HomeCard({
   title,
   icon: Icon,
-  tint,
   badge,
   badgeWords,
   onPress,
@@ -680,7 +681,6 @@ function HomeCard({
 }: {
   title: string;
   icon: LucideIcon;
-  tint: [string, string];
   badge?: number;
   /** The count in words for the heading's screen-reader name: "two things", "three new". */
   badgeWords?: string;
@@ -706,12 +706,13 @@ function HomeCard({
             justifyContent: "center",
           }}
         >
+          {/* One accent (owner, 2026-11-07): Neddy's teal on its tint, no colour tiles. */}
           <GlossFill
             id={`home-${title}`}
-            from={tint[0]}
-            to={tint[1]}
+            from={TEAL[0]}
+            to={TEAL[1]}
             angle="tilted"
-            shine={0.5}
+            shine={0.4}
             radius={9}
           />
           <OnGloss>
@@ -849,7 +850,7 @@ function Waiting({
           transform: [{ scale: pressed ? 0.97 : 1 }],
         })}
       >
-        <GlossFill id={`review-${title}`} from="#279a52" to="#0a5f2d" radius={22} />
+        <GlossFill id={`review-${title}`} from={TEAL[0]} to={TEAL[1]} radius={22} />
         <OnGloss>
           <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>{button}</Text>
         </OnGloss>
@@ -912,8 +913,8 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
           paddingLeft: tight ? 70 : 78,
           paddingRight: tight ? 16 : 20,
           transform: [{ scale: pressed ? 0.98 : 1 }],
-          shadowColor: "#1E46BE",
-          shadowOpacity: 0.45,
+          shadowColor: TEAL[1],
+          shadowOpacity: 0.3,
           shadowRadius: 14,
           shadowOffset: { width: 0, height: 8 },
         })}
@@ -930,7 +931,7 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
             overflow: "hidden",
           }}
         >
-          <GlossFill id="talk" from="#3d86f0" to="#1a47b8" radius={31} />
+          <GlossFill id="talk" from={TEAL[0]} to={TEAL[1]} radius={31} />
         </View>
         {/* He stands in the bar, his head rising above it. */}
         <Image

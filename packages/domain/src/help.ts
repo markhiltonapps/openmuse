@@ -93,7 +93,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Your first five minutes",
     summary: "Connect your apps, tell {agent} about you, and try a call.",
     steps: [
-      "Connect your email and calendar: open **Apps**, search for Gmail, Outlook or Google Calendar, and tap **Connect**. You sign in to each app yourself.",
+      "Connect your email and calendar: open **You › Apps**, search for Gmail, Outlook or Google Calendar, and tap **Connect**. You sign in to each app yourself.",
       "Tell {agent} about yourself: say “Ask me a few questions for my About you page.”",
       "Try a call: tap the headset next to the message box and say “What’s on my calendar today?”",
       "Add the app to your home screen so it’s one tap away and can send you notifications.",
@@ -164,7 +164,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Under them, the **Weather** card shows the temperature now and the next seven days, each with its high and low. Tap it for the full forecast in Feed. It’s shown when you’ve saved a US home city (see **Weather and where you live**).",
       "If {agent} has an email address set up, a small **Email {agent}** card follows, with Copy and Save contact.",
       "Further down: **Coming up** (your routines and one-time jobs and when they run, once you have some), **Recent** (what {agent} did and noticed, newest first; **See all** has the last week’s), and **About {agent}**: its name, look and voice, what it knows about you, when it speaks up, your plan and this Help. Tap {agent}’s name at the top of any screen to jump straight to About {agent}.",
-      "To come back here from anywhere, tap {agent} at the top of the screen, choose **Home** in the ☰ Menu, or say “Take me home”.",
+      "To come back here from anywhere, tap **Home** in the bottom bar, tap {agent} at the top of the screen, choose **Home** in the ☰ Menu, or say “Take me home”.",
     ],
     say: [{ text: "Take me home.", send: true }],
     keywords: [
@@ -195,8 +195,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "At the end, {agent} shows what it knows and something real from it: today’s calendar if you connected one, or tomorrow’s weather with the offer of a weekday morning brief. **Start talking** begins a call; **Or type in Chat** opens the chat.",
     ],
     body: [
-      "Every answer lands on **Apps › About you**, marked “You said it during setup”, where you can change or forget it.",
-      "Closing part-way keeps your answers; the next open carries on from the next question. To run it again any time, open **Apps › About you** and tap **Set up with {agent} again**, or say “Take me to setup”.",
+      "Every answer lands on **You › About you**, marked “You said it during setup”, where you can change or forget it.",
+      "Closing part-way keeps your answers; the next open carries on from the next question. To run it again any time, open **You › About you** and tap **Set up with {agent} again**, or say “Take me to setup”.",
     ],
     say: [{ text: "Take me to setup.", send: true }],
     keywords: [
@@ -215,13 +215,13 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "find-your-way",
     group: "start",
     title: "Find your way around",
-    summary: "The bottom bar has the main screens; the top has the Menu, {agent} and New job.",
+    summary: "Four tabs along the bottom: Home, Chat, Activity and You. The ☰ Menu has the rest.",
     shot: "home",
     steps: [
-      "**☰ Menu (top left):** Home, Chats, New job, Calendar, Spaces, Files, {agent}’s browser, Apps & settings and Help & how-to, each with a line saying what it’s for.",
+      "**☰ Menu (top left):** Home, Chats, New job, Calendar, Feed, Spaces, Goals, Ideas, Files, {agent}’s browser, Backdrop, You and Help & how-to, each with a line saying what it’s for.",
       "**{agent}’s picture:** what it’s working on now. A number on it is how many things need you (approvals and questions for you); a dot means something new under Recent on Home. Tap it to go back to Home; tap its name to jump to About {agent}. On the chat screen, the button under it says which chat you’re in and opens your chats.",
       "**The clipboard button (top right):** hand {agent} a new job.",
-      "**The bottom bar:** Chat, Feed, Spaces, Activity, Ideas, Goals, Files and Apps.",
+      "**The bottom bar:** Home, Chat, Activity and You (your apps, {agent}’s settings, About you, alerts, money and your account). Everything else is in the Menu, on Home, or a “take me to…” away.",
     ],
     body: [
       "You don’t have to find anything: ask {agent} “Take me to my food log” or “Where are my reminders?” and it shows a button that takes you there.",
@@ -347,12 +347,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "callvoice",
     place: "agent-settings",
     steps: [
-      "Open **Apps › Agent** and find **Voice on live calls**.",
+      "Open **You › Agent** and find **Voice on live calls**.",
       "Tap **Play** next to a voice to hear a short hello, or tap the voice itself to choose it (it plays the hello too).",
       "Or just say it, on a call or in the chat: “Switch to Theodore”, or “Use a deeper voice”. On a call, the new voice speaks straight away, so you can try a few. In the chat, “Let me hear Theodore” shows it with a **Play** button.",
     ],
     body: [
-      "Choosing is for the new voice. If your calls use OpenAI’s voice, the card isn’t there; the admin can move you to the new voice under **Apps › Account › People**.",
+      "Choosing is for the new voice. If your calls use OpenAI’s voice, the card isn’t there; the admin can move you to the new voice under **You › Account › People**.",
       "On the new voice, when you’ve been talking a while and pause mid-thought, {agent} now and then murmurs a soft “mm-hmm” or “uh-huh”, like people do on the phone. When a look-up takes a while, it tells you it’s still on it.",
     ],
     say: [
@@ -383,7 +383,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Tap **Listen** under any reply to hear it.",
       "Where live talk isn’t on, tap the **mic** to speak a message instead of typing, or the **sound-wave** button to talk hands-free.",
-      "Choose the voice for replies read aloud on this device, and the microphone, under **Apps › Agent › Voice**. For live calls, see **Choose {agent}’s voice on calls**.",
+      "Choose the voice for replies read aloud on this device, and the microphone, under **You › Agent › Voice**. For live calls, see **Choose {agent}’s voice on calls**.",
     ],
     keywords: ["dictation", "mic", "read aloud", "listen", "voice", "spoken replies"],
     related: ["microphone", "live-call"],
@@ -578,7 +578,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "{agent} reads every calendar you connect, and can add or move events with your OK.",
     place: "calendar",
     steps: [
-      "Connect Google Calendar or Outlook under **Apps**.",
+      "Connect Google Calendar or Outlook under **You › Apps**.",
       "Ask “What’s on today?” and a calendar card shows your day, with your reminders.",
       "To see the calendar itself, open **☰ Menu › Calendar**.",
     ],
@@ -675,7 +675,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Open **Home** (tap {agent} at the top) and look under **Recent**: the newest updates, unread first. Tap one to open what it’s about.",
       "Tap **See all** for results, changes {agent} noticed and anything needing you, from the last 7 days. Something older that still needs you stays until it’s done.",
       "**Mark all read** clears the count. Or say “Mark all my updates read.”",
-      "Choose where updates show under **Apps › Agent › Where updates show**.",
+      "Choose where updates show under **You › Agent › Where updates show**.",
     ],
     body: [
       "Email only shows up here when you’ve asked to hear about it: an email rule, or **Every new email** under **Email alerts**.",
@@ -718,7 +718,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Useful next steps {agent} suggests from your email, goals and plans.",
     place: "ideas",
     steps: [
-      "Open **Ideas** in the bottom bar.",
+      "Open **Ideas** from the ☰ Menu (top left).",
       "Tap an idea to see why it’s suggested. **Start this** hands it to {agent} as a job, **Edit** changes what it will do, and **Dismiss** removes it.",
     ],
     keywords: ["suggestions", "ideas", "recommendations", "next steps"],
@@ -731,7 +731,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Longer-term goals with milestones, and everything {agent} keeps an eye on.",
     place: "goals",
     steps: [
-      "Open **Goals** in the bottom bar.",
+      "Open **Goals** from the ☰ Menu (top left).",
       "**Goals** and their milestones; ask {agent} to set one up.",
       "**Tracking:** your routines and the pages {agent} watches, with a price chart for a price watch.",
       "**Subscriptions:** tap **Find my subscriptions** to have {agent} find the charges that repeat.",
@@ -809,7 +809,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "{agent} can work a website in its own browser: download a bill, fill in a form, compare prices.",
     steps: [
-      "If the site needs a sign-in, save its password first under **Apps › Account › Passwords**.",
+      "If the site needs a sign-in, save its password first under **You › Account › Passwords**.",
       "Hand over the job: “Download my latest bill from my electric company’s website.”",
       "{agent} asks before it signs in (unless you turned that off) and always before it pays, sends or submits.",
       "Files it downloads go to **Files & media**.",
@@ -983,7 +983,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "spaces",
     place: "spaces",
     steps: [
-      "Open **Spaces** in the bottom bar.",
+      "Open **Spaces** from the ☰ Menu (top left).",
       "Tap a space to open it. Each has an **Overview**, its history, and a **Playbook** of how you want it run.",
       "To start one, tap **Start a family planner** or **Start a social media space**. If a space is open, tap **All spaces** first.",
     ],
@@ -1153,7 +1153,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "apps",
     place: "apps",
     steps: [
-      "Open **Apps**, or just say “Connect my Gmail.”",
+      "Open **You › Apps**, or just say “Connect my Gmail.”",
       "Search for the app.",
       "Tap **Connect** and sign in on the app’s own page.",
       "Come back to Neato_Muse. It shows **Connected**.",
@@ -1175,7 +1175,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "{agent} uses the Gmail, Outlook or Google Calendar you connect under Apps.",
     place: "apps",
     body: [
-      "Connect your email and calendar under **Apps** (see “Connect your apps”). That’s the connection {agent} uses, in the chat, on calls and in jobs.",
+      "Connect your email and calendar under **You › Apps** (see “Connect your apps”). That’s the connection {agent} uses, in the chat, on calls and in jobs.",
       "If {agent} ever says it can’t reach an app you connected, see “{agent} says it can’t reach an app I connected”.",
       "Ask “Do I have any emails I need to respond to?” {agent} checks every mailbox you’ve connected (Gmail, Outlook or both) and what you’ve already sent. It tells you what needs action, including security alerts and failed payments, and what doesn’t.",
       "Ask “Move my receipts into a Receipts folder” and {agent} looks at your folders, makes the one you named only if it’s missing, then moves the mail. In Gmail a folder is a label, so making one is a first **Approve** and the move is a second; tap each as its card appears. {agent} then looks again and tells you how many really moved. If something didn’t move, it says what.",
@@ -1222,7 +1222,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Add any app that offers an MCP server (a web address made for AI assistants), like your note-taking app.",
     place: "apps",
     steps: [
-      "Say “Connect my notes app at https://…”, or open **Apps › Your own apps › Add an app**.",
+      "Say “Connect my notes app at https://…”, or open **You › Apps › Your own apps › Add an app**.",
       "Give it a name and its https address, and a key if it uses one.",
       "Tap **Connect**, and sign in on the app’s page if it asks.",
     ],
@@ -1239,7 +1239,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Choose, app by app, whether {agent} can only look things up or also make changes.",
     place: "apps",
     steps: [
-      "Open **Apps › App permissions**.",
+      "Open **You › Apps › App permissions**.",
       "Set an app to **Read only** and {agent} can look things up there but never send, create or change anything, even with your OK.",
     ],
     keywords: ["permissions", "read only", "access", "write", "safety"],
@@ -1253,7 +1253,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "apps",
     steps: [
       "When you approve something, you can choose to always allow that kind of action.",
-      "See and undo them under **Apps › Always allowed**.",
+      "See and undo them under **You › Apps › Always allowed**.",
     ],
     body: [
       "Purchases always ask.",
@@ -1281,9 +1281,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "agentaddress",
     place: "agent-settings",
     steps: [
-      "Your address (1) is on **Home**, in the **Email {agent}** card. It is also under **Apps › Agent › Agent email** and **Apps › Account**.",
+      "Your address (1) is on **Home**, in the **Email {agent}** card. It is also under **You › Agent › Agent email** and **You › Account**.",
       "Tap **Copy** (2), then paste it into the **To** box of a forward. Or tap **Save contact** (3) and open the card it downloads (it isn’t shown in the installed app). Most mail apps will then fill in the address when you type {agent}’s name; for Gmail on the web, add the card at contacts.google.com.",
-      "Forward or send an email to it. Supported attachments are read too: PDFs, pictures, Word, Excel, PowerPoint, CSV and text files, up to 5 files of 10 MB each. At first only email from the address you signed in with counts, so forward from that account. To add other addresses, go to **Apps › Agent › Agent email**.",
+      "Forward or send an email to it. Supported attachments are read too: PDFs, pictures, Word, Excel, PowerPoint, CSV and text files, up to 5 files of 10 MB each. At first only email from the address you signed in with counts, so forward from that account. To add other addresses, go to **You › Agent › Agent email**.",
       "Email from anyone else is held: {agent} doesn’t act on it, and you get a notice. After you approve the sender, send it again. (If the notice says it failed the sender check, approving won’t help: send it again from your usual mail app.)",
       "Email can take a minute or two to arrive. To check, ask “Did you get my email?” and {agent} lists what reached its address and how each one went.",
     ],
@@ -1320,7 +1320,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "location",
     place: "account",
     steps: [
-      "Open **Apps › Account › Your location** and tick **Share where I am while the app is open**. Your browser asks once; tap **Allow**.",
+      "Open **You › Account › Your location** and tick **Share where I am while the app is open**. Your browser asks once; tap **Allow**.",
       "Ask “Where am I?” or “Find a coffee shop near me”, in the chat or on a call.",
       "To stop, untick it, or say “Turn off my location”.",
     ],
@@ -1355,10 +1355,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Tap **Stop these** to turn that kind of heads-up off. **Undo** shows for about 15 seconds in case you tapped by mistake.",
     ],
     body: [
-      "Heads-ups are on to start with. {agent} reads the calendars you’ve connected under **Apps**, and won’t send or change anything for you without your OK. The first time, a short card explains all this. If {agent} can’t see a calendar yet, that card says so and has a **Connect calendar** button; if it can’t read one, the button says **Reconnect calendar**.",
+      "Heads-ups are on to start with. {agent} reads the calendars you’ve connected under **You › Apps**, and won’t send or change anything for you without your OK. The first time, a short card explains all this. If {agent} can’t see a calendar yet, that card says so and has a **Connect calendar** button; if it can’t read one, the button says **Reconnect calendar**.",
       "{agent} stays quiet from 10 pm to 7 am; say “quiet hours 9 pm to 8 am” to change it. It doesn’t check traffic: it uses your usual travel time, 30 minutes to start. **Later** reminds you once, in about 10 minutes for something about to happen or 4 hours for a clash or a long stretch with no break, and only if there’s still time.",
       "A meeting about to start shows as a card and under **Recent** on Home, without buzzing your phone. During a live call heads-ups don’t speak up; see **Urgent alerts on calls**, which is separate.",
-      "Turned one off by mistake? Say “Turn that heads-up back on”, or switch it on again in **Apps › Alerts › Heads-ups**.",
+      "Turned one off by mistake? Say “Turn that heads-up back on”, or switch it on again in **You › Alerts › Heads-ups**.",
     ],
     say: [
       { text: "What are my heads-ups?", send: true },
@@ -1397,7 +1397,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "headsupsettings",
     place: "alerts",
     steps: [
-      "Open **Apps › Alerts**. **Heads-ups** is the first card. Its switch turns every heads-up on or off. They’re on to start with. If {agent} can’t see a calendar, a note at the top says so, with a button to connect one under **Apps**.",
+      "Open **You › Alerts**. **Heads-ups** is the first card. Its switch turns every heads-up on or off. They’re on to start with. If {agent} can’t see a calendar, a note at the top says so, with a button to connect one under **You › Apps**.",
       "Under **How much I tell you**, choose **Only the important ones**, **The usual** or **Everything I notice**.",
       "Tap **More options** for your usual travel time (15, 30, 45 or 60 minutes), **Phone notifications**, **Email**, and a switch for each thing {agent} watches for.",
     ],
@@ -1437,14 +1437,14 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "urgent",
     place: "alerts",
     steps: [
-      "Open **Apps › Alerts › Urgent alerts on calls**.",
+      "Open **You › Alerts › Urgent alerts on calls**.",
       "Tick the kinds you want: **Time to leave**, **Security alerts**, **Money problems**, **People you choose**. All four are on to start with.",
       "Under **People you choose**, add an email address, or a name exactly as it shows on their emails; email from them counts as urgent.",
       "Or just say it: “Stop telling me about money alerts on calls”, or “Tell me straight away if Mom emails.”",
     ],
     body: [
       "Time to leave is said about 15 minutes before something on your calendar starts (it doesn’t know about traffic yet). Security, money and people alerts come from your connected email and app alerts, so email alerts need to be on.",
-      "That’s a call-only nudge for anything on your calendar. For when to leave for an appointment, using your usual travel time, see **Apps › Alerts › Heads-ups**.",
+      "That’s a call-only nudge for anything on your calendar. For when to leave for an appointment, using your usual travel time, see **You › Alerts › Heads-ups**.",
       "Everything else stays a normal notification. If {agent} can’t break in at once, it tells you first thing in its next answer. Alerts say who they’re from and the subject out loud, so keep that in mind on speakerphone; sign-in codes are never read out.",
     ],
     say: [
@@ -1472,7 +1472,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Hear about new email right away, and have {agent} act on email from people you choose.",
     place: "alerts",
     steps: [
-      "Open **Apps › Alerts › Email alerts** and turn them on (Gmail or Outlook must be connected).",
+      "Open **You › Alerts › Email alerts** and turn them on (Gmail or Outlook must be connected).",
       "Add a rule, or just say: “When Dana emails me, sum it up and draft a reply.”",
       "Choose what reaches your updates (**Recent** on Home): **Only email that matches a rule** (the default), or **Every new email**.",
     ],
@@ -1488,7 +1488,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "alerts",
     steps: [
       "Ask: “Tell me when someone books a Calendly meeting.”",
-      "{agent} finds the right alert for that app and turns it on. They’re listed under **Apps › Alerts › App alerts**.",
+      "{agent} finds the right alert for that app and turns it on. They’re listed under **You › Alerts › App alerts**.",
     ],
     keywords: ["app alerts", "calendly", "slack", "webhook", "trigger"],
     related: ["email-alerts"],
@@ -1503,7 +1503,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "files",
     place: "files",
     steps: [
-      "Open **Files** in the bottom bar.",
+      "Open **Files** from the ☰ Menu (top left).",
       "Tap a file to open it. Tap **List** for a compact list.",
       "**Mini apps** and **Saved by {agent}** are further down.",
     ],
@@ -1851,7 +1851,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "about",
     place: "memory",
     steps: [
-      "Open **Apps › About you**.",
+      "Open **You › About you**.",
       "Facts are grouped: You, Work, Home and family, Email and apps, How I help. Each says where it came from.",
       "Tap one to change it or forget it. A guess can be confirmed.",
       "Tap **Answer a few questions** and {agent} fills it in with you.",
@@ -1885,7 +1885,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "{agent} suggests things to remember from your chats; you keep the right ones.",
     place: "memory",
     steps: [
-      "Open **Apps › About you**. **Suggested from your chats** is at the top: tap **Keep** or **Dismiss**.",
+      "Open **You › About you**. **Suggested from your chats** is at the top: tap **Keep** or **Dismiss**.",
       "**Other things I remember** lists everything else. Correct or forget any of them.",
       "Add one yourself under **Something else I should remember**.",
     ],
@@ -1902,7 +1902,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "agent-settings",
     steps: [
       "Mention people in the chat; {agent} adds what’s worth remembering.",
-      "See them under **Apps › Agent › People & groups**.",
+      "See them under **You › Agent › People & groups**.",
     ],
     say: ["Dana is my sister; her birthday is May 3."],
     keywords: ["people", "contacts", "family", "friends", "birthdays", "notes"],
@@ -1917,7 +1917,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "memory",
     steps: [
       "In ChatGPT or Claude, ask for a data export; you get a .zip by email.",
-      "Open **Apps › About you**: under **Chats from ChatGPT and Claude**, tap **Upload a ChatGPT or Claude export** (from a web browser for big files).",
+      "Open **You › About you**: under **Chats from ChatGPT and Claude**, tap **Upload a ChatGPT or Claude export** (from a web browser for big files).",
       "For ChatGPT memories, copy the list from ChatGPT’s **Settings › Personalization › Manage memories**, paste it under **Memories from ChatGPT** and tap **Import pasted memories**.",
     ],
     keywords: ["chatgpt", "claude", "import", "export", "history", "zip", "memories"],
@@ -1971,7 +1971,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "money",
     place: "money",
     steps: [
-      "Open **Apps › Money**.",
+      "Open **You › Money**.",
       "Turn on purchases and set the most for one purchase and the most per month.",
       "Every purchase still waits for your OK. This month’s purchases and a chart by month are below.",
     ],
@@ -2000,7 +2000,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Save a site’s password so {agent} can sign in for you; it never sees it.",
     place: "account",
     steps: [
-      "Open **Apps › Account › Passwords** and tap **Add a password**.",
+      "Open **You › Account › Passwords** and tap **Add a password**.",
       "Fill in the website, your username or email and the password, and save.",
       "Keep **Ask me before each sign-in** on, unless you want {agent} to sign in without asking.",
     ],
@@ -2025,8 +2025,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "**What’s hidden:** card numbers, Social Security numbers, bank account and routing numbers, ID numbers (passport, licence), passwords, PINs and secret keys. They’re found by how they look and hidden before the AI model sees them, wherever they come from: what you type, your email, files, web pages {agent} reads, results from your connected apps, background jobs, chat summaries and meeting notes. {agent} sees a stand-in like “card ending 1234”.",
       "**What it can’t do:** your own message stays in your chat history; only the AI never sees the number. On a live call the voice service hears what you say out loud, so hiding doesn’t apply to speech: don’t read out card numbers, passwords or PINs. Numbers spelled out in words, and ID numbers from other countries with no label next to them, can slip through. It lowers the risk; it isn’t a guarantee.",
-      "**What to do instead:** for a password, save the sign-in under **Apps › Account › Passwords**; the website gets it and {agent} doesn’t. For a payment, ask {agent} to buy it and tap **Approve** on the card; never type your card number into the chat.",
-      "To remove a number you typed, tap the bin under that message in the chat, or use **Reset my agent…** under **Apps › Account › Your data**.",
+      "**What to do instead:** for a password, save the sign-in under **You › Account › Passwords**; the website gets it and {agent} doesn’t. For a payment, ask {agent} to buy it and tap **Approve** on the card; never type your card number into the chat.",
+      "To remove a number you typed, tap the bin under that message in the chat, or use **Reset my agent…** under **You › Account › Your data**.",
     ],
     say: [
       { text: "What do you hide from the AI?", send: true },
@@ -2066,7 +2066,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Under **On your About you page** (3), tap **Forget** next to anything you don’t want {agent} to keep. **Undo** puts it back.",
     ],
     body: [
-      "{agent} can use everything on your About you page in any answer, so this sheet can’t honestly say which of those facts one answer leaned on. It shows what is on the page right now, and you can remove any of it; **Undo** works until you close the sheet. Other things {agent} remembers, such as memories, are under **Apps › About you**, in **Other things I remember**. A change shows from your next message, and on a call from the next call.",
+      "{agent} can use everything on your About you page in any answer, so this sheet can’t honestly say which of those facts one answer leaned on. It shows what is on the page right now, and you can remove any of it; **Undo** works until you close the sheet. Other things {agent} remembers, such as memories, are under **You › About you**, in **Other things I remember**. A change shows from your next message, and on a call from the next call.",
       "The button shows under the last answer of each question in the main chat and your other chats, not on live calls, earlier parts of a long chat, or a copy kept on your device while the chat loads. The list covers the main places {agent} can look, and is worked out from what {agent} did in that answer. Private things are spotted by how they look, so a number written out in words might not be caught. What you typed stays in your chat until you delete it.",
     ],
     say: [{ text: "What did you use for that answer?", send: true }, "Forget my work hours."],
@@ -2089,7 +2089,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Take a copy of everything, or start fresh.",
     place: "account",
     steps: [
-      "Open **Apps › Account › Your data**.",
+      "Open **You › Account › Your data**.",
       "**Download my data** gets a copy of your chats, memories, jobs, goals, routines, reminders, health log and files.",
       "**Reset my agent…** deletes them for good (type RESET to confirm). Your account, connected apps and email stay.",
     ],
@@ -2122,7 +2122,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "agent",
     place: "agent-settings",
     steps: [
-      "Open **Apps › Agent**.",
+      "Open **You › Agent**.",
       "Pick a character and colour; it saves straight away.",
       "Change the **Name** and **Tone** (Warm, Concise or Thoughtful).",
       "Tap **Save name and settings**.",
@@ -2169,7 +2169,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Light or dark",
     summary: "Choose light, dark or match your device. With a backdrop on, the app stays dark.",
     place: "account",
-    steps: ["Open **Apps › Account › Appearance** and choose."],
+    steps: ["Open **You › Account › Appearance** and choose."],
     keywords: ["dark mode", "light mode", "theme", "appearance", "colors", "colours"],
     related: ["backdrop", "agent-settings"],
   },
@@ -2181,7 +2181,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "alerts",
     steps: [
       "On iPhone, first add the app to your home screen and open it from there.",
-      "Open **Apps › Alerts › Phone app & notifications** and turn them on.",
+      "Open **You › Alerts › Phone app & notifications** and turn them on.",
       "Allow notifications when your phone asks.",
     ],
     keywords: ["notifications", "push", "alerts", "phone", "iphone", "android"],
@@ -2194,7 +2194,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "Choose how you hear when a job finishes or needs you: in the app, a notification, or an email.",
     place: "alerts",
-    steps: ["Open **Apps › Alerts › Jobs you hand off** to choose how you hear about jobs."],
+    steps: ["Open **You › Alerts › Jobs you hand off** to choose how you hear about jobs."],
     keywords: ["job done", "finished", "email", "notification", "alerts"],
     related: ["notifications", "new-job"],
   },
@@ -2207,7 +2207,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "audiodevices",
     place: "agent-settings",
     steps: [
-      "Open **Apps › Agent › Voice** and find **Microphone**. Where live talk isn’t on, the arrow next to the mic in the chat opens a picker with live bars: speak, and pick the one whose bars move.",
+      "Open **You › Agent › Voice** and find **Microphone**. Where live talk isn’t on, the arrow next to the mic in the chat opens a picker with live bars: speak, and pick the one whose bars move.",
       "Choose your headset’s microphone (1). If your headset isn’t listed, connect it first, make sure its call audio is on in the phone’s Bluetooth settings, and tap **Show my microphones**.",
       "Under **Speaker**, choose where {agent}’s voice plays on a call (2). It changes at once, even during a call. If the Speaker list isn’t there, your browser can’t choose a speaker (see below).",
     ],
@@ -2237,7 +2237,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "What the AI behind {agent} has cost: today, the last 7 days, all time and by month.",
     place: "money",
     steps: [
-      "Open **Apps › Money › Usage**.",
+      "Open **You › Money › Usage**.",
       "Three boxes at the top show **Today**, **Last 7 days** and **All time**. Each gives about what the AI cost, how many tokens it used, and how many AI calls it made.",
       "Under them are this month’s costs by kind of work and a chart by month. If more than one person uses {agent}, the admin also sees **Everyone together**.",
     ],
@@ -2269,7 +2269,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Your plan, and how much live talk, how many messages, hours of recorded meetings and background jobs are left this month.",
     place: "money",
     steps: [
-      "Open **Apps › Money › Usage**. **Your plan** is at the top.",
+      "Open **You › Money › Usage**. **Your plan** is at the top.",
       "Each line shows what you’ve used and your limit: live talk minutes, messages, recorded meetings and background jobs. Everything is counted per month and comes back on the 1st.",
       "When one is used up, {agent} says so, says when it comes back, and where to write for more room: hello@neatoventures.com. You can keep typing when live talk runs out.",
     ],
@@ -2315,7 +2315,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Sign out",
     summary: "Sign out of this device.",
     place: "account",
-    steps: ["Open **Apps › Account** and tap **Sign out of this device**."],
+    steps: ["Open **You › Account** and tap **Sign out of this device**."],
     keywords: ["sign out", "log out", "logout"],
     related: ["sign-in"],
   },
@@ -2353,7 +2353,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Apps sometimes sign you out. Ask {agent} to reconnect it, or tap Reconnect under Apps.",
     steps: [
       "Say “Reconnect my Gmail”, and tap **Connect** on the card.",
-      "Or open **Apps**, find the app and tap **Reconnect**.",
+      "Or open **You › Apps**, find the app and tap **Reconnect**.",
     ],
     keywords: ["reconnect", "expired", "disconnected", "signed out", "app"],
     related: ["connect-apps"],
@@ -2364,7 +2364,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "{agent} says it can’t reach an app I connected",
     summary: "Check the app is connected, then ask again.",
     steps: [
-      "Ask “Which apps are connected?” or look under **Apps**.",
+      "Ask “Which apps are connected?” or look under **You › Apps**.",
       "If the app shows **Reconnect**, tap it and sign in again.",
       "Ask again. If it still says no, tell {agent} “My Gmail is connected under Apps,” and tell the person who runs Neato_Muse what you asked.",
     ],
@@ -2379,7 +2379,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Ask {agent} to book a restaurant. It finds where the restaurant takes bookings, fills in the form in its own browser, and waits for your OK before the last click.",
     steps: [
       "Say or type what you want: “Book a table for 4 at Nobu on Friday at 7:30,” with the place if there are several.",
-      "{agent} finds the restaurant’s own booking page (or OpenTable, Resy or Tock) and asks for anything missing, such as your name and mobile number. Save them once in **Apps › About you** and it won’t ask again.",
+      "{agent} finds the restaurant’s own booking page (or OpenTable, Resy or Tock) and asks for anything missing, such as your name and mobile number. Save them once in **You › About you** and it won’t ask again.",
       "Watch the **Browser** card in the chat: it shows each page as {agent} fills it in. Tap **Open browser** to see it larger or take over.",
       "At the last step ({agent} never clicks **Book**, **Reserve** or **Join waitlist** on its own) an **Approve** card appears with what was set up. Tap **Approve** to book, or say “yes, go ahead” on a call.",
       "Once the site shows a confirmation, {agent} tells you and offers to set a reminder.",
@@ -2425,7 +2425,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Check the app’s setting and your phone’s.",
     steps: [
       "On iPhone, add Neato_Muse to your home screen and open it from there.",
-      "Turn notifications on in **Apps › Alerts › Phone app & notifications**.",
+      "Turn notifications on in **You › Alerts › Phone app & notifications**.",
       "Check that your phone’s settings allow notifications for it.",
     ],
     keywords: ["notifications", "not getting", "push", "silent", "alerts"],
@@ -2438,7 +2438,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Usually the microphone: allow it, or pick the right one.",
     steps: [
       "If your browser blocked the microphone, tap the icon beside the web address, allow the microphone, and try again.",
-      "Pick the microphone you’re using under **Apps › Agent › Voice**.",
+      "Pick the microphone you’re using under **You › Agent › Voice**.",
       "Check your internet connection. If there’s no headset button even with the message box empty, live talk isn’t turned on yet: ask the person who runs Neato_Muse.",
     ],
     keywords: ["call", "microphone", "can't hear", "no sound", "won't start", "headset", "voice"],
@@ -2473,7 +2473,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "{agent} got something wrong",
     summary: "Tell it, fix what it remembers, or retry a reply that didn’t go through.",
     body: [
-      "Just say so: “No, I prefer morning meetings.” To fix something it remembers, open **Apps › About you**.",
+      "Just say so: “No, I prefer morning meetings.” To fix something it remembers, open **You › About you**.",
       "If a reply didn’t finish (“I reached my step limit”), say “continue”.",
       "If a reply didn’t go through, tap **Retry response**. If it keeps happening in one chat, start a new chat (the chat button under {agent}’s name › **New chat**) and tell the person who runs Neato_Muse what the error said.",
     ],
@@ -2536,7 +2536,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Each person gets a private space and their own agent address. You’re emailed when someone asks to join.",
     place: "account",
     steps: [
-      "Open **Apps › Account › People**. The line at the top says how many people are invited and how many requests are waiting.",
+      "Open **You › Account › People**. The line at the top says how many people are invited and how many requests are waiting.",
       "**Asked to join** is first. Each request from **Request access** (on the website or the sign-in screen) has **Approve and invite** and **Decline**; with more than three, **Show all** lists the rest. You’re also emailed at your own address each time someone asks. Approving sends them the usual sign-in invite and they start on Free. Declining doesn’t email them.",
       "**Invited** lists everyone else, one row each, showing their name, email, last sign-in and plan. Tap a row to open it. With more than six people a search box finds them by name, email or plan, and **Show 8 more** adds eight at a time.",
       "Tap **Invite someone**, fill in a name and email and tap **Send invite**; they get a sign-in email (needs email sign-in; see “Sign-in emails and the agent’s email address”).",
@@ -2577,7 +2577,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "models",
     place: "money",
     steps: [
-      "Open **Apps › Money › AI models**.",
+      "Open **You › Money › AI models**.",
       "Tap **Change** next to a kind of work, pick a model and how hard it thinks, then tap **Save**. It applies to everyone: from the next message, and to jobs that start after it.",
       "**Claude, as before** puts that work back on the Claude model the server was using before. The **Back to … (recommended)** button under a kind of work returns it to the recommended pick. **Put everything back on Claude** and **Use the recommended picks** change them all at once.",
       "**Look-ups during calls** is what {agent} looks up or does while you talk live (your calendar, email, reminders). Its recommended pick is the server’s quick Claude model: these are short, need a fast answer, and it costs much less than the chat’s model.",
@@ -2641,7 +2641,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Run our own voice next to OpenAI’s, on yourself or a few people, and compare them before switching everyone.",
     place: "account",
     steps: [
-      "Say “Put me on the new voice” or “Put Ann on the new voice”, on a call or in the chat. Or open **Apps › Account › People**, tap **Live talk voice** to open it, then **Try the new voice myself**. For a person, open their row and tap **Try the new voice**.",
+      "Say “Put me on the new voice” or “Put Ann on the new voice”, on a call or in the chat. Or open **You › Account › People**, tap **Live talk voice** to open it, then **Try the new voice myself**. For a person, open their row and tap **Try the new voice**.",
       "Calls look the same with either voice. **Back to OpenAI’s voice** (or saying so) moves someone back.",
       "To compare them, say “Compare the voices”, or tap **Compare the voices** on the same card: calls, minutes, the usual wait for a reply and the slowest wait (1 in 10), and the cost per minute of each voice. **Last 7 days** and **Last 30 days** switch between the two.",
     ],
@@ -2656,7 +2656,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "It runs as its own **voice** service in Railway, and its sound travels through Cloudflare’s relay. It needs keys from Soniox, Inworld or Speechify, and Cloudflare (Realtime › TURN Server). They go under **Variables** on the voice and api services, then **Deploy** on the banner. The README’s “Live voice” section lists each one.",
       "Each person gets 200 minutes a month on the new voice (**VOICE_MONTHLY_MINUTES** on the api; 0 means no limit). {agent} mentions it when 10 or fewer minutes are left, and warns just before a call runs out. A quiet call hangs up after 30 seconds.",
       "The full report, with each call’s turn times, is at **/api/voice/compare** on the api (admin only; add **?days=7** for a week). The README says how to open it.",
-      "People on the new voice choose how it sounds under **Apps › Agent › Voice on live calls** (or by saying it). The voice service offers only the voices Inworld really has; when it starts, its log says how many it found and any it didn’t.",
+      "People on the new voice choose how it sounds under **You › Agent › Voice on live calls** (or by saying it). The voice service offers only the voices Inworld really has; when it starts, its log says how many it found and any it didn’t.",
       "To hear any of Inworld’s voices, tap **All Inworld voices** on that card (only you see it). Search by name or by words like “british man”, tap **Play** to hear one, and **Add** to put it on the list everyone chooses from; **Remove** takes it off (anyone who chose it goes back to the usual voice, and **Undo** puts it back). **Listening sounds** plays the soft “mm-hmm” calls make. Or say “Find me a British man’s voice”, or “Add Hades to the voices”.",
       "When you’re happy with it, set **VOICE_PROVIDER** to **pipecat** on the api and Deploy, and everyone uses it.",
     ],
@@ -2750,7 +2750,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Today, the last 7 days, all time and each person’s costs.",
     place: "money",
     steps: [
-      "Open **Apps › Money › Usage**. As the admin you see **Everyone together** too: their totals for today, the last 7 days and all time, then each person’s cost this month.",
+      "Open **You › Money › Usage**. As the admin you see **Everyone together** too: their totals for today, the last 7 days and all time, then each person’s cost this month.",
     ],
     say: [{ text: "What has the AI cost everyone together?", send: true }],
     keywords: ["usage", "cost", "billing", "per person", "everyone"],

@@ -301,7 +301,7 @@ export function pastChatToolSpecs(chats: PastChats, owner: string) {
         if (!(await chats.sources(owner)).length)
           return {
             results: [],
-            note: "The person hasn't brought over any ChatGPT or Claude chats yet. They can add them in Apps & settings → Agent → Chats from ChatGPT and Claude.",
+            note: "The person hasn't brought over any ChatGPT or Claude chats yet. They can add them in You › About you › Chats from ChatGPT and Claude.",
           };
         const results = await chats.search(owner, query, app);
         return results.length

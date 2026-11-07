@@ -581,3 +581,15 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   start listening (`speak(...).then(listen)`), or the microphone hears the agent. Never auto-open a
   first-run sheet on the sample server: every Playwright test and Help picture would start there.
   `identity.onboardedAt` is the "seen it" flag; existing testers see the sheet once.
+- **Renaming a screen (2026-11-07, Apps → You, eight tabs → four):** the name lives in far more
+  than Help and APP_PLACES: server prompts and tool messages (engine/service, approval-rules,
+  sign-in, spending, mcp-apps, heads-ups), emails (job-email, access-request-email), the agent's
+  app guide, app notes in the mobile code, docs/DEPLOY.md and the tests that quote them. Grep for
+  the old name with both arrows ("Apps › " and "Apps → ") across apps/, packages/, docs/ and tests/
+  before calling it done. A Menu that drops its "Say …" lines when it doesn't fit drops them
+  forever once it has enough rows: measure, don't gate.
+- **The sample database ages (2026-11-07):** jobs archive and vanish, routines pile up from test
+  runs, and nothing reseeds agent data (only the workspace's actions and the Health space are
+  seeded). The Help pictures that show jobs come from a mock in scripts/help-shots.mjs
+  (`/api/agent` gets a finished job and one waiting on an approval), not from the database. When
+  pictures look empty, reset `${DATA_DIR}/postgres` with the server stopped; don't chase the data.

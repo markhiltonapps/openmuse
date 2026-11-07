@@ -483,7 +483,7 @@ export function useAvatarImage(api: MuseApi, version?: string) {
   return image;
 }
 
-/** The signed-in person's agent avatar, as chosen in Apps → Personality. */
+/** The signed-in person's agent avatar, as chosen in You › Agent. */
 export function AgentAvatar({
   size,
   mood,

@@ -493,7 +493,7 @@ export function headsUpToolSpecs(headsUps: HeadsUps, owner: string) {
           kindsOff: HEADS_UP_KINDS.filter((k) => !saysKind(settings, k)).map(
             (k) => HEADS_UP_KIND_INFO[k].label,
           ),
-          next: `${emailRefused ? "Email isn’t available yet, so nothing was turned on for it. Say so in one line. " : ""}Say what changed in a few words, nothing more. Only if they ask where: Apps › Alerts › Heads-ups. If travelMinutes isn’t what they asked for, say it was set to the nearest choice (15, 30, 45 or 60). If email is on, say it’s only for things that can wait.`,
+          next: `${emailRefused ? "Email isn’t available yet, so nothing was turned on for it. Say so in one line. " : ""}Say what changed in a few words, nothing more. Only if they ask where: You › Alerts › Heads-ups. If travelMinutes isn’t what they asked for, say it was set to the nearest choice (15, 30, 45 or 60). If email is on, say it’s only for things that can wait.`,
         };
       },
     },

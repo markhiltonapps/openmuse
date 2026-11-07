@@ -252,7 +252,7 @@ export class Logins {
     const login = await this.db.get<SavedLogin>(owner, "logins", id);
     if (!login)
       throw new AppError(
-        "That saved password was deleted. Add it again under Apps → Account → Passwords, then ask your agent to try again.",
+        "That saved password was deleted. Add it again under You › Account › Passwords, then ask your agent to try again.",
         404,
       );
     if (!sameSite(url, login.site))

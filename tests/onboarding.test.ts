@@ -88,10 +88,10 @@ test("the history email carries the Help topic's steps, in the agent's name", ()
   const email = historyStepsEmail("Pip", "https://neddy.example");
   assert.match(email.subject, /ChatGPT or Claude history to Pip/);
   assert.match(email.text, /1\. In ChatGPT or Claude, ask for a data export/);
-  assert.match(email.text, /Apps › About you/);
+  assert.match(email.text, /You › About you/);
   assert.doesNotMatch(email.text, /\*\*|\{agent\}/);
   assert.match(email.html, /<ol><li>/);
-  assert.match(email.html, /<b>Apps › About you<\/b>/);
+  assert.match(email.html, /<b>You › About you<\/b>/);
   assert.match(email.html, /href="https:\/\/neddy\.example"/);
   const plain = historyStepsEmail("Pip");
   assert.doesNotMatch(plain.text, /Open Pip:/);

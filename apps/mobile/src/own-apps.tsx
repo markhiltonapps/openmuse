@@ -79,7 +79,7 @@ export function openPage(url: string, tab?: Window | null) {
 }
 
 /**
- * Apps → Apps: connect an app that offers an MCP server by its web address. Sign-in happens on
+ * You › Apps: connect an app that offers an MCP server by its web address. Sign-in happens on
  * the app's own page; an access key, when the app gives one, is typed here and never in chat.
  */
 export function OwnAppsCard() {

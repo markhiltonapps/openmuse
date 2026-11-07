@@ -118,6 +118,57 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
         : fact;
     await route.fulfill({ json: { ...real, facts: (real.facts ?? []).map(named) } });
   });
+  // The sample server runs no model, so its Activity has no jobs of its own: two are added to its
+  // answer, a finished Morning brief and one waiting on the coffee approval, for the pictures.
+  await page.route(/\/api\/agent$/, async (route) => {
+    const response = await route.fetch();
+    if (response.status() === 304) return route.fulfill({ response });
+    const real = await response.json();
+    const now = Date.now();
+    const at = (minutesAgo) => new Date(now - minutesAgo * 60_000).toISOString();
+    const waiting = state.actions?.find((action) => action.status === "awaiting_review");
+    const base = {
+      kind: "agent",
+      prompt: "",
+      plan: [],
+      evidence: [],
+      input: {},
+      state: {},
+      attempts: 1,
+      artifactIds: [],
+    };
+    const tasks = [
+      waiting && {
+        ...base,
+        id: "sample-job-coffee",
+        title: "Add coffee with Jamie to the calendar",
+        status: "waiting_approval",
+        actionId: waiting.id,
+        createdAt: at(40),
+        updatedAt: at(38),
+      },
+      {
+        ...base,
+        id: "sample-job-brief",
+        title: "Morning brief",
+        status: "succeeded",
+        createdAt: at(130),
+        updatedAt: at(128),
+        result:
+          "## Today\n**78°, mostly sunny**, with a chance of rain after 3 PM. Take an umbrella for the 4:30 pickup.\n\n## Your calendar\n- **9:30 AM** Dentist, Dr. Patel\n- **12:00 PM** Lunch with Alex at Tiny Boxwoods\n- **4:30 PM** School pickup\n\n## Waiting on you\n- Reply to **Maria** about Saturday’s party\n- Approve the coffee with Jamie\n\n## Goals\nYou’re 3 of 4 workouts into the week. One more by Friday keeps the streak.",
+      },
+    ].filter(Boolean);
+    state.sampleTasks = tasks;
+    await route.fulfill({ json: { ...real, tasks: [...tasks, ...(real.tasks ?? [])] } });
+  });
+  await page.route(/\/api\/agent\/tasks\/sample-job-[a-z]+$/, async (route) => {
+    const id = route.request().url().split("/").pop();
+    const task = (state.sampleTasks ?? []).find((item) => item.id === id);
+    if (!task) return route.fulfill({ status: 404, json: { error: "Task not found" } });
+    await route.fulfill({
+      json: { task, events: [], artifacts: [], files: [], browsers: [], allowedApps: [] },
+    });
+  });
   await page.route(/\/api\/copilotkit\/info/, async (route) => {
     const real = await (await route.fetch()).json();
     const { intelligence: _i, threadEndpoints: _t, ...rest } = real;
@@ -230,15 +281,32 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
   await page.waitForTimeout(3500);
   // The app opens on Home; most pictures start from the chat.
   if (start === "chat") {
-    await page.getByRole("tab", { name: "Chat", exact: true }).first().click();
+    await tab(page, "Chat").click();
     await page.waitForTimeout(1200);
   }
   return page;
 }
 
-// A tab's name can carry a count after a comma ("Activity, 2 need you").
-const tab = (page, name) => page.getByRole("tab", { name: new RegExp(`^${name}(,|$)`) }).first();
+// A tab on the bottom bar (Home, Chat, Activity, You), inside the tablist named "Sections"; its
+// name can carry a count after a comma ("Activity, 2 need you"). The You screen's own tab row
+// (Apps, Agent, About you, …) has no name, so it isn't matched here.
+const tab = (page, name) =>
+  page
+    .getByRole("tablist", { name: "Sections" })
+    .getByRole("tab", { name: new RegExp(`^${name}(,|$)`) })
+    .first();
 const button = (page, name) => page.getByRole("button", { name }).first();
+/** Opens a screen from the ☰ Menu (Feed, Spaces, Ideas, Goals, Files, …) by its row's exact name. */
+async function viaMenu(page, name) {
+  await page.getByRole("button", { name: "Menu", exact: true }).first().click();
+  await page.waitForTimeout(600);
+  // A row's name is its title, a full stop, then its line: "Feed. Your day, …".
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}[.,]`) })
+    .first()
+    .click();
+  await page.waitForTimeout(1200);
+}
 const say = (page, event) => page.evaluate((e) => window.__channel?.emit(e), event);
 async function startCall(page) {
   await button(page, /^Talk live with/).click();
@@ -283,10 +351,11 @@ async function showApproval(page, state) {
   await say(page, { type: "session.commentary.appended" });
   await page.waitForTimeout(1800);
 }
-async function appsTab(page, name) {
-  await tab(page, "Apps").click();
+/** Opens the You screen (the bar's "You" tab) and one of its inner tabs (Apps, About you, …). */
+async function appsTab(page, inner) {
+  await tab(page, "You").click();
   await page.waitForTimeout(1200);
-  await page.getByRole("tab", { name }).first().click();
+  await page.getByRole("tab", { name: inner }).first().click();
   await page.waitForTimeout(1500);
 }
 
@@ -322,10 +391,7 @@ const SHOTS = [
   {
     id: "setup",
     go: async (p) => {
-      await p.getByRole("tab", { name: "Apps", exact: true }).click();
-      await p.waitForTimeout(800);
-      await p.getByRole("tab", { name: "About you", exact: true }).click();
-      await p.waitForTimeout(1200);
+      await appsTab(p, /^About you/);
       await p.getByRole("button", { name: /^Set up with Neddy again/ }).click();
       await p.waitForTimeout(1500);
     },
@@ -368,7 +434,7 @@ const SHOTS = [
       await startCall(p);
       await button(p, "Shrink the call. It keeps going.").click();
       await p.waitForTimeout(700);
-      await tab(p, "Feed").click();
+      await viaMenu(p, "Feed");
       await p.waitForTimeout(1500);
     },
     marks: {
@@ -401,20 +467,20 @@ const SHOTS = [
   {
     id: "feed",
     go: async (p) => {
-      await tab(p, "Feed").click();
+      await viaMenu(p, "Feed");
       await p.waitForTimeout(2500);
     },
     marks: {
       1: (p) => p.getByPlaceholder(/Make me a feed about/).first(),
       2: (p) => p.getByRole("button", { name: /°|weather|Mostly sunny/i }).first(),
-      3: words((p) => p.getByText(/on your calendar|Nothing else on your calendar/i).first()),
+      3: words((p) => p.getByText(/A slow start|on your calendar/i).first()),
       4: { find: (p) => button(p, "Log a meal"), side: "left" },
     },
   },
   {
     id: "spaces",
     go: async (p) => {
-      await tab(p, "Spaces").click();
+      await viaMenu(p, "Spaces");
       await p.waitForTimeout(2000);
     },
     marks: {
@@ -425,7 +491,7 @@ const SHOTS = [
   {
     id: "health",
     go: async (p) => {
-      await tab(p, "Spaces").click();
+      await viaMenu(p, "Spaces");
       await p.waitForTimeout(1500);
       await p.getByText("Health", { exact: true }).first().click();
       await p.waitForTimeout(2500);
@@ -439,7 +505,7 @@ const SHOTS = [
   {
     id: "weight",
     go: async (p) => {
-      await tab(p, "Spaces").click();
+      await viaMenu(p, "Spaces");
       await p.waitForTimeout(1500);
       await p.getByText("Health", { exact: true }).first().click();
       await p.waitForTimeout(2500);
@@ -460,10 +526,17 @@ const SHOTS = [
   {
     id: "family",
     go: async (p) => {
-      await tab(p, "Spaces").click();
+      await viaMenu(p, "Spaces");
       await p.waitForTimeout(1500);
-      await p.getByText("Family", { exact: true }).first().click();
-      await p.waitForTimeout(2500);
+      // A fresh sample has no Family space yet: start the planner, which opens it.
+      const family = p.getByText("Family", { exact: true }).first();
+      if (await family.count()) await family.click();
+      else
+        await p
+          .getByRole("button", { name: /^Start a family planner/ })
+          .first()
+          .click();
+      await p.waitForTimeout(3500);
     },
     marks: {
       2: (p) => p.getByRole("tab", { name: "Overview" }).first(),
@@ -479,8 +552,8 @@ const SHOTS = [
     },
     marks: {
       1: (p) => tab(p, "Activity"),
-      2: words((p) => p.getByText(/Waiting for your OK ·|Wait for your OK on/).first()),
-      3: words((p) => p.getByText(/Done ·/).first()),
+      2: words((p) => p.getByText(/^Waiting for your OK/).first()),
+      3: words((p) => p.getByText("Done", { exact: true }).first()),
       4: words((p) => p.getByText("Reviews & receipts").first()),
       5: (p) => button(p, /^Clear finished/),
     },
@@ -502,21 +575,25 @@ const SHOTS = [
     go: async (p) => {
       await tab(p, "Activity").click();
       await p.waitForTimeout(1500);
-      await p.getByText("Morning brief", { exact: true }).first().click();
+      // The sample's job is titled "Morning brief · <date>" when a routine makes it.
+      await p
+        .getByText(/^Morning brief/)
+        .first()
+        .click();
       await p.waitForTimeout(2000);
     },
     marks: {
-      3: words((p) => p.getByText(/^Done ·/).last()),
+      3: words((p) => p.getByText(/^Done · /).first()),
     },
   },
   {
     id: "apps",
     go: async (p) => {
-      await tab(p, "Apps").click();
-      await p.waitForTimeout(2000);
+      await appsTab(p, /^Apps$/);
+      await p.waitForTimeout(500);
     },
     marks: {
-      1: (p) => tab(p, "Apps"),
+      1: (p) => tab(p, "You"),
       2: { find: (p) => p.getByLabel("Search apps"), side: "inside-right" },
       3: words((p) => p.getByText("Gmail", { exact: true }).first()),
     },
@@ -888,11 +965,11 @@ const SHOTS = [
   {
     id: "files",
     go: async (p) => {
-      await tab(p, "Files & media").click();
+      await viaMenu(p, "Files");
       await p.waitForTimeout(2000);
     },
     marks: {
-      1: (p) => tab(p, "Files & media"),
+      1: (p) => p.getByRole("button", { name: "Menu", exact: true }).first(),
       2: (p) => button(p, /^List/),
       3: words((p) => p.getByText(/^Saved by/).first()),
     },
@@ -928,7 +1005,7 @@ const SHOTS = [
           },
         }),
       );
-      await tab(p, "Files & media").click();
+      await viaMenu(p, "Files");
       await p.waitForTimeout(2500);
     },
     marks: {
@@ -973,7 +1050,7 @@ const SHOTS = [
         }),
       );
       await p.route(/\/api\/meetings\/help-m1$/, (route) => route.fulfill({ json: meeting }));
-      await tab(p, "Files & media").click();
+      await viaMenu(p, "Files");
       await p.waitForTimeout(2500);
       await p
         .getByRole("button", { name: /^Open Kitchen remodel kickoff/ })
@@ -1035,7 +1112,7 @@ const SHOTS = [
         }),
       );
       await p.route(/\/api\/meetings\/help-m1$/, (route) => route.fulfill({ json: meeting }));
-      await tab(p, "Files & media").click();
+      await viaMenu(p, "Files");
       await p.waitForTimeout(2500);
       await p
         .getByRole("button", { name: /^Open Kitchen remodel kickoff/ })
@@ -1193,7 +1270,7 @@ const SHOTS = [
         }),
       );
       await p.route(/\/api\/meetings\/help-dump$/, (route) => route.fulfill({ json: meeting }));
-      await tab(p, "Files & media").click();
+      await viaMenu(p, "Files");
       await p.waitForTimeout(2500);
       await p
         .getByRole("button", { name: /^Open Weekend errands/ })
@@ -1274,7 +1351,7 @@ const SHOTS = [
     id: "watchdescribe",
     height: 1250,
     go: async (p) => {
-      await p.getByRole("tab", { name: /^Goals/ }).click();
+      await viaMenu(p, "Goals");
       await p.waitForTimeout(1500);
       await button(p, "Track something new").click();
       await button(p, "A web page").click();

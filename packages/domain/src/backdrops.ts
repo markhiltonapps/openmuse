@@ -127,7 +127,11 @@ export const BACKDROPS: Backdrop[] = [
 ];
 
 /** What a new account starts with (owner, 2026-10-09). */
-export const DEFAULT_BACKDROP = "beach-sunset";
+/**
+ * What a person who never chose gets: the plain cream look (owner, 2026-11-07); the scenes stay
+ * a choice under Backdrop. Anyone who chose a scene keeps it.
+ */
+export const DEFAULT_BACKDROP = "none";
 /** The plain look, with no backdrop. */
 export const NO_BACKDROP = "none";
 

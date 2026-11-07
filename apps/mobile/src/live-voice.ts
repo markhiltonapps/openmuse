@@ -161,7 +161,7 @@ export async function startLive(
   const stream = await navigator.mediaDevices
     .getUserMedia({ audio: micId ? { ...audio, deviceId: { exact: micId } } : audio })
     .catch((error: unknown) => {
-      // The microphone chosen in Apps › Voice is unplugged: use the usual one, as dictation does.
+      // The microphone chosen in You › Voice is unplugged: use the usual one, as dictation does.
       if (
         micId &&
         error instanceof Error &&

@@ -47,7 +47,7 @@ export async function fillSignIn(
   const login = await logins.get(owner, loginId);
   if (!login)
     throw new AppError(
-      "That saved password was deleted. Add it again under Apps → Account → Passwords, then ask your agent to try again.",
+      "That saved password was deleted. Add it again under You › Account › Passwords, then ask your agent to try again.",
       404,
     );
   let page = await browser.elements(owner, sessionId);
@@ -200,7 +200,7 @@ export function signInToolSpecs(
         const saved = await logins.forPage(owner, page.url);
         if (!saved.length)
           return {
-            error: `No saved password for ${site(page.url)}. Ask the person to save one in the app (Apps → Account → Passwords), never in chat, or to sign in with Take control on the browser card.`,
+            error: `No saved password for ${site(page.url)}. Ask the person to save one in the app (You › Account › Passwords), never in chat, or to sign in with Take control on the browser card.`,
           };
         const login = choose(saved, input.username);
         if (!login)

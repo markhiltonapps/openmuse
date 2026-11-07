@@ -775,7 +775,7 @@ function ReviewDetail({
                   onPress={() => setAllow("app")}
                 />
               </View>
-              <Text style={s.small}>Change this any time under Apps › Always allowed.</Text>
+              <Text style={s.small}>Change this any time under You › Apps › Always allowed.</Text>
             </View>
           )}
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>

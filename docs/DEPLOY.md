@@ -88,7 +88,7 @@ With `ADMIN_EMAIL` set, the sign-in screen offers **Email me a sign-in link**. L
 
 Invite people under **Apps → People**. Each person gets a private workspace (chat, connected apps, routines, memory, spending limits) and their own agent address, `name@` the `AGENT_EMAIL` domain, which starts with only their own email approved as a sender. Mail to an address nobody uses is ignored; mail that reaches the agent through another address, such as a forwarding alias, goes to the admin. **Remove access** signs the person out everywhere, stops their routines and address, and keeps their data so access can be restored.
 
-With `COMPOSIO_API_KEY` set, the API logs `Connected apps ready (Composio)` at startup. Connect apps under **Apps & settings → More apps** or by asking in chat.
+With `COMPOSIO_API_KEY` set, the API logs `Connected apps ready (Composio)` at startup. Connect apps under **You › Apps** or by asking in chat.
 
 Composio has no ready-made sign-in for some apps, such as Brex. For those, create an auth config for the app in the Composio dashboard (for Brex, choose API Key); **Connect** then uses it and asks for the key on Composio's page. Until one exists, Connect explains what to set up.
 

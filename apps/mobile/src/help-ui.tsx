@@ -24,7 +24,7 @@ import { useWorkspace } from "./workspace";
 /**
  * The help guide (packages/domain/src/help.ts): search, groups and topics with screenshots,
  * numbered steps, what to say instead, and a button to the place it's about. On the Help sheet
- * (menu, Help links, ?help=), on Apps › Help, and on the sign-in screen (without the parts that
+ * (menu, Help links, ?help=), on You › Help, and on the sign-in screen (without the parts that
  * need signing in).
  */
 
@@ -823,7 +823,7 @@ export function HelpSheet({ topic }: { topic?: string }) {
   );
 }
 
-/** Apps › Help: the guide right in the tab. */
+/** You › Help: the guide right in the tab. */
 export function HelpCard() {
   return (
     <Card style={{ gap: 14 }}>

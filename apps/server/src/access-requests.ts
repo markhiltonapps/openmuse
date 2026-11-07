@@ -86,7 +86,7 @@ export class AccessRequests {
     await this.notify(
       ADMIN_OWNER,
       `${request.name} asked to join`,
-      `${email}${request.note ? ` — “${request.note}”` : ""}. Approve or decline under Apps & settings → Account → People.`,
+      `${email}${request.note ? ` — “${request.note}”` : ""}. Approve or decline under You › Account › People.`,
       `access-request:${request.id}:${request.createdAt}`,
     );
     await this.emailAdmin(request);

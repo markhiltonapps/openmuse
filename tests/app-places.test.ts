@@ -61,7 +61,7 @@ test("take-me-there: the way there reads as the app names it", () => {
     "Spaces › Health · 30 days",
   );
   assert.equal(placeWhere({ place: "plans", tab: "past" }), "Feed · Past");
-  assert.equal(placeWhere({ place: "money" }), "Apps");
+  assert.equal(placeWhere({ place: "money" }), "You");
 });
 
 test("take-me-there: the agent is told every place and when to use a button", () => {

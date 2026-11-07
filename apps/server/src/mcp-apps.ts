@@ -664,8 +664,8 @@ export class McpApps {
           app.status === "connected"
             ? `${app.name} (your own app) is connected`
             : app.status === "needs_confirm"
-              ? `${app.name} is waiting for the person to check it and connect it under Apps → Your own apps`
-              : `${app.name} needs the person to sign in or add its key under Apps → Your own apps`,
+              ? `${app.name} is waiting for the person to check it and connect it under You › You › Your own apps`
+              : `${app.name} needs the person to sign in or add its key under You › You › Your own apps`,
       })),
       guidance: [],
     };
@@ -828,7 +828,7 @@ export class CombinedApps implements AppConnector {
   private others() {
     if (!this.composio)
       throw new AppError(
-        "Only your own apps can be connected on this server. Add one under Apps → Your own apps.",
+        "Only your own apps can be connected on this server. Add one under You › You › Your own apps.",
         409,
       );
     return this.composio;

@@ -122,7 +122,7 @@ export class SpendingService {
   async check(owner: string, amount: number | undefined) {
     const settings = await this.settings(owner);
     if (!settings.enabled)
-      return "Purchases are turned off. The person can turn them on in Apps → Spending.";
+      return "Purchases are turned off. The person can turn them on in You › Money.";
     if (!amount || amount <= 0)
       return "State the purchase total in US dollars (amountUsd) so it can be checked against the spending limits.";
     if (amount > settings.perPurchaseLimit)

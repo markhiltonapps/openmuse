@@ -90,7 +90,7 @@ test("get_help answers from the guide with the agent's name, plain text, admin t
   assert.ok(found.topics.length <= 2);
   const text = JSON.stringify(found);
   assert.ok(!text.includes("{agent}") && !text.includes("**"), "the name is in, the marks are out");
-  assert.match(found.topics[0]?.where ?? "", /Bottom bar › Apps/);
+  assert.match(found.topics[0]?.where ?? "", /You \(bottom bar\) › Apps/);
   // A topic id they named comes first.
   const named = (await tool(false)?.execute({ question: "this", topic: "weight" })) as {
     topics: { id: string }[];

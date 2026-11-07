@@ -1145,8 +1145,8 @@ function DoneAlertsOffer() {
     setDeclined(true);
     setNote(
       state === "off"
-        ? "OK. You can turn notifications on later in Apps › Alerts."
-        : "OK. Once Neato_Muse is on your Home Screen, turn notifications on in Apps › Alerts.",
+        ? "OK. You can turn notifications on later in You › Alerts."
+        : "OK. Once Neato_Muse is on your Home Screen, turn notifications on in You › Alerts.",
     );
   };
   const offer = !note && !declined && !!state && ["off", "install-first"].includes(state);

@@ -45,7 +45,7 @@ import { useWorkspace } from "./workspace";
 
 /**
  * Heads-ups (owner, 2026-10-22): Neddy watches the calendar and speaks first. The cards sit just
- * above the chat box like the meal check-in; the settings are the first card under Apps › Alerts.
+ * above the chat box like the meal check-in; the settings are the first card under You › Alerts.
  * Everything here can also be said or asked in the chat (my_heads_ups, set_heads_ups).
  */
 
@@ -1108,7 +1108,7 @@ function LookNotice({ state }: { state: HeadsUpsState }) {
   return null;
 }
 
-/** Apps › Alerts: Heads-ups on or off and how much; more options and what to say are below. */
+/** You › Alerts: Heads-ups on or off and how much; more options and what to say are below. */
 export function HeadsUpsCard() {
   const { state, save } = useHeadsUps();
   const { notify } = useWorkspace();

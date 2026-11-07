@@ -18,7 +18,7 @@ export const APP_PLACES = {
   },
   feed: {
     name: "Feed",
-    where: "Bottom bar",
+    where: "☰ Menu (top left)",
     about:
       "today at a glance: weather, calendar, plans and bookings, reminders, meals logged today, news",
   },
@@ -32,14 +32,18 @@ export const APP_PLACES = {
     where: "Feed",
     about: "upcoming reminders, and those sent in the last 7 days",
   },
-  calendar: { name: "Calendar", where: "Menu (☰, top left)", about: "their calendar" },
-  mail: { name: "Mail", where: "Apps", about: "their email, when Google is connected" },
+  calendar: { name: "Calendar", where: "☰ Menu (top left)", about: "their calendar" },
+  mail: {
+    name: "Mail",
+    where: "Ask {agent} to open it",
+    about: "their email, when Google is connected",
+  },
   updates: {
     name: "Updates",
     where: "Home › Recent › See all",
     about: "background updates and notifications",
   },
-  spaces: { name: "Spaces", where: "Bottom bar", about: "the list of their spaces" },
+  spaces: { name: "Spaces", where: "☰ Menu (top left)", about: "the list of their spaces" },
   health: {
     name: "Health",
     where: "Spaces",
@@ -103,10 +107,10 @@ export const APP_PLACES = {
     about:
       "receipts of what was done, with everything waiting for their OK at the top (to approve something, use show_approvals instead: its Approve card appears right where they are, in the chat or on a call's screen)",
   },
-  ideas: { name: "Ideas", where: "Bottom bar", about: "suggestions to act on" },
+  ideas: { name: "Ideas", where: "☰ Menu (top left)", about: "suggestions to act on" },
   goals: {
     name: "Goals",
-    where: "Bottom bar",
+    where: "☰ Menu (top left)",
     about: "goals and milestones, tracking, subscriptions",
   },
   tracking: {
@@ -114,7 +118,11 @@ export const APP_PLACES = {
     where: "Goals",
     about: "routines and watched pages, with a price chart for a price watch",
   },
-  files: { name: "Files & media", where: "Bottom bar", about: "files, photos and documents" },
+  files: {
+    name: "Files & media",
+    where: "☰ Menu (top left)",
+    about: "files, photos and documents",
+  },
   meetings: {
     name: "Meetings",
     where: "Files & media",
@@ -129,56 +137,56 @@ export const APP_PLACES = {
   },
   "agent-computer": {
     name: "The agent's browser",
-    where: "Menu (☰, top left)",
+    where: "☰ Menu (top left)",
     about: "the websites the agent opened, to watch or take control (sign in somewhere for it)",
   },
   delegate: {
     name: "New job",
-    where: "Top right, next to the bell",
+    where: "Clipboard button (top right), or ☰ Menu › New job",
     about: "hand the agent a job to work on in the background",
   },
   apps: {
     name: "Apps",
-    where: "Bottom bar",
+    where: "You (bottom bar)",
     about: "connected apps, their own apps, always allowed actions, app permissions",
   },
   "agent-settings": {
     name: "Agent settings",
-    where: "Apps › Agent",
+    where: "You › Agent",
     about: "the agent's name and look, people notes, voice, the agent's email",
   },
   setup: {
     name: "Set up with {agent}",
-    where: "Apps › About you › Set up with {agent} again",
+    where: "You › About you › Set up with {agent} again",
     about:
       "the first-run questions (their name, home town, work, family, email and calendar, what they want help with), answered by voice or typed, to run again any time",
   },
   memory: {
     name: "About you",
-    where: "Apps › About you",
+    where: "You › About you",
     about:
       "what the agent knows about them (name, work, home, apps, how to reach them) and everything else it remembers, to check, correct or forget",
   },
-  alerts: { name: "Alerts", where: "Apps", about: "alerts from email and other apps" },
+  alerts: { name: "Alerts", where: "You", about: "alerts from email and other apps" },
   money: {
     name: "Money",
-    where: "Apps",
+    where: "You",
     about: "the spending limit, this month's purchases, spending and AI usage by month",
   },
   account: {
     name: "Account",
-    where: "Apps",
+    where: "You",
     about: "appearance, account, passwords, their data",
   },
   backdrop: {
     name: "Backdrop",
-    where: "Menu (☰, top left)",
+    where: "☰ Menu (top left)",
     about:
       "the moving scene behind the app: pick a beach, mountains, city, rain, forest or night sky, hold it still, or turn it off",
   },
   help: {
     name: "Help",
-    where: "Apps",
+    where: "You",
     about: "the help guide: pictures and simple steps for every part of the app, and fixes",
   },
 } as const satisfies Record<string, { name: string; where: string; about: string }>;

@@ -144,7 +144,7 @@ const count = (n: number) => n.toLocaleString();
 const added = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-/** Apps & settings → Agent: bring past chats over from ChatGPT and Claude. */
+/** You › About you: bring past chats over from ChatGPT and Claude. */
 export function PastChatsImport() {
   const { api, notify } = useWorkspace();
   const { data, refresh } = useAgentWorkspace();

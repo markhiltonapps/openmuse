@@ -1,17 +1,27 @@
+import {
+  Bell,
+  Bot,
+  CreditCard,
+  HelpCircle,
+  KeyRound,
+  type LucideIcon,
+  Puzzle,
+  Smile,
+} from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Emoji } from "./emoji";
 import { colors } from "./ui";
 
 export type AppsTab = "apps" | "agent" | "about" | "alerts" | "money" | "account" | "help";
-const TABS: { id: AppsTab; label: string; emoji: string }[] = [
-  { id: "apps", label: "Apps", emoji: "🧩" },
-  { id: "agent", label: "Agent", emoji: "🤖" },
-  { id: "about", label: "About you", emoji: "🙂" },
-  { id: "alerts", label: "Alerts", emoji: "🔔" },
-  { id: "money", label: "Money", emoji: "💳" },
-  { id: "account", label: "Account", emoji: "🔑" },
-  { id: "help", label: "Help", emoji: "🙋" },
+/** Plain line icons, like the bar's (owner, 2026-11-07: one icon style, one accent). */
+const TABS: { id: AppsTab; label: string; icon: LucideIcon }[] = [
+  { id: "apps", label: "Apps", icon: Puzzle },
+  { id: "agent", label: "Agent", icon: Bot },
+  { id: "about", label: "About you", icon: Smile },
+  { id: "alerts", label: "Alerts", icon: Bell },
+  { id: "money", label: "Money", icon: CreditCard },
+  { id: "account", label: "Account", icon: KeyRound },
+  { id: "help", label: "Help", icon: HelpCircle },
 ];
 /** The last tab opened, so coming back to Apps (from Mail or Files, say) lands where you were. */
 let lastTab: AppsTab = "apps";
@@ -64,16 +74,21 @@ export function AppsTabs({
               paddingRight: 10,
               height: 40,
               borderRadius: 20,
-              backgroundColor: selected ? colors.inverse : colors.subtle,
+              // Selected in the accent's tint, like the bar and every filter.
+              backgroundColor: selected ? colors.blue : colors.subtle,
               opacity: pressed ? 0.8 : 1,
             })}
           >
-            <Emoji char={item.emoji} size={20} />
+            <item.icon
+              size={18}
+              strokeWidth={selected ? 2.4 : 2}
+              color={selected ? colors.blueText : colors.mutedStrong}
+            />
             <Text
               style={{
                 fontSize: 14,
-                fontWeight: "600",
-                color: selected ? colors.onInverse : colors.text,
+                fontWeight: selected ? "700" : "600",
+                color: selected ? colors.blueText : colors.text,
               }}
             >
               {item.label}

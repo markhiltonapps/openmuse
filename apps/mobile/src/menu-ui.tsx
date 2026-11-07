@@ -6,15 +6,17 @@ import {
   Globe2,
   House,
   LifeBuoy,
+  Lightbulb,
   type LucideIcon,
   MessageCircle,
   Mic,
-  Settings2,
+  Newspaper,
+  SquareCheck,
+  UserRound,
   UsersRound,
   Wallpaper,
 } from "lucide-react-native";
-import { useState } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
 import { useMuseThread } from "./threads";
 import { colors, Sheet, s } from "./ui";
@@ -125,12 +127,11 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
   const agent = data?.identity.name || "your agent";
   const browser = useBrowserState();
   const { enabled } = useMuseThread();
-  const { width, height } = useWindowDimensions();
-  // The room a sheet has for its list: its tallest, less its title and padding.
-  const room = (width < 600 ? height * 0.94 : Math.min(height * 0.9, 860)) - 140;
-  const [fits, setFits] = useState<boolean>();
-  const say = fits !== false;
-  const go = (section: "home" | "calendar" | "spaces" | "files" | "apps") => {
+  // The voice hints show on every row: the list scrolls now that it has thirteen rows.
+  const say = true;
+  const go = (
+    section: "home" | "calendar" | "feed" | "spaces" | "ideas" | "goals" | "files" | "apps",
+  ) => {
     onClose();
     navigate(section);
   };
@@ -140,14 +141,7 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
   };
   return (
     <Sheet title="Menu" subtitle={`Tap a place, or just ask ${agent}.`} onClose={onClose} narrow>
-      <View
-        // With its "Say …" lines it must fit without scrolling; if not, they go.
-        onLayout={(event) => {
-          if (fits === undefined) setFits(event.nativeEvent.layout.height <= room);
-        }}
-        // Unseen until measured, so the lines never show and then jump away.
-        style={{ gap: 2, opacity: fits === undefined ? 0 : 1 }}
-      >
+      <View style={{ gap: 2 }}>
         <MenuRow
           icon={House}
           title="Home"
@@ -179,11 +173,32 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
           onPress={() => go("calendar")}
         />
         <MenuRow
+          icon={Newspaper}
+          title="Feed"
+          detail="Your day, plans, reminders and news on what you follow."
+          say={say ? "what’s in my feed?" : undefined}
+          onPress={() => go("feed")}
+        />
+        <MenuRow
           icon={UsersRound}
           title="Spaces"
           detail="Your health, the family week and social media."
           say={say ? "open my health space" : undefined}
           onPress={() => go("spaces")}
+        />
+        <MenuRow
+          icon={SquareCheck}
+          title="Goals"
+          detail="Goals, routines and what you’re keeping an eye on."
+          say={say ? "show my goals" : undefined}
+          onPress={() => go("goals")}
+        />
+        <MenuRow
+          icon={Lightbulb}
+          title="Ideas"
+          detail={`Suggestions from ${agent}, grounded in your world.`}
+          say={say ? "any ideas for me?" : undefined}
+          onPress={() => go("ideas")}
         />
         <MenuRow
           icon={FolderOpen}
@@ -209,9 +224,9 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
         />
         <View style={[s.divider, { marginVertical: 8 }]} />
         <MenuRow
-          icon={Settings2}
-          title="Apps & settings"
-          detail={`Your apps, ${agent}’s name and voice, alerts, money and your account.`}
+          icon={UserRound}
+          title="You"
+          detail={`Your apps, ${agent}’s name and voice, About you, alerts, money and your account.`}
           say={say ? "connect my Gmail" : undefined}
           onPress={() => go("apps")}
         />

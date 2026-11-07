@@ -574,7 +574,7 @@ export async function createApp(
   // Our own voice (apps/voice, Pipecat), side by side with OpenAI's: the same call handling,
   // pointed at the voice service, which speaks OpenAI's live protocol.
   const voiceComparison = new VoiceComparison(db, usage);
-  // The voices people choose from for their calls on our own voice (Apps › Agent).
+  // The voices people choose from for their calls on our own voice (You › Agent).
   const callVoices =
     config.voiceServiceUrl && config.voiceServiceToken
       ? new CallVoices(db, config.voiceServiceUrl, config.voiceServiceToken, ADMIN_OWNER)
@@ -649,7 +649,7 @@ export async function createApp(
     if (!callVoices || (await voiceProviderFor(db, config, owner)) !== "pipecat")
       return {
         error:
-          "This account’s live calls use OpenAI’s voice, which can’t be changed here. An admin can switch it to the new voice under Apps › Account › People, which has voices to choose from.",
+          "This account’s live calls use OpenAI’s voice, which can’t be changed here. An admin can switch it to the new voice under You › Account › People, which has voices to choose from.",
       };
     const result = await callVoices.choose(owner, name);
     if ("error" in result) return { error: result.error };
@@ -2354,7 +2354,7 @@ export async function createApp(
       throw new AppError(
         (await voiceProviderFor(db, config, c.get("owner"))) === "pipecat"
           ? result.error
-          : "Your calls now use OpenAI’s voice, which can’t be changed here. An admin can move you to the new voice under Apps › Account › People.",
+          : "Your calls now use OpenAI’s voice, which can’t be changed here. An admin can move you to the new voice under You › Account › People.",
         409,
       );
     return c.json(result);

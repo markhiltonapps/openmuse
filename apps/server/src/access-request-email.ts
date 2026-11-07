@@ -37,7 +37,7 @@ export function accessRequestEmail(input: AccessRequestEmail) {
     `Email: ${input.email}`,
     ...(input.note ? [`Note: ${oneLine(input.note)}`] : []),
     "",
-    `Approve or decline in the app: Apps & settings › Account › People.${others}`,
+    `Approve or decline in the app: You › Account › People.${others}`,
     link,
   ].join("\n");
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#F4F5F6"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:#FFFFFF;border-radius:24px"><tr><td style="padding:28px 28px 8px;font-family:${FONT};font-size:22px;font-weight:700;color:${INK}">${esc(name)} asked to join</td></tr><tr><td style="padding:4px 28px 0;font-family:${FONT};font-size:16px;line-height:24px;color:${INK}">${esc(input.email)}</td></tr>${

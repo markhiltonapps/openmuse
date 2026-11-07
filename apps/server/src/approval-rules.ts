@@ -79,7 +79,7 @@ export class ApprovalRules {
     const app = tool.app.toLowerCase();
     if (!(await this.readOnlyApps(owner)).includes(app)) return undefined;
     const name = app.charAt(0).toUpperCase() + app.slice(1);
-    return `${name} is set to read-only, so nothing there can be changed or sent. The person can allow changes under Apps → Apps → App permissions.`;
+    return `${name} is set to read-only, so nothing there can be changed or sent. The person can allow changes under You › You › App permissions.`;
   }
   async add(owner: string, raw: unknown) {
     const input = approvalRuleSchema.parse(raw);

@@ -1445,7 +1445,7 @@ export class AgentService {
     compare: (days: number) => Promise<unknown>;
   };
   /**
-   * The voice each person hears on calls with our own voice (Apps › Agent › Voice on live calls):
+   * The voice each person hears on calls with our own voice (You › Agent › Voice on live calls):
    * the choices, and changing it (straight away on a call). Unset in tests.
    */
   callVoices?: {
@@ -1538,7 +1538,7 @@ export class AgentService {
         lookUpsDuringCalls: modelLabel(this.modelFor("voice").model),
       },
       modelsNote:
-        "Live voice calls talk with their own voice model, which isn’t changed with these; what they look up or do is “look-ups during calls”. Only the admin can change the models, with change_ai_models or on the AI models card (Apps › Money).",
+        "Live voice calls talk with their own voice model, which isn’t changed with these; what they look up or do is “look-ups during calls”. Only the admin can change the models, with change_ai_models or on the AI models card (You › Money).",
       ...(admin && this.everyoneCosts
         ? { everyoneTogether: named(await this.everyoneCosts()) }
         : {}),

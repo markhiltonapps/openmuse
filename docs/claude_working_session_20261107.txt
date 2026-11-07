@@ -176,3 +176,50 @@ Onboarding: Set up with Neddy
   like over every sheet.
 - Owner, mid-round: "Use Neddy's colors and go with four tabs" (the proposal's "Four doors, not
   38": Home, Chat, Activity, You; cream, teal, amber, night-blue). Planned next, after this ships.
+
+Neddy's colours and four tabs (owner: "Use Neddy's colors and go with four tabs")
+--------------------------------------------------------------------------------
+- Owner's choices: the cream look by default (backdrops stay a choice under Backdrop; anyone who
+  chose a scene keeps it: `DEFAULT_BACKDROP` is "none" now, read by the server and new devices);
+  four tabs Home, Chat, Activity, You (You = the former Apps screen with its own tab row).
+- Theme (theme.ts): light is cream (#F8F3EA page, #FFFDF9 cards) with Neddy's teal as the one
+  accent (the `blue*` tokens: #2A6C66 / tint #D4ECE8) and his amber (new `amber`, `amberText`)
+  only for the count on his picture; night is his visor's blue (#0E131B page, #17202B cards,
+  teal #5FC6BB). Token names didn't change, so every screen followed.
+- Bar (App.tsx `nav`): four plain line icons (House, MessageCircle, PanelsTopLeft, UserRound), the
+  one you're in in teal on a soft pill, no colour tiles; `TILE_COLOURS` is unused by the bar now.
+  Home's card icons and its Talk/Review buttons wear one teal gradient (`TEAL` in home.tsx).
+- Menu (menu-ui.tsx): Feed, Goals and Ideas rows added; "Apps & settings" is "You".
+- Words: APP_PLACES `where` (Feed/Spaces/Ideas/Goals/Files → "☰ Menu (top left)", "Apps › …" →
+  "You › …"), Help (find-your-way rewritten; every "Open X in the bottom bar" and "under Apps"),
+  the agent's app guide (app-guide.ts, also no bell), space-tools' "Spaces tab". tests/help and
+  tests/app-places updated for "You".
+- scripts/help-shots.mjs: `tab()` scoped to the Sections tablist, `viaMenu()` for Feed/Spaces/
+  Goals/Files, `appsTab()` goes through You; all pictures retaken (the bar is in most of them).
+- Website: the six dock mockups show the four tabs (teal active tab, amber count); the mockups'
+  bells are gone too; the site's own dark theme is unchanged.
+- Review round (visual, usability, copy) found 17 blockers; all fixed:
+  * Contrast: the amber count wears dark ink (white on amber was 3.5:1 / 2.3:1); the teal gradient
+    starts at #3A8A82 so white text and icons on Talk, Review and the card icons pass; the Talk
+    pill's old blue glow is teal; Today's times and the Working-on dot use the palette.
+  * The You screen's tabs: lucide line icons instead of emoji, and selected in the accent tint
+    like the bar (the navy pill was the strongest colour on the page).
+  * The Menu's "Say …" voice hints never showed (its fit check always failed once the list grew);
+    they always show now and the sheet scrolls.
+  * Calendar, Mail and the browser no longer light the You tab (a false "selected").
+  * "Apps › …" directions swept everywhere people or the agent read them: server prompts and
+    emails (job emails, sign-in, passwords, spending, heads-ups, approval rules, own apps, access
+    requests, past chats), the app's notes (alerts, voice), docs/DEPLOY.md; "next to the bell"
+    on the New job place; three Help paths now go through You › Apps; Mail's place says to ask.
+    tests/accounts and tests/onboarding updated for the new names.
+- Left as is (said on purpose): Ideas has no Home card (it's ☰ Menu › Ideas, two taps); the
+  find-your-way picture is still Home with its marks (no separate Menu picture); the New job button
+  hides the last row's right end on long You/Activity lists (as before); "Local data" labels at
+  10px use `muted`.
+- Help pictures: the local sample database had aged (its jobs were gone, the Family space too, and
+  the Morning brief routine had been copied by the setup walkthrough's "Yes, weekdays"), so it was
+  reset (the old one is kept in the scratchpad as data-postgres-aged-*). The sample server runs no
+  model, so scripts/help-shots.mjs now adds two jobs to /api/agent for the pictures (a finished
+  Morning brief with a brief in the server's own markdown, and one waiting on the coffee
+  approval), and the family shot starts the planner when the sample has none. Every picture
+  retaken on the final build.

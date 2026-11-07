@@ -3,16 +3,12 @@ import { StatusBar } from "expo-status-bar";
 import {
   Check,
   ClipboardPlus,
-  FolderOpen,
-  Lightbulb,
+  House,
   type LucideIcon,
   Menu,
   MessageCircle,
-  Newspaper,
   PanelsTopLeft,
-  Shapes,
-  SquareCheck,
-  UsersRound,
+  UserRound,
   X,
 } from "lucide-react-native";
 import {
@@ -67,7 +63,6 @@ import { ChatButton, ChatReporter, ChatsSheet, onOpenChats } from "./src/chats-u
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { FeedScreen } from "./src/feed";
-import { GlossFill, OnGloss, TILE_COLOURS } from "./src/gloss";
 import { HomeScreen, HomeTalkRow, waitingOnYou } from "./src/home";
 import { countWords } from "./src/home-lists";
 import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
@@ -120,39 +115,34 @@ import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
  * `tip` says what's there, on hover (and a long press on phones).
  */
 const nav: { id: Section; label: string; short?: string; tip: string; icon: LucideIcon }[] = [
+  { id: "home", label: "Home", tip: "Home: what needs you, your day and {agent}", icon: House },
   { id: "chat", label: "Chat", tip: "Chat: talk or type to {agent}", icon: MessageCircle },
-  { id: "feed", label: "Feed", tip: "Feed: news and your day", icon: Newspaper },
-  { id: "spaces", label: "Spaces", tip: "Spaces: family, health and more", icon: UsersRound },
   {
     id: "activity",
     label: "Activity",
     tip: "Activity: jobs and what needs you",
     icon: PanelsTopLeft,
   },
-  { id: "ideas", label: "Ideas", tip: "Ideas: suggestions for you", icon: Lightbulb },
-  { id: "goals", label: "Goals", tip: "Goals: what you’re working toward", icon: SquareCheck },
   {
-    id: "files",
-    label: "Files & media",
-    short: "Files",
-    tip: "Files & media: your documents and photos",
-    icon: FolderOpen,
+    id: "apps",
+    label: "You",
+    tip: "You: your apps, {agent}’s settings, About you, alerts, money and account",
+    icon: UserRound,
   },
-  { id: "apps", label: "Apps", tip: "Apps: connections and settings", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   activity: { title: "Activity", subtitle: "Plans, progress, decisions and results." },
-  feed: { title: "Feed", subtitle: "Your day, and what's new on the topics you follow." },
+  feed: { title: "Feed", subtitle: "Your day, and what’s new on the topics you follow." },
   ideas: { title: "Ideas", subtitle: "Useful next steps, grounded in your world." },
   goals: {
     title: "Goals",
     subtitle: "Longer-term goals and things to keep an eye on.",
   },
   apps: {
-    title: "Apps",
-    subtitle: "Connections, capabilities and what your agent remembers.",
+    title: "You",
+    subtitle: "Your apps, your agent, what it knows about you, alerts, money and account.",
   },
-  connections: { title: "Apps", subtitle: "Connections and capabilities." },
+  connections: { title: "You", subtitle: "Connections and capabilities." },
   mail: { title: "Mail", subtitle: "The conversations behind your work." },
   calendar: { title: "Calendar", subtitle: "Time for what matters." },
   browser: { title: "Browser", subtitle: "Your connected browsing sessions." },
@@ -699,12 +689,13 @@ function WorkspaceShell({
                         borderRadius: 11,
                         alignItems: "center",
                         justifyContent: "center",
-                        backgroundColor: "#B4530F",
+                        backgroundColor: colors.amber,
                         borderWidth: 2,
                         borderColor: colors.canvas,
                       }}
                     >
-                      <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "800" }}>
+                      {/* Dark ink on amber, in both themes: white fails contrast on it. */}
+                      <Text style={{ color: "#1B2430", fontSize: 12, fontWeight: "800" }}>
                         {needYou > 9 ? "9+" : needYou}
                       </Text>
                     </View>
@@ -718,7 +709,7 @@ function WorkspaceShell({
                         width: 14,
                         height: 14,
                         borderRadius: 7,
-                        backgroundColor: "#B4530F",
+                        backgroundColor: colors.amber,
                         borderWidth: 2,
                         borderColor: colors.canvas,
                       }}
@@ -897,14 +888,13 @@ function WorkspaceShell({
           {home && <HomeTalkRow desktop={desktop} />}
           <View
             style={{
-              // Eight tiles: a narrow phone gives the bar nearly all its width.
-              paddingHorizontal: width < 375 ? 3 : width < 420 ? 8 : 22,
+              paddingHorizontal: width < 375 ? 8 : 22,
               paddingTop: 10,
               paddingBottom: desktop ? 18 : 8,
               alignItems: "center",
             }}
           >
-            {/* The glossy bar from the backdrop mockup: a colour tile for each place. */}
+            {/* Four doors (owner, 2026-11-07): plain icons, the one you're in lit in Neddy's teal. */}
             <View
               role="tablist"
               aria-label="Sections"
@@ -912,10 +902,10 @@ function WorkspaceShell({
                 {
                   flexDirection: "row",
                   width: "100%",
-                  maxWidth: desktop ? 640 : 420,
-                  paddingTop: 8,
+                  maxWidth: desktop ? 520 : 400,
+                  paddingTop: 6,
                   paddingBottom: 6,
-                  paddingHorizontal: width < 375 ? 0 : 4,
+                  paddingHorizontal: 8,
                   borderRadius: 28,
                   backgroundColor: glass ? "rgba(30, 24, 44, 0.62)" : colors.surface,
                   borderWidth: 1,
@@ -930,9 +920,15 @@ function WorkspaceShell({
               ]}
             >
               {nav.map((item) => {
-                const active = section === item.id || (item.id === "apps" && utility);
-                const tint = TILE_COLOURS[item.id] ?? TILE_COLOURS.apps;
-                const tile = desktop ? 52 : width < 360 ? 34 : 40;
+                // Mail, Calendar and the browser belong to no tab: none lights up for them.
+                const active = section === item.id;
+                const ink = active
+                  ? glass
+                    ? "#FFFFFF"
+                    : colors.blueDark
+                  : glass
+                    ? "rgba(255, 255, 255, 0.78)"
+                    : colors.mutedStrong;
                 return (
                   <Pressable
                     key={item.id}
@@ -946,75 +942,45 @@ function WorkspaceShell({
                       flex: 1,
                       minWidth: 0,
                       alignItems: "center",
-                      gap: 4,
-                      paddingBottom: 6,
+                      gap: 3,
+                      paddingVertical: 6,
                       // Rounds the keyboard focus ring too.
-                      borderRadius: 14,
+                      borderRadius: 18,
                       transform: [{ scale: pressed ? 0.94 : 1 }],
                     })}
                   >
+                    {/* A soft pill behind the icon of the place you're in. */}
                     <View
                       style={{
-                        width: tile,
-                        height: tile,
-                        borderRadius: tile * 0.3,
-                        overflow: "hidden",
+                        width: desktop ? 56 : 52,
+                        height: desktop ? 32 : 30,
+                        borderRadius: 16,
                         alignItems: "center",
                         justifyContent: "center",
-                        shadowColor: "#08041A",
-                        shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 14,
+                        backgroundColor: active
+                          ? glass
+                            ? "rgba(255, 255, 255, 0.2)"
+                            : colors.blue
+                          : "transparent",
                       }}
                     >
-                      <GlossFill
-                        id={`tab-${item.id}`}
-                        from={tint.from}
-                        to={tint.to}
-                        angle="tilted"
-                        shine={0.5}
-                        radius={tile * 0.3}
+                      <item.icon
+                        size={desktop ? 24 : 22}
+                        strokeWidth={active ? 2.4 : 2}
+                        color={ink}
                       />
-                      <OnGloss>
-                        <item.icon
-                          size={Math.round(tile * 0.52)}
-                          strokeWidth={2}
-                          color={tint.ink ?? "#FFFFFF"}
-                        />
-                      </OnGloss>
                     </View>
                     <Text
                       numberOfLines={1}
                       style={{
-                        color: active
-                          ? glass
-                            ? "#FFFFFF"
-                            : colors.text
-                          : glass
-                            ? "rgba(255, 255, 255, 0.86)"
-                            : colors.mutedStrong,
-                        fontSize: desktop ? 12 : width < 360 ? 10 : 10.5,
-                        lineHeight: 13,
+                        color: ink,
+                        fontSize: desktop ? 12 : 11,
+                        lineHeight: 14,
                         fontWeight: active ? "800" : "600",
                       }}
                     >
                       {item.short ?? item.label}
                     </Text>
-                    {/* The place you're in: a small glowing dot under its name. */}
-                    <View
-                      style={{
-                        position: "absolute",
-                        bottom: -2,
-                        width: 5,
-                        height: 5,
-                        borderRadius: 3,
-                        backgroundColor: active ? (glass ? "#FFFFFF" : colors.text) : "transparent",
-                        // Over a backdrop it glows, like the mockup's.
-                        shadowColor: "#FFFFFF",
-                        shadowOpacity: active && glass ? 1 : 0,
-                        shadowRadius: 6,
-                      }}
-                    />
                   </Pressable>
                 );
               })}
