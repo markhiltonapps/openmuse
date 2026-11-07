@@ -624,3 +624,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   Service path as the home city (`forSpot`), sunrise and sunset are computed (`sun.ts`), never fetched. Distances, walking
   times and "35 minutes ago" wording are in packages/domain/src/location.ts so cards and tools say the same thing. A
   hyphenated Help shot id needs a quoted key in help-shots.ts (the script now does it).
+- **Reuse a card before building one (2026-11-07):** "what's near me" needed no new screen because the places card already
+  draws `{title, places:[{name, address, note, url, lat, lng}]}`; a tool that returns that shape (`find_nearby`) plus the four
+  call-card steps is enough. Check which tools the chat can really call before telling the agent to use one (`prepare_email`
+  is a job tool; in the chat email goes through `use_app`). Anything sent to another person (a location link) must come from a
+  fresh reading, not the last one an hour ago. Public map services (OpenStreetMap Overpass and Nominatim) are shared by
+  everyone on the server: one request at a time, cached answers, a polite user agent, a second server as fallback.

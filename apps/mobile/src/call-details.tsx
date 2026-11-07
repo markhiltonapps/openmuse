@@ -174,6 +174,8 @@ export function CallDetails({
                   return <CalendarCard key={key} result={result} onCall={onCall} wide />;
                 case "get_help":
                   return <HelpAnswerCard key={key} result={result} onCall={onCall} />;
+                case "find_nearby":
+                  return <PlacesCard key={key} result={result} loading={false} />;
                 case "park_car":
                   return <ParkedCarToolCard key={key} result={result} />;
                 case "call_voice":

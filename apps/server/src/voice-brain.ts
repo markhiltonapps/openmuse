@@ -122,6 +122,9 @@ function shown(tool: CallDetailTool, raw: string) {
         ? voices
         : undefined;
     }
+    case "find_nearby":
+      // The places found, on a map with Directions; "none" and errors are said, not shown.
+      return some("places") ? { title: result.title, places: result.places } : undefined;
     case "park_car":
       // Where the car is, with its Directions button; clearing and "none" are said, not shown.
       return result.parked && typeof result.parked === "object"
@@ -236,6 +239,10 @@ export function voiceNote(tool: string, args: unknown) {
       return "Changing my voice";
     case "get_weather":
       return "Checking the weather";
+    case "find_nearby":
+      return "Looking for places near you";
+    case "share_where_i_am":
+      return "Writing where you are";
     case "park_car":
       return (args as { do?: string } | undefined)?.do === "save"
         ? "Saving where you parked"

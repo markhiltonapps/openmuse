@@ -65,6 +65,7 @@ import type { MealCheckIns } from "../meal-checkins.ts";
 import type { Meetings } from "../meetings.ts";
 import { MiniApps } from "../mini-apps.ts";
 import type { ModelChoices, ModelJob } from "../model-choices.ts";
+import type { Nearby } from "../nearby.ts";
 import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
 import type { Pictures } from "../pictures.ts";
@@ -1429,6 +1430,8 @@ export class AgentService {
   urgent?: UrgentAlerts;
   /** Where they are right now, from their phone (while the app is open and it's on). */
   whereabouts?: Whereabouts;
+  /** Real places near where they are (OpenStreetMap), set when the server can reach the map service. */
+  nearby?: Nearby;
   /** A live call's ear, for approving by voice (what was read back, and their words since). */
   voiceEar?: (owner: string, sessionId: string) => CallEar | undefined;
   /** Everyone's AI costs together, for the admin. */

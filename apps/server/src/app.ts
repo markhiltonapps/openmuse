@@ -82,6 +82,7 @@ import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.t
 import { ModelChoices, SERVER_MODEL } from "./model-choices.ts";
 import { monitorChecks } from "./monitor-history.ts";
 import { ffmpegAvailable, ffmpegMp3 } from "./mp3.ts";
+import { Nearby } from "./nearby.ts";
 import { historyStepsEmail } from "./onboarding.ts";
 import { PastChats } from "./past-chats.ts";
 import { Pictures } from "./pictures.ts";
@@ -814,6 +815,10 @@ export async function createApp(
       : undefined,
   );
   agent.whereabouts = whereabouts;
+  if (config.mode === "live")
+    agent.nearby = new Nearby({
+      userAgent: `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; places near me)`,
+    });
   agent.areas = new Areas(
     db,
     config.mode === "live"

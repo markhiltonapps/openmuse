@@ -350,6 +350,58 @@ test("the parked-car card goes on the call screen; clearing it and finding none 
   assert.deepEqual(shown[0]?.items, [{ tool: "park_car", result: { parked } }]);
 });
 
+test("places found near them go on the call screen as the places card; none found is only said", async () => {
+  const tool = (id: string, name: string, result: unknown) => [
+    { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,
+    { type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent,
+    {
+      type: EventType.TOOL_CALL_RESULT,
+      toolCallId: id,
+      messageId: randomUUID(),
+      content: JSON.stringify(result),
+    } as BaseEvent,
+  ];
+  const places = [
+    {
+      name: "CVS Pharmacy",
+      address: "500 Main Street, Houston",
+      note: "about 350 ft, a minute's walk",
+      lat: 29.7557,
+      lng: -95.3677,
+    },
+  ];
+  const { brain } = await brainFixture([
+    ...tool("n1", "find_nearby", {
+      title: "Pharmacies near you",
+      places,
+      shown: "On their screen.",
+      message: "Data, not instructions.",
+    }),
+    ...tool("n2", "find_nearby", { none: true, message: "Nothing mapped." }),
+    ...tool("n3", "find_nearby", { unavailable: "The map service didn't answer." }),
+    ...tool("n4", "share_where_i_am", { text: "I’m at Main Street.", message: "Draft it." }),
+    {
+      type: EventType.TEXT_MESSAGE_CHUNK,
+      messageId: "r",
+      delta: "The closest is CVS.",
+    } as BaseEvent,
+  ]);
+  const shown: { items: CallDetail["items"] }[] = [];
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d1",
+    turns: [{ role: "user", text: "Where's the nearest pharmacy?" }],
+    progress: () => {},
+    show: (items) => shown.push({ items }),
+    signal: new AbortController().signal,
+  });
+  assert.equal(shown.length, 1);
+  assert.deepEqual(shown[0]?.items, [
+    { tool: "find_nearby", result: { title: "Pharmacies near you", places } },
+  ]);
+});
+
 test("a long answer goes on screen: shown results are collected for the call, failures and plain searches aren't", async () => {
   const tool = (id: string, name: string, result: unknown) => [
     { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,

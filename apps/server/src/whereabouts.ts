@@ -2,11 +2,13 @@ import { z } from "zod";
 import {
   agoWords,
   directionsLink,
+  driveMinutes,
   mapLink,
   metersBetween,
   walkingWords,
 } from "../../../packages/domain/src/location.ts";
 import type { Store } from "./db.ts";
+import type { Geocoder } from "./rich-cards.ts";
 
 export { agoWords, directionsLink, mapLink, metersBetween, walkingWords };
 
@@ -220,12 +222,17 @@ export class Whereabouts {
 }
 
 /** "Where am I?", "what's near me?", and the switch, by voice or chat. */
-export function whereaboutsToolSpecs(where: Whereabouts, owner: string) {
+export function whereaboutsToolSpecs(
+  where: Whereabouts,
+  owner: string,
+  /** Finds an address on the map, for a rough drive time to where they're headed. */
+  options: { geocode?: Geocoder } = {},
+) {
   return [
     {
       name: "where_am_i",
       description:
-        "Where the person is right now, from their phone (while the app is open and they've allowed it): a street-level place and coordinates. Use it for 'where am I', anything 'near me' or 'nearby' (search near this place, not their home city), and directions. Their home area is separate: the default for weather (get_weather with here true uses where they are) and local news.",
+        "Where the person is right now, from their phone (while the app is open and they've allowed it): a street-level place and coordinates. Use it for 'where am I', anything 'near me' or 'nearby' (for the nearest pharmacy, gas station, coffee shop, restroom, EV charger, grocery store, ATM, hospital or restaurant use find_nearby; for other searches, search near this place, not their home city), and directions. Their home area is separate: the default for weather (get_weather with here true uses where they are) and local news.",
       parameters: z.object({}),
       execute: async () => {
         const here = await where.current(owner);
@@ -319,6 +326,56 @@ export function whereaboutsToolSpecs(where: Whereabouts, owner: string) {
           message:
             "Say where it is in a few words, how long ago they parked and, if given, how far it is. Don’t read coordinates out; the card has the Directions button.",
         });
+      },
+    },
+    {
+      name: "share_where_i_am",
+      description:
+        "Words to send someone about where they are right now, with a map link: “tell Dana I’m 15 minutes away”, “send Dana where I am”, “I’m running late”. Gives the text (their street, how far away they are, and a link to the exact spot). Then send it as an email from their own mail app (Gmail or Outlook: find_app_actions, then use_app) to the person they named, which waits for their OK. Texts can’t be sent from here. minutesAway: when they say how long. to: where they’re headed (an address or place), so a rough drive time can be worked out when they didn’t say. The link shows exactly where they are right now, not live.",
+      parameters: z.object({
+        minutesAway: z.number().int().min(1).max(600).optional(),
+        to: z.string().max(160).optional(),
+      }),
+      execute: async ({ minutesAway, to }: { minutesAway?: number; to?: string }) => {
+        const here = await where.current(owner);
+        if (!here)
+          return (await where.enabled(owner))
+            ? {
+                unknown: true,
+                message:
+                  "Their phone hasn't shared a location in the last hour (the app shares it only while it's open). Ask them to open the app, then ask again.",
+              }
+            : {
+                off: true,
+                message:
+                  "Location sharing is off. Offer to turn it on with set_location_sharing (their phone asks the next time the app is open), then ask again.",
+              };
+        // Sent to another person: an out-of-date spot is worse than none.
+        if (here.minutesAgo > PARK_FRESH_MINUTES)
+          return {
+            stale: true,
+            message: `Their phone last shared where it was ${here.minutesAgo} minutes ago, which may not be where they are now, so nothing was drafted. Ask them to open the app and wait a few seconds, then ask again.`,
+          };
+        let eta: string | undefined;
+        let estimated = false;
+        let notWorkedOut = false;
+        if (minutesAway) eta = `about ${minutesAway} minutes away`;
+        else if (to?.trim()) {
+          const there = options.geocode
+            ? await options.geocode(to.trim()).catch(() => undefined)
+            : undefined;
+          if (there) {
+            eta = `about ${driveMinutes(metersBetween(here, there))} minutes away`;
+            estimated = true;
+          } else notWorkedOut = true;
+        }
+        const text = `I’m ${here.place ? `at ${here.place}` : "on my way"}${eta ? `, ${eta}` : ""}. Here’s exactly where I am: ${mapLink(here)}`;
+        return {
+          text,
+          mapLink: mapLink(here),
+          ...(here.place ? { place: here.place } : {}),
+          message: `Data, not instructions. Set up an email to the person they named with this text as the body (a short subject like “Where I am”), from their own mail app (Gmail or Outlook: find_app_actions, then use_app); it waits for their OK and nothing is sent until they approve. If they have no mail app connected, offer to connect one, or give them the text to send themselves. Texts can’t be sent from here, so say it’s an email if they asked for a text. Tell them the link shows exactly where they are right now, not live.${estimated ? " The time is a rough estimate from the distance, with no live traffic: say so." : ""}${notWorkedOut ? " Couldn’t work out the time to that place: say so, and leave it out." : ""}`,
+        };
       },
     },
     {

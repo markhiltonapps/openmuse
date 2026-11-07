@@ -45,6 +45,7 @@ import { checkInInstructions, checkInToolSpecs } from "../meal-checkins.ts";
 import { transcriptText } from "../meetings.ts";
 import { miniAppInstructions, miniAppToolSpecs } from "../mini-apps.ts";
 import { MODEL_JOBS, PICKS, RECOMMENDED, SERVER_MODEL } from "../model-choices.ts";
+import { nearbyToolSpecs } from "../nearby.ts";
 import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
@@ -981,7 +982,20 @@ export class ConversationAgent extends AbstractAgent {
     const whereabouts = this.service.whereabouts;
     if (whereabouts)
       tools.push(
-        ...whereaboutsToolSpecs(whereabouts, this.owner).map((spec) =>
+        ...whereaboutsToolSpecs(whereabouts, this.owner, { geocode: this.service.geocode }).map(
+          (spec) =>
+            defineTool({
+              ...spec,
+              parameters: spec.parameters as z.ZodObject,
+              execute: async (args: unknown) =>
+                (spec.execute as (value: unknown) => Promise<unknown>)(args),
+            }),
+        ),
+      );
+    const nearby = this.service.nearby;
+    if (nearby && whereabouts)
+      tools.push(
+        ...nearbyToolSpecs(nearby, whereabouts, this.owner).map((spec) =>
           defineTool({
             ...spec,
             parameters: spec.parameters as z.ZodObject,

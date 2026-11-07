@@ -359,6 +359,13 @@ export function WorkspaceTools() {
       <RehearseToolCard result={result} loading={status !== "complete"} />
     ),
   });
+  // "Where's the nearest pharmacy?": real places near them, on the same map card as other places.
+  useRenderTool({
+    name: "find_nearby",
+    description: "Show the places found near them",
+    parameters: displayParameters,
+    render: ({ result, status }) => <PlacesCard result={result} loading={status !== "complete"} />,
+  });
   // "I parked here" / "where did I park?": where the car is, with Directions and Found it.
   useRenderTool({
     name: "park_car",

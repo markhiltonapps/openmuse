@@ -501,3 +501,27 @@ Round 1 (park my car + weather where you are):
   Checked in a browser with mocked routes: Found it sends the parking's time, Undo sends the whole spot back, the card
   returns. Help pictures retaken: park-car, weather-here (shorter), location (now shows the saved-spot row, mark 4).
 - Tests 732 pass; lint clean on what changed (three older test-file optional-chain errors fixed on the way). Not pushed.
+
+Round 2 (owner: "Go ahead with round 2"): "I'm running late / tell someone where I am" and "What's near me".
+- What's near me: tool find_nearby (apps/server/src/nearby.ts). Real places around the shared spot from OpenStreetMap's
+  free Overpass service (no key, no cost): pharmacy, gas, coffee, restroom, EV charger, grocery, ATM, hospital/urgent care,
+  restaurant, parking, or a name ("Starbucks"). Close look (1.5 km) first, a wider one (6 km) when under three turn up, or
+  only as far as they say. Closest first, 6 at most, deduplicated, private lots and customer-only toilets left out. One request
+  at a time with a short gap, answers kept 10 minutes per ~100 m, a second public server as a fallback. Hours are shown as
+  mapped ("Hours on the map: ..."), never as "open now". It returns the shape the chat's existing places card already draws
+  (map with numbered pins, distance and walking time, Directions per place), so there is NO new screen: the card is
+  registered for find_nearby in chat.tsx and call-details.tsx, find_nearby is in CALL_DETAIL_TOOLS, voice-brain shown().
+  Only created on the live server (like the geocoder). Honest limits said in Help: OpenStreetMap can miss places and hours
+  can be wrong; the spot (rounded to ~100 m) is sent to OpenStreetMap.
+- Tell someone where you are: tool share_where_i_am (whereabouts.ts) gives the words ("I'm at <street>, about 15 minutes
+  away. Here's exactly where I am: <map link>") from a FRESH location (over 5 minutes old is refused: it would be sent to a
+  person). The time is what they said (minutesAway) or a rough drive time worked out from a destination (`to`, found with the
+  geocoder, packages/domain/src/location.ts driveMinutes: straight line x1.3 at city/road speeds, no traffic, said as an
+  estimate). The agent then sets the email up with their own mail app (find_app_actions, use_app), which waits for their OK;
+  texts can't be sent. No new UI: the Approve card is the existing one. (First version of the tool text named prepare_email,
+  which isn't a chat tool; caught while making the Help picture.)
+- Help: new topics "What's near you" (near-me) and "Tell someone where you are" (share-where-i-am) with light and dark
+  pictures and numbered marks; "Share your location" points to both. PICTURE NOTE: the near-me map is a plain street-grid
+  stand-in (generated tiles routed in Playwright) because the sandbox can't reach the map service (CARTO); the numbers,
+  distances and list are the real card. The Approve button says "Approve locally" because the sample server says so, as in the
+  other Help pictures. Site paragraph updated.

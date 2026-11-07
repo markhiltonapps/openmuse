@@ -15,6 +15,7 @@ export const CALL_DETAIL_TOOLS = [
   "make_picture",
   "call_voice",
   "park_car",
+  "find_nearby",
 ] as const;
 /** A conversation to practise: who Neddy plays, what it's about, and what they want out of it. */
 export interface RehearsalAsk {

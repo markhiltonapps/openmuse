@@ -768,6 +768,193 @@ const SHOTS = [
     },
   },
   {
+    // "Where's the nearest pharmacy?": the places card, on a plain street-grid stand-in map (the map
+    // service, CARTO, isn't reachable from the sandbox).
+    id: "near-me",
+    height: 1250,
+    go: async (p, state) => {
+      const tiles = {
+        light: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAC+0lEQVR42u3dMWvCQBiA4UuJqwQUcemgU7p28P/PGbo2kw5dRCKErA7XISChQilFjKfPM5118PLB24/SQrMYY4Bn9WIECAAEAM8n39VVurdflZv+kPRTmL8NACNtgHPE546nxTy5x0jozl3bDL93Dpm/DQACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAPxRbgSpO5zasT56NuodFpPCBgABgABAACAAEAAIAAQAAgABgABAACAAEAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAHAmLIYoylgA4AA4Mnkwxe7ugohTIt5KrefLdf94bjfpnLnrm1CCKtyc/nW/+Z/OLVjPcvb63t/+Pz6uP2nLyaFDQACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAA4H7lRpC6q/ynoAe4gw0AAgABgABAACAAEAAIAAQAAgABIAAjQAAgABAACAAEAAIAAYAAQADwYPJdXf34Utc2qdx+tlwnd+fe5djN3waAW8tijKaAnwFAACAAEAAIAAQADyz/5Tcy929VbvpD0k9h/jYAjLQBzhGfO54W8+QeI6E79381MBy7+dsAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgALiJLMZoCtgAIAB4Mvnwxa6uQgjTYp7K7WfLdX847rep3LlrmxDCqtxcvmX+NgAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAAAjACBAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAcAVfAMvGWmpokOgAwAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+        dark: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAADB0lEQVR42u3dvWrCUBiA4WPJEEw8dHBwkF6AF+AVeP8XURwcHEo0kkGkQyCEWkoR/455ninWoSdfef2kFjpaLFcBhurNCBAACACGJ9vvqnRPX05ie5H0XZi/DQAP2gBdxF3HTZ1Mzd3hEzpzXsT+yfvM3wYAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAD+KTOC5H+E49Mwz3A8XOHl2wbAWyAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAOByo8VyZQrYACAAGJis/2C/q0IITV2lcvrpbN5ebDfrVM6cFzGEUE7i+VOXzT8bnx51L+/xo734qj7v/92Phyu8fNsAeAsEAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAt5IZQequ8p+CLhSf4Aw2AAgABAACAAGAAEAAIAAQAAgABAACAAEgABAACAAEAAIAAYAAQADworL9rvrxpbyIyd1Gcmc+H7v52wBw9w1QTuIL3MZr3IX52wAgABAACAAEAAKAW8j++ETm+XW/fUv6LszfBoAHbYD+Rxhtx02dTM3d4RM6c/tXA79+cmT+NgAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAAAjACBAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgALil0WK5MgVsABAADEzWf7DfVSGEpq5SOf10Nm8vtpt1KmfOixhCKCfx/CnztwFAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAkAARoAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACACu4Bu3h26j+xt8/wAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      };
+      await p.route(/basemaps\.cartocdn\.com/, (route) =>
+        route.fulfill({
+          body: route.request().url().includes("dark_all") ? tiles.dark : tiles.light,
+          contentType: "image/png",
+        }),
+      );
+      const places = [
+        {
+          name: "CVS Pharmacy",
+          address: "500 Main Street, Houston",
+          note: "about 350 ft, a minute's walk · Hours on the map: Mo-Su 08:00-22:00",
+          lat: 29.7557,
+          lng: -95.3677,
+        },
+        {
+          name: "Walgreens",
+          address: "1210 Fannin Street, Houston",
+          note: "about 0.3 mi, about 6 minutes on foot · Hours on the map: Mo-Fr 08:00-21:00; Sa 09:00-18:00",
+          lat: 29.7512,
+          lng: -95.3641,
+        },
+        {
+          name: "Midtown Pharmacy",
+          address: "3000 Travis Street, Houston",
+          note: "about 0.5 mi, about 10 minutes on foot",
+          lat: 29.7498,
+          lng: -95.3731,
+        },
+      ];
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "Where’s the nearest pharmacy?" },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "The closest is CVS Pharmacy on Main Street, about a minute’s walk. Two more are on the map. Hours are as they’re listed there, so call first if it matters.",
+          toolCalls: [
+            {
+              id: "help-call-1",
+              type: "function",
+              function: { name: "find_nearby", arguments: JSON.stringify({ what: "pharmacy" }) },
+            },
+          ],
+        },
+        {
+          id: "help-r1",
+          role: "tool",
+          toolCallId: "help-call-1",
+          content: JSON.stringify({ title: "Pharmacies near you", places }),
+        },
+      ];
+      // The chat connected before this exchange was set: open it again.
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await p
+        .getByRole("link", { name: /^Directions to CVS Pharmacy/ })
+        .waitFor({ timeout: 20000 });
+      await p.waitForTimeout(1200);
+    },
+    marks: {
+      2: { find: (p) => p.getByPlaceholder(/^Message/), side: "inside-right" },
+      3: { find: (p) => p.getByRole("group", { name: /^Map of/ }), side: "top-right" },
+      4: { find: (p) => p.getByText(/^about 350 ft/), side: "top-right", tight: true },
+      5: {
+        find: (p) => p.getByRole("link", { name: /^Directions to CVS Pharmacy/ }),
+        side: "left",
+      },
+    },
+  },
+  {
+    // "Tell Dana I'm 15 minutes away": the email it writes, waiting for the person's OK.
+    id: "share-where-i-am",
+    height: 1100,
+    go: async (p, state) => {
+      const body =
+        "I’m at Main Street, Midtown, Houston, about 15 minutes away. Here’s exactly where I am: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677";
+      // The sample's own approval is replaced by the email, waiting for the OK.
+      await p.route(/\/api\/workspace$/, async (route) => {
+        const real = await (await route.fetch()).json();
+        state.actions = [
+          {
+            id: "help-share-1",
+            kind: "email.send",
+            title: "Email Dana Ruiz",
+            status: "awaiting_review",
+            hash: "help-share-hash",
+            account: "alex@example.com",
+            connectionId: "sample-google",
+            createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 36e5).toISOString(),
+            data: {
+              to: ["dana@example.com"],
+              cc: [],
+              bcc: [],
+              subject: "Where I am",
+              body,
+              attachmentIds: [],
+            },
+          },
+        ];
+        await route.fulfill({
+          json: {
+            ...real,
+            actions: state.actions,
+            runtime: { ...real.runtime, richThreads: true },
+          },
+        });
+      });
+      state.exchange = [
+        { id: "help-u1", role: "user", content: "Tell Dana I’m about 15 minutes away." },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "Here’s the email to Dana. It has your street and a link to your exact spot. It only goes when you approve.",
+          toolCalls: [
+            {
+              id: "help-call-1",
+              type: "function",
+              function: {
+                name: "share_where_i_am",
+                arguments: JSON.stringify({ minutesAway: 15 }),
+              },
+            },
+            {
+              id: "help-call-2",
+              type: "function",
+              function: { name: "use_app", arguments: "{}" },
+            },
+          ],
+        },
+        {
+          id: "help-r1",
+          role: "tool",
+          toolCallId: "help-call-1",
+          content: JSON.stringify({ text: body }),
+        },
+        {
+          id: "help-r2",
+          role: "tool",
+          toolCallId: "help-call-2",
+          content: JSON.stringify({ status: "awaiting_review", actionId: "help-share-1" }),
+        },
+      ];
+      // The chat connected before this exchange was set: open it again.
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await p
+        .getByRole("button", { name: /^Approve/ })
+        .first()
+        .waitFor({ timeout: 20000 });
+      await p.waitForTimeout(800);
+    },
+    marks: {
+      2: {
+        find: (p) => p.getByText("Tell Dana I’m about 15 minutes away.").first(),
+        side: "top-right",
+        tight: true,
+      },
+      3: { find: (p) => p.getByText(/^To dana@example\.com/), side: "top-right", tight: true },
+      4: {
+        find: (p) => p.getByRole("button", { name: /^Approve/ }).first(),
+        also: (p) => p.getByRole("button", { name: /^See details/ }).first(),
+        side: "left",
+      },
+    },
+  },
+  {
     // "I parked here": the parked-car card in the chat, with Directions and Found it.
     id: "park-car",
     height: 1000,

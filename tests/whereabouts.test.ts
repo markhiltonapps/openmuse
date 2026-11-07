@@ -185,3 +185,53 @@ test("an old location isn't taken as where the car is; parking again says so; Un
     false,
   );
 });
+
+test("“tell Dana I'm 15 minutes away” gets words with a map link, only from a fresh location", async () => {
+  let now = Date.parse("2026-11-07T15:00:00Z");
+  const where = new Whereabouts(
+    db,
+    async () => "Main Street, Midtown, Houston",
+    () => now,
+  );
+  const owner = "share-1";
+  const places: Record<string, { lat: number; lng: number } | undefined> = {
+    "500 Main St": { lat: 29.78, lng: -95.37 },
+  };
+  const share = whereaboutsToolSpecs(where, owner, {
+    geocode: async (query) => places[query],
+  }).find((t) => t.name === "share_where_i_am");
+  assert.ok(share);
+  const run = (args: { minutesAway?: number; to?: string }) =>
+    (share.execute as (a: typeof args) => Promise<Record<string, unknown>>)(args);
+
+  // Nothing shared yet: it says so, and nothing is drafted.
+  assert.equal((await run({})).off, true);
+  await where.setEnabled(owner, true);
+  assert.equal((await run({})).unknown, true);
+
+  // What they said: their words, the street, and a link to the exact spot.
+  await where.report(owner, { lat: 29.7547, lng: -95.3677 });
+  const said = await run({ minutesAway: 15 });
+  assert.equal(
+    said.text,
+    "I’m at Main Street, Midtown, Houston, about 15 minutes away. Here’s exactly where I am: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677",
+  );
+  assert.doesNotMatch(String(said.message), /rough estimate/);
+
+  // Where they're headed: a rough time from the distance, and said to be a rough one.
+  const worked = await run({ to: "500 Main St" });
+  assert.match(String(worked.text), /about \d+ minutes away\./);
+  assert.match(String(worked.message), /rough estimate/);
+  // A place that can't be found: no time is made up.
+  const lost = await run({ to: "Nowhere Land" });
+  assert.doesNotMatch(String(lost.text), /minutes away/);
+  assert.match(String(lost.message), /Couldn’t work out the time/);
+  // No time at all: just where they are.
+  assert.match(String((await run({})).text), /^I’m at Main Street, Midtown, Houston\. Here’s/);
+
+  // An old spot isn't sent to someone else as if it were now.
+  now += 8 * 60_000;
+  const stale = await run({ minutesAway: 10 });
+  assert.equal(stale.stale, true);
+  assert.equal(stale.text, undefined);
+});

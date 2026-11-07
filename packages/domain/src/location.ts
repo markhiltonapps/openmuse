@@ -42,3 +42,15 @@ export const mapLink = (spot: { lat: number; lng: number }) =>
   `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
 export const directionsLink = (spot: { lat: number; lng: number }) =>
   `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}&travelmode=walking`;
+
+/**
+ * A rough time to drive between two spots from the straight-line distance: the road is about a third
+ * longer than the line, at a speed that grows with the trip. No live traffic, so it is always said
+ * as "about" and as an estimate. Rounded to the minute, then to five minutes from ten up.
+ */
+export function driveMinutes(meters: number) {
+  const road = meters * 1.3;
+  const speed = road < 8_000 ? 11.2 : road < 40_000 ? 15.6 : 22.4;
+  const minutes = Math.max(1, Math.round(road / speed / 60));
+  return minutes >= 10 ? Math.round(minutes / 5) * 5 : minutes;
+}
