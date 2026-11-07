@@ -13,7 +13,7 @@ import { tipProps } from "./tips";
 import { Button, colors, ErrorNotice, plainPreview, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
-/** Where background updates show: a pop-up by the bell, only in the bell, or as a card in chat. */
+/** Where background updates show: a pop-up at the top, quietly on Home ("bell", the old name), or as a card in chat. */
 export type UpdatesDisplay = "popup" | "bell" | "chat";
 export function updatesDisplay(
   identity?: Pick<AgentIdentity, "updatesDisplay" | "showChatUpdates">,

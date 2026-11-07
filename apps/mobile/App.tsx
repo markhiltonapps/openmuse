@@ -1,7 +1,6 @@
 import { CopilotKitProvider } from "@copilotkit/react-native/headless";
 import { StatusBar } from "expo-status-bar";
 import {
-  Bell,
   Check,
   ClipboardPlus,
   FolderOpen,
@@ -58,7 +57,7 @@ import {
   redeemSignInLink,
   serverInfo,
 } from "./src/api";
-import { BackToChat, usePillsRoom } from "./src/app-places-ui";
+import { BackToChat, scrollToAnchor, usePillsRoom } from "./src/app-places-ui";
 import { AgentAvatar, Mascot, type Mood, useChatActivity } from "./src/avatar";
 import BackdropLayer from "./src/BackdropLayer";
 import { takeReopenedToPicker, useBackdropSync, useReopenPill } from "./src/backdrop";
@@ -70,6 +69,7 @@ import { Details } from "./src/details";
 import { FeedScreen } from "./src/feed";
 import { GlossFill, OnGloss, TILE_COLOURS } from "./src/gloss";
 import { HomeScreen, HomeTalkRow, waitingOnYou } from "./src/home";
+import { countWords } from "./src/home-lists";
 import { CallBar, CallNews, LiveCallProvider, useCallControls, useCallNews } from "./src/live-call";
 import { LiveTalkSheet } from "./src/live-talk-ui";
 import { LocationReporter } from "./src/location-ui";
@@ -476,11 +476,10 @@ function WorkspaceShell({
   const desktop = width >= 900;
   // A short computer window (1280×720 and the like) gets the phone's header, so Home's cards fit.
   const shortDesk = desktop && height < 760;
-  const pending =
-    (data?.notifications.filter((n) => !n.read).length || 0) +
-    workspace.actions.filter((a) => a.status === "awaiting_review").length;
-  // What's waiting on the person: approvals and jobs with a question (the Activity tile's badge).
+  // What is waiting on the person: approvals and jobs with a question (the count on Neddy).
   const needYou = waitingOnYou(workspace.actions, data?.tasks).count;
+  // New updates (the dot on Neddy): the only sign of them on screens other than Home.
+  const unread = (data?.notifications ?? []).filter((item) => !item.read).length;
   const activeTask =
     data?.tasks.find(
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
@@ -559,6 +558,15 @@ function WorkspaceShell({
   // The chat's header takes the height of what's in it (the chat button grows with big text);
   // this is its least.
   const headerHeight = chat ? (desktop ? 176 : 155) : desktop && !shortDesk ? 158 : 132;
+  const avatarSize = chat
+    ? desktop
+      ? 68
+      : 62
+    : desktop && !shortDesk
+      ? 88
+      : width < 360
+        ? 64
+        : 76;
   const pillsRoom = usePillsRoom(section);
   // The space beside the 760px column on a wide screen.
   const sideRoom = Math.max(0, (width - 760) / 2);
@@ -613,11 +621,11 @@ function WorkspaceShell({
                   <Defs>
                     <LinearGradient id="header-fade" x1="0" y1="0" x2="0" y2="1">
                       {/* Over the backdrop, a lighter fade: the scene's own shade does the rest. */}
-                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={glass ? 0.6 : 0.96} />
+                      <Stop offset="0" stopColor={colors.canvas} stopOpacity={glass ? 0.9 : 0.96} />
                       <Stop
                         offset="0.62"
                         stopColor={colors.canvas}
-                        stopOpacity={glass ? 0.4 : 0.8}
+                        stopOpacity={glass ? 0.7 : 0.8}
                       />
                       <Stop offset="1" stopColor={colors.canvas} stopOpacity={0} />
                     </LinearGradient>
@@ -633,76 +641,131 @@ function WorkspaceShell({
             >
               <IconButton icon={Menu} label="Menu" onPress={() => setPanel("menu")} />
             </View>
-            <View style={{ alignItems: "center", gap: 1 }}>
+            <View style={{ alignItems: "center", gap: 1, maxWidth: Math.min(width, 760) - 40 }}>
+              {/* Neddy and his name are two buttons side by side in the tree, stacked by the
+                  column: a button inside a button can't be reached by a screen reader. */}
               <Pressable
                 accessibilityRole="button"
                 // Neddy at the top always takes you home, where what he's doing has its own card.
-                accessibilityLabel={
-                  mood === "idle"
-                    ? `${agentName}. Opens Home`
-                    : `${agentName}: ${status.replace(/…$/, "")}. Opens Home`
-                }
+                accessibilityLabel={`${agentName}${
+                  needYou || unread
+                    ? `: ${[
+                        needYou
+                          ? `${countWords(needYou).toLowerCase()} ${needYou === 1 ? "thing needs" : "things need"} you`
+                          : "",
+                        unread
+                          ? `${countWords(unread).toLowerCase()} new ${unread === 1 ? "update" : "updates"}`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}`
+                    : mood === "idle" || mood === "attention"
+                      ? ""
+                      : `: ${status.replace(/…$/, "")}`
+                }. Opens Home`}
                 {...tipProps("Home")}
                 onPress={() => navigate("home")}
+                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+              >
+                <View>
+                  <AgentAvatar
+                    size={avatarSize}
+                    mood={mood}
+                    activity={mood === "working" ? activity?.kind : undefined}
+                  />
+                  {/* On his helmet: how many things need you, or a dot for something new. */}
+                  {needYou > 0 ? (
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        right: Math.round(avatarSize * 0.16) - 8,
+                        minWidth: 22,
+                        height: 22,
+                        paddingHorizontal: 6,
+                        borderRadius: 11,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "#B4530F",
+                        borderWidth: 2,
+                        borderColor: colors.canvas,
+                      }}
+                    >
+                      <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "800" }}>
+                        {needYou > 9 ? "9+" : needYou}
+                      </Text>
+                    </View>
+                  ) : unread > 0 ? (
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: "absolute",
+                        top: 2,
+                        right: Math.round(avatarSize * 0.16) - 4,
+                        width: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        backgroundColor: "#B4530F",
+                        borderWidth: 2,
+                        borderColor: colors.canvas,
+                      }}
+                    />
+                  ) : null}
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`About ${agentName}. Opens About ${agentName} on Home`}
+                {...tipProps(`About ${agentName}`)}
+                onPress={() => {
+                  scrollToAnchor("about-neddy");
+                  navigate("home");
+                }}
                 style={({ pressed }) => ({
-                  alignItems: "center",
-                  // The status line sits below the buttons, so it can use the header's width;
-                  // the buttons are above it and keep their taps.
-                  maxWidth: Math.min(width, 760) - 40,
-                  opacity: pressed ? 0.65 : 1,
+                  // Just under his feet: Neddy is drawn whole, and the chip mustn't hide them.
+                  marginTop: -4,
+                  paddingHorizontal: 14,
+                  paddingVertical: 5,
+                  borderRadius: 18,
+                  backgroundColor: colors.subtle,
+                  borderWidth: 2,
+                  borderColor: colors.canvas,
+                  opacity: pressed ? 0.7 : 1,
                 })}
               >
-                <AgentAvatar
-                  size={
-                    chat ? (desktop ? 68 : 62) : desktop && !shortDesk ? 88 : width < 360 ? 64 : 76
-                  }
-                  mood={mood}
-                  activity={mood === "working" ? activity?.kind : undefined}
-                />
-                <View
-                  style={{
-                    // Just under his feet: Neddy is drawn whole, and the chip mustn't hide them.
-                    marginTop: -4,
-                    paddingHorizontal: 14,
-                    paddingVertical: 5,
-                    borderRadius: 18,
-                    backgroundColor: colors.subtle,
-                    borderWidth: 2,
-                    borderColor: colors.canvas,
-                  }}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      fontSize: 15,
-                      fontWeight: "600",
-                      color: colors.text,
-                      letterSpacing: -0.3,
-                    }}
-                  >
-                    {agentName}
-                  </Text>
-                </View>
                 <Text
                   numberOfLines={1}
                   style={{
-                    // Busy or waiting on you, it says so clearly; idle, it's quiet.
-                    fontSize: mood === "idle" ? 11 : 12,
-                    fontWeight: mood === "idle" ? "400" : "600",
-                    color:
-                      mood === "working"
-                        ? colors.blueText
-                        : mood === "attention"
-                          ? colors.text
-                          : colors.muted,
-                    marginTop: 4,
-                    marginBottom: 6,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: colors.text,
+                    letterSpacing: -0.3,
                   }}
                 >
-                  {mood === "idle" ? " " : status}
+                  {agentName}
                 </Text>
               </Pressable>
-              {section === "chat" && <ChatButton onPress={() => setPanel("chats")} />}
+              <Text
+                numberOfLines={1}
+                style={{
+                  // Busy, it says what it's doing; idle or waiting on you (the count says that),
+                  // it's quiet. Kept mounted so nothing moves when a job starts.
+                  fontSize: mood === "working" ? 12 : 11,
+                  fontWeight: mood === "working" ? "600" : "400",
+                  color: mood === "working" ? colors.blueText : colors.muted,
+                  marginTop: 2,
+                  marginBottom: 2,
+                }}
+              >
+                {mood === "working" ? status : " "}
+              </Text>
+              {section === "chat" && (
+                // A little apart from the name chip above it, so the two pills read as two things.
+                <View style={{ marginTop: 4 }}>
+                  <ChatButton onPress={() => setPanel("chats")} />
+                </View>
+              )}
             </View>
             <View
               style={{
@@ -719,27 +782,6 @@ function WorkspaceShell({
                 label={`New job for ${agentName}`}
                 onPress={() => open({ type: "delegate" })}
               />
-              <View>
-                <IconButton
-                  icon={Bell}
-                  label={pending ? `Updates, ${pending} new` : "Updates"}
-                  onPress={() => open({ type: "notifications" })}
-                />
-                {pending > 0 && (
-                  <View
-                    pointerEvents="none"
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 4,
-                      position: "absolute",
-                      top: 7,
-                      right: 9,
-                      backgroundColor: colors.blueDark,
-                    }}
-                  />
-                )}
-              </View>
             </View>
           </View>
           <View style={{ flex: 1, minHeight: 0 }}>
@@ -762,7 +804,10 @@ function WorkspaceShell({
                   paddingHorizontal: desktop ? 42 : 22,
                   paddingTop: headerHeight,
                   // Room for "Back to chat" (and voice mode) at the end, over the last controls.
-                  paddingBottom: 28 + pillsRoom + (pillsRoom ? 0 : 64),
+                  // Home gets more, so About Neddy (its last card) can come up from under the
+                  // header when his name is tapped.
+                  paddingBottom:
+                    28 + pillsRoom + (pillsRoom ? 0 : 64) + (home ? headerHeight - 64 : 0),
                 }}
                 keyboardShouldPersistTaps="handled"
               >
@@ -876,17 +921,12 @@ function WorkspaceShell({
                 const active = section === item.id || (item.id === "apps" && utility);
                 const tint = TILE_COLOURS[item.id] ?? TILE_COLOURS.apps;
                 const tile = desktop ? 52 : width < 360 ? 34 : 40;
-                const badge = item.id === "activity" ? needYou : 0;
                 return (
                   <Pressable
                     key={item.id}
                     // react-native-web reads role and aria-*, not accessibilityState.
                     role="tab"
-                    aria-label={
-                      badge
-                        ? `${item.label}, ${badge} ${badge === 1 ? "needs" : "need"} you`
-                        : item.label
-                    }
+                    aria-label={item.label}
                     aria-selected={active}
                     {...tipProps(item.tip.replace("{agent}", agentName))}
                     onPress={() => navigate(item.id)}
@@ -931,33 +971,6 @@ function WorkspaceShell({
                         />
                       </OnGloss>
                     </View>
-                    {badge > 0 && (
-                      <View
-                        pointerEvents="none"
-                        style={{
-                          position: "absolute",
-                          top: -5,
-                          left: "50%",
-                          marginLeft: tile / 2 - 12,
-                          minWidth: 18,
-                          height: 18,
-                          paddingHorizontal: 5,
-                          borderRadius: 9,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          overflow: "hidden",
-                          borderWidth: 2,
-                          borderColor: glass ? "rgba(20, 14, 30, 0.7)" : colors.surface,
-                        }}
-                      >
-                        <GlossFill id="tab-badge" from="#ff6b5e" to="#d9261c" shine={0} />
-                        <OnGloss>
-                          <Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "800" }}>
-                            {badge > 9 ? "9+" : badge}
-                          </Text>
-                        </OnGloss>
-                      </View>
-                    )}
                     <Text
                       numberOfLines={1}
                       style={{

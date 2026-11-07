@@ -47,3 +47,55 @@ Later the same day
   round, 8+8+8 blockers fixed in the drawings). Published: https://claude.ai/artifact/ (see chat).
   Owner's onboarding answers: ~3 min; name, home, time zone, work, family, connect email, what they want
   help with; connect during onboarding; history import offered as "Email me the steps".
+
+Tap Neddy (Home holds everything about him)
+-------------------------------------------
+- Owner's decisions: Tap Neddy first, then onboarding; existing testers see onboarding once.
+- Header (App.tsx): the bell and its dot are gone; the status line under Neddy's name is quiet
+  unless he's working (no more "Waiting for your OK": one amber count on his picture says how many
+  things need you); the Activity tab badge is gone; Neddy's name is its own button that scrolls
+  Home to About Neddy (`scrollToAnchor` + a window event, app-places-ui.tsx; PlaceAnchor also
+  listens while mounted, and sets scrollTop directly: a smooth scrollTo was ignored).
+- Home (home.tsx): Needs you shows the real ApprovalCard (Approve named for the action, See
+  details, Don't proceed); an approval that has expired no longer counts as needing you
+  (waitingOnYou). New cards: Coming up (enabled routines, soonest first, 3; rows open Tracking),
+  Recent (updates, unread first, 3; See all opens the Updates sheet; a row opens its job/meeting),
+  About Neddy (rows to Agent settings, About you with the suggestions count, Alerts, Account,
+  Help) wrapped in a PlaceAnchor "about-neddy". Words come from home-lists.ts (scheduleWords,
+  whenWords, comingUp, recentFew; tests in apps/mobile/test/home-lists.test.ts).
+- Help: home, find-your-way and updates topics rewritten (no bell); APP_PLACES.updates.where is
+  "Home › Recent › See all"; greet + home shots retaken (help-shots.mjs needs Pillow: run with
+  PATH=<scratch>/venv/bin:$PATH, the system Pillow is broken). Website: the heads-up line no longer
+  says "in the bell".
+- Not in this version (noted for later): Stop on the Working-on card, answering a job's question
+  in place, the learning switch, an expiry countdown.
+- Review round 2 on the built screens (visual, usability, copy) found 11 blockers; all fixed:
+  * Neddy's name chip was a button inside the avatar button (unreachable to screen readers, two
+    tips stacked): the two are siblings now, in a plain column (App.tsx).
+  * Nothing on other screens said an update had arrived (the bell's dot did): Neddy's picture
+    shows the amber count when things need you, else a small amber dot for new updates; its label
+    says "two things need you, three new updates".
+  * Tapping a Recent row never marked it read and sent check-ins/approvals/rehearsals to the
+    generic list: the Updates sheet's routing is now a shared hook (`useOpenUpdate`, agent-ui.tsx)
+    that Home uses too; row labels end with where they go (`updateOpens`).
+  * The count pills on Needs you / Recent were bare numbers to a screen reader: aria-hidden, the
+    heading says "Recent, three new".
+  * Apps › Agent › Where updates show still offered "Pop-up by the bell" / "Only the bell": now
+    "Pop-up at the top" / "Quietly on Home" (the saved id "bell" is unchanged, no migration);
+    Account › Jobs you hand off and the rehearsal's late note no longer say bell.
+  * About Neddy landed under the floating header: PlaceAnchor's jump reads the page's real
+    padding-top (the header's height) instead of a fixed 164; Home has headerHeight more bottom
+    room so the last card can come up; the glass header fade is 0.9/0.7 (was 0.6/0.4).
+  * The approval card's "Don't proceed" wrapped to its own line on a phone: See details and Don't
+    proceed are one group that wraps together under the pill, text at the card's left edge;
+    the card inside Needs you has 14px corners (radius prop on ApprovalCard/Shell).
+  * Help "home" step 1 names the real buttons (Approve & send / & run / change; Review; Answer);
+    "Coming up" is "once you have some"; Recent is always on Home (with "Nothing yet") so
+    "Home › Recent › See all" is always true; find-your-way explains the number and the dot.
+  * Smaller: curly apostrophe, "is on the rest", "Opens Agent in Apps", "Opens Goals › Tracking",
+    "See all updates. Opens Updates", one-time jobs read "Once, Mon 9 Nov at 9:00 am", row
+    padding evened, status line margins 2/2, chat button 4px further from the name chip, badge
+    on the helmet's edge, the anchor waits up to 20 s for Home's cards (was 5 s).
+- Left as is (said here on purpose): Home's "Don't proceed" is one tap with no confirm, the same
+  as the Activity card; the greet Help picture still shows the sample's "Approve locally" (the
+  sample server runs approvals locally; the step names the real wordings).

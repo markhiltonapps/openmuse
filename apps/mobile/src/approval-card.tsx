@@ -141,6 +141,7 @@ export function ApprovalCard({
   onCall = false,
   wide = false,
   eyebrow = true,
+  radius,
 }: {
   actionId: string;
   onCall?: boolean;
@@ -148,6 +149,8 @@ export function ApprovalCard({
   wide?: boolean;
   /** The "Needs your OK" label; off where a heading above already says so. */
   eyebrow?: boolean;
+  /** Smaller corners inside another card (Home's Needs you). */
+  radius?: number;
 }) {
   const { workspace: w, api, refresh, open, ask } = useWorkspace();
   const { data, refresh: refreshJobs } = useAgentWorkspace();
@@ -190,7 +193,7 @@ export function ApprovalCard({
   }, [expiresAt]);
   if (!action)
     return (
-      <Shell wide={wide}>
+      <Shell wide={wide} radius={radius}>
         {missing ? (
           <Text style={s.muted}>This approval isn’t available any more.</Text>
         ) : (
@@ -251,7 +254,7 @@ export function ApprovalCard({
   const expired = !waiting && (action.status === "expired" || action.status === "awaiting_review");
   const label = approveLabel(action, w.mode === "sample");
   return (
-    <Shell done={done} wide={wide} label={action.title}>
+    <Shell done={done} wide={wide} radius={radius} label={action.title}>
       {(eyebrow || !waiting) && (
         <View style={[s.row, { gap: 5 }]}>
           {done && <Check size={12} color={colors.greenText} />}
@@ -327,7 +330,7 @@ export function ApprovalCard({
         />
       ) : null}
       {waiting ? (
-        <View style={[s.row, { gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 4 }]}>
+        <View style={[s.row, { gap: 16, flexWrap: "wrap", alignItems: "center", marginTop: 4 }]}>
           {needsCode && !details ? (
             <Button
               primary
@@ -349,29 +352,14 @@ export function ApprovalCard({
               {label}
             </Button>
           )}
-          <Pressable
-            role="button"
-            aria-label={`${onCall && details ? "Hide details" : "See details"}: ${action.title}`}
-            aria-expanded={onCall ? details : undefined}
-            onPress={seeDetails}
-            style={({ pressed }) => ({
-              minHeight: 44,
-              justifyContent: "center",
-              paddingHorizontal: 10,
-              opacity: pressed ? 0.6 : 1,
-            })}
-          >
-            <Text style={[s.text, { color: colors.blueText, fontWeight: "600" }]}>
-              {onCall && details ? "Hide details" : "See details"}
-            </Text>
-          </Pressable>
-          {/* Saying no without opening the details, where a job waits on the answer. */}
-          {wide && !onCall ? (
+          {/* The text buttons move together: on a narrow card they go under the pill as one line,
+              with the first one's text at the card's left edge (its own padding taken back). */}
+          <View style={[s.row, { gap: 6, alignItems: "center", marginLeft: -10 }]}>
             <Pressable
               role="button"
-              aria-label={`Don’t proceed: ${action.title}`}
-              disabled={busy}
-              onPress={() => void decide("deny")}
+              aria-label={`${onCall && details ? "Hide details" : "See details"}: ${action.title}`}
+              aria-expanded={onCall ? details : undefined}
+              onPress={seeDetails}
               style={({ pressed }) => ({
                 minHeight: 44,
                 justifyContent: "center",
@@ -379,11 +367,30 @@ export function ApprovalCard({
                 opacity: pressed ? 0.6 : 1,
               })}
             >
-              <Text style={[s.text, { color: colors.mutedStrong, fontWeight: "600" }]}>
-                Don’t proceed
+              <Text style={[s.text, { color: colors.blueText, fontWeight: "600" }]}>
+                {onCall && details ? "Hide details" : "See details"}
               </Text>
             </Pressable>
-          ) : null}
+            {/* Saying no without opening the details, where a job waits on the answer. */}
+            {wide && !onCall ? (
+              <Pressable
+                role="button"
+                aria-label={`Don’t proceed: ${action.title}`}
+                disabled={busy}
+                onPress={() => void decide("deny")}
+                style={({ pressed }) => ({
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 10,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Text style={[s.text, { color: colors.mutedStrong, fontWeight: "600" }]}>
+                  Don’t proceed
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       ) : expired && !onCall && Date.now() - expiresAt < 86_400_000 ? (
         <Button
@@ -410,11 +417,13 @@ export function Shell({
   children,
   done = false,
   wide = false,
+  radius = 22,
   label,
 }: {
   children: ReactNode;
   done?: boolean;
   wide?: boolean;
+  radius?: number;
   /** Its name for a screen reader, among several cards. */
   label?: string;
 }) {
@@ -425,7 +434,7 @@ export function Shell({
       style={{
         gap: 10,
         padding: 16,
-        borderRadius: 22,
+        borderRadius: radius,
         borderWidth: 1,
         borderColor: done ? colors.green : colors.line,
         backgroundColor: done ? colors.green : colors.card,

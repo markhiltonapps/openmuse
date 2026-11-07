@@ -1,6 +1,10 @@
 import {
+  Bell,
+  Bot,
+  CalendarClock,
   CalendarDays,
   Check,
+  ChevronRight,
   CloudSun,
   Copy,
   Globe,
@@ -17,11 +21,14 @@ import type { ActionProposal } from "../../../packages/domain/src";
 import type { Weather } from "../../../packages/domain/src/weather";
 import { taskActivity } from "./activity";
 import { contactCard, contactFileName } from "./agent-contact";
+import { updateOpens, useOpenUpdate } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { PlaceAnchor, usePlace } from "./app-places-ui";
+import { ApprovalCard } from "./approval-card";
 import { type AppDay, todaysEvents } from "./calendar-apps";
-import { appLabel } from "./details";
 import { Emoji } from "./emoji";
 import { GlossFill, OnGloss } from "./gloss";
+import { comingUp, countWords as count, recentFew, scheduleWords, whenWords } from "./home-lists";
 import { useCallControls } from "./live-call";
 import { useLiveVoice } from "./live-talk-ui";
 import { HomeRecordButton, useRecording } from "./meetings-ui";
@@ -48,29 +55,12 @@ function rememberedName() {
     return "";
   }
 }
-const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
-const count = (n: number) => WORDS[n] ?? String(n);
 /** A title's date ("Social media digest · Sep 29") stays on one line with the dot before it. */
 const keepDate = (title: string) =>
   title.replace(/ · (.+)$/, (_, date: string) => ` · ${date.replace(/ /g, " ")}`);
 /** What a waiting job needs, in the words Activity uses. */
 const waitingWords = (status: string) =>
   status === "waiting_input" ? "Needs your answer" : "Waiting for your OK";
-
-/** What an approval is, in a few words under its title. */
-function approvalLine(action: ActionProposal) {
-  const d = action.data;
-  if (action.kind === "email.send" || action.kind === "agent_email.send")
-    return "Email, ready to send";
-  if (action.kind === "app.action") {
-    const app = d.app ? appLabel(String(d.app)) : "";
-    if (typeof d.amountUsd === "number")
-      return app ? `$${d.amountUsd.toFixed(2)} · ${app}` : `$${d.amountUsd.toFixed(2)}`;
-    return app ? `In ${app}` : "In a connected app";
-  }
-  if (action.kind.startsWith("calendar.")) return "In your calendar";
-  return "On a website";
-}
 
 /**
  * What needs the person: approvals, and jobs with a question. A job waiting for an approval it
@@ -80,7 +70,10 @@ export function waitingOnYou(
   actions: ActionProposal[],
   tasks: { id: string; status: string; title: string }[] | undefined,
 ) {
-  const approvals = actions.filter((a) => a.status === "awaiting_review");
+  // One that waited too long isn't waiting on anyone; Activity still shows it as expired.
+  const approvals = actions.filter(
+    (a) => a.status === "awaiting_review" && !(Date.parse(a.expiresAt) < Date.now()),
+  );
   const ofJobs = new Set(approvals.map((a) => a.taskId).filter(Boolean));
   const jobs = (tasks ?? []).filter(
     (t) => t.status === "waiting_input" || (t.status === "waiting_approval" && !ofJobs.has(t.id)),
@@ -101,6 +94,13 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
   useEffect(() => {
     api.request<AppDay>("/api/calendar/today").then(setAppDay, () => setAppDay(null));
   }, [api]);
+  // Where the rows at the bottom go: the same places the Apps tabs open.
+  const tracking = usePlace({ place: "tracking" });
+  const agentSettings = usePlace({ place: "agent-settings" });
+  const aboutYou = usePlace({ place: "memory" });
+  const alerts = usePlace({ place: "alerts" });
+  const account = usePlace({ place: "account" });
+  const help = usePlace({ place: "help" });
   // Their name, remembered so the greeting doesn't change under them as the app opens.
   const [name, setName] = useState(rememberedName);
   useEffect(() => {
@@ -132,12 +132,18 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
   const { approvals, jobs, count: needs } = waitingOnYou(w.actions, data?.tasks);
   const busy = (data?.tasks ?? []).filter((t) => t.status === "running" || t.status === "queued");
   const current = busy[0];
+  const upcoming = comingUp(data?.routines ?? []);
+  const recent = recentFew(data?.notifications ?? []);
+  const unread = (data?.notifications ?? []).filter((item) => !item.read).length;
+  const suggestions = data?.memorySuggestions.length ?? 0;
+  // An update is marked read and opens what it's about, exactly as the Updates list does.
+  const openUpdate = useOpenUpdate();
   const sub = !known
     ? " "
     : needs
       ? `${count(needs)} ${needs === 1 ? "thing needs" : "things need"} ${
           jobs.length ? "you" : "your OK"
-        }.${busy.length ? ` ${agent} has the rest.` : ""}`
+        }.${busy.length ? ` ${agent} is on the rest.` : ""}`
       : !data
         ? " "
         : busy.length
@@ -220,15 +226,21 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
       {known && (
         <View style={{ gap: desktop ? 16 : 12 }}>
           {(approvals.length > 0 || jobs.length > 0) && (
-            <HomeCard title="Needs you" icon={Check} tint={["#3fd0a3", "#0b8a6c"]} badge={needs}>
-              {approvals.slice(0, 3).map((action, index) => (
-                <Waiting
+            <HomeCard
+              title="Needs you"
+              icon={Check}
+              tint={["#3fd0a3", "#0b8a6c"]}
+              badge={needs}
+              badgeWords={`${count(needs).toLowerCase()} ${needs === 1 ? "thing" : "things"}`}
+            >
+              {/* The real card: Approve (named for what it does) and See details, right here. */}
+              {approvals.slice(0, 3).map((action) => (
+                <ApprovalCard
                   key={action.id}
-                  first={index === 0}
-                  title={action.title}
-                  line={approvalLine(action)}
-                  button="Review"
-                  onPress={() => open({ type: "review", action })}
+                  actionId={action.id}
+                  wide
+                  eyebrow={false}
+                  radius={14}
                 />
               ))}
               {jobs.slice(0, Math.max(0, 3 - approvals.length)).map((task, index) => (
@@ -342,9 +354,146 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
             !weather && lastShown() && <WeatherRoom />
           )}
           <AddressCard agent={agent} />
+          {upcoming.length > 0 && (
+            <HomeCard title="Coming up" icon={CalendarClock} tint={["#7fd4ff", "#2f7be0"]}>
+              {upcoming.map((routine, index) => (
+                <Row
+                  key={routine.id}
+                  first={index === 0}
+                  title={routine.title}
+                  line={scheduleWords(routine)}
+                  label={`${routine.title}, ${scheduleWords(routine)}. Opens Goals › Tracking`}
+                  onPress={() => tracking.go()}
+                />
+              ))}
+            </HomeCard>
+          )}
+          {/* Always here, so "Home › Recent › See all" is true even before the first update. */}
+          <HomeCard
+            title="Recent"
+            icon={Bell}
+            tint={["#ffbe6e", "#e8591a"]}
+            badge={unread || undefined}
+            badgeWords={`${count(unread).toLowerCase()} new`}
+            more="See all"
+            moreLabel="See all updates. Opens Updates"
+            onMore={() => open({ type: "notifications" })}
+          >
+            {recent.length === 0 && (
+              <Text style={{ color: soft(), fontSize: 13, lineHeight: 18 }}>
+                Nothing yet. What {agent} does and notices shows up here.
+              </Text>
+            )}
+            {recent.map((item, index) => (
+              <Row
+                key={item.id}
+                first={index === 0}
+                title={item.title}
+                line={whenWords(item.createdAt)}
+                strong={!item.read}
+                label={`${item.title}, ${whenWords(item.createdAt)}${item.read ? "" : ", new"}. ${updateOpens(item)}`}
+                onPress={() =>
+                  void openUpdate(item, () => open({ type: "notifications" })).catch(() =>
+                    // Couldn't be marked read (offline?): still show it.
+                    open({ type: "notifications" }),
+                  )
+                }
+              />
+            ))}
+          </HomeCard>
+          <PlaceAnchor id="about-neddy" label={`About ${agent}`} radius={24}>
+            <HomeCard title={`About ${agent}`} icon={Bot} tint={["#b49cff", "#6a3fd6"]}>
+              <Row
+                first
+                title="Name, look and voice"
+                line={agent}
+                label={`Name, look and voice: ${agent}. Opens Agent in Apps`}
+                onPress={() => agentSettings.go()}
+              />
+              <Row
+                title="About you"
+                line={
+                  suggestions
+                    ? `${count(suggestions)} ${suggestions === 1 ? "suggestion" : "suggestions"} waiting for you`
+                    : `What ${agent} knows about you`
+                }
+                strong={suggestions > 0}
+                label={`About you${suggestions ? `, ${suggestions} ${suggestions === 1 ? "suggestion" : "suggestions"} waiting` : ""}. Opens About you`}
+                onPress={() => aboutYou.go()}
+              />
+              <Row
+                title={`When ${agent} speaks up`}
+                line="Heads-ups, notifications and email alerts"
+                label={`When ${agent} speaks up. Opens Alerts`}
+                onPress={() => alerts.go()}
+              />
+              <Row
+                title="Your plan"
+                line="Minutes, messages and what’s included"
+                label="Your plan. Opens Account"
+                onPress={() => account.go()}
+              />
+              <Row
+                title="Help & how-to"
+                line={`Pictures of every screen, and what to say to ${agent}`}
+                label="Help and how-to. Opens Help"
+                onPress={() => help.go()}
+              />
+            </HomeCard>
+          </PlaceAnchor>
         </View>
       )}
     </View>
+  );
+}
+
+/** A tappable row in a Home card: a title, a line under it, a chevron. The whole row is the target. */
+function Row({
+  first = false,
+  title,
+  line,
+  strong = false,
+  label,
+  onPress,
+}: {
+  first?: boolean;
+  title: string;
+  line: string;
+  /** Unread: the title in the stronger ink. */
+  strong?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        minHeight: 44,
+        paddingTop: first ? 0 : 8,
+        paddingBottom: 6,
+        borderTopWidth: first ? 0 : 1,
+        borderTopColor: glass ? "rgba(255,255,255,0.12)" : colors.line,
+        opacity: pressed ? 0.6 : 1,
+      })}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          style={{ color: ink(), fontSize: 15, fontWeight: strong ? "700" : "600" }}
+          numberOfLines={2}
+        >
+          {keepDate(title)}
+        </Text>
+        <Text style={{ color: soft(), fontSize: 13, marginTop: 2 }} numberOfLines={2}>
+          {line}
+        </Text>
+      </View>
+      <ChevronRight size={18} color={soft()} />
+    </Pressable>
   );
 }
 
@@ -520,18 +669,28 @@ function HomeCard({
   icon: Icon,
   tint,
   badge,
+  badgeWords,
   onPress,
   label,
   style,
+  more,
+  moreLabel,
+  onMore,
   children,
 }: {
   title: string;
   icon: LucideIcon;
   tint: [string, string];
   badge?: number;
+  /** The count in words for the heading's screen-reader name: "two things", "three new". */
+  badgeWords?: string;
   onPress?: () => void;
   label?: string;
   style?: object;
+  /** A link in the heading row ("See all"), and what it opens. */
+  more?: string;
+  moreLabel?: string;
+  onMore?: () => void;
   children: ReactNode;
 }) {
   const body = (
@@ -562,12 +721,15 @@ function HomeCard({
         <Text
           role="heading"
           aria-level={2}
+          // The count pill is a bare number to a screen reader, so the heading says it in words.
+          aria-label={badge ? `${title}, ${badgeWords ?? String(badge)}` : undefined}
           style={{ flex: 1, color: ink(), fontSize: 15, fontWeight: "700" }}
         >
           {title}
         </Text>
         {!!badge && (
           <View
+            aria-hidden
             style={{
               minWidth: 24,
               height: 24,
@@ -580,6 +742,29 @@ function HomeCard({
           >
             <Text style={{ color: ink(), fontSize: 13, fontWeight: "800" }}>{badge}</Text>
           </View>
+        )}
+        {!!more && !!onMore && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={moreLabel ?? `${more}: ${title}`}
+            onPress={onMore}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              justifyContent: "center",
+              paddingHorizontal: 6,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Text
+              style={{
+                color: glass ? "#FFFFFF" : colors.blueText,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              {more}
+            </Text>
+          </Pressable>
         )}
       </View>
       {children}

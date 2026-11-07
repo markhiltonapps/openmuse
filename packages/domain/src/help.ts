@@ -155,7 +155,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "greet",
     place: "home",
     steps: [
-      "**Needs you:** anything waiting for your OK, and jobs with a question for you. Tap **Review** to see the whole thing before you approve it, or **Answer** to reply.",
+      "**Needs you:** anything waiting for your OK, with an **Approve** button right on the card that says what it does (**Approve & send** for an email, **Approve & run** for an app, **Approve change** for the rest; the sample says **Approve locally**) and **See details** to look first. A job waiting for your OK has **Review**; one with a question for you has **Answer**.",
       "**Today:** what’s left on your calendar. Tap it for your day in Feed.",
       "**Working on:** the job {agent} is doing now. Tap it to see how it’s going, or, when {agent} is free, to give it a job.",
       "**Talk to {agent}:** tap it and just talk. The keyboard button next to it opens the chat so you can type instead.",
@@ -163,6 +163,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "Under them, the **Weather** card shows the temperature now and the next seven days, each with its high and low. Tap it for the full forecast in Feed. It’s shown when you’ve saved a US home city (see **Weather and where you live**).",
       "If {agent} has an email address set up, a small **Email {agent}** card follows, with Copy and Save contact.",
+      "Further down: **Coming up** (your routines and one-time jobs and when they run, once you have some), **Recent** (what {agent} did and noticed, newest first; **See all** has the last week’s), and **About {agent}**: its name, look and voice, what it knows about you, when it speaks up, your plan and this Help. Tap {agent}’s name at the top of any screen to jump straight to About {agent}.",
       "To come back here from anywhere, tap {agent} at the top of the screen, choose **Home** in the ☰ Menu, or say “Take me home”.",
     ],
     say: [{ text: "Take me home.", send: true }],
@@ -183,14 +184,13 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "find-your-way",
     group: "start",
     title: "Find your way around",
-    summary:
-      "The bottom bar has the main screens; the top has the Menu, {agent}, New job and Updates.",
+    summary: "The bottom bar has the main screens; the top has the Menu, {agent} and New job.",
     shot: "home",
     steps: [
       "**☰ Menu (top left):** Home, Chats, New job, Calendar, Spaces, Files, {agent}’s browser, Apps & settings and Help & how-to, each with a line saying what it’s for.",
-      "**{agent}’s picture:** what it’s working on now. Tap it to go back to Home. On the chat screen, the button under it says which chat you’re in and opens your chats.",
-      "**The clipboard button (top right):** hand {agent} a new job. The **bell** next to it has your updates.",
-      "**The bottom bar:** Chat, Feed, Spaces, Activity, Ideas, Goals, Files and Apps. A red number on Activity is how many things need you.",
+      "**{agent}’s picture:** what it’s working on now. A number on it is how many things need you (approvals and questions for you); a dot means something new under Recent on Home. Tap it to go back to Home; tap its name to jump to About {agent}. On the chat screen, the button under it says which chat you’re in and opens your chats.",
+      "**The clipboard button (top right):** hand {agent} a new job.",
+      "**The bottom bar:** Chat, Feed, Spaces, Activity, Ideas, Goals, Files and Apps.",
     ],
     body: [
       "You don’t have to find anything: ask {agent} “Take me to my food log” or “Where are my reminders?” and it shows a button that takes you there.",
@@ -636,13 +636,13 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: "updates",
     group: "day",
-    title: "Updates and the bell",
+    title: "Updates: what {agent} did",
     summary:
-      "The bell keeps the last week’s updates; small cards pop up under it as things happen.",
+      "Home’s Recent card has the newest updates; See all keeps the last week’s. Small cards pop up as things happen.",
     place: "updates",
     steps: [
-      "Tap the **bell** at the top right. A dot means something new.",
-      "Results, changes {agent} noticed and anything needing you are listed there, from the last 7 days. Something older that still needs you stays until it’s done.",
+      "Open **Home** (tap {agent} at the top) and look under **Recent**: the newest updates, unread first. Tap one to open what it’s about.",
+      "Tap **See all** for results, changes {agent} noticed and anything needing you, from the last 7 days. Something older that still needs you stays until it’s done.",
       "**Mark all read** clears the count. Or say “Mark all my updates read.”",
       "Choose where updates show under **Apps › Agent › Where updates show**.",
     ],
@@ -1326,7 +1326,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "Heads-ups are on to start with. {agent} reads the calendars you’ve connected under **Apps**, and won’t send or change anything for you without your OK. The first time, a short card explains all this. If {agent} can’t see a calendar yet, that card says so and has a **Connect calendar** button; if it can’t read one, the button says **Reconnect calendar**.",
       "{agent} stays quiet from 10 pm to 7 am; say “quiet hours 9 pm to 8 am” to change it. It doesn’t check traffic: it uses your usual travel time, 30 minutes to start. **Later** reminds you once, in about 10 minutes for something about to happen or 4 hours for a clash or a long stretch with no break, and only if there’s still time.",
-      "A meeting about to start shows as a card and in the bell, without buzzing your phone. During a live call heads-ups don’t speak up; see **Urgent alerts on calls**, which is separate.",
+      "A meeting about to start shows as a card and under **Recent** on Home, without buzzing your phone. During a live call heads-ups don’t speak up; see **Urgent alerts on calls**, which is separate.",
       "Turned one off by mistake? Say “Turn that heads-up back on”, or switch it on again in **Apps › Alerts › Heads-ups**.",
     ],
     say: [
@@ -1443,7 +1443,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Open **Apps › Alerts › Email alerts** and turn them on (Gmail or Outlook must be connected).",
       "Add a rule, or just say: “When Dana emails me, sum it up and draft a reply.”",
-      "Choose what reaches the bell: **Only email that matches a rule** (the default), or **Every new email**.",
+      "Choose what reaches your updates (**Recent** on Home): **Only email that matches a rule** (the default), or **Every new email**.",
     ],
     say: ["When my boss emails, sum it up for me.", "Tell me when Dana emails me."],
     keywords: ["email alerts", "rules", "new mail", "inbox", "automation"],
@@ -1677,7 +1677,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "After a rehearsal you get your pace, filler and softening words, your longest turn, and three things to try next time.",
     shot: "rehearsescore",
     steps: [
-      "Choose **End** on the rehearsal call. The scorecard opens. If the call ended by itself (at 15 minutes, or after a long quiet), choose **See how it went** on the call screen or the bar. Or say “How did I do?”. You also get a bell entry that opens it.",
+      "Choose **End** on the rehearsal call. The scorecard opens. If the call ended by itself (at 15 minutes, or after a long quiet), choose **See how it went** on the call screen or the bar. Or say “How did I do?”. It’s also under **Recent** on Home.",
       "**The numbers** (1) come first: how fast you spoke, how long, your longest turn, and the filler words (“um”, “you know”) and softening words (“just”, “sorry”) you used.",
       "A moment later the tips appear (2): where it landed, what went well, and up to three things to try next time.",
       "Tap **Try again** (3) to go straight back in with the same part.",

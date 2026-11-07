@@ -570,3 +570,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   heartbeat) out of the tag's key, or every answer is "new". The web app and the api are on different
   addresses: a new request header needs `allowHeaders` and a new response header `exposeHeaders` in the
   CORS setup, or the browser silently drops it.
+- **A button inside a button (2026-11-07):** a `Pressable` nested in another `Pressable` (Neddy's name
+  chip inside his picture's button) is presentational to screen readers (ARIA treats a button's
+  children as text), Enter can fire both, and two tooltips stack. Stack buttons in a plain `View`
+  instead. And when a screen loses a signal (the bell's unread dot), check what every other screen
+  showed through it before calling the change done: the dot was the only "new update" sign off Home.

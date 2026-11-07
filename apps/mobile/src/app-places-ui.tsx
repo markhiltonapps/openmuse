@@ -164,6 +164,15 @@ function useReturnTo() {
 
 // The part of a screen to scroll to once it's drawn: "saved", "tracking", "reviews" or "memory".
 let anchor: { id: string; at: number } | undefined;
+/**
+ * Scroll to this part of the next screen once it's drawn (a PlaceAnchor with this id), or of this
+ * screen if it's already there.
+ */
+export function scrollToAnchor(id: string) {
+  anchor = { id, at: Date.now() };
+  if (Platform.OS === "web" && typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent("openmuse:anchor", { detail: id }));
+}
 
 /**
  * Moves keyboard (and screen reader) focus to what `find` returns once it's on screen, trying for
@@ -208,24 +217,51 @@ export function PlaceAnchor({
 }) {
   const ref = useRef<View>(null);
   useEffect(() => {
-    if (anchor?.id !== id || Date.now() - anchor.at > 5000) return;
-    anchor = undefined;
     if (Platform.OS !== "web") return;
     // After the page has laid out; below the header that floats over the page's top.
-    const timer = setTimeout(() => {
+    const jump = () => {
       const node = ref.current as unknown as HTMLElement | null;
+      // The nearest ancestor that really scrolls (one that can scroll but has nothing to is skipped).
       let page = node?.parentElement;
-      while (page && !/(auto|scroll)/.test(getComputedStyle(page).overflowY))
+      while (
+        page &&
+        !(
+          /(auto|scroll)/.test(getComputedStyle(page).overflowY) &&
+          page.scrollHeight > page.clientHeight
+        )
+      )
         page = page.parentElement;
       if (!node || !page) return;
       const top =
         node.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop;
-      page.scrollTo({ top: Math.max(top - 164, 0), behavior: "smooth" });
+      // Under the header that floats over the page: the page's content is padded by its height.
+      const content = page.firstElementChild;
+      const header = content ? Number.parseFloat(getComputedStyle(content).paddingTop) : NaN;
+      const room = (Number.isFinite(header) ? header : 152) + 12;
+      // Set directly: a smooth scrollTo is ignored by some browsers while the page is still laying out.
+      page.scrollTop = Math.max(top - room, 0);
       // And focus it, so the keyboard and screen readers arrive there too.
       node.setAttribute("tabindex", "-1");
       node.focus({ preventScroll: true });
-    }, 250);
-    return () => clearTimeout(timer);
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Home draws its cards only once the jobs are in, which can take a while on a slow link.
+    if (anchor?.id === id && Date.now() - anchor.at <= 20_000) {
+      anchor = undefined;
+      timer = setTimeout(jump, 250);
+    }
+    // Asked for while this screen is already showing (Neddy's name, tapped on Home).
+    const asked = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== id) return;
+      anchor = undefined;
+      clearTimeout(timer);
+      timer = setTimeout(jump, 50);
+    };
+    window.addEventListener("openmuse:anchor", asked);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("openmuse:anchor", asked);
+    };
   }, [id]);
   return (
     <View ref={ref} role="region" aria-label={label} style={{ borderRadius: radius }}>

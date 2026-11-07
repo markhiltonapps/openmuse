@@ -36,6 +36,7 @@ import type { ActionProposal, Artifact, BrowserSession } from "../../../packages
 import type {
   AgentArtifact,
   AgentMemory,
+  AgentNotification,
   AgentTask,
   Evidence,
   Goal,
@@ -1630,7 +1631,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
         </Card>
       ))
     : null;
-  // Opening a job answers its updates, so its pop-up and the bell don't ask about it again.
+  // Opening a job answers its updates, so its pop-up and Home's Recent don't ask about it again.
   const unread = !!data?.notifications.some((n) => n.taskId === taskId && !n.read);
   useEffect(() => {
     if (unread) void mutate("/notifications/read", { taskId }).catch(() => undefined);
@@ -3699,52 +3700,85 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
 const UPDATE_PLACES: { id: UpdatesDisplay; label: string; detail: string }[] = [
   {
     id: "popup",
-    label: "Pop-up by the bell",
+    label: "Pop-up at the top",
     detail:
-      "A small card pops up under the bell. Reminders and anything that needs you stay until you act; the rest slide away.",
+      "A small card pops up at the top of the screen. Reminders and anything that needs you stay until you act; the rest slide away.",
   },
-  { id: "bell", label: "Only the bell", detail: "Updates wait quietly in the bell." },
+  // "bell" is the saved value from when the app had a bell; the updates now wait on Home.
+  {
+    id: "bell",
+    label: "Quietly on Home",
+    detail: "Updates wait under Recent on Home; nothing pops up.",
+  },
   { id: "chat", label: "In the chat", detail: "Updates appear as a card at the end of the chat." },
 ];
+/** What an update opens when tapped, for its label: "Opens this job". */
+export function updateOpens(
+  item: Pick<AgentNotification, "taskId" | "meetingId" | "rehearsalId" | "checkInId" | "actionId">,
+) {
+  return item.taskId
+    ? "Opens this job"
+    : item.meetingId
+      ? "Opens the notes"
+      : item.rehearsalId
+        ? "Opens the scorecard"
+        : item.checkInId
+          ? "Opens the chat"
+          : item.actionId
+            ? "Opens the approval"
+            : "Opens Updates";
+}
+/**
+ * Marks an update read and opens what it's about: the Updates list and Home's Recent card share
+ * it, so a tap anywhere clears the count and lands in the same place.
+ */
+export function useOpenUpdate() {
+  const { mutate } = useAgentWorkspace();
+  const { close, open, navigate, workspace, api, refresh } = useWorkspace();
+  return async function openUpdate(
+    item: Pick<
+      AgentNotification,
+      "id" | "taskId" | "meetingId" | "rehearsalId" | "checkInId" | "actionId"
+    >,
+    /** Where a plain update (about nothing in particular) goes; the Updates list stays put. */
+    otherwise?: () => void,
+  ) {
+    await mutate(`/notifications/${item.id}/read`, {});
+    const { taskId, meetingId, rehearsalId, checkInId, actionId } = item;
+    if (taskId) open({ type: "task", taskId });
+    else if (meetingId) open({ type: "meeting", id: meetingId });
+    else if (rehearsalId)
+      open({ type: "rehearsalScore", id: rehearsalId, ask: { who: "", about: "", goal: "" } });
+    else if (checkInId) {
+      close();
+      navigate("chat");
+    } else if (actionId) {
+      // Its review, or Activity when it's already been decided or has expired. Something saved
+      // during a call while the app was open may not be in what's loaded yet: look again.
+      const waiting = (list: ActionProposal[]) =>
+        list.find((item) => item.id === actionId && item.status === "awaiting_review");
+      let action = waiting(workspace.actions);
+      if (!action) {
+        action = waiting(
+          (await api.request<{ actions: ActionProposal[] }>("/api/workspace")).actions,
+        );
+        void refresh().catch(() => undefined);
+      }
+      if (action) open({ type: "review", action });
+      else {
+        close();
+        navigate("activity");
+      }
+    } else otherwise?.();
+  };
+}
 export function NotificationsSheet() {
   const { data, mutate } = useAgentWorkspace();
-  const { close, open, navigate, workspace, api, refresh } = useWorkspace();
   const [error, setError] = useState("");
-  async function read(
-    id: string,
-    taskId?: string,
-    checkInId?: string,
-    actionId?: string,
-    meetingId?: string,
-    rehearsalId?: string,
-  ) {
+  const openUpdate = useOpenUpdate();
+  async function read(item: AgentNotification) {
     try {
-      await mutate(`/notifications/${id}/read`, {});
-      if (taskId) open({ type: "task", taskId });
-      else if (meetingId) open({ type: "meeting", id: meetingId });
-      else if (rehearsalId)
-        open({ type: "rehearsalScore", id: rehearsalId, ask: { who: "", about: "", goal: "" } });
-      else if (checkInId) {
-        close();
-        navigate("chat");
-      } else if (actionId) {
-        // Its review, or Activity when it's already been decided or has expired. Something saved
-        // during a call while the app was open may not be in what's loaded yet: look again.
-        const waiting = (list: ActionProposal[]) =>
-          list.find((item) => item.id === actionId && item.status === "awaiting_review");
-        let action = waiting(workspace.actions);
-        if (!action) {
-          action = waiting(
-            (await api.request<{ actions: ActionProposal[] }>("/api/workspace")).actions,
-          );
-          void refresh().catch(() => undefined);
-        }
-        if (action) open({ type: "review", action });
-        else {
-          close();
-          navigate("activity");
-        }
-      }
+      await openUpdate(item);
     } catch (e) {
       setError(errorText(e));
     }
@@ -3808,19 +3842,7 @@ export function NotificationsSheet() {
               {reminder ? lateNote(item.title) || "Reminder" : plainPreview(item.body)}
             </Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
-            <Button
-              small
-              onPress={() =>
-                void read(
-                  item.id,
-                  item.taskId,
-                  item.checkInId,
-                  item.actionId,
-                  item.meetingId,
-                  item.rehearsalId,
-                )
-              }
-            >
+            <Button small onPress={() => void read(item)}>
               {item.taskId
                 ? "Open job"
                 : item.rehearsalId
@@ -4114,8 +4136,8 @@ export function AppsScreen() {
               ))}
             </View>
             <Text style={s.small}>
-              {UPDATE_PLACES.find((place) => place.id === display)?.detail} The bell always keeps
-              every update, including anything that needs you.
+              {UPDATE_PLACES.find((place) => place.id === display)?.detail} Home’s Recent card
+              always keeps every update, including anything that needs you.
             </Text>
             {/* Lit only when something here isn't saved yet, so an avatar tap never looks unsaved. */}
             <Button
@@ -4457,7 +4479,7 @@ function JobAlertsCard() {
             ? "a pop-up in the app"
             : shows === "chat"
               ? "it in the chat"
-              : "it in the bell"
+              : "it under Recent on Home"
         }. Devices with notifications on get a notification too.`}
       </Text>
       <CheckRow label="Email me about jobs I hand off" checked={on} onPress={() => void toggle()} />

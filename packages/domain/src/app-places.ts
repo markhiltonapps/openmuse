@@ -36,7 +36,7 @@ export const APP_PLACES = {
   mail: { name: "Mail", where: "Apps", about: "their email, when Google is connected" },
   updates: {
     name: "Updates",
-    where: "Bell, top right",
+    where: "Home › Recent › See all",
     about: "background updates and notifications",
   },
   spaces: { name: "Spaces", where: "Bottom bar", about: "the list of their spaces" },

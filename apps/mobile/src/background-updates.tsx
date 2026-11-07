@@ -20,7 +20,7 @@ export function BackgroundUpdates() {
     item.taskId ?? item.reminderId;
   const others = new Set(updates.map(subject).filter((id) => id !== (update && subject(update))))
     .size;
-  // Only when the person chose updates in chat; otherwise they pop up by the bell.
+  // Only when the person chose updates in chat; otherwise they pop up at the top or wait on Home.
   if (!update || updatesDisplay(data?.identity) !== "chat") return null;
   async function act(work: () => Promise<unknown>) {
     setBusy(true);

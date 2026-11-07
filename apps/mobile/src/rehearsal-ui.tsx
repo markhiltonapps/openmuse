@@ -269,8 +269,8 @@ export function RehearsalScoreSheet({ id, ask }: { id: string; ask: RehearsalAsk
         )}
         {view?.state !== "short" && writing && late && (
           <Text style={s.muted}>
-            The tips are taking longer than usual. You’ll get a notification (and a bell entry) when
-            they’re ready.
+            The tips are taking longer than usual. You’ll get a notification (and an update under
+            Recent on Home) when they’re ready.
           </Text>
         )}
         {view?.state === "done" && !coaching && (
