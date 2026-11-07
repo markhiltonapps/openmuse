@@ -236,3 +236,35 @@ Old address → new address
   refused in the sandbox); Railway keeps the old web deployment up if the new one fails to start.
 - Testers signed in on the old address sign in once more on the new one (the session token is kept
   per address in the browser); an installed app on the old address should be added again from the new one.
+
+Setup questions in Neddy's own voice
+------------------------------------
+Owner: "Make sure when Neddy speaks during the onboarding that it's the same speech we have been
+using." The setup sheet had used the device's own speech (speechSynthesis), so the first voice people
+heard wasn't the one that talks on calls.
+- Voice service (apps/voice): `Voices.say(http, voice, text)` makes any short line (≤ 300 characters)
+  with Inworld in that voice, as calls sound (MP3; the fake voice hums), kept per (voice, line) with
+  the 200 newest. Route `GET /v1/voices/{voice}/say?text=` (signed; 400 empty/too long, 404 unknown
+  voice, 502 when Inworld fails). Test in tests/sounds_test.py (run from apps/voice with the
+  scratchpad venv: `VOICE_TTS=fake <scratch>/venv/bin/python -m tests.sounds_test`, 4 ok).
+- Api: `CallVoices.say(owner, text)` asks the voice service in the voice this person's calls use
+  (`chosen`: their pick, else the usual one), kept the same way; `GET /api/call-voices/say?text=`
+  answers audio, or 503 when calls here aren't on our own voice (or the service is down), so the
+  app falls back. tests/call-voices.test.ts: 10 pass.
+- App: apps/mobile/src/neddy-voice.ts (`sayAsNeddy`, `stopSaying`, `unlockAudio`): fetches the
+  line with the session token, plays it as a blob (kept per line, so going back doesn't fetch it
+  again), drives the avatar's mouth through `setLiveSpeaking`, and resolves true once said, false
+  when it can't be (then onboarding-ui.tsx says it with the device's speech, as before). "Let's go"
+  / "Start again" play a silent moment inside the tap (iPhones only play sound after a tap), next to
+  `primeSpeech()`. "Read, don't speak" and leaving a step stop both voices.
+- Checked locally in Playwright (scratchpad say-check.mjs): with the route answering audio, each
+  question is fetched once (200) and played, and the device voice is never used; with 503 the device
+  voice says the same words; after "Read, don't speak" the next question isn't said at all.
+- Help "setup" topic: "{agent} says each question in the same voice as on a call". The picture is
+  the same screen (no retake). Site: "in his own voice" added to the first-run line (words only, no
+  layout change, screenshots not retaken).
+- Not tested live: Inworld isn't reachable from the sandbox, so the real MP3 path runs first on
+  Railway; a failure there shows in the api's log as a 503 on /api/call-voices/say and the voice
+  service's "A line in …'s voice couldn't be made".
+- Checks: Biome clean (one pre-existing unused import warning in app.ts), pnpm typecheck, worker
+  tsc, `env -u OPENROUTER_API_KEY pnpm test` 718 pass.

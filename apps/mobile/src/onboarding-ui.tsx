@@ -13,6 +13,7 @@ import { usePlace } from "./app-places-ui";
 import { AgentAvatar } from "./avatar";
 import { type AppDay, CALENDAR_NAMES, todaysEvents } from "./calendar-apps";
 import { useCallControls } from "./live-call";
+import { sayAsNeddy, stopSaying, unlockAudio } from "./neddy-voice";
 import {
   FOCUS_OPTIONS,
   focusFromSpeech,
@@ -188,6 +189,7 @@ export function OnboardingSheet() {
     stopListening.current?.();
     stopListening.current = undefined;
     setListening(false);
+    stopSaying();
     stopSpeaking();
   }, []);
   useEffect(() => quietDown, [quietDown]);
@@ -215,7 +217,10 @@ export function OnboardingSheet() {
     const then = () => {
       if (live && spoken && !quiet && canListen) listen();
     };
-    if (!quiet && speechAvailable()) void speak(words).then(then);
+    // Said in the voice their calls use (the server makes the line); the device's own speech
+    // only when that's not on here, so the first voice they hear is the one that will talk to them.
+    const sayAnyway = () => (speechAvailable() ? speak(words).then(then) : then());
+    if (!quiet) void sayAsNeddy(api, words).then((said) => (said ? then() : sayAnyway()));
     else then();
     return () => {
       live = false;
@@ -460,6 +465,7 @@ export function OnboardingSheet() {
           primary
           onPress={() => {
             primeSpeech();
+            unlockAudio();
             go(resumeFrom ?? "name");
           }}
         >
@@ -469,6 +475,7 @@ export function OnboardingSheet() {
           <Button
             onPress={() => {
               primeSpeech();
+              unlockAudio();
               go("name");
             }}
           >

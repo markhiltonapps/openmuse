@@ -446,10 +446,16 @@ interface Offered {
  * any Inworld no longer has. Lists and samples are kept a while: they rarely change, and a sample
  * costs a little to make.
  */
+/** A line said outside a call is at most this long, and this many are kept. */
+export const SAY_LIMIT = 300;
+const SAID_KEPT = 200;
+
 export class CallVoices {
   private offer?: { at: number; value: Offered };
   private everyone?: { at: number; value: Offered };
   private readonly samples = new Map<string, { body: ArrayBuffer; type: string }>();
+  /** Lines said on request, by voice and text, newest last. */
+  private readonly said = new Map<string, { body: ArrayBuffer; type: string }>();
   constructor(
     private readonly db: Store,
     private readonly url: string,
@@ -630,5 +636,41 @@ export class CallVoices {
   async listening(name: string) {
     const voice = await this.findAny(name);
     return voice ? this.audio(voice.id, "listening") : undefined;
+  }
+  /**
+   * A short line in the voice this person's calls use (the setup questions), so the first voice
+   * they hear is the one that will talk to them. Made once per voice and line, and kept.
+   */
+  async say(owner: string, text: string) {
+    const line = text.replace(/\s+/g, " ").trim();
+    if (!line) throw new AppError("Nothing to say.", 400);
+    if (line.length > SAY_LIMIT)
+      throw new AppError(`A line is at most ${SAY_LIMIT} characters.`, 400);
+    const voice = await this.chosen(owner);
+    if (!voice) throw new AppError("The voice isn’t available just now.", 503);
+    const key = `${voice}:${line}`;
+    const kept = this.said.get(key);
+    if (kept) {
+      // Newest last, so the lines still in use stay.
+      this.said.delete(key);
+      this.said.set(key, kept);
+      return kept;
+    }
+    const response = await this.fetcher(
+      `${this.url}/v1/voices/${encodeURIComponent(voice)}/say?text=${encodeURIComponent(line)}`,
+      { headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(30_000) },
+    );
+    if (!response.ok) throw new AppError("The voice isn’t available just now.", 503);
+    const audio = {
+      body: await response.arrayBuffer(),
+      type: response.headers.get("content-type") ?? "audio/mpeg",
+    };
+    this.said.set(key, audio);
+    while (this.said.size > SAID_KEPT) {
+      const oldest = this.said.keys().next().value;
+      if (oldest === undefined) break;
+      this.said.delete(oldest);
+    }
+    return audio;
   }
 }

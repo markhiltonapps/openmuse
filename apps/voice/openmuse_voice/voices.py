@@ -55,6 +55,9 @@ LISTENING = ("Mm-hmm.", "Mhm.", "Uh-huh.")
 STEER = "[softly and briefly, like someone quietly listening on the phone] "
 # How loud the murmurs play next to speech: in the background.
 MURMUR_LEVEL = 0.6
+# Short lines said outside a call (the setup questions): at most this long, and this many kept.
+SAY_LIMIT = 300
+SAID_KEPT = 200
 # The rate calls play audio at; the recordings are made at it too.
 RATE = 24000
 
@@ -107,6 +110,8 @@ class Voices:
         self._checked = 0.0
         self._lock = asyncio.Lock()
         self._samples: dict[str, tuple[bytes, str]] = {}
+        # Lines said on request, by (voice, text), newest last.
+        self._said: dict[tuple[str, str], tuple[bytes, str]] = {}
         self._clips: dict[str, list[bytes]] = {}
         self._making: dict[str, asyncio.Task] = {}
 
@@ -254,6 +259,26 @@ class Voices:
                 audio = await self._speak(http, SAMPLE, voice, "MP3")
                 self._samples[voice] = (audio, "audio/mpeg")
         return self._samples[voice]
+
+    async def say(self, http: aiohttp.ClientSession, voice: str, text: str) -> tuple[bytes, str]:
+        """Any short line in that voice (as calls sound), and its content type; kept a while.
+
+        The app's setup questions are said this way, so the voice people hear first is the one
+        their calls use. A line is made once per voice and kept, with the oldest lines dropped.
+        """
+        key = (voice, text)
+        kept = self._said.pop(key, None)
+        if kept is None:
+            if self._config.tts == "fake":
+                names = [c["id"] for c in (*CHOICES, *FAKE_EXTRA)]
+                pitch = 180 + 15 * (names.index(voice) if voice in names else 0)
+                kept = (_as_wav(_hum(min(1.5, 0.3 + 0.04 * len(text)), pitch)), "audio/wav")
+            else:
+                kept = (await self._speak(http, text, voice, "MP3"), "audio/mpeg")
+        self._said[key] = kept
+        while len(self._said) > SAID_KEPT:
+            del self._said[next(iter(self._said))]
+        return kept
 
     def clips(self, http: aiohttp.ClientSession, voice: str) -> "asyncio.Task[list[bytes]]":
         """The listening murmurs in that voice (raw 16-bit audio at RATE), made once."""

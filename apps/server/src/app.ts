@@ -2377,6 +2377,18 @@ export async function createApp(
     if ("error" in result) throw new AppError(result.error, 409);
     return c.json(result);
   });
+  // A line in this person's call voice (the setup questions). 503 when calls aren't on our own
+  // voice here, so the app falls back to the device's own speech.
+  app.get("/api/call-voices/say", async (c) => {
+    const owner = c.get("owner");
+    if (!callVoices || (await voiceProviderFor(db, config, owner)) !== "pipecat")
+      throw new AppError("The voice isn’t available just now.", 503);
+    const audio = await callVoices.say(owner, c.req.query("text") ?? "");
+    return c.body(audio.body, 200, {
+      "content-type": audio.type,
+      "cache-control": "private, max-age=86400",
+    });
+  });
   app.get("/api/call-voices/:voice/listening", async (c) => {
     if (!(await accounts.isAdmin(c.get("owner")).catch(() => false)))
       throw new AppError("Only the admin can play the listening sounds.", 403);

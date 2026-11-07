@@ -593,3 +593,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   seeded). The Help pictures that show jobs come from a mock in scripts/help-shots.mjs
   (`/api/agent` gets a finished job and one waiting on an approval), not from the database. When
   pictures look empty, reset `${DATA_DIR}/postgres` with the server stopped; don't chase the data.
+- **One voice everywhere (owner, 2026-11-07):** anything Neddy says outside a call (the setup
+  questions) is made by the voice service in the person's call voice (`CallVoices.say` →
+  `/v1/voices/{voice}/say`), played from a blob in the app (`neddy-voice.ts`), and only falls back to
+  the device's speechSynthesis when the api answers 503 (calls not on our own voice). Lines are
+  short (≤ 300 chars), made once per voice and kept; play a silent clip inside the starting tap so
+  iPhones allow the fetched audio. The voice tests need the scratchpad venv with pipecat installed.

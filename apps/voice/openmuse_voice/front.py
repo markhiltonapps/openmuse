@@ -17,7 +17,7 @@ from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 from loguru import logger
 
 from .config import load
-from .voices import Voices
+from .voices import SAY_LIMIT, Voices
 
 config = load()
 voices = Voices(config)
@@ -187,6 +187,29 @@ async def voice_sample(request: web.Request):
     )
 
 
+async def voice_say(request: web.Request):
+    """A short line in one voice (the setup questions), so people hear the voice calls use."""
+    assert http
+    if not _signed(request.headers.get("authorization")):
+        return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
+    voice = request.match_info["voice"]
+    text = " ".join(request.query.get("text", "").split())
+    if not text:
+        return _refused(400, "no_text", "Nothing to say.")
+    if len(text) > SAY_LIMIT:
+        return _refused(400, "too_long", f"A line is at most {SAY_LIMIT} characters.")
+    if not any(entry["id"] == voice for entry in await voices.catalog(http)):
+        return _refused(404, "no_voice", "That voice isn't one of Inworld's.")
+    try:
+        audio, kind = await voices.say(http, voice, text)
+    except Exception as error:
+        logger.warning(f"A line in {voice}'s voice couldn't be made: {error}")
+        return _refused(502, "no_sample", "The line couldn't be made just now.")
+    return web.Response(
+        body=audio, content_type=kind, headers={"cache-control": "private, max-age=86400"}
+    )
+
+
 async def all_voices(request: web.Request):
     """All of Inworld's English voices, for the admin's browser."""
     assert http
@@ -243,6 +266,7 @@ def main():
     app.router.add_get("/v1/voices", list_voices)
     app.router.add_get("/v1/voices/all", all_voices)
     app.router.add_get("/v1/voices/{voice}/sample", voice_sample)
+    app.router.add_get("/v1/voices/{voice}/say", voice_say)
     app.router.add_get("/v1/voices/{voice}/listening", listening_sample)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)

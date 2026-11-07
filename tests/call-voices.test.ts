@@ -32,6 +32,11 @@ function voiceService(options: { down?: boolean } = {}) {
     if (options.down) throw new Error("connection refused");
     if (url.endsWith("/v1/voices")) return Response.json(OFFER);
     if (url.endsWith("/v1/voices/all")) return Response.json(CATALOG);
+    const said = /\/v1\/voices\/([^/]+)\/say\?text=(.+)$/.exec(url);
+    if (said)
+      return new Response(`${said[1]} says ${decodeURIComponent(said[2] ?? "")}`, {
+        headers: { "content-type": "audio/mpeg" },
+      });
     const [, voice, kind] = /\/v1\/voices\/([^/]+)\/(sample|listening)$/.exec(url) ?? [];
     if (voice)
       return new Response(`${kind === "sample" ? "mp3" : "wav"} of ${voice}`, {
@@ -85,6 +90,45 @@ test("samples are made once and kept; unknown voices have none", async () => {
   assert.equal(again, first);
   assert.equal(service.asked.filter((url) => url.endsWith("/sample")).length, 1);
   assert.equal(await voices.sample("Gandalf"), undefined);
+  await db.close();
+});
+
+test("a line is said in the person's own call voice, made once per voice and kept", async () => {
+  const db = await createStore();
+  const service = voiceService();
+  const voices = new CallVoices(db, "http://voice", "token", "admin", service.fetcher);
+  const words = new TextDecoder();
+  const first = await voices.say("p1", "  What should I\n call you? ");
+  assert.equal(words.decode(first.body), "Ashley says What should I call you?", "the usual voice");
+  assert.equal(first.type, "audio/mpeg");
+  assert.equal(await voices.say("p1", "What should I call you?"), first, "kept");
+  await voices.choose("p1", "Dennis");
+  const dennis = await voices.say("p1", "What should I call you?");
+  assert.equal(words.decode(dennis.body), "Dennis says What should I call you?", "their choice");
+  assert.equal(
+    await voices.say("p2", "What should I call you?"),
+    first,
+    "another person on the usual voice gets the same recording",
+  );
+  assert.equal(service.asked.filter((url) => url.includes("/say?")).length, 2);
+  await assert.rejects(voices.say("p1", "   "), /Nothing to say/);
+  await assert.rejects(voices.say("p1", "x".repeat(301)), /at most 300 characters/);
+  await db.close();
+});
+
+test("with the voice service down, a line can't be said and the app is told so", async () => {
+  const db = await createStore();
+  const voices = new CallVoices(
+    db,
+    "http://voice",
+    "token",
+    "admin",
+    voiceService({ down: true }).fetcher,
+  );
+  await assert.rejects(voices.say("p1", "Hello"), (e: Error & { status?: number }) => {
+    assert.equal(e.status, 503);
+    return true;
+  });
   await db.close();
 });
 

@@ -21,7 +21,7 @@ os.environ.update(VOICE_TTS="fake", VOICE_STT="fake", VOICE_LLM_MODEL="fake")
 from openmuse_voice.call import STILL_CHECKING, Call  # noqa: E402
 from openmuse_voice.config import load  # noqa: E402
 from openmuse_voice.pipeline import Backchannel  # noqa: E402
-from openmuse_voice.voices import CHOICES, LISTENING, Voices  # noqa: E402
+from openmuse_voice.voices import CHOICES, LISTENING, SAID_KEPT, Voices  # noqa: E402
 
 
 class Fast(Backchannel):
@@ -164,6 +164,16 @@ async def voice_list():
         assert hades.startswith(b"RIFF"), "samples for any catalog voice"
         murmurs = await voices.listening(http, "Dennis")
         assert murmurs.startswith(b"RIFF") and len(murmurs) > 3 * 0.35 * 24000 * 2
+        # Lines said on request (the setup questions): the call's voice, made once and kept.
+        line, kind = await voices.say(http, "Dennis", "What should I call you?")
+        assert kind == "audio/wav" and line.startswith(b"RIFF")
+        again, _ = await voices.say(http, "Dennis", "What should I call you?")
+        assert again is line, "a line is made once per voice"
+        other, _ = await voices.say(http, "Theodore", "What should I call you?")
+        assert other is not line, "another voice is another recording"
+        for n in range(SAID_KEPT + 5):
+            await voices.say(http, "Dennis", f"Line {n}")
+        assert len(voices._said) == SAID_KEPT, "the oldest lines are dropped"
     assert voices.accepts("Theodore") and voices.accepts("Hades"), "ours and the catalog's"
     assert not voices.accepts("Nobody") and not voices.accepts(3)
 
