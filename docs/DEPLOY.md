@@ -46,6 +46,7 @@ A reachable deployment must use the live workspace. The sample workspace has no 
 | `AUTH_EMAIL_FROM` | Optional sender of sign-in emails; defaults to `OpenMuse <signin@` + the `AGENT_EMAIL` domain + `>`, which must be verified for sending in Resend |
 | `EXTRA_ALLOWED_ORIGINS` | Optional extra web addresses allowed to use the API, comma-separated. Adding a custom domain to the web service changes what `${{web.RAILWAY_PUBLIC_DOMAIN}}` gives `ALLOWED_ORIGINS`, so list both the custom domain and the `*.up.railway.app` address here (for example `https://muse.neatoventures.com,https://web-production-16243.up.railway.app`) |
 | `APP_URL` | Optional web address used in sign-in links; defaults to the first `ALLOWED_ORIGINS` entry |
+| (web domains) | The web service answers on `neddy.neatoventures.com`; `muse.neatoventures.com` redirects there (302, `infra/Caddyfile`). A person who signed in on the old address signs in once more on the new one: the session lives in the browser per address. |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` to keep records in Postgres instead of PGlite on the volume |
 | `S3_BUCKET` | `${{<bucket>.BUCKET}}`: the bucket's S3 name. With the four `S3_*` below, file contents and avatar clips go to the bucket and a copy of every record is saved there nightly (`backups/records-YYYY-MM-DD.jsonl.gz`, 14 kept) |
 | `S3_ENDPOINT` | `${{<bucket>.ENDPOINT}}` |

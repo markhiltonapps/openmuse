@@ -4,6 +4,10 @@
 }
 
 :{$PORT:8080} {
+	# The old address sends people to the new one, same page (owner, 2026-11-07: neddy.neatoventures.com).
+	# Temporary (302) rather than permanent, so browsers don't cache it for good while the move settles.
+	@old host muse.neatoventures.com
+	redir @old https://neddy.neatoventures.com{uri} 302
 	root * /srv
 	encode zstd gzip
 	@hashed path /_expo/static/*

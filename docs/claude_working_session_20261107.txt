@@ -223,3 +223,16 @@ Neddy's colours and four tabs (owner: "Use Neddy's colors and go with four tabs"
   Morning brief with a brief in the server's own markdown, and one waiting on the coffee
   approval), and the family shot starts the planner when the sample has none. Every picture
   retaken on the final build.
+
+Pushed c092212 (Set up with Neddy, flying Neddy) and 1b715eb (colours, four tabs) on "push it";
+api + web deployed SUCCESS 11:45 UTC, api came up clean. The staged api variables for the custom
+domain had already been applied: the api answers CORS for https://neddy.neatoventures.com.
+
+Old address → new address
+-------------------------
+- infra/Caddyfile: requests with Host muse.neatoventures.com get a 302 to
+  https://neddy.neatoventures.com{uri} (temporary on purpose, so browsers don't cache a permanent
+  redirect while the move settles; make it 308 later). Not validated locally (downloading Caddy was
+  refused in the sandbox); Railway keeps the old web deployment up if the new one fails to start.
+- Testers signed in on the old address sign in once more on the new one (the session token is kept
+  per address in the browser); an installed app on the old address should be added again from the new one.
