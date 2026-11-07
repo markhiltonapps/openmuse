@@ -102,6 +102,7 @@ import { ScheduledPosts } from "./space-posts.ts";
 import { spaceRoutes } from "./space-routes.ts";
 import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
+import { jsonUnlessUnchanged } from "./unchanged.ts";
 import { UrgentAlerts } from "./urgent-alerts.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
@@ -1056,7 +1057,9 @@ export async function createApp(
     "*",
     cors({
       origin: (origin) => (origins.has(origin) ? origin : undefined),
-      allowHeaders: ["Content-Type", "Authorization"],
+      allowHeaders: ["Content-Type", "Authorization", "If-None-Match"],
+      // The web app reads the answer's tag (ETag) to ask "only if it changed" next time.
+      exposeHeaders: ["ETag"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,
     }),
@@ -1298,7 +1301,9 @@ export async function createApp(
     return mailAlerts;
   };
   // The moving backdrop behind the app: which scene (or none), and whether it holds still.
-  app.get("/api/backdrop", async (c) => c.json(await backdropView(db, c.get("owner"))));
+  app.get("/api/backdrop", async (c) =>
+    jsonUnlessUnchanged(c, await backdropView(db, c.get("owner"))),
+  );
   app.post("/api/backdrop", async (c) => {
     const change = backdropChangeSchema.parse(await c.req.json());
     try {
@@ -1307,7 +1312,9 @@ export async function createApp(
       throw new AppError(error instanceof Error ? error.message : String(error), 400);
     }
   });
-  app.get("/api/location", async (c) => c.json(await whereabouts.view(c.get("owner"))));
+  app.get("/api/location", async (c) =>
+    jsonUnlessUnchanged(c, await whereabouts.view(c.get("owner"))),
+  );
   app.post("/api/location", async (c) =>
     c.json(await whereabouts.report(c.get("owner"), await c.req.json())),
   );
@@ -1555,7 +1562,7 @@ export async function createApp(
         ? { ...connection, status: "unavailable" }
         : connection,
     );
-    return c.json(snapshot);
+    return jsonUnlessUnchanged(c, snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
   // A watched page's last checks, for its chart and table.
@@ -1697,7 +1704,7 @@ export async function createApp(
   });
   app.get("/api/meal-checkins", async (c) => {
     const owner = c.get("owner");
-    return c.json({
+    return jsonUnlessUnchanged(c, {
       settings: await checkIns.settings(owner),
       replaced: await checkIns.replaced(owner),
       ...(await checkIns.current(owner)),
@@ -1720,7 +1727,9 @@ export async function createApp(
   app.post("/api/meal-checkins/:id/snooze", async (c) =>
     c.json(await checkIns.snooze(c.get("owner"), checkInId(c.req.param("id")))),
   );
-  app.get("/api/heads-ups", async (c) => c.json(await headsUps.current(c.get("owner"))));
+  app.get("/api/heads-ups", async (c) =>
+    jsonUnlessUnchanged(c, await headsUps.current(c.get("owner"))),
+  );
   app.post("/api/heads-ups/settings", async (c) =>
     c.json(await headsUps.update(c.get("owner"), await c.req.json())),
   );
@@ -2194,7 +2203,7 @@ export async function createApp(
   // Meetings recorded in the room: the recorder sends pieces, the server writes them up.
   app.get("/api/meetings", async (c) => {
     const owner = c.get("owner");
-    return c.json({
+    return jsonUnlessUnchanged(c, {
       available: meetings.available,
       dumpAvailable: meetings.available && meetings.dumpAvailable,
       allowance: await meetings.allowance(owner),

@@ -563,3 +563,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   could move. find_gmail_matching pages ids-only on the server (up to 4,000) and hands the agent a selection id;
   the move takes the selection, and approved Gmail batch changes over 1,000 ids run in parts (`runAppAction`).
   Anything that acts on "all of them" should work this way: the agent describes, the server collects.
+- **"Nothing changed" answers (2026-11-07):** polled GETs (`/api/agent` every 3 s, heads-ups, meetings,
+  location, backdrop, meal check-ins, workspace) answer with an ETag and 304 via `jsonUnlessUnchanged`
+  (server/unchanged.ts); the app's `MuseApi` keeps the last tagged answer per address and hands back the
+  SAME object on 304, so React redraws nothing. Leave anything that changes every answer (the worker's
+  heartbeat) out of the tag's key, or every answer is "new". The web app and the api are on different
+  addresses: a new request header needs `allowHeaders` and a new response header `exposeHeaders` in the
+  CORS setup, or the browser silently drops it.

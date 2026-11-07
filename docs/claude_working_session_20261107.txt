@@ -1,0 +1,35 @@
+Claude working session — 2026-11-07
+=====================================
+
+"Anything new?" check (server cost; no visible change)
+------------------------------------------------------
+- The app asks GET /api/agent every 3 seconds (agent-workspace.tsx) and got the whole workspace
+  back each time, redrawing with a new object. Now the polled GET routes answer with an ETag and
+  304 when nothing changed: /api/agent (the worker's heartbeat moves every second, so it's left
+  out of the tag), /api/workspace, /api/heads-ups, /api/meetings, /api/location, /api/backdrop,
+  /api/meal-checkins (`jsonUnlessUnchanged`, apps/server/src/unchanged.ts; Cache-Control no-store
+  so the browser's own cache stays out of it).
+- The app's MuseApi keeps the last tagged answer per address (AnswerTags, apps/mobile/src/unchanged.ts),
+  sends If-None-Match on GETs, and hands back the SAME object on 304, so React's setState sees no
+  change and nothing redraws. Nothing stored changes; no data is touched.
+- CORS: the web app and the api are on different addresses, so If-None-Match had to be allowed and
+  ETag exposed (`exposeHeaders`), or the browser would never see the tag. Test covers both.
+- Tests: tests/agent-api.test.ts (200+tag, 304, change → new tag, CORS headers),
+  apps/mobile/test/unchanged.test.ts.
+- Seen while here (not changed): the task worker writes a "worker-status" heartbeat row to Postgres
+  every second (engine/worker.ts, pollMs 1000). A write a second per server is a candidate for the
+  scaling work.
+
+Design review (no code)
+-----------------------
+- UI/UX + efficiency review published: https://claude.ai/artifact/UGSZCoaq2921SLmgBCn8Wi (tap Neddy
+  for everything about him, 4 tabs, Neddy's colours, only send what changed, how Neddy learns).
+- Owner read Muse's self-description; borrowed: tap-the-avatar screen, approve from the notification,
+  tap-to-answer buttons, proactive limits (9:00–21:30, ~2/day, silence = no). Owner's private details
+  in that file were NOT saved anywhere in the repo.
+- Owner's answers: GO on (1) anything-new check and (2) tap-on-Neddy screen; wants a strong
+  onboarding so Neddy learns the person fast (questions pending); wants the address
+  neddy.neatoventures.com (today muse.neatoventures.com, CNAME → g7jv26ji.up.railway.app on the web
+  service; api has ALLOWED_ORIGINS/EXTRA_ALLOWED_ORIGINS/APP_URL). Not changed yet; needs his OK and
+  the CNAME at the DNS host.
+- Voice cost answer: our own voice ≈2¢/min measured (docs/pricing_math.md); OpenAI's live voice 5¢.

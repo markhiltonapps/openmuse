@@ -61,6 +61,43 @@ after(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
+test("the workspace is answered in a few bytes when nothing changed", async () => {
+  const first = await request("");
+  assert.equal(first.status, 200);
+  const tag = first.headers.get("etag");
+  assert.ok(tag, "the answer carries a tag");
+  assert.equal(first.headers.get("cache-control"), "no-store");
+  // The same ask with the tag: 304, no body, same tag.
+  const again = await server.app.request("/api/agent", {
+    headers: { ...headers(), "If-None-Match": tag as string },
+  });
+  assert.equal(again.status, 304);
+  assert.equal(again.headers.get("etag"), tag);
+  assert.equal(await again.text(), "");
+  // A change gives a full answer with a new tag.
+  await read("/memories", { text: "Prefers morning meetings", source: "test" }, 201);
+  const changed = await server.app.request("/api/agent", {
+    headers: { ...headers(), "If-None-Match": tag as string },
+  });
+  assert.equal(changed.status, 200);
+  assert.notEqual(changed.headers.get("etag"), tag);
+  // From the web app (another address), the browser may send the tag and read it back.
+  const origin = config.allowedOrigins[0] as string;
+  const preflight = await server.app.request("/api/agent", {
+    method: "OPTIONS",
+    headers: {
+      Origin: origin,
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "authorization,if-none-match",
+    },
+  });
+  assert.match(preflight.headers.get("access-control-allow-headers") ?? "", /If-None-Match/i);
+  const crossOrigin = await server.app.request("/api/agent", {
+    headers: { ...headers(), Origin: origin },
+  });
+  assert.match(crossOrigin.headers.get("access-control-expose-headers") ?? "", /ETag/i);
+});
+
 test("agent API requires a session and reports the actual worker state", async () => {
   assert.equal((await server.app.request("/api/agent")).status, 401);
   assert.equal(

@@ -11,6 +11,7 @@ import {
 } from "../../../../packages/domain/src/agent.ts";
 import { designAvatar } from "../avatar-designer.ts";
 import { AppError } from "../errors.ts";
+import { jsonUnlessUnchanged } from "../unchanged.ts";
 import type { AgentService } from "./service.ts";
 
 const text = z.string().trim().min(1).max(4000);
@@ -31,7 +32,15 @@ const goalPatchSchema = z.object({
 
 export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: string } }> {
   const app = new Hono<{ Variables: { owner: string } }>();
-  app.get("/", async (c) => c.json(await service.snapshot(c.get("owner"))));
+  // The app asks for this every 3 seconds: "nothing changed" is answered in a few bytes. The
+  // worker's heartbeat moves every second, so it's left out of what counts as a change.
+  app.get("/", async (c) => {
+    const snapshot = await service.snapshot(c.get("owner"));
+    return jsonUnlessUnchanged(c, snapshot, {
+      ...snapshot,
+      worker: { running: snapshot.worker.running },
+    });
+  });
   app.post("/tasks", async (c) =>
     c.json(await service.delegate(c.get("owner"), await c.req.json()), 201),
   );

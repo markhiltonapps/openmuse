@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { AnswerTags } from "./unchanged.ts";
 
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
@@ -15,18 +16,30 @@ export function onSignedOut(handler: (byChoice?: boolean) => void) {
 }
 
 export class MuseApi {
+  /** Tagged answers, so an ask that finds nothing new costs a few bytes and no redraw. */
+  private readonly tags = new AnswerTags();
   constructor(readonly token: string) {}
   async request<T>(path: string, body?: unknown, method?: string): Promise<T> {
+    const get = body === undefined && (method ?? "GET") === "GET";
+    const tag = get ? this.tags.tag(path) : undefined;
     const response = await fetch(`${API_URL}${path}`, {
       method: method ?? (body === undefined ? "GET" : "POST"),
       headers: {
         Authorization: `Bearer ${this.token}`,
+        ...(tag ? { "If-None-Match": tag } : {}),
         ...(body === undefined || body instanceof FormData
           ? {}
           : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     });
+    if (response.status === 304) {
+      const kept = this.tags.unchanged<T>(path);
+      if (kept !== undefined) return kept;
+      // Nothing kept for this address after all: ask again plainly.
+      this.tags.keep(path, null, undefined);
+      return this.request(path, body, method);
+    }
     // While the server is being replaced (a deploy), an answer may be plain text ("404 Not
     // Found") rather than JSON: say so, instead of showing the parser's own words.
     const payload = (await response.json().catch(() => undefined)) as
@@ -42,6 +55,7 @@ export class MuseApi {
             : `Request failed (${response.status})`,
       );
     if (payload === undefined) throw new Error("The server gave an answer the app couldn’t read.");
+    if (get) this.tags.keep(path, response.headers.get("etag"), payload);
     return payload as T;
   }
   /** Sends raw bytes (a piece of a recording) with PUT. */
