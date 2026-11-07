@@ -425,3 +425,8 @@ Describe a voice (owner: Muse asks what kind of voice, then finds it); voice pre
   drops the utterance after a cancel), and a Play that the browser blocks (NotAllowedError) now
   says "Your browser blocked the sound. Tap Play once more." instead of a generic line. Asked the
   owner which card he tapped and what he saw.
+- Deployed (push 14:41 UTC, api and web SUCCESS by 14:43). The api's start log says
+  "Pictures off: OPENROUTER_API_KEY isn't set": Railway's api has no OPENROUTER_API_KEY variable
+  (the sandbox's key never reaches production), so pictures stay off there until the owner adds
+  the variable and chooses Deploy on Railway's banner. The next api start should then say
+  "Pictures on (OpenRouter; depth model ready…)".
