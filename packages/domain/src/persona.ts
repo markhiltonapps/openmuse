@@ -123,6 +123,7 @@ export function personaSourceLabel(fact: Pick<PersonaFact, "source" | "confidenc
           ? "From your account"
           : "From our chats";
   if (fact.source === "you") return "You set this";
+  if (fact.source === "interview") return "You said it during setup";
   if (fact.confidence === "confirmed") return "You confirmed this";
   if (fact.source === "account") return "From your account";
   if (fact.source === "email") return "From your email";

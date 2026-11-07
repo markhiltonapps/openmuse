@@ -99,3 +99,80 @@ Tap Neddy (Home holds everything about him)
 - Left as is (said here on purpose): Home's "Don't proceed" is one tap with no confirm, the same
   as the Activity card; the greet Help picture still shows the sample's "Approve locally" (the
   sample server runs approvals locally; the step names the real wordings).
+
+Pushed 7d67140 (Tap Neddy) on "push it"; api + web deployed SUCCESS 02:21 UTC, api came up clean.
+
+Flying Neddy at the top (owner: "top center")
+---------------------------------------------
+- The header's Neddy hovers on his jetpack: `flying` on AgentAvatar/Mascot (avatar.tsx) swaps the
+  idle breathing for a slow rise and fall (lift 0→0.55 over 1.3 s each way) and draws two small
+  jet flames under his feet (JetFlames: a teardrop with a lighter core, height flickering on its
+  own Animated value, the second one out of step). Still with reduced motion; quiet during a call,
+  like the rest of his motion. Only the header passes `flying`; the name chip moved 10px down so
+  the flames show (marginTop 6, was -4).
+
+Onboarding: Set up with Neddy
+-----------------------------
+- Built from the approved concept (concepts/ob-sheet.png): a sheet (`{type:"onboarding"}`,
+  onboarding-ui.tsx) with hello → name → home → work → family → connect → focus → history → done.
+  Each question is said with the browser's read-aloud (`speak`, voice.ts; primed on Let's go) and
+  shown; "Read, don't speak" keeps it quiet. Answers by dictation (`dictate`, web-app.ts; starts by
+  itself after the question is said, so the mic doesn't hear Neddy) with an "I heard … That's it /
+  Fix it" read-back, or typed. A refused microphone switches to typing with a line saying so.
+- Saving: name → `you.name`, work → `work.occupation`, family → `household.people`, what they
+  want help with → `you.focus` (chips + "Something else"), all through the new
+  POST /api/onboarding/facts (persona.save with source "interview": About you shows "You said it
+  during setup"); the town goes to POST /api/area (the "Use where I am now" chip shows only when
+  the browser already allows location, so no second permission prompt). Progress and answers are
+  kept in localStorage ("openmuse.setup") so closing part-way resumes on the next open.
+- Connect step: Gmail, Outlook and Google Calendar rows using /api/apps and /api/apps/connect
+  (blank tab opened on the tap, pointed at the sign-in page; "Signing in…" until the window comes
+  back, then "Didn't finish · Try again"). Without Composio the step says so and lets them carry on.
+- History step: "Email me the steps" → POST /api/onboarding/history-steps emails the Help topic
+  import-chatgpt's steps (apps/server/src/onboarding.ts builds the text and HTML from the topic,
+  so they can't drift); 503 without a mailer, 409 without an account email.
+- Done step: with a connected calendar, today's events from /api/calendar/today; otherwise
+  tomorrow's weather from /api/weather and "Yes, weekdays at 7:30" (creates the Morning brief
+  routine via POST /api/agent/routines with the phone's time zone) plus "Connect my calendar".
+  "Start talking" starts a live call; "Or type in Chat" opens the chat. Reaching it (or Skip for
+  now on the hello screen) calls POST /api/onboarding/done, which stamps `identity.onboardedAt`.
+- When it opens by itself (App.tsx `setupWanted`): identity loaded and no onboardedAt, nothing
+  else open, no call on, never on the sample server (the tests and Help pictures use it), and not
+  after being closed part-way twice. Existing testers therefore see it once; Skip for now is one tap.
+  Run again: Apps › About you › "Set up with Neddy again", or "Take me to setup" (place `setup`).
+- Help topic "setup" (picture "setup"), place `setup` in APP_PLACES, website sentence under "He
+  remembers what you tell him". Tests: tests/onboarding.test.ts (facts with source interview, 422
+  for a key About you doesn't keep, onboardedAt stamped without touching the rest of the identity,
+  503 without a mailer, the email's words), apps/mobile/test/onboarding-steps.test.ts.
+- Review round on the built screens (visual, usability, copy) found 20 blockers; all fixed:
+  * POST /api/area answers `{area}`: the sheet read the town off the wrong shape, so a typed town
+    kept the raw words and "Use where I am now" saved an empty town. Fixed, with a real error when
+    the location can't be named.
+  * The sheet always opens on hello now: a saved step is offered as "Carry on where I stopped"
+    (plus "Start again"), because browsers refuse read-aloud with no tap and the microphone must
+    never start by itself. "Set up with Neddy again" therefore no longer lands on the last step.
+  * The quiet switch only stops the voice; it no longer wipes an answer in progress (the step
+    effect runs on the step alone).
+  * "Skip for now" marked setup done for good: it's "Skip setup" now; the X is "Finish later".
+  * Screen readers: an always-mounted status line says the question, "I heard: …", the notes and
+    problems; focus moves to the question on each step.
+  * Voice drives the sheet: "skip", "next", "back", "that's it" are taps (`spokenCommand`), a said
+    town drops "I live in" (`placeFrom`), and on the focus step "email and my calendar" ticks the
+    chips (`focusFromSpeech`); a chip tap stops listening.
+  * Copy: Help's steps name the real buttons (Skip / Do this later / Carry on), say the town isn't
+    marked "said during setup" (it's the area), "carries on where you stopped", "stops opening by
+    itself after two closes"; hello says "your browser", one voice line; Connect labels say they
+    open Google's/Microsoft's sign-in page in a new tab; "Yes, weekdays at 7:30 am" says the brief
+    comes to Home as an update; "Try me" fits what's shown; the email reads "Best done from a
+    computer, where the file is".
+  * Visual: "Set up with Neddy" is the title on every step with "Step n of 8" as the subtitle (the
+    question is the biggest text); Next/Skip in the footer like every other sheet; one blue button
+    per screen (Connect rows and the routine button are plain); the tap links are 14px; the flames
+    have room under the picture; selected chips carry a check; bottom room so nothing sits under
+    the footer; a failed "done" counts as a close so it can't nag forever; Escape on the last step
+    closes.
+- Left as is (said on purpose): the Connect rows use letter tiles rather than the apps' logos; the
+  hello screen isn't vertically centred on a tall phone; the header's Neddy peeks over the sheet
+  like over every sheet.
+- Owner, mid-round: "Use Neddy's colors and go with four tabs" (the proposal's "Four doors, not
+  38": Home, Chat, Activity, You; cream, teal, amber, night-blue). Planned next, after this ships.

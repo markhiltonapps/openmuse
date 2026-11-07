@@ -36,6 +36,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   rehearse: { width: 720, height: 1558 },
   rehearsescore: { width: 720, height: 1846 },
   seeit: { width: 720, height: 1558 },
+  setup: { width: 720, height: 1558 },
   spaces: { width: 720, height: 1558 },
   urgent: { width: 720, height: 1558 },
   watchdescribe: { width: 720, height: 2308 },

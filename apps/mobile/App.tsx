@@ -75,6 +75,7 @@ import { LiveTalkSheet } from "./src/live-talk-ui";
 import { LocationReporter } from "./src/location-ui";
 import { MeetingRecorderProvider, useRecordingBar } from "./src/meetings-ui";
 import { MenuSheet } from "./src/menu-ui";
+import { setupWanted } from "./src/onboarding-ui";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import {
   clearSession,
@@ -495,6 +496,16 @@ function WorkspaceShell({
       : activeTask?.status === "queued"
         ? ({ kind: "thinking", label: "Getting started…" } as const)
         : undefined);
+  // The first-run setup opens once, when nothing else is open and no call is on (never on the
+  // sample server, whose screens the tests and Help pictures use).
+  const setupShown = useRef(false);
+  useEffect(() => {
+    if (setupShown.current || detail || workspace.mode === "sample" || call.phase !== "idle")
+      return;
+    if (!setupWanted(data?.identity)) return;
+    setupShown.current = true;
+    open({ type: "onboarding" });
+  }, [data?.identity, detail, workspace.mode, call.phase, open]);
   // A task that newly succeeds gets a short celebration.
   const [celebrating, setCelebrating] = useState(false);
   const succeeded = useRef<Set<string>>(undefined);
@@ -672,6 +683,7 @@ function WorkspaceShell({
                     size={avatarSize}
                     mood={mood}
                     activity={mood === "working" ? activity?.kind : undefined}
+                    flying
                   />
                   {/* On his helmet: how many things need you, or a dot for something new. */}
                   {needYou > 0 ? (
@@ -723,8 +735,8 @@ function WorkspaceShell({
                   navigate("home");
                 }}
                 style={({ pressed }) => ({
-                  // Just under his feet: Neddy is drawn whole, and the chip mustn't hide them.
-                  marginTop: -4,
+                  // Under his feet and the flames he hovers on: the chip mustn't hide them.
+                  marginTop: 6,
                   paddingHorizontal: 14,
                   paddingVertical: 5,
                   borderRadius: 18,

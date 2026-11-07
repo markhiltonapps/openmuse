@@ -575,3 +575,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   children as text), Enter can fire both, and two tooltips stack. Stack buttons in a plain `View`
   instead. And when a screen loses a signal (the bell's unread dot), check what every other screen
   showed through it before calling the change done: the dot was the only "new update" sign off Home.
+- **Setup questions (onboarding, 2026-11-07):** fixed questions, no model call per step; each answer
+  is saved as it's given (About you facts with source "interview", the town via /api/area) and the
+  progress kept in localStorage, so closing part-way loses nothing. Say the question first, then
+  start listening (`speak(...).then(listen)`), or the microphone hears the agent. Never auto-open a
+  first-run sheet on the sample server: every Playwright test and Help picture would start there.
+  `identity.onboardedAt` is the "seen it" flag; existing testers see the sheet once.

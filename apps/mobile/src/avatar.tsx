@@ -211,6 +211,7 @@ export function Mascot({
   animated = true,
   speaking = false,
   quiet = false,
+  flying = false,
 }: {
   size?: number;
   variant?: AvatarColor;
@@ -224,6 +225,11 @@ export function Mascot({
   speaking?: boolean;
   /** No looping motion (breathing, bobbing), e.g. during a live call; clips still talk. */
   quiet?: boolean;
+  /**
+   * Whole Neddy hovers on his jetpack (owner, 2026-11-07: the flying Neddy at the top of the
+   * screen): a slow rise and fall with two small flames under his feet, instead of breathing.
+   */
+  flying?: boolean;
 }) {
   // Neddy is always shown whole (owner, 2026-10-09): a still, full-body cut-out, never the
   // head-and-shoulders clips. Other clip characters keep theirs.
@@ -233,6 +239,28 @@ export function Mascot({
   const motion = animated && !reduce;
   const breathe = useRef(new Animated.Value(0)).current;
   const lift = useRef(new Animated.Value(0)).current;
+  const flames = whole && flying;
+  // The flames' flicker: their height, a little uneven, like a real flame.
+  const flicker = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    flicker.setValue(1);
+    if (!flames || !motion || quiet) return;
+    const step = (toValue: number, duration: number) =>
+      Animated.timing(flicker, { toValue, duration, useNativeDriver: Platform.OS !== "web" });
+    const loop = Animated.loop(
+      Animated.sequence([
+        step(0.72, 90),
+        step(1.08, 130),
+        step(0.84, 70),
+        step(1, 120),
+        step(0.9, 100),
+        step(1.12, 140),
+        step(1, 90),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [flames, motion, quiet, flicker]);
   useEffect(() => {
     breathe.setValue(0);
     lift.setValue(0);
@@ -267,15 +295,17 @@ export function Mascot({
             ? Animated.loop(Animated.sequence([Animated.delay(1700), hop(1.4)]))
             : mood === "celebrate"
               ? Animated.sequence([hop(2), hop(1.3)])
-              : // Clips breathe on their own.
-                video
-                ? undefined
-                : Animated.loop(
-                    Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]),
-                  );
+              : // Flying: a slow hover, up and down. Clips breathe on their own.
+                flames
+                ? Animated.loop(Animated.sequence([move(lift, 0.55, 1300), move(lift, 0, 1300)]))
+                : video
+                  ? undefined
+                  : Animated.loop(
+                      Animated.sequence([move(breathe, 1, 1700), move(breathe, 0, 1700)]),
+                    );
     animation?.start();
     return () => animation?.stop();
-  }, [mood, activity, motion, breathe, lift, video, quiet, whole, speaking]);
+  }, [mood, activity, motion, breathe, lift, video, quiet, whole, speaking, flames]);
   const custom = character === "custom";
   const art = video ? (
     <AvatarVideo id={character} size={size} speaking={speaking} still={!motion} />
@@ -352,6 +382,7 @@ export function Mascot({
         }}
       >
         {art}
+        {flames && <JetFlames size={size} flicker={flicker} />}
       </Animated.View>
       {motion &&
         mood === "working" &&
@@ -363,6 +394,70 @@ export function Mascot({
         ))}
       {motion && mood === "celebrate" && <Sparkles size={size} />}
     </View>
+  );
+}
+
+/** Two small jet flames under whole Neddy's feet, their height following `flicker`. */
+function JetFlames({ size, flicker }: { size: number; flicker: Animated.Value }) {
+  const w = size * 0.09;
+  const h = size * 0.22;
+  const flame = (left: number, delay: number) => (
+    <Animated.View
+      key={left}
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        // Just under each foot; the image stands on the bottom edge of its box.
+        bottom: -h * 0.72,
+        left: size * left - w / 2,
+        width: w,
+        height: h,
+        alignItems: "center",
+        transformOrigin: "50% 0%",
+        transform: [
+          {
+            scaleY: flicker.interpolate({
+              inputRange: [0.7, 1.15],
+              outputRange: [0.7 + delay, 1.15 - delay],
+            }),
+          },
+        ],
+      }}
+    >
+      {/* A teardrop, point up (the nozzle), with a lighter core. */}
+      <View
+        style={{
+          width: w,
+          height: h,
+          borderTopLeftRadius: w * 0.3,
+          borderTopRightRadius: w * 0.3,
+          borderBottomLeftRadius: w,
+          borderBottomRightRadius: w,
+          backgroundColor: "#FF8A3D",
+          opacity: 0.92,
+        }}
+      />
+      <View
+        style={{
+          position: "absolute",
+          top: h * 0.12,
+          width: w * 0.46,
+          height: h * 0.62,
+          borderTopLeftRadius: w * 0.2,
+          borderTopRightRadius: w * 0.2,
+          borderBottomLeftRadius: w,
+          borderBottomRightRadius: w,
+          backgroundColor: "#FFE08A",
+        }}
+      />
+    </Animated.View>
+  );
+  // The second flame leans the other way, so they don't flicker in step.
+  return (
+    <>
+      {flame(0.4, 0)}
+      {flame(0.6, 0.12)}
+    </>
   );
 }
 
@@ -394,12 +489,15 @@ export function AgentAvatar({
   mood,
   activity,
   onCall = false,
+  flying = false,
 }: {
   size: number;
   mood?: Mood;
   activity?: ActivityKind;
   /** The call screen's own avatar, which keeps moving during the call. */
   onCall?: boolean;
+  /** Whole Neddy hovers on his jetpack (the one at the top of the screen). */
+  flying?: boolean;
 }) {
   const { data } = useAgentWorkspace();
   const { api } = useWorkspace();
@@ -419,6 +517,7 @@ export function AgentAvatar({
       mood={mood}
       activity={activity}
       speaking={speaking}
+      flying={flying}
     />
   );
 }

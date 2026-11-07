@@ -320,6 +320,20 @@ const SHOTS = [
     },
   },
   {
+    id: "setup",
+    go: async (p) => {
+      await p.getByRole("tab", { name: "Apps", exact: true }).click();
+      await p.waitForTimeout(800);
+      await p.getByRole("tab", { name: "About you", exact: true }).click();
+      await p.waitForTimeout(1200);
+      await p.getByRole("button", { name: /^Set up with Neddy again/ }).click();
+      await p.waitForTimeout(1500);
+    },
+    marks: {
+      1: (p) => p.getByRole("button", { name: "Let’s go", exact: true }),
+    },
+  },
+  {
     id: "chats",
     go: async (p) => {
       await p.locator("#chat-button").click();

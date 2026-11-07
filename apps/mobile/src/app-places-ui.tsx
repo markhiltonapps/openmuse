@@ -31,6 +31,7 @@ import {
   Send,
   Shapes,
   ShieldCheck,
+  Sparkles,
   SquareCheck,
   UserRound,
   UsersRound,
@@ -97,6 +98,7 @@ const ICONS: Record<AppPlaceId, LucideIcon> = {
   apps: Shapes,
   "agent-settings": Bot,
   memory: Brain,
+  setup: Sparkles,
   alerts: BellRing,
   money: Wallet,
   account: UserRound,
@@ -375,6 +377,7 @@ export function usePlace(request: PlaceRequest) {
     if (request.place === "log-meal") return open({ type: "food", log: true });
     if (request.place === "agent-computer") return open({ type: "computer" });
     if (request.place === "delegate") return open({ type: "delegate" });
+    if (request.place === "setup") return open({ type: "onboarding" });
     const screen = SCREENS[request.place] ?? { section: "activity" as const };
     if (request.place === "spaces") {
       spacesView.list = true;

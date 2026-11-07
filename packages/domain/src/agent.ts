@@ -220,6 +220,8 @@ export interface AgentIdentity {
   updatesDisplay?: "popup" | "bell" | "chat";
   /** Email the person when a job they handed off is done, needs them, or fails (on unless false). */
   emailJobUpdates?: boolean;
+  /** When the person finished (or skipped) the first-run setup questions; unset shows them once. */
+  onboardedAt?: string;
 }
 /** A person's own avatar: an uploaded photo (data URL) or a designed SVG. */
 export interface AvatarImage {

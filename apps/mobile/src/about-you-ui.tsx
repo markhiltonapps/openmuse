@@ -1,4 +1,4 @@
-import { ChevronDown, MessageCircleQuestion, Pencil, Plus } from "lucide-react-native";
+import { ChevronDown, MessageCircleQuestion, Pencil, Plus, Sparkles } from "lucide-react-native";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import {
@@ -123,7 +123,7 @@ interface Page {
  * `top` goes straight under the hero: memories waiting for review.
  */
 export function AboutYou({ top }: { top?: ReactNode }) {
-  const { api, ask, notify } = useWorkspace();
+  const { api, ask, notify, open: openDetail } = useWorkspace();
   const { data } = useAgentWorkspace();
   const agentName = data?.identity.name || "Neddy";
   const [facts, setFacts] = useState<PersonaFact[]>();
@@ -322,14 +322,23 @@ export function AboutYou({ top }: { top?: ReactNode }) {
           )}
         </View>
       </View>
-      <Button
-        primary
-        icon={MessageCircleQuestion}
-        style={{ alignSelf: "flex-start" }}
-        onPress={() => ask("Ask me a few questions for my About you page.")}
-      >
-        Answer a few questions
-      </Button>
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        <Button
+          primary
+          icon={MessageCircleQuestion}
+          onPress={() => ask("Ask me a few questions for my About you page.")}
+        >
+          Answer a few questions
+        </Button>
+        {/* The first-run questions again, by voice or typed: name, home, work, family, apps. */}
+        <Button
+          icon={Sparkles}
+          accessibilityLabel={`Set up with ${agentName} again. Opens the setup questions`}
+          onPress={() => openDetail({ type: "onboarding" })}
+        >
+          {`Set up with ${agentName} again`}
+        </Button>
+      </View>
       <View style={{ gap: 6 }}>
         <SayOrType
           inline

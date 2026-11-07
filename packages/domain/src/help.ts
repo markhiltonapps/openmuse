@@ -181,6 +181,37 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["find-your-way", "live-call", "approvals"],
   },
   {
+    id: "setup",
+    group: "start",
+    title: "Set up with {agent}: the first few minutes",
+    summary:
+      "The first time you open the app, {agent} asks a few questions so it can start helping right away. Say your answers or type them.",
+    place: "setup",
+    shot: "setup",
+    steps: [
+      "Tap **Let’s go**. {agent} says each question and shows it; answer out loud (your phone asks to use the microphone once) or type in the box. **Read, don’t speak** keeps {agent} quiet in public.",
+      "What {agent} heard is shown back: tap **That’s it** to keep it, or **Fix it** to change it. Your name is the only thing it needs; **Skip** passes any other question.",
+      "The questions: your name, your home town (the time zone comes from your phone), your work, your family, connecting Gmail, Outlook or Google Calendar (you sign in on their own page), what you’d like help with, and whether to bring your ChatGPT or Claude chats (**Email me the steps**).",
+      "At the end, {agent} shows what it knows and something real from it: today’s calendar if you connected one, or tomorrow’s weather with the offer of a weekday morning brief. **Start talking** begins a call; **Or type in Chat** opens the chat.",
+    ],
+    body: [
+      "Every answer lands on **Apps › About you**, marked “You said it during setup”, where you can change or forget it.",
+      "Closing part-way keeps your answers; the next open carries on from the next question. To run it again any time, open **Apps › About you** and tap **Set up with {agent} again**, or say “Take me to setup”.",
+    ],
+    say: [{ text: "Take me to setup.", send: true }],
+    keywords: [
+      "setup",
+      "set up",
+      "onboarding",
+      "first run",
+      "welcome",
+      "questions",
+      "start",
+      "new",
+    ],
+    related: ["first-steps", "about-you", "connect-apps", "import-chatgpt", "live-call"],
+  },
+  {
     id: "find-your-way",
     group: "start",
     title: "Find your way around",

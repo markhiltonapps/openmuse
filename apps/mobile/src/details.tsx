@@ -56,6 +56,7 @@ import { fileExtension, fileSummary, isPdf, isPicture } from "./file-kinds";
 import { HelpSheet } from "./help-ui";
 import { FoodLogSheet } from "./meal-checkins-ui";
 import { MeetingSheet } from "./meetings-ui";
+import { OnboardingSheet } from "./onboarding-ui";
 import PdfReader from "./PdfReader";
 import { artifactKind, savedDate } from "./plans";
 import { CommitmentsSheet, RemindersSheet } from "./plans-ui";
@@ -91,6 +92,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "backdrop") return <BackdropSheet />;
   if (detail.type === "receipt") return <ReceiptSheet info={detail.info} />;
   if (detail.type === "rehearse") return <RehearseSheet />;
+  if (detail.type === "onboarding") return <OnboardingSheet />;
   if (detail.type === "rehearsalScore")
     return <RehearsalScoreSheet id={detail.id} ask={detail.ask} />;
   if (detail.type === "food") return <FoodLogSheet log={detail.log} />;

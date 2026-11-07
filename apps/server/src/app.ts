@@ -81,6 +81,7 @@ import { appDocument, goneDocument, MINI_APP_HEADER_POLICY } from "./mini-apps.t
 import { ModelChoices, SERVER_MODEL } from "./model-choices.ts";
 import { monitorChecks } from "./monitor-history.ts";
 import { ffmpegAvailable, ffmpegMp3 } from "./mp3.ts";
+import { historyStepsEmail } from "./onboarding.ts";
 import { PastChats } from "./past-chats.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
 import { PushService } from "./push.ts";
@@ -2522,6 +2523,33 @@ export async function createApp(
     c.json({ turns: await agent.receipts.forThread(c.get("owner"), c.req.param("threadId")) }),
   );
   app.get("/api/persona", async (c) => c.json({ facts: await agent.persona.list(c.get("owner")) }));
+  // Setup with the agent (the first-run questions): each answer lands on About you as a fact.
+  app.post("/api/onboarding/facts", async (c) =>
+    c.json({ facts: await agent.persona.save(c.get("owner"), await c.req.json(), "interview") }),
+  );
+  app.post("/api/onboarding/done", async (c) => {
+    const owner = c.get("owner");
+    await agent.ensure(owner);
+    const identity = await agent.db.compareAndSwap<{ onboardedAt?: string }>(
+      owner,
+      "agent-settings",
+      "identity",
+      {},
+      { onboardedAt: new Date().toISOString() },
+    );
+    return c.json({ onboardedAt: identity?.onboardedAt ?? null });
+  });
+  // The steps for bringing ChatGPT or Claude history, by email: nothing to do on the phone now.
+  app.post("/api/onboarding/history-steps", async (c) => {
+    if (!mailer) throw new AppError("Email isn’t set up on this server yet", 503);
+    const owner = c.get("owner");
+    const me = await accounts.me(owner);
+    const to = me && "email" in me && typeof me.email === "string" ? me.email : undefined;
+    if (!to) throw new AppError("Your account has no email address to send to", 409);
+    const identity = await agent.db.get<{ name?: string }>(owner, "agent-settings", "identity");
+    await mailer.send({ to, ...historyStepsEmail(identity?.name || "Neddy", config.appUrl) });
+    return c.json({ sent: true, to });
+  });
   app.post("/api/persona/:key", async (c) =>
     c.json(await agent.persona.edit(c.get("owner"), c.req.param("key"), await c.req.json())),
   );

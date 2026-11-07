@@ -47,6 +47,8 @@ export type Detail =
   | { type: "rehearse" }
   /** How a rehearsal went, by the call's id. */
   | { type: "rehearsalScore"; id: string; ask: RehearsalAsk }
+  /** Setup with the agent: the first-run questions (onboarding-ui.tsx). */
+  | { type: "onboarding" }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

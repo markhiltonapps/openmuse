@@ -147,6 +147,12 @@ export const APP_PLACES = {
     where: "Apps › Agent",
     about: "the agent's name and look, people notes, voice, the agent's email",
   },
+  setup: {
+    name: "Set up with {agent}",
+    where: "Apps › About you › Set up with {agent} again",
+    about:
+      "the first-run questions (their name, home town, work, family, email and calendar, what they want help with), answered by voice or typed, to run again any time",
+  },
   memory: {
     name: "About you",
     where: "Apps › About you",
