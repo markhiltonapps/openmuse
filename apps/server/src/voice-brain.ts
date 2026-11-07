@@ -112,6 +112,16 @@ function shown(tool: CallDetailTool, raw: string) {
         return { meeting: result.meeting, speakers: result.speakers };
       return some("meetings") ? { meetings: result.meetings } : undefined;
     }
+    case "call_voice": {
+      // Voices to hear and choose from (a browse, a list, an admin's add or remove). A voice just
+      // chosen is heard, not shown, and the listening sounds play as they talk.
+      if (result.listening === true) return undefined;
+      const { shown: _, note: __, ...voices } = result;
+      return some("voices") ||
+        (typeof result.added === "boolean" && typeof result.voice === "string")
+        ? voices
+        : undefined;
+    }
     case "make_picture":
       // The picture, moving, on the call screen.
       return result.picture && typeof result.picture === "object"

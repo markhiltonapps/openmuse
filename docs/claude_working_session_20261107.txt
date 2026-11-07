@@ -437,3 +437,18 @@ Describe a voice (owner: Muse asks what kind of voice, then finds it); voice pre
   Google "connected" pages say Neddy. Kept as-is on purpose: the "Neato_Muse/1.0" user-agent strings
   that other websites see (a test pins one) and the OpenRouter X-Title header, because services may
   know us by them. Also removed an unused import in app.ts that lint flagged from the pictures commit.
+- Owner (2026-11-07, after trying the new voice search on a call): "it said it was putting them on the
+  screen, but it never did", and after minimizing the call he couldn't get it back. Cause of the first:
+  the call_voice tool was never in CALL_DETAIL_TOOLS (packages/domain/src/voice.ts), so a call kept no
+  card for it, and the tool deliberately sent no "shown" claim on a call while its description told the
+  agent the voices were on screen. Now call_voice is a call detail tool (voice-brain.ts `shown()` keeps a
+  browse/list/add/remove result with voices; a voice just chosen and the listening sounds stay unshown,
+  they're heard), call-details.tsx draws CallVoiceToolCard, and the tool says "On their screen" on a call
+  for those results only. Test in tests/voice-brain.test.ts; Playwright (scratchpad call-minimize*.mjs)
+  shows the card under Details on the call screen. Help call-voice step mentions it.
+  The second report (a minimized call that wouldn't come back) did NOT reproduce: with a fake WebRTC call,
+  tapping the bar reopened the call screen on a 390px phone and a Pixel 7 with touch, on a 1280px window,
+  from every tab (Home, Chat, Activity, You), from inside the Menu sheet, with a hand-off running, with a
+  long reply, with news waiting (See it), after the call ended by itself, and with a backdrop on. Asked
+  the owner what the bar looked like and on which device. Production log for the 15:37-15:39 UTC call:
+  four chat hand-offs, no errors.

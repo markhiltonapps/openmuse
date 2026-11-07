@@ -256,6 +256,57 @@ test("a finished call is added to the chat as one message, once", async () => {
   await db.close();
 });
 
+test("voices found on a call go on the call screen; a voice just chosen and the listening sounds don't", async () => {
+  const tool = (id: string, name: string, result: unknown) => [
+    { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,
+    { type: EventType.TOOL_CALL_END, toolCallId: id } as BaseEvent,
+    {
+      type: EventType.TOOL_CALL_RESULT,
+      toolCallId: id,
+      messageId: randomUUID(),
+      content: JSON.stringify(result),
+    } as BaseEvent,
+  ];
+  const voices = [
+    { id: "Craig", description: "older British man, warm", onList: true },
+    { id: "Theodore", description: "deep, calm man", onList: false },
+  ];
+  const { brain } = await brainFixture([
+    ...tool("v1", "call_voice", {
+      browse: true,
+      usual: "Hades",
+      voices,
+      matched: 2,
+      shown: "On their screen, with a Play button for each.",
+    }),
+    // Chosen on a call: they hear it, so there's no card.
+    ...tool("v2", "call_voice", { voice: { id: "Craig", description: "older British man" } }),
+    // The soft murmurs play as they talk.
+    ...tool("v3", "call_voice", { listening: true, voice: "Craig" }),
+    // Nothing matched: no empty card.
+    ...tool("v4", "call_voice", { browse: true, usual: "Hades", voices: [], note: "none" }),
+    {
+      type: EventType.TEXT_MESSAGE_CHUNK,
+      messageId: "r",
+      delta: "Craig and Theodore are on your screen.",
+    } as BaseEvent,
+  ]);
+  const shown: { items: CallDetail["items"] }[] = [];
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d1",
+    turns: [{ role: "user", text: "Change your voice to an older British man" }],
+    progress: () => {},
+    show: (items) => shown.push({ items }),
+    signal: new AbortController().signal,
+  });
+  assert.equal(shown.length, 1);
+  assert.deepEqual(shown[0]?.items, [
+    { tool: "call_voice", result: { browse: true, usual: "Hades", voices, matched: 2 } },
+  ]);
+});
+
 test("a long answer goes on screen: shown results are collected for the call, failures and plain searches aren't", async () => {
   const tool = (id: string, name: string, result: unknown) => [
     { type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: name } as BaseEvent,

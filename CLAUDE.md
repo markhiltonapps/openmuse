@@ -612,3 +612,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   free. Card buttons that would make another picture put words in the message box (`draft`), never
   send. Biome reads WebGL's `gl.useProgram` as a React hook: ignore that line. In a Playwright chat
   mock, set the exchange BEFORE the chat connects (reload and reopen Chat after setting it).
+
+- **A tool's card on a call needs four things (2026-11-07):** the tool name in `CALL_DETAIL_TOOLS`
+  (packages/domain/src/voice.ts), a case in voice-brain.ts `shown()` that keeps the part to draw, a case in
+  call-details.tsx that draws it, and a `shown` claim in the tool's result only when those exist. The voice
+  search had a chat card but none of the three on a call, so the agent said "it's on your screen" and
+  nothing appeared. A test in tests/voice-brain.test.ts feeds the tool's result through `voiceAnswer`.

@@ -13,6 +13,7 @@ import type { CallDetail } from "../../../packages/domain/src/voice";
 import { ApprovalCard } from "./approval-card";
 import { AssistantResponse } from "./assistant-response";
 import { CalendarCard } from "./calendar-card";
+import { CallVoiceToolCard } from "./call-voice-ui";
 import { ChatActionCard } from "./chats-ui";
 import { ConnectCard, OwnAppCard } from "./connect-card";
 import { EmailCards, emailItems } from "./email-cards";
@@ -172,6 +173,8 @@ export function CallDetails({
                   return <CalendarCard key={key} result={result} onCall={onCall} wide />;
                 case "get_help":
                   return <HelpAnswerCard key={key} result={result} onCall={onCall} />;
+                case "call_voice":
+                  return <CallVoiceToolCard key={key} result={result} loading={false} />;
                 case "make_picture":
                   return <PictureToolCard key={key} result={result} onCall={onCall} />;
                 case "meetings":

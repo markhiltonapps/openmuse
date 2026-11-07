@@ -13,6 +13,7 @@ export const CALL_DETAIL_TOOLS = [
   "meetings",
   "rehearse",
   "make_picture",
+  "call_voice",
 ] as const;
 /** A conversation to practise: who Neddy plays, what it's about, and what they want out of it. */
 export interface RehearsalAsk {

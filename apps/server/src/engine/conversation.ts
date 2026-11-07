@@ -507,8 +507,10 @@ export class ConversationAgent extends AbstractAgent {
         execute: async ({ do: what, names, voice, query, confirm }) => {
           const voices = this.service.callVoices;
           if (!voices) return { error: "Choosing a voice isn’t set up on this server." };
-          // In the chat the app draws a card with Play for each voice; on a call they hear it.
-          const shown = onCall ? {} : { shown: "On their screen, with a Play button for each." };
+          // The app draws a card with Play for each voice, in the chat and on the call screen. A voice
+          // just chosen is drawn in the chat only; on a call they hear it.
+          const shown = { shown: "On their screen, with a Play button for each." };
+          const inChat = onCall ? {} : shown;
           if (what === "list") {
             const view = await voices.list(this.owner);
             const wanted = names?.map((n) =>
@@ -542,7 +544,7 @@ export class ConversationAgent extends AbstractAgent {
           }
           if (what === "listening") {
             const result = await voices.listening(this.owner, voice ?? undefined);
-            return "error" in result ? result : { ...result, ...shown };
+            return "error" in result ? result : { ...result, ...inChat };
           }
           if (what === "add" || what === "remove") {
             if (!voice) return { error: "Say which voice." };
@@ -554,7 +556,7 @@ export class ConversationAgent extends AbstractAgent {
           }
           if (voice === undefined) return { error: "Say which voice, or null for the usual one." };
           const result = await voices.choose(this.owner, voice);
-          return "error" in result ? result : { ...result, ...shown };
+          return "error" in result ? result : { ...result, ...inChat };
         },
       }),
       defineTool({
