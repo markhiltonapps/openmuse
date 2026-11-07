@@ -33,3 +33,17 @@ Design review (no code)
   service; api has ALLOWED_ORIGINS/EXTRA_ALLOWED_ORIGINS/APP_URL). Not changed yet; needs his OK and
   the CNAME at the DNS host.
 - Voice cost answer: our own voice ≈2¢/min measured (docs/pricing_math.md); OpenAI's live voice 5¢.
+
+Later the same day
+------------------
+- Pushed 5699125 (anything-new check) on the owner's "push it"; api + web deployed SUCCESS 01:31 UTC, api log quiet.
+- Domain: neddy.neatoventures.com added to the web service (CNAME → 3w40oy42.up.railway.app, TXT
+  _railway-verify.neddy), verified with a valid certificate; it serves the app. Staged on the api
+  (patch a9f3d38b, NOT yet deployed): EXTRA_ALLOWED_ORIGINS = muse + neddy + web-production-16243
+  addresses, APP_URL = https://neddy.neatoventures.com. Owner presses Deploy when nobody is on a call.
+  muse.neatoventures.com keeps working; testers sign in once at the new address. Later: redirect muse → neddy.
+- Concepts for Tap Neddy (Home gains question card, Coming up, Recent, About Neddy list; bell, status line
+  and Activity badge go) and the 9-step onboarding went through visual, usability and copy review (one
+  round, 8+8+8 blockers fixed in the drawings). Published: https://claude.ai/artifact/ (see chat).
+  Owner's onboarding answers: ~3 min; name, home, time zone, work, family, connect email, what they want
+  help with; connect during onboarding; history import offered as "Email me the steps".
