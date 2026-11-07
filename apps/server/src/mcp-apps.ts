@@ -411,7 +411,7 @@ export class McpApps {
   }
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: "Neato_Muse",
+      client_name: "Neddy",
       redirect_uris: [this.redirectUrl],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -767,7 +767,7 @@ export class McpApps {
       ? { headers: { authorization: `Bearer ${this.open(app.key)}` } }
       : undefined;
     const attempt = async (transport: Transport) => {
-      const client = new Client({ name: "Neato_Muse", version: "1.0.0" });
+      const client = new Client({ name: "Neddy", version: "1.0.0" });
       try {
         await client.connect(transport, { timeout: 30000 });
         return await run(client);
@@ -797,10 +797,10 @@ const isSignInFailure = (error: unknown) =>
 
 /** The sign-in page's return address; outside the session check, like Google's. */
 export function signedInPage(name: string) {
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signed in</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 24px;line-height:1.5;color:#11191C"><h1 style="font-size:1.5rem">Signed in to ${escapeHtml(name)}</h1><p>You can close this tab and go back to Neato_Muse.</p></body>`;
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signed in</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 24px;line-height:1.5;color:#11191C"><h1 style="font-size:1.5rem">Signed in to ${escapeHtml(name)}</h1><p>You can close this tab and go back to Neddy.</p></body>`;
 }
 export function signInFailedPage(message: string) {
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign-in didn't finish</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 24px;line-height:1.5;color:#11191C"><h1 style="font-size:1.5rem">The sign-in didn't finish</h1><p>${escapeHtml(message)}</p><p>Go back to Neato_Muse and tap Sign in to try again.</p></body>`;
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign-in didn't finish</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 24px;line-height:1.5;color:#11191C"><h1 style="font-size:1.5rem">The sign-in didn't finish</h1><p>${escapeHtml(message)}</p><p>Go back to Neddy and tap Sign in to try again.</p></body>`;
 }
 
 /**

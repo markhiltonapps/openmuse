@@ -435,7 +435,7 @@ function TopicPage({
         </Pressable>
       ) : (
         <Text style={[s.text, { color: colors.mutedStrong }]}>
-          Still stuck? Ask the person who runs Neato_Muse.
+          Still stuck? Ask the person who runs Neddy.
         </Text>
       )}
     </View>

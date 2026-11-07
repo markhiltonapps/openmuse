@@ -430,3 +430,10 @@ Describe a voice (owner: Muse asks what kind of voice, then finds it); voice pre
   (the sandbox's key never reaches production), so pictures stay off there until the owner adds
   the variable and chooses Deploy on Railway's banner. The next api start should then say
   "Pictures on (OpenRouter; depth model ready…)".
+- The product is called Neddy everywhere people read it (owner, 2026-11-07: the sign-in email's "from"
+  said "Neato Muse"). The sender name (config.ts `authEmailFrom`, used unless AUTH_EMAIL_FROM is set;
+  it is not set on Railway) is now "Neddy <signin@domain>", and the sign-in, invite and job emails, the
+  sign-in pages, Help, the old home.html/futurehome.html pages, the powerpoint author and the
+  Google "connected" pages say Neddy. Kept as-is on purpose: the "Neato_Muse/1.0" user-agent strings
+  that other websites see (a test pins one) and the OpenRouter X-Title header, because services may
+  know us by them. Also removed an unused import in app.ts that lint flagged from the pictures commit.

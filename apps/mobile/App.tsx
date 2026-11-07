@@ -224,7 +224,7 @@ export default function App() {
             <Text
               style={{ fontSize: 32, color: colors.text, letterSpacing: -1, fontWeight: "500" }}
             >
-              Welcome to Neato_Muse.
+              Welcome to Neddy.
             </Text>
             <Text style={[s.muted, { textAlign: "center" }]}>A little room for your day.</Text>
             {busy ? (

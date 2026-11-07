@@ -176,7 +176,7 @@ export function PastChatsImport() {
         result = await chooseAndSend<Imported>(api, "/api/past-chats/upload", TYPES, {
           maxBytes: 12 * 1024 * 1024,
           tooBig:
-            "This export is too big for the phone app. Upload it from Neato_Muse in a web browser.",
+            "This export is too big for the phone app. Upload it from Neddy in a web browser.",
         });
       } else {
         const picked = await DocumentPicker.getDocumentAsync({ type: TYPES });
@@ -225,7 +225,7 @@ export function PastChatsImport() {
         );
       else if (Platform.OS !== "web" && /too large/i.test(problem))
         setError(
-          "This export is too big for the phone app. Upload it from Neato_Muse in a web browser.",
+          "This export is too big for the phone app. Upload it from Neddy in a web browser.",
         );
       else setError(problem);
     } finally {

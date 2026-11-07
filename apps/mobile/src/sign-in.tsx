@@ -98,7 +98,7 @@ export function SignInCard({
               Request sent
             </Text>
             <Text style={s.muted}>
-              The person who runs this Neato_Muse will see your request. If they approve, an invite
+              The person who runs Neddy will see your request. If they approve, an invite
               arrives at {requested}. It works for 3 days.
             </Text>
             <Text style={s.small}>
@@ -121,7 +121,7 @@ export function SignInCard({
               Request access
             </Text>
             <Text style={s.muted}>
-              Neato_Muse is by invitation. Leave your name and email, and the person who runs it can
+              Neddy is by invitation. Leave your name and email, and the person who runs it can
               invite you.
             </Text>
             <Field
@@ -178,7 +178,7 @@ export function SignInCard({
         <>
           <Text style={s.heading}>Check your email</Text>
           <Text style={s.muted}>
-            If {sentTo} has a Neato_Muse account, a 6-digit sign-in code is on its way. It works
+            If {sentTo} has a Neddy account, a 6-digit sign-in code is on its way. It works
             once and expires in 15 minutes.
           </Text>
           <Field
@@ -274,7 +274,7 @@ export function SignInCard({
         </Pressable>
       ) : (
         <Text style={s.small}>
-          Local workspaces open without a key. Make sure your Neato_Muse server is running at{" "}
+          Local workspaces open without a key. Make sure your Neddy server is running at{" "}
           {API_URL}.
         </Text>
       )}
@@ -284,7 +284,7 @@ export function SignInCard({
         style={{ minHeight: 44, justifyContent: "center" }}
       >
         <Text style={[s.small, { textAlign: "center", textDecorationLine: "underline" }]}>
-          New here? See how Neato_Muse works
+          New here? See how Neddy works
         </Text>
       </Pressable>
       {help !== undefined && <SignedOutHelp start={help} onClose={() => setHelp(undefined)} />}

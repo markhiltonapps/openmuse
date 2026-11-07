@@ -254,7 +254,7 @@ export function readConfig(): Config {
   const senderDomain = config.agentEmail?.split("@")[1];
   config.authEmailFrom =
     process.env.AUTH_EMAIL_FROM?.trim() ||
-    (senderDomain ? `Neato_Muse <signin@${senderDomain}>` : undefined);
+    (senderDomain ? `Neddy <signin@${senderDomain}>` : undefined);
   if (
     mode === "live" &&
     (!config.accessKey || config.accessKey.length < 24 || !config.encryptionKey)

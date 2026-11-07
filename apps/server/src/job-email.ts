@@ -102,9 +102,9 @@ export function jobEmail(input: JobEmail) {
     input.outcome === "done" ? "#E3F3E8" : input.outcome === "question" ? "#EDF7FD" : "#FBEFED";
   const action =
     input.outcome === "done"
-      ? "Open in Neato_Muse"
+      ? "Open in Neddy"
       : input.outcome === "question"
-        ? "Answer in Neato_Muse"
+        ? "Answer in Neddy"
         : "See what happened";
   // A failure's own text is usually an error message, not something to put in an inbox.
   const source =
@@ -134,7 +134,7 @@ export function jobEmail(input: JobEmail) {
     more,
     reply,
     `${action}: ${link}`,
-    `You’re getting this because you asked ${input.agentName} to do this in Neato_Muse. You can turn these emails off in You › Alerts.`,
+    `You’re getting this because you asked ${input.agentName} to do this in Neddy. You can turn these emails off in You › Alerts.`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -146,7 +146,7 @@ export function jobEmail(input: JobEmail) {
         `<p style="margin:0 0 12px;font-family:${FONT};font-size:16px;line-height:24px;color:${INK}">${inline(block).replace(/\n/g, "<br>")}</p>`,
     )
     .join("");
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${esc(subject)}</title></head><body style="margin:0;padding:0;background:#F3F4F1"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(body.slice(0, 140))}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F3F4F1" style="background:#F3F4F1"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="max-width:600px;background:#FFFFFF;border-radius:28px"><tr><td bgcolor="${tint}" style="background:${tint};padding:26px 24px 22px;border-radius:28px 28px 0 0"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td valign="top" style="padding-right:14px"><img src="${base}/email/neddy.png" width="56" height="56" alt="" style="display:block;border:0;border-radius:18px;width:56px;height:56px"></td><td valign="middle" style="font-family:${FONT}"><div style="font-size:24px;line-height:1.2;font-weight:800;letter-spacing:-0.4px;color:${INK}">${esc(heading)}</div><div style="font-size:15px;line-height:21px;color:${MUTED};margin-top:4px">You asked: ${esc(title)}</div></td></tr></table></td></tr><tr><td style="padding:24px 24px 4px">${paragraphs}${files ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:16px;line-height:24px;color:${INK}"><b>${esc(files)}</b></p>` : ""}${more ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:15px;line-height:22px;color:${MUTED}">${more}</p>` : ""}${reply ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:15px;line-height:22px;color:${MUTED}">${esc(reply)}</p>` : ""}</td></tr><tr><td align="center" style="padding:14px 24px 30px">${button(esc(link), esc(action))}</td></tr></table><div style="max-width:560px;font-family:${FONT};font-size:12px;line-height:18px;color:${MUTED};padding:18px 12px 0;text-align:center">You’re getting this because you asked ${esc(input.agentName)} to do this in Neato_Muse. You can turn these emails off in You › Alerts.</div></td></tr></table></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${esc(subject)}</title></head><body style="margin:0;padding:0;background:#F3F4F1"><div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(body.slice(0, 140))}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F3F4F1" style="background:#F3F4F1"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="max-width:600px;background:#FFFFFF;border-radius:28px"><tr><td bgcolor="${tint}" style="background:${tint};padding:26px 24px 22px;border-radius:28px 28px 0 0"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td valign="top" style="padding-right:14px"><img src="${base}/email/neddy.png" width="56" height="56" alt="" style="display:block;border:0;border-radius:18px;width:56px;height:56px"></td><td valign="middle" style="font-family:${FONT}"><div style="font-size:24px;line-height:1.2;font-weight:800;letter-spacing:-0.4px;color:${INK}">${esc(heading)}</div><div style="font-size:15px;line-height:21px;color:${MUTED};margin-top:4px">You asked: ${esc(title)}</div></td></tr></table></td></tr><tr><td style="padding:24px 24px 4px">${paragraphs}${files ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:16px;line-height:24px;color:${INK}"><b>${esc(files)}</b></p>` : ""}${more ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:15px;line-height:22px;color:${MUTED}">${more}</p>` : ""}${reply ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:15px;line-height:22px;color:${MUTED}">${esc(reply)}</p>` : ""}</td></tr><tr><td align="center" style="padding:14px 24px 30px">${button(esc(link), esc(action))}</td></tr></table><div style="max-width:560px;font-family:${FONT};font-size:12px;line-height:18px;color:${MUTED};padding:18px 12px 0;text-align:center">You’re getting this because you asked ${esc(input.agentName)} to do this in Neddy. You can turn these emails off in You › Alerts.</div></td></tr></table></body></html>`;
 
   return { subject, text, html };
 }

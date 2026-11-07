@@ -15,7 +15,7 @@ is "AI Todd").
 
 ## Product Purpose
 
-Neato_Muse is a personal AI agent that manages a person's personal and business life in the
+Neddy is a personal AI agent that manages a person's personal and business life in the
 background: email, calendar, reminders, bills and statements, research, shopping, health, family
 plans, social posts and connected apps. Success is the person doing less: less typing, fewer
 decisions, fewer things remembered by them instead of by Neddy.
@@ -52,7 +52,7 @@ sends or changes on their behalf.
 
 ## Brand Commitments
 
-- Product name Neato_Muse; the agent is Neddy by default, with a friendly robot mascot and an
+- Product name Neddy; the agent is Neddy by default, with a friendly robot mascot and an
   animated avatar. The help page calls Neddy "he".
 - Marketing pages follow the Neato Ventures brand guidelines. The app keeps its own existing look.
 

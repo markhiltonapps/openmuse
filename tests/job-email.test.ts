@@ -15,7 +15,7 @@ test("a finished job's email says it's done, shows the summary and opens the job
   assert.equal(email.subject, "Done: Compare the three best-reviewed robot vacuums on amazon.com");
   assert.match(email.text, /Top pick: the Roborock Q5/);
   assert.match(email.text, /• Roborock Q5 \(https:\/\/www\.amazon\.com\/dp\/B0\) \$199/);
-  assert.match(email.text, /Open in Neato_Muse: https:\/\/muse\.example\.com\/\?task=task%201/);
+  assert.match(email.text, /Open in Neddy: https:\/\/muse\.example\.com\/\?task=task%201/);
   assert.match(email.html, /I saved Robot vacuums\.pdf in your Files\./);
   assert.match(email.html, /href="https:\/\/muse\.example\.com\/\?task=task%201"/);
   assert.doesNotMatch(email.html, /\*\*/);
@@ -34,7 +34,7 @@ test("a question or a failure says so, and long summaries are cut with a pointer
     taskId: "t",
   });
   assert.equal(question.subject, "AI Todd needs your answer: Check my order");
-  assert.match(question.html, /Answer in Neato_Muse/);
+  assert.match(question.html, /Answer in Neddy/);
   assert.match(question.text, /Replies to this email don’t reach me/);
   const failed = jobEmail({
     outcome: "failed",

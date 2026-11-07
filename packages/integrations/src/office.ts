@@ -125,7 +125,7 @@ export async function makePptx(title: string, slides: Slide[], subtitle = ""): P
   const deck = new PptxGenJS();
   deck.layout = "LAYOUT_WIDE";
   deck.title = title;
-  deck.author = "Neato_Muse";
+  deck.author = "Neddy";
   const ink = "291A14";
   const teal = "1E6B6B";
   deck.defineSlideMaster({

@@ -56,7 +56,7 @@ export interface HelpTopic {
   /** Other words people use for it, for search. */
   keywords?: string[];
   related?: string[];
-  /** Only the admin (the person who runs this Neato_Muse) sees it. */
+  /** Only the admin (the person who runs Neddy) sees it. */
   admin?: boolean;
 }
 
@@ -116,7 +116,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Each device stays signed in for 30 days after you last used it.",
     ],
     body: [
-      "New here? Tap **Request access** and leave your name and email; the person who runs Neato_Muse can invite you. The website’s Request access buttons open that form straight away.",
+      "New here? Tap **Request access** and leave your name and email; the person who runs Neddy can invite you. The website’s Request access buttons open that form straight away.",
       "Using the app from an iPhone home screen? Links open in Safari. Press and hold the link in the email, tap **Copy**, and paste it in the code box on the sign-in screen.",
     ],
     keywords: [
@@ -137,11 +137,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "home-screen",
     group: "start",
     title: "Add the app to your home screen",
-    summary: "Neato_Muse installs like an app, so it opens full screen and can send notifications.",
+    summary: "Neddy installs like an app, so it opens full screen and can send notifications.",
     steps: [
       "**Android (Chrome):** tap ⋮ at the top right, then **Install app** or **Add to Home screen**.",
       "**iPhone (Safari):** tap **Share**, then **Add to Home Screen**, and open it from there. Notifications need this on iPhone.",
-      "**Windows (Chrome or Edge):** click the install icon at the right of the address bar, or ⋮ › **Install Neato_Muse**.",
+      "**Windows (Chrome or Edge):** click the install icon at the right of the address bar, or ⋮ › **Install Neddy**.",
     ],
     keywords: ["install", "app", "icon", "pwa", "home screen", "shortcut"],
     related: ["notifications", "fix-look"],
@@ -1158,7 +1158,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Open **You › Apps**, or just say “Connect my Gmail.”",
       "Find it in the list; for anything else, type its name in **Search 1,000+ apps** under **More apps**.",
       "Tap **Connect** and sign in on the app’s own page.",
-      "Come back to Neato_Muse. It shows **Connected**.",
+      "Come back to Neddy. It shows **Connected**.",
     ],
     body: [
       "On a call or in the chat, a **Connect** card appears right where you are. Signing in happens on the app’s own page; {agent} never sees your password.",
@@ -2148,7 +2148,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Your space is private",
     summary: "Your chats, memory, files and apps are yours alone.",
     body: [
-      "Other people using this Neato_Muse can’t see your chats, memory, files, connected apps or spending.",
+      "Other people using Neddy can’t see your chats, memory, files, connected apps or spending.",
       "Email, web pages and documents are treated as information, never as instructions: an email can’t tell {agent} to do something.",
       "Card numbers, passwords and the like are hidden before the AI sees them; see **Card numbers and passwords stay hidden**.",
     ],
@@ -2422,7 +2422,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Ask “Which apps are connected?” or look under **You › Apps**.",
       "If the app shows **Reconnect**, tap it and sign in again.",
-      "Ask again. If it still says no, tell {agent} “My Gmail is connected under Apps,” and tell the person who runs Neato_Muse what you asked.",
+      "Ask again. If it still says no, tell {agent} “My Gmail is connected under Apps,” and tell the person who runs Neddy what you asked.",
     ],
     keywords: ["can't access", "no access", "not connected", "gmail", "doesn't work", "job"],
     related: ["fix-reconnect", "gmail-two"],
@@ -2480,7 +2480,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "I’m not getting notifications",
     summary: "Check the app’s setting and your phone’s.",
     steps: [
-      "On iPhone, add Neato_Muse to your home screen and open it from there.",
+      "On iPhone, add Neddy to your home screen and open it from there.",
       "Turn notifications on in **You › Alerts › Phone app & notifications**.",
       "Check that your phone’s settings allow notifications for it.",
     ],
@@ -2495,7 +2495,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "If your browser blocked the microphone, tap the icon beside the web address, allow the microphone, and try again.",
       "Pick the microphone you’re using under **You › Agent › Voice**.",
-      "Check your internet connection. If there’s no headset button even with the message box empty, live talk isn’t turned on yet: ask the person who runs Neato_Muse.",
+      "Check your internet connection. If there’s no headset button even with the message box empty, live talk isn’t turned on yet: ask the person who runs Neddy.",
     ],
     keywords: ["call", "microphone", "can't hear", "no sound", "won't start", "headset", "voice"],
     related: ["microphone", "live-call"],
@@ -2531,7 +2531,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "Just say so: “No, I prefer morning meetings.” To fix something it remembers, open **You › About you**.",
       "If a reply didn’t finish (“I reached my step limit”), say “continue”.",
-      "If a reply didn’t go through, tap **Retry response**. If it keeps happening in one chat, start a new chat (the chat button under {agent}’s name › **New chat**) and tell the person who runs Neato_Muse what the error said.",
+      "If a reply didn’t go through, tap **Retry response**. If it keeps happening in one chat, start a new chat (the chat button under {agent}’s name › **New chat**) and tell the person who runs Neddy what the error said.",
     ],
     keywords: [
       "wrong",
@@ -2573,10 +2573,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "fix-still-stuck",
     group: "fix",
     title: "Still stuck?",
-    summary: "Ask {agent}, or the person who runs Neato_Muse.",
+    summary: "Ask {agent}, or the person who runs Neddy.",
     body: [
       "Ask {agent} “How do I…?”: it answers from this guide.",
-      "Or ask the person who runs Neato_Muse. Say what you tapped and what you saw.",
+      "Or ask the person who runs Neddy. Say what you tapped and what you saw.",
     ],
     keywords: ["help", "support", "contact", "stuck", "problem"],
     related: ["welcome"],

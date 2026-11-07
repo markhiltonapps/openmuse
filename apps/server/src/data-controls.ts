@@ -151,7 +151,7 @@ export class DataControls {
     }
     entries["README.txt"] = strToU8(
       [
-        `Neato_Muse export, ${new Date().toISOString()}`,
+        `Neddy export, ${new Date().toISOString()}`,
         "",
         "data/   everything your agent keeps, one JSON file per kind (memories, tasks, goals,",
         "        routines, reminders, health log, notifications and more)",

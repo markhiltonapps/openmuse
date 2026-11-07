@@ -1147,7 +1147,7 @@ function DoneAlertsOffer() {
     setNote(
       state === "off"
         ? "OK. You can turn notifications on later in You › Alerts."
-        : "OK. Once Neato_Muse is on your Home Screen, turn notifications on in You › Alerts.",
+        : "OK. Once Neddy is on your Home Screen, turn notifications on in You › Alerts.",
     );
   };
   const offer = !note && !declined && !!state && ["off", "install-first"].includes(state);
@@ -1160,7 +1160,7 @@ function DoneAlertsOffer() {
           </Text>
           <Text style={[s.muted, { color: colors.mutedStrong }]}>
             {state === "install-first"
-              ? "On iPhone, notifications need Neato_Muse on your Home Screen: tap Share, then “Add to Home Screen”, and open it from there."
+              ? "On iPhone, notifications need Neddy on your Home Screen: tap Share, then “Add to Home Screen”, and open it from there."
               : "I’ll send one to this device, so you can close the app."}
             {email ? " I’ll email you either way." : ""}
           </Text>
@@ -4520,19 +4520,19 @@ function PhoneAppCard() {
       {!isInstalled() && (
         <Text style={s.muted}>
           {isIos()
-            ? "Add Neato_Muse to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
-            : "Install Neato_Muse from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
+            ? "Add Neddy to your Home Screen: tap the Share button, then “Add to Home Screen”. Open it from there to get notifications."
+            : "Install Neddy from your browser menu (“Install app” or “Add to Home screen”) to open it like an app."}
         </Text>
       )}
       <Text style={s.muted}>
         {state === "on"
           ? "This device gets a notification when a job or routine finishes, or something needs you."
           : state === "install-first"
-            ? "Notifications work once Neato_Muse is on your Home Screen."
+            ? "Notifications work once Neddy is on your Home Screen."
             : state === "blocked"
               ? "Notifications are blocked for this site. Allow them in your browser settings, then come back."
               : state === "unsupported"
-                ? "This browser can't show notifications from Neato_Muse."
+                ? "This browser can't show notifications from Neddy."
                 : "Get a notification when a job or routine finishes, or something needs you."}
       </Text>
       {(state === "on" || state === "off") && (

@@ -42,7 +42,7 @@ test("a 6-digit code from the sign-in email signs in, once, with few guesses", a
     await call("/api/auth/request", { email: "boss@example.com" });
     const first = codeOf(sent[0]);
     assert.match(first, /^\d{6}$/, "the code leads the subject");
-    assert.match(sent[0]?.html ?? "", /Type this code in Neato_Muse/);
+    assert.match(sent[0]?.html ?? "", /Type this code in Neddy/);
     assert.match(sent[0]?.text ?? "", /#login=/, "the link is still there");
     // A newer email replaces the older code.
     await call("/api/auth/request", { email: "boss@example.com" });
