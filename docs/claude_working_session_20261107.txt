@@ -525,3 +525,15 @@ Round 2 (owner: "Go ahead with round 2"): "I'm running late / tell someone where
   stand-in (generated tiles routed in Playwright) because the sandbox can't reach the map service (CARTO); the numbers,
   distances and list are the real card. The Approve button says "Approve locally" because the sample server says so, as in the
   other Help pictures. Site paragraph updated.
+- Review round on round 2 (visual, usability, copy; all three: no blockers). Fixed: hours on their own line and read in plain
+  words ("Mon–Fri 9 am–6 pm", never raw map code; anything more complicated is left out; non-breaking spaces and a word joiner keep
+  "8 am–10 pm" on one line); a failed wider search keeps the close results (3 looks: 0.5 mi, 1.5 mi, 3.7 mi; 8 s per server,
+  up to 300 places so "closest" is honest); a name search only matches real places (amenity, shop, healthcare, tourism,
+  leisure), not streets; hospitals add "call 911 first" advice; a rough phone location is said; walking time is a rough
+  straight-line figure ("a 6-minute walk"); the email says "I'm near <street>. I'm about 15 minutes away. Here's where I am
+  right now: <link>" (no "exactly", no made-up "on my way"), "a minute" not "1 minutes", a worked-out time says "roughly" and a
+  trip of 3 hours or more is treated as a wrong match; Help says a connected Gmail or Outlook is needed and that OpenStreetMap
+  also looks up the street name; site paragraph states the OpenStreetMap limit. Not done on purpose: distance stays larger
+  than the address in the places card (it's the point of a "near me" list); no "you are here" pin; the Approve button in the
+  pictures still says "Approve locally" (sample server wording, as in the other Help pictures).
+- Tests 743 pass at this point; lint clean on what changed. Not pushed.

@@ -91,7 +91,7 @@ test("a parked car is saved from where they are, found again with how far, and c
   const found = (await run({ do: "find" })) as { parkedAgo: string; fromThem: string };
   assert.equal(found.parkedAgo, "2 hours ago");
   assert.match(found.fromThem, /^about 1[0-9]{3} ft|^about 0\.[0-9] mi/);
-  assert.match(found.fromThem, /minutes on foot/);
+  assert.match(found.fromThem, /-minute walk$/);
 
   // A card from the first parking can't clear a newer one.
   const first = saved.parked.at;
@@ -118,8 +118,8 @@ test("distances and times are said in plain words", async () => {
     "../apps/server/src/whereabouts.ts"
   );
   assert.ok(Math.abs(metersBetween({ lat: 0, lng: 0 }, { lat: 0, lng: 1 }) - 111_195) < 200);
-  assert.equal(walkingWords(90), "about 300 ft, a minute's walk");
-  assert.equal(walkingWords(800), "about 0.5 mi, about 10 minutes on foot");
+  assert.equal(walkingWords(90), "about 300 ft, a minute’s walk");
+  assert.equal(walkingWords(800), "about 0.5 mi, a 10-minute walk");
   assert.equal(agoWords(30_000), "just now");
   assert.equal(agoWords(35 * 60_000), "35 minutes ago");
   assert.equal(agoWords(3 * 24 * 3_600_000), "3 days ago");
@@ -214,20 +214,30 @@ test("“tell Dana I'm 15 minutes away” gets words with a map link, only from 
   const said = await run({ minutesAway: 15 });
   assert.equal(
     said.text,
-    "I’m at Main Street, Midtown, Houston, about 15 minutes away. Here’s exactly where I am: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677",
+    "I’m near Main Street, Midtown, Houston. I’m about 15 minutes away. Here’s where I am right now: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677",
   );
-  assert.doesNotMatch(String(said.message), /rough estimate/);
+  assert.doesNotMatch(String(said.message), /rough driving estimate/);
 
   // Where they're headed: a rough time from the distance, and said to be a rough one.
   const worked = await run({ to: "500 Main St" });
-  assert.match(String(worked.text), /about \d+ minutes away\./);
-  assert.match(String(worked.message), /rough estimate/);
+  assert.match(String(worked.text), /I’m roughly \d+ minutes away\./);
+  assert.match(String(worked.message), /rough driving estimate/);
   // A place that can't be found: no time is made up.
   const lost = await run({ to: "Nowhere Land" });
   assert.doesNotMatch(String(lost.text), /minutes away/);
   assert.match(String(lost.message), /Couldn’t work out the time/);
+  // One minute is "a minute", not "1 minutes".
+  assert.match(String((await run({ minutesAway: 1 })).text), /I’m about a minute away\./);
+  // Three hours or more by car is a wrong match, not a trip: no time is made up.
+  places["Far Away"] = { lat: 51.5, lng: -0.12 };
+  const far = await run({ to: "Far Away" });
+  assert.doesNotMatch(String(far.text), /minutes away/);
+  assert.match(String(far.message), /Couldn’t work out the time/);
   // No time at all: just where they are.
-  assert.match(String((await run({})).text), /^I’m at Main Street, Midtown, Houston\. Here’s/);
+  assert.match(
+    String((await run({})).text),
+    /^I’m near Main Street, Midtown, Houston\. Here’s where I am right now: /,
+  );
 
   // An old spot isn't sent to someone else as if it were now.
   now += 8 * 60_000;

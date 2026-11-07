@@ -40,7 +40,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   rehearsescore: { width: 720, height: 1846 },
   seeit: { width: 720, height: 1558 },
   setup: { width: 720, height: 1558 },
-  "share-where-i-am": { width: 720, height: 2031 },
+  "share-where-i-am": { width: 720, height: 1477 },
   spaces: { width: 720, height: 1558 },
   urgent: { width: 720, height: 1558 },
   watchdescribe: { width: 720, height: 2308 },

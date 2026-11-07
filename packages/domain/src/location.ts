@@ -19,12 +19,12 @@ export function distanceWords(meters: number) {
     : `about ${(meters / 1609.34).toFixed(1)} mi`;
 }
 
-/** The distance with a walking time at a gentle pace (3 mph). */
+/** The distance with a rough walking time (a straight line at 3 mph, not a route). */
 export function walkingWords(meters: number) {
   const minutes = Math.round(meters / 80);
   return minutes < 2
-    ? `${distanceWords(meters)}, a minute's walk`
-    : `${distanceWords(meters)}, about ${minutes} minutes on foot`;
+    ? `${distanceWords(meters)}, a minute’s walk`
+    : `${distanceWords(meters)}, a ${minutes}-minute walk`;
 }
 
 /** "just now", "35 minutes ago", "2 hours ago", "3 days ago". */

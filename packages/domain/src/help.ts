@@ -1359,7 +1359,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Open **You › Account › Your location** and tick **Share where I am while the app is open**. Your phone or browser asks once; tap **Allow**.",
       "Ask “Where am I?” or “Find a coffee shop near me”, in the chat or on a call.",
       "Ask for the weather where you are: “Will it rain on my walk?” or “When’s sunset here?” {agent} uses your spot, not your home city, and adds sunrise and sunset. Weather is US only.",
-      "Say “I parked here” to save where your car is. It shows here too, with a **Remove** button. See **Remember where you parked**. For the nearest pharmacy or coffee shop, see **What’s near you**; to tell someone where you are, see **Tell someone where you are**.",
+      "Say “I parked here” to save where your car is. It shows here too, with a **Remove** button. See **Remember where you parked**.",
       "To stop, untick it, or say “Turn off my location”.",
     ],
     body: [
@@ -1439,12 +1439,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Turn on **Your location** first (**You › Account › Your location**). Your phone or browser asks once; tap **Allow**.",
       "Ask in the chat or on a call: “Where’s the nearest pharmacy?” or “Find a coffee shop near me.”",
       "{agent} tells you the closest one, and a card shows them on a map with numbered pins.",
-      "Under each place you see how far it is, how long it takes on foot, and its hours as they’re written on the map.",
+      "Under each place you see how far it is, a rough walking time, and its hours when the map has them.",
       "Tap **Directions** to go there in your maps app. Tap a number on the map to pick out that place in the list.",
     ],
     body: [
       "{agent} can look for pharmacies, gas stations, coffee shops, public restrooms, EV chargers, grocery stores, ATMs, hospitals and urgent care, restaurants and parking, or a place by name, like “Starbucks”. It looks close first, then wider when only a few turn up.",
-      "The places come from OpenStreetMap, a free map that people keep up to date, so a place can be missing and hours can be out of date: call first when it matters. Your location, rounded to about a city block, is sent to OpenStreetMap to find them. Live traffic isn’t included.",
+      "The places come from OpenStreetMap, a free map that people keep up to date, so a place can be missing and hours can be out of date: call first when it matters. To find them, your location, rounded to about a city block, is sent to OpenStreetMap, which also looks up your street name. Live traffic isn’t included.",
     ],
     say: [
       { text: "Where’s the nearest pharmacy?", send: true },
@@ -1480,13 +1480,13 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "share-where-i-am",
     place: "account",
     steps: [
-      "Turn on **Your location** first (**You › Account › Your location**). Your phone or browser asks once; tap **Allow**.",
+      "Turn on **Your location** first (**You › Account › Your location**). Your phone or browser asks once; tap **Allow**. Connect your Gmail or Outlook under **You › Apps** too, if you haven’t.",
       "Say or type who and how long: “Tell Dana I’m about 15 minutes away.” Or just: “Send Dana where I am.”",
-      "{agent} writes the email, with your street, the time and a link to your exact spot. If you say where you’re headed, {agent} can work out a rough time for you.",
+      "{agent} writes the email, with your street, the time and a link to where you are right now. If you say where you’re headed, {agent} can work out a rough time for you.",
       "Read it, then tap **Approve** to send it. Tap **See details** to read it all, change it or say no. Nothing goes until you approve.",
     ],
     body: [
-      "The link opens a map at exactly where you are right now. It doesn’t follow you, so it won’t update as you move. Saying where you are needs a fresh location: if your phone last shared a few minutes ago, {agent} asks you to open the app first.",
+      "The link opens a map at exactly where you are right now. It doesn’t follow you, so it won’t update as you move. Sharing where you are needs a fresh location: if your phone last shared a few minutes ago, {agent} asks you to open the app first. The email goes from your connected Gmail or Outlook; without one, {agent} offers to connect it, or gives you the words to send yourself.",
       "A time {agent} works out is a rough estimate from the distance, with no live traffic. It goes as an email, not a text: {agent} can’t send texts.",
     ],
     say: ["Tell Dana I’m about 15 minutes away.", "Send Dana where I am."],

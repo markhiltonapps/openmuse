@@ -793,21 +793,21 @@ const SHOTS = [
         {
           name: "CVS Pharmacy",
           address: "500 Main Street, Houston",
-          note: "about 350 ft, a minute's walk\nHours on the map: Mo-Su 08:00-22:00",
+          note: "about 350 ft, a minute’s walk\nHours on the map: Every day 8 am–⁠10 pm",
           lat: 29.7557,
           lng: -95.3677,
         },
         {
           name: "Walgreens",
           address: "1210 Fannin Street, Houston",
-          note: "about 0.3 mi, about 6 minutes on foot\nHours on the map: Mo-Fr 08:00-21:00; Sa 09:00-18:00",
+          note: "about 0.3 mi, a 6-minute walk\nHours on the map: Mon–Fri 8 am–⁠9 pm; Sat 9 am–⁠6 pm",
           lat: 29.7512,
           lng: -95.3641,
         },
         {
           name: "Midtown Pharmacy",
           address: "3000 Travis Street, Houston",
-          note: "about 0.5 mi, about 10 minutes on foot",
+          note: "about 0.5 mi, a 10-minute walk",
           lat: 29.7498,
           lng: -95.3731,
         },
@@ -860,7 +860,7 @@ const SHOTS = [
     height: 800,
     go: async (p, state) => {
       const body =
-        "I’m at Main Street, Midtown, Houston, about 15 minutes away. Here’s exactly where I am: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677";
+        "I’m near Main Street, Midtown, Houston. I’m about 15 minutes away. Here’s where I am right now: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677";
       // The sample's own approval is replaced by the email, waiting for the OK.
       await p.route(/\/api\/workspace$/, async (route) => {
         const real = await (await route.fetch()).json();
@@ -899,7 +899,7 @@ const SHOTS = [
           id: "help-a1",
           role: "assistant",
           content:
-            "Here’s the email to Dana. It has your street and a link to your exact spot. It only goes when you approve.",
+            "Here’s the email to Dana. It has your street and a link to where you are right now. It only goes when you approve.",
           toolCalls: [
             {
               id: "help-call-1",
