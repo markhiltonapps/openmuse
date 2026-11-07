@@ -215,7 +215,7 @@ export class Nearby {
           tags.operator?.trim() ||
           (what ? NEARBY_KINDS[what].one : "Place"),
         ...(address ? { address } : {}),
-        note: `${walkingWords(meters)}${hours ? ` · Hours on the map: ${hours}` : ""}`,
+        note: `${walkingWords(meters)}${hours ? `\nHours on the map: ${hours}` : ""}`,
         ...(httpUrl(tags.website ?? tags["contact:website"])
           ? { url: httpUrl(tags.website ?? tags["contact:website"]) }
           : {}),

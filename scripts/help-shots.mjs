@@ -793,14 +793,14 @@ const SHOTS = [
         {
           name: "CVS Pharmacy",
           address: "500 Main Street, Houston",
-          note: "about 350 ft, a minute's walk · Hours on the map: Mo-Su 08:00-22:00",
+          note: "about 350 ft, a minute's walk\nHours on the map: Mo-Su 08:00-22:00",
           lat: 29.7557,
           lng: -95.3677,
         },
         {
           name: "Walgreens",
           address: "1210 Fannin Street, Houston",
-          note: "about 0.3 mi, about 6 minutes on foot · Hours on the map: Mo-Fr 08:00-21:00; Sa 09:00-18:00",
+          note: "about 0.3 mi, about 6 minutes on foot\nHours on the map: Mo-Fr 08:00-21:00; Sa 09:00-18:00",
           lat: 29.7512,
           lng: -95.3641,
         },
@@ -857,7 +857,7 @@ const SHOTS = [
   {
     // "Tell Dana I'm 15 minutes away": the email it writes, waiting for the person's OK.
     id: "share-where-i-am",
-    height: 1100,
+    height: 800,
     go: async (p, state) => {
       const body =
         "I’m at Main Street, Midtown, Houston, about 15 minutes away. Here’s exactly where I am: https://www.google.com/maps/search/?api=1&query=29.7547,-95.3677";
@@ -950,7 +950,7 @@ const SHOTS = [
       4: {
         find: (p) => p.getByRole("button", { name: /^Approve/ }).first(),
         also: (p) => p.getByRole("button", { name: /^See details/ }).first(),
-        side: "left",
+        side: "top-right",
       },
     },
   },
