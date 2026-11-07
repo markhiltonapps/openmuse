@@ -14,10 +14,12 @@ import {
   Mail,
   Mic,
   UserPlus,
+  X,
 } from "lucide-react-native";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src";
+import type { AgentTask } from "../../../packages/domain/src/agent";
 import type { Weather } from "../../../packages/domain/src/weather";
 import { taskActivity } from "./activity";
 import { contactCard, contactFileName } from "./agent-contact";
@@ -91,9 +93,73 @@ const soft = () => (glass ? "rgba(255, 255, 255, 0.82)" : colors.mutedStrong);
 /** The greeting home: what needs you, today, and what the agent is doing, then talk or type. */
 export function HomeScreen({ desktop }: { desktop: boolean }) {
   const { workspace: w, api, open, navigate } = useWorkspace();
-  const { data, error: jobsError } = useAgentWorkspace();
+  const { data, error: jobsError, mutate } = useAgentWorkspace();
   const agent = data?.identity.name || "Neddy";
   const { result: weather } = useWeather();
+  // A stopped job (the ✕ on a Needs you row): what happened, in the card where its row was, with
+  // Undo for a while. The card stays while this shows, even when it was the last row.
+  const [gone, setGone] = useState<{
+    title: string;
+    text: string;
+    undo: boolean;
+    failed?: boolean;
+  }>();
+  const goneTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // No second ✕ for a moment after one: the next row slides into the tapped spot.
+  const [stopping, setStopping] = useState(false);
+  useEffect(() => () => clearTimeout(goneTimer.current), []);
+  const sayGone = (title: string, text: string, undo: boolean, seconds: number, failed = false) => {
+    clearTimeout(goneTimer.current);
+    setGone({ title, text, undo, failed });
+    goneTimer.current = setTimeout(() => setGone(undefined), seconds * 1000);
+  };
+  const stopJob = async (task: Pick<AgentTask, "id" | "title">) => {
+    setStopping(true);
+    try {
+      // One tidy (stop + archive), so Undo here, in Activity or by voice brings back exactly this.
+      await mutate("/tasks/archive", { ids: [task.id], stop: true });
+      sayGone(task.title, `Stopped “${task.title}”. It’s under Archived in Activity.`, true, 20);
+      // The ✕ that had focus is gone: keyboard and screen-reader focus go to Undo.
+      if (Platform.OS === "web")
+        setTimeout(() => document.getElementById("needs-you-undo")?.focus(), 50);
+    } catch (e) {
+      sayGone(
+        task.title,
+        e instanceof Error ? e.message : "Couldn’t stop it. Try again.",
+        false,
+        8,
+        true,
+      );
+    } finally {
+      setTimeout(() => setStopping(false), 1000);
+    }
+  };
+  const undoStop = async () => {
+    const title = gone?.title ?? "it";
+    try {
+      // Undo brings back the last tidy, wherever it was done; say what really came back.
+      const result = await mutate<{ jobs: string[] }>("/tasks/undo", {});
+      const n = result.jobs.length;
+      sayGone(
+        title,
+        n === 1
+          ? `Brought back “${title}”.`
+          : n
+            ? `Brought back ${n} jobs.`
+            : "Nothing to bring back.",
+        false,
+        6,
+      );
+    } catch (e) {
+      sayGone(
+        title,
+        e instanceof Error ? e.message : "Couldn’t bring it back. Try again.",
+        true,
+        8,
+        true,
+      );
+    }
+  };
   const [appDay, setAppDay] = useState<AppDay | null>();
   useEffect(() => {
     api.request<AppDay>("/api/calendar/today").then(setAppDay, () => setAppDay(null));
@@ -229,11 +295,11 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
       {/* Nothing below the greeting until the jobs are in, so no card moves under a thumb. */}
       {known && (
         <View style={{ gap: desktop ? 16 : 12 }}>
-          {(approvals.length > 0 || jobs.length > 0) && (
+          {(approvals.length > 0 || jobs.length > 0 || gone) && (
             <HomeCard
               title="Needs you"
               icon={Check}
-              badge={needs}
+              badge={needs || undefined}
               badgeWords={`${count(needs).toLowerCase()} ${needs === 1 ? "thing" : "things"}`}
             >
               {/* The real card: Approve (named for what it does) and See details, right here. */}
@@ -254,8 +320,57 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
                   line={waitingWords(task.status)}
                   button={task.status === "waiting_input" ? "Answer" : "Review"}
                   onPress={() => open({ type: "task", taskId: task.id })}
+                  onDismiss={stopping ? undefined : () => void stopJob(task)}
                 />
               ))}
+              {/* Always mounted, so a change is read out (a line that appears with its text often
+                  isn't); out of the flow and untouchable. */}
+              <Text
+                role="status"
+                aria-live="polite"
+                pointerEvents="none"
+                style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
+              >
+                {gone?.text ?? ""}
+              </Text>
+              {gone && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    paddingTop: approvals.length || jobs.length ? 10 : 0,
+                    borderTopWidth: approvals.length || jobs.length ? 1 : 0,
+                    borderTopColor: glass ? "rgba(255,255,255,0.12)" : colors.line,
+                  }}
+                >
+                  <Text
+                    style={{ color: gone.failed ? colors.danger : soft(), fontSize: 13, flex: 1 }}
+                    numberOfLines={3}
+                  >
+                    {gone.text}
+                  </Text>
+                  {gone.undo && (
+                    <Pressable
+                      nativeID="needs-you-undo"
+                      accessibilityRole="button"
+                      accessibilityLabel={`Undo: bring back ${gone.title}`}
+                      onPress={() => void undoStop()}
+                      style={({ pressed }) => ({
+                        height: 36,
+                        paddingHorizontal: 14,
+                        borderRadius: 18,
+                        borderWidth: 1.5,
+                        borderColor: glass ? "rgba(255,255,255,0.35)" : colors.edge,
+                        justifyContent: "center",
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <Text style={{ color: ink(), fontSize: 14, fontWeight: "700" }}>Undo</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
               {needs > 3 && (
                 <Pressable
                   accessibilityRole="button"
@@ -814,12 +929,15 @@ function Waiting({
   line,
   button,
   onPress,
+  onDismiss,
 }: {
   first: boolean;
   title: string;
   line: string;
   button: string;
   onPress: () => void;
+  /** Stops the job (owner, 2026-11-07: a way to delete a Needs you row): archived, with Undo. */
+  onDismiss?: () => void;
 }) {
   return (
     <View
@@ -857,6 +975,32 @@ function Waiting({
           <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>{button}</Text>
         </OnGloss>
       </Pressable>
+      {onDismiss && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Stop: ${title}`}
+          {...tipProps("Stop")}
+          onPress={onDismiss}
+          // react-native-web passes `hovered`; the native types don't know it.
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
+            width: 44,
+            height: 44,
+            marginRight: -8,
+            borderRadius: 22,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor:
+              pressed || hovered
+                ? glass
+                  ? "rgba(255,255,255,0.12)"
+                  : colors.subtle
+                : "transparent",
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <X size={18} color={soft()} strokeWidth={2.2} />
+        </Pressable>
+      )}
     </View>
   );
 }

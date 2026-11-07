@@ -3887,7 +3887,6 @@ export function AppsScreen() {
       (next ?? heading)?.focus();
     }, 150);
   }
-  const [query, setQuery] = useState("");
   const [tab, setTab] = useAppsTab();
   const [name, setName] = useState(data?.identity.name || "Neddy");
   const [tone, setTone] = useState(data?.identity.tone || "warm");
@@ -3974,31 +3973,23 @@ export function AppsScreen() {
       <AppsTabs tab={tab} onTab={setTab} badges={{ about: data?.memorySuggestions.length }} />
       {tab === "apps" && (
         <>
-          <Field
-            label="Search apps"
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search connectors"
-          />
-          <ConnectionsScreen query={query} />
-          {!query && <OwnAppsCard />}
+          {/* One search on this screen (owner, 2026-11-07): the 1,000+ apps box under More apps.
+              The short lists above it need no filter. */}
+          <ConnectionsScreen />
+          <OwnAppsCard />
           <Text style={s.heading}>On your computer</Text>
           <Card style={{ paddingVertical: 3, backgroundColor: colors.card }}>
-            {shortcuts
-              .filter((item) =>
-                `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()),
-              )
-              .map((item) => (
-                <LinkRow
-                  key={item.section}
-                  icon={item.icon}
-                  title={item.title}
-                  detail={item.detail}
-                  onPress={() =>
-                    item.section === "browser" ? open({ type: "computer" }) : navigate(item.section)
-                  }
-                />
-              ))}
+            {shortcuts.map((item) => (
+              <LinkRow
+                key={item.section}
+                icon={item.icon}
+                title={item.title}
+                detail={item.detail}
+                onPress={() =>
+                  item.section === "browser" ? open({ type: "computer" }) : navigate(item.section)
+                }
+              />
+            ))}
           </Card>
           <AlwaysAllowedCard />
           <AppPermissionsCard />

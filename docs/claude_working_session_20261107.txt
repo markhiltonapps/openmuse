@@ -303,3 +303,40 @@ animate (sent a screenshot with an arrow at him). Phone calls (Twilio) wait.
 - Checks: Biome, pnpm typecheck, `env -u OPENROUTER_API_KEY pnpm test` 718 pass; Playwright: teal
   saves, shows on Home (both Neddys) and survives a reload; Copy puts the transcript on the
   clipboard and the button reads Copied then Copy transcript again.
+
+Needs you: a ✕ to stop a job; a livelier Neddy at the top; one search on You › Apps
+----------------------------------------------------------------------------------
+Owner: "We need a way of deleting 'Needs You' requests", "Neddy needs a lot better animation
+(the one at the top centre)", and from a screenshot of You › Apps: two search bars, and OpenBot
+isn't needed since Neddy can already search the web.
+- Home › Needs you (home.tsx `Waiting`, `stopJob`, `undoStop`): each waiting job row has a ✕
+  (label "Stop: {title}", tooltip Stop) after Answer/Review. One tap = the same tidy as Activity's
+  "let go" (POST /tasks/archive {ids, stop:true}); the row goes and the card says "Stopped “…”.
+  It’s under Archived in Activity." with an outlined Undo pill (POST /tasks/undo, which names what
+  really came back) for 20 s. Review fixes: the card stays while that line shows even when it was
+  the last row (it used to vanish with its Undo); an always-mounted role="status" line announces
+  it; focus moves to Undo (nativeID needs-you-undo); no second ✕ for 1 s so the next row sliding
+  into the spot isn't stopped by mistake; errors in `colors.danger` with "Try again"; 3-line
+  text. "Dismiss" became "Stop" (copy + UX reviewers: a ✕ that reads "dismiss" hides a notice,
+  but the job really stops). Approval rows already have their own Turn down. Help home step
+  updated; greet picture retaken.
+- The flying Neddy (avatar.tsx `Mascot`, whole Neddy with `flying`): besides the rise and fall
+  he drifts sideways (±3%, 6.3 s loop) and leans (±3.5°, 5.1 s), glances to one side now and then
+  (5°, eased, held 0.7 s), blinks (`NeddyLids`: visor-coloured patches over the eye arcs at
+  0.321–0.426 / 0.560–0.664 × 0.241–0.289, every 2.6–6 s for 150 ms), the jets push hardest at
+  the bottom of each hover (`thrust` in `JetFlames`), and a finished job makes him spin once
+  (`spin`, 750 ms) with the sparkles. Origin at his middle while flying. Reduced motion and live
+  calls stop all of it. Checked with 28 frames at 250 ms (scratchpad neddy-frames.png) and a
+  40 ms burst that caught a blink (blink-closed.png). The count badge on his helmet stays put
+  (a HUD) while he moves; left as is. The Talk bar's Neddy gets the same motion.
+- You › Apps: the top "Search apps" field (it only filtered three rows) is gone; the one search
+  is "Search 1,000+ apps" under More apps (shown when Composio is set up). The OpenBot row and
+  its sheet are gone (`ConnectionsScreen` takes no query now). The search row's box can shrink
+  (`minWidth: 0`), which also fixed the Search button being clipped at phone width. Help
+  connect-apps step 2 now says to find it in the list or type its name there; the picture mocks
+  /api/apps/directory as configured so the box shows, and is retaken.
+- Copy fixes from the review: agent-settings "pick an eye colour", meeting-transcript "Copy
+  transcript, then paste it…" with the iPhone share-sheet note, site "Pick his eye colour".
+- Checks: Biome, pnpm typecheck, `env -u OPENROUTER_API_KEY pnpm test` 718 pass; Playwright
+  (scratchpad dismiss-anim.mjs): stop → row gone + line + Undo; undo → row back; stopping the last
+  row keeps the card with the line and focus on Undo.

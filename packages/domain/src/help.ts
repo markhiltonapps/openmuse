@@ -155,7 +155,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "greet",
     place: "home",
     steps: [
-      "**Needs you:** anything waiting for your OK, with an **Approve** button right on the card that says what it does (**Approve & send** for an email, **Approve & run** for an app, **Approve change** for the rest; the sample says **Approve locally**) and **See details** to look first. A job waiting for your OK has **Review**; one with a question for you has **Answer**.",
+      "**Needs you:** anything waiting for your OK, with an **Approve** button right on the card that says what it does (**Approve & send** for an email, **Approve & run** for an app, **Approve change** for the rest; the sample says **Approve locally**) and **See details** to look first. A job waiting for your OK has **Review**; one with a question for you has **Answer**. The **✕** next to it stops the job: it goes under **Archived** in Activity, with **Undo** there for a little while.",
       "**Today:** what’s left on your calendar. Tap it for your day in Feed.",
       "**Working on:** the job {agent} is doing now. Tap it to see how it’s going, or, when {agent} is free, to give it a job.",
       "**Talk to {agent}:** tap it and just talk. The keyboard button next to it opens the chat so you can type instead.",
@@ -1154,7 +1154,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     place: "apps",
     steps: [
       "Open **You › Apps**, or just say “Connect my Gmail.”",
-      "Search for the app.",
+      "Find it in the list; for anything else, type its name in **Search 1,000+ apps** under **More apps**.",
       "Tap **Connect** and sign in on the app’s own page.",
       "Come back to Neato_Muse. It shows **Connected**.",
     ],
@@ -1604,7 +1604,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     shot: "meetingtranscript",
     place: "meetings",
     steps: [
-      "Open **Files › Meetings**, tap a meeting, and under **Every word** tap **Copy transcript** to paste the words into an email or a note, or **Download transcript** to have your browser save a text file named after the meeting.",
+      "Open **Files › Meetings**, tap a meeting, and under **Every word** tap **Copy transcript**, then paste it into an email or a note; or **Download transcript** for a text file named after the meeting (an installed iPhone app opens the share sheet instead).",
       "To get real names in the file, tap a speaker’s name (like **Speaker 2**) first and say who it is, then download it.",
     ],
     body: [
@@ -2124,7 +2124,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Open **You › Agent**.",
       "Pick a character and colour; it saves straight away.",
-      "With Neddy, pick the eyes: **Amber** (Neddy’s own) or **Teal**. The change shows everywhere at once.",
+      "With Neddy, pick an eye colour: **Amber** (Neddy’s own) or **Teal**. It changes everywhere at once.",
       "Change the **Name** and **Tone** (Warm, Concise or Thoughtful).",
       "Tap **Save name and settings**.",
     ],

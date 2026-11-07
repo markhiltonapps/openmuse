@@ -588,9 +588,14 @@ const SHOTS = [
   },
   {
     id: "apps",
+    height: 1500,
     go: async (p) => {
+      // The sample server has no app catalog key; Railway does, so the picture shows its search.
+      await p.route(/\/api\/apps\/directory(\?.*)?$/, (route) =>
+        route.fulfill({ json: { configured: true, apps: [] } }),
+      );
       await appsTab(p, /^Apps$/);
-      await p.waitForTimeout(500);
+      await p.waitForTimeout(800);
     },
     marks: {
       1: (p) => tab(p, "You"),

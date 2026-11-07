@@ -128,6 +128,35 @@ function Capybara({ size, blink }: { size: number; blink: boolean }) {
   );
 }
 
+/**
+ * Whole Neddy's blink: two patches the visor's own colour over his eye arcs (measured in the
+ * picture: left 0.321–0.426 × 0.241–0.289, right 0.560–0.664), shown for a moment every few seconds.
+ */
+function NeddyLids({ size, closed }: { size: number; closed: boolean }) {
+  const lid = (x0: number, x1: number) => (
+    <View
+      key={x0}
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: size * (x0 - 0.02),
+        top: size * 0.228,
+        width: size * (x1 - x0 + 0.04),
+        height: size * 0.075,
+        borderRadius: size * 0.04,
+        backgroundColor: "#4A3537",
+        opacity: closed ? 1 : 0,
+      }}
+    />
+  );
+  return (
+    <>
+      {lid(0.321, 0.426)}
+      {lid(0.56, 0.664)}
+    </>
+  );
+}
+
 function ThinkingDots({ size }: { size: number }) {
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -249,6 +278,65 @@ export function Mascot({
   const breathe = useRef(new Animated.Value(0)).current;
   const lift = useRef(new Animated.Value(0)).current;
   const flames = whole && flying;
+  // Flying Neddy also drifts sideways and tilts a little, at a different pace from the rise and
+  // fall, so the hover feels like floating rather than a metronome; now and then he glances to
+  // one side, and he blinks.
+  const sway = useRef(new Animated.Value(0)).current;
+  const tilt = useRef(new Animated.Value(0)).current;
+  const spin = useRef(new Animated.Value(0)).current;
+  const blink = useBlink(flames && motion && !quiet);
+  useEffect(() => {
+    sway.setValue(0);
+    tilt.setValue(0);
+    if (!flames || !motion || quiet) return;
+    const ease = Easing.inOut(Easing.sin);
+    const drift = (value: Animated.Value, toValue: number, duration: number) =>
+      Animated.timing(value, {
+        toValue,
+        duration,
+        easing: ease,
+        useNativeDriver: Platform.OS !== "web",
+      });
+    const swaying = Animated.loop(
+      Animated.sequence([drift(sway, 1, 2100), drift(sway, -1, 2100), drift(sway, 0, 2100)]),
+    );
+    // A slow lean each way, then a quick glance to one side and back, then rest.
+    const tilting = Animated.loop(
+      Animated.sequence([
+        drift(tilt, 0.5, 1700),
+        drift(tilt, -0.5, 1700),
+        drift(tilt, 0, 1700),
+        Animated.delay(2600),
+        drift(tilt, 0.7, 420),
+        Animated.delay(700),
+        drift(tilt, 0, 520),
+        Animated.delay(4200),
+        drift(tilt, -0.7, 420),
+        Animated.delay(600),
+        drift(tilt, 0, 520),
+        Animated.delay(2400),
+      ]),
+    );
+    swaying.start();
+    tilting.start();
+    return () => {
+      swaying.stop();
+      tilting.stop();
+    };
+  }, [flames, motion, quiet, sway, tilt]);
+  // Finished work: one spin on the spot, with the sparkles.
+  useEffect(() => {
+    spin.setValue(0);
+    if (!flames || !motion || quiet || mood !== "celebrate") return;
+    const turn = Animated.timing(spin, {
+      toValue: 1,
+      duration: 750,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: Platform.OS !== "web",
+    });
+    turn.start();
+    return () => turn.stop();
+  }, [flames, motion, quiet, mood, spin]);
   // The flames' flicker: their height, a little uneven, like a real flame.
   const flicker = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -380,10 +468,22 @@ export function Mascot({
         style={{
           width: size,
           height: size,
-          transformOrigin: "50% 100%",
+          transformOrigin: flames ? "50% 60%" : "50% 100%",
           transform: [
             {
               translateY: lift.interpolate({ inputRange: [0, 2], outputRange: [0, -size * 0.14] }),
+            },
+            {
+              translateX: sway.interpolate({
+                inputRange: [-1, 1],
+                outputRange: [-size * 0.03, size * 0.03],
+              }),
+            },
+            {
+              rotate: Animated.add(
+                tilt.interpolate({ inputRange: [-1, 1], outputRange: [-7, 7] }),
+                spin.interpolate({ inputRange: [0, 1], outputRange: [0, 360] }),
+              ).interpolate({ inputRange: [-7, 367], outputRange: ["-7deg", "367deg"] }),
             },
             { scaleY: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] }) },
             { scaleX: breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 0.99] }) },
@@ -391,7 +491,8 @@ export function Mascot({
         }}
       >
         {art}
-        {flames && <JetFlames size={size} flicker={flicker} />}
+        {whole && <NeddyLids size={size} closed={blink} />}
+        {flames && <JetFlames size={size} flicker={flicker} lift={lift} />}
       </Animated.View>
       {motion &&
         mood === "working" &&
@@ -407,9 +508,26 @@ export function Mascot({
 }
 
 /** Two small jet flames under whole Neddy's feet, their height following `flicker`. */
-function JetFlames({ size, flicker }: { size: number; flicker: Animated.Value }) {
+function JetFlames({
+  size,
+  flicker,
+  lift,
+}: {
+  size: number;
+  flicker: Animated.Value;
+  /** The hover's height: the jets push hardest at the bottom, just before he rises. */
+  lift: Animated.Value;
+}) {
   const w = size * 0.09;
   const h = size * 0.22;
+  const thrust = Animated.multiply(
+    flicker,
+    lift.interpolate({
+      inputRange: [0, 0.55, 2],
+      outputRange: [1.25, 0.8, 0.8],
+      extrapolate: "clamp",
+    }),
+  );
   const flame = (left: number, delay: number) => (
     <Animated.View
       key={left}
@@ -425,7 +543,7 @@ function JetFlames({ size, flicker }: { size: number; flicker: Animated.Value })
         transformOrigin: "50% 0%",
         transform: [
           {
-            scaleY: flicker.interpolate({
+            scaleY: thrust.interpolate({
               inputRange: [0.7, 1.15],
               outputRange: [0.7 + delay, 1.15 - delay],
             }),
