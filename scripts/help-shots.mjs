@@ -1360,6 +1360,41 @@ const SHOTS = [
     },
   },
   {
+    // Pairing a device: the code field, Pair device, and the paired device with Rename and Remove.
+    id: "devices",
+    height: 1500,
+    go: async (p) => {
+      await p.route(/\/api\/devices$/, (route) =>
+        route.fulfill({
+          json: {
+            talkReady: true,
+            visible: true,
+            devices: [
+              {
+                id: "d1",
+                name: "Desk",
+                model: "Waveshare watch board",
+                createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+                lastSeenAt: new Date().toISOString(),
+                connected: true,
+              },
+            ],
+          },
+        }),
+      );
+      await appsTab(p, /Account/);
+      await reveal(p.getByText("Pair a device", { exact: true }), 400);
+      // The code the person has typed, so Pair device is live (not greyed out).
+      await p.getByLabel("Code on the device").pressSequentially("482913");
+      await p.waitForTimeout(300);
+    },
+    marks: {
+      1: { find: (p) => p.getByLabel("Code on the device"), side: "inside-right" },
+      2: { find: (p) => button(p, "Pair device"), side: "left" },
+      3: { find: (p) => button(p, "Remove Desk"), side: "top-right" },
+    },
+  },
+  {
     id: "backdrop",
     // Tall enough to show every group down to No backdrop: marks never scroll.
     height: 2300,

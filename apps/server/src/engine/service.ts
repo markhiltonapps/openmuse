@@ -50,6 +50,7 @@ import {
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
+import type { Devices } from "../devices.ts";
 import type { EmailViews } from "../email-views.ts";
 import { AppError } from "../errors.ts";
 import { FileShares } from "../file-shares.ts";
@@ -1436,6 +1437,10 @@ export class AgentService {
   placeReminders?: PlaceReminders;
   /** Websites built for people on a stronger model, in the background. */
   websites?: WebsiteBuilds;
+  /** Small button-held devices (the watch-style board) the person has paired. */
+  devices?: Devices;
+  /** Whether our own voice is on, so a paired device can answer. */
+  devicesTalkReady?: boolean;
   /** Real places near where they are (OpenStreetMap), set when the server can reach the map service. */
   nearby?: Nearby;
   /** A live call's ear, for approving by voice (what was read back, and their words since). */

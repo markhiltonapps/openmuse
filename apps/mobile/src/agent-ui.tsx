@@ -70,6 +70,7 @@ import { BarChart, DataTable, Meter } from "./charts";
 import { LineChart } from "./charts-extra";
 import { ChatgptImport, YourDataCard } from "./data-ui";
 import { REST_OF_JOB_DETAIL } from "./details";
+import { DevicesCard } from "./devices-ui";
 import { Emoji, topicEmoji } from "./emoji";
 import { HeadsUpsCard } from "./heads-ups-ui";
 import { HealthSection } from "./health-ui";
@@ -4020,6 +4021,7 @@ export function AppsScreen() {
           <AccountCard />
           <PasswordsCard />
           <LocationCard />
+          <DevicesCard />
           <YourDataCard />
           <PeopleCard />
         </>

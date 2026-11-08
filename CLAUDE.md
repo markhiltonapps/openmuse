@@ -652,3 +652,13 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   Safety checks on model-written HTML are an allow-list (what a link or style may contain), never a block-list of bad words;
   anything paid that a retry can repeat (a build) is idempotent by its input and a job gets only the status tool; a record that
   says "working" needs a reaper for when the process died; a render in a browser needs its own deadline and queue cap.
+- **Devices (owner, 2026-11-08; the Waveshare ESP32-S3 AMOLED 2.06 watch board, push-to-talk, our own voice):** a device has no
+  keyboard, so it shows a six-digit code and the person types or SAYS it (`manage_devices`; spoken digits arrive as "4 8 2 9 1 3", so
+  strip spaces before checking). The device collects its token once by polling and only hashes are stored. Anything a repeated call
+  can do twice must be idempotent: the same person claiming the same code again gets the same device and isn't counted as a wrong
+  guess; names are made unique ("My device 2") so "the kitchen one" is unambiguous; removing by voice asks first (`confirm`). A card
+  that is hidden when you have nothing must stay mounted after you remove the last item, or its confirmation vanishes with it.
+  The api only copies audio between the device's websocket (`ws`, upgrade handled outside Hono, so the sign-in middleware doesn't
+  run: the device token is checked in `DeviceBridge.upgrade`) and the voice service (`/v1/live/sessions/<id>/audio`); the call
+  starts at the first press so an idle device costs nothing. Real latency can't be known without real Soniox/Inworld and the board.
+

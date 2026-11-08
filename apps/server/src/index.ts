@@ -18,7 +18,9 @@ await moveFromVolume(db, config.dataDir, blobs, {
   log: (line) => console.log(line),
 });
 await db.recoverInterruptedActions();
-const { app, agent, liveVoice, pipecatVoice } = await createApp(db, config, { blobs });
+const { app, agent, liveVoice, pipecatVoice, deviceBridge } = await createApp(db, config, {
+  blobs,
+});
 console.log(liveVoice.describe());
 console.log(
   pipecatVoice
@@ -49,6 +51,8 @@ if (config.taskWorkerEnabled) agent.start();
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, () =>
   console.log(`OpenMuse ${config.mode} API ready at ${config.publicUrl}`),
 );
+// Devices (the watch-style board) keep one websocket open to talk over.
+deviceBridge.attach(server as unknown as import("node:http").Server);
 if (config.workerUrl)
   void fetch(`${config.workerUrl}/health`, { signal: AbortSignal.timeout(10000) }).then(
     (response) =>
@@ -64,6 +68,7 @@ if (config.workerUrl)
 // finishes the requests it has (a reply being written), then exits.
 const shutdown = () => {
   const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+  deviceBridge.stop();
   void Promise.all([agent.stop(), liveVoice.stop(), pipecatVoice?.stop(), closed])
     .then(() => db.close())
     .then(() => process.exit(0));

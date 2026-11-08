@@ -32,6 +32,7 @@ import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
 import { hiddenMessages, withoutHidden } from "../data-controls.ts";
 import { calendarToolSpec } from "../day-tools.ts";
+import { deviceToolSpecs } from "../devices.ts";
 import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
@@ -893,6 +894,11 @@ export class ConversationAgent extends AbstractAgent {
         ...miniAppToolSpecs(this.service.miniApps, this.owner),
         ...(this.service.websites?.available
           ? websiteToolSpecs(this.service.websites, this.owner)
+          : []),
+        ...(this.service.devices
+          ? deviceToolSpecs(this.service.devices, this.owner, {
+              talkReady: this.service.devicesTalkReady,
+            })
           : []),
         ...peopleToolSpecs(this.service.people, this.owner),
         ...personaToolSpecs(this.service.persona, this.owner),

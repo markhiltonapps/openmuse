@@ -45,6 +45,8 @@ import { DataControls, type ThreadStore } from "./data-controls.ts";
 import { withOwnCalendar } from "./day-tools.ts";
 import type { Store } from "./db.ts";
 import { Depth, depthModelPath } from "./depth.ts";
+import { DeviceBridge } from "./device-socket.ts";
+import { Devices, pairClaimSchema } from "./devices.ts";
 import { EmailViews } from "./email-views.ts";
 import { emojiPicture } from "./emoji.ts";
 import { hourIn } from "./engine/clock.ts";
@@ -620,9 +622,10 @@ export async function createApp(
         coach,
         socket: voiceComparison.socket(),
         // The audio relay, and the end of their month's minutes.
-        extras: async (owner, rehearsing) => {
+        extras: async (owner, rehearsing, device) => {
           const [iceServers, allowance, identity, voice] = await Promise.all([
-            turnServers(config),
+            // A device's audio is a websocket: no relay credentials to fetch.
+            device ? Promise.resolve([]) : turnServers(config),
             callAllowance(owner),
             db.get<{ name?: string }>(owner, "agent-settings", "identity").catch(() => null),
             callVoices?.chosen(owner).catch(() => ""),
@@ -651,6 +654,11 @@ export async function createApp(
     : undefined;
   /** The voice holding a call: ours for "pc_…" ids, else OpenAI's. */
   const voiceFor = (id: string) => (pipecatVoice && isPipecatCall(id) ? pipecatVoice : liveVoice);
+  // Small button-held devices (the watch-style board) talk on our own voice, over one websocket.
+  const devices = new Devices(db);
+  const deviceBridge = new DeviceBridge(devices, () => pipecatVoice);
+  agent.devices = devices;
+  agent.devicesTalkReady = Boolean(pipecatVoice);
   /** Both voices side by side, for everyone's calls over the last few days (the admin's). */
   const compareVoices = async (days: number) =>
     voiceComparison.report(
@@ -1349,6 +1357,19 @@ export async function createApp(
       },
     );
   });
+  // A device with no keyboard pairs itself: it shows a code and collects its token once the
+  // person has typed that code into the app. These two are the only device routes with no sign-in.
+  app.post("/api/device/pair/start", async (c) => {
+    const body = z
+      .object({ model: z.string().trim().max(60).optional() })
+      .parse(await c.req.json().catch(() => ({})));
+    const from = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    return c.json(await devices.start(body.model ?? "", from), 201);
+  });
+  app.post("/api/device/pair/poll", async (c) => {
+    const body = z.object({ pollToken: z.string().max(80) }).parse(await c.req.json());
+    return c.json(await devices.poll(body.pollToken));
+  });
   app.use("/api/*", async (c, next) => {
     const signedRoute =
       /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$|^\/api\/meetings\/[^/]+\/mp3\/file$/.test(
@@ -1362,6 +1383,31 @@ export async function createApp(
     await next();
   });
   app.get("/api/session", (c) => c.json({ mode: config.mode }));
+  // The person's devices: pair one with the code on its screen, rename it, or turn it off.
+  app.get("/api/devices", async (c) => {
+    const list = await devices.list(c.get("owner"));
+    return c.json({
+      talkReady: Boolean(pipecatVoice),
+      // Early testing: the card shows for the admin and for anyone who already has a device;
+      // other testers pair by saying “pair my device” (the chat tool works for everyone).
+      visible: list.length > 0 || (await accounts.isAdmin(c.get("owner")).catch(() => false)),
+      devices: list.map((device) => ({
+        ...device,
+        connected: deviceBridge.isConnected(device.id),
+      })),
+    });
+  });
+  app.post("/api/devices/pair", async (c) =>
+    c.json(await devices.claim(c.get("owner"), pairClaimSchema.parse(await c.req.json())), 201),
+  );
+  app.post("/api/devices/:id/rename", async (c) => {
+    const body = z.object({ name: z.string().trim().min(1).max(40) }).parse(await c.req.json());
+    return c.json(await devices.rename(c.get("owner"), c.req.param("id"), body.name));
+  });
+  app.post("/api/devices/:id/remove", async (c) =>
+    c.json(await devices.remove(c.get("owner"), c.req.param("id"))),
+  );
+
   app.post("/api/auth/signout", async (c) => {
     await auth.revoke(c.req.header("authorization"));
     return c.json({ ok: true });
@@ -2879,5 +2925,6 @@ export async function createApp(
     computer,
     liveVoice,
     pipecatVoice,
+    deviceBridge,
   };
 }

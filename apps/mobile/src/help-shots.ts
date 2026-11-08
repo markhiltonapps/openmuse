@@ -14,6 +14,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   callvoice: { width: 720, height: 2123 },
   chat: { width: 720, height: 1558 },
   chats: { width: 720, height: 1558 },
+  devices: { width: 720, height: 2769 },
   "driving-mode": { width: 720, height: 1558 },
   family: { width: 720, height: 1558 },
   feed: { width: 720, height: 1558 },

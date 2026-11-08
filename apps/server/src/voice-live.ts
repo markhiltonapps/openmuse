@@ -72,7 +72,11 @@ export interface LiveVoiceOptions {
    * Fields added to the session request for this person (the Pipecat service's relay and the
    * minutes left in their month). OpenAI's request is unchanged without it.
    */
-  extras?: (owner: string, rehearsing?: boolean) => Promise<Record<string, unknown>>;
+  extras?: (
+    owner: string,
+    rehearsing?: boolean,
+    device?: boolean,
+  ) => Promise<Record<string, unknown>>;
   /** The voice's name and key variable in messages: OpenAI and OPENAI_VOICE_API_KEY by default. */
   provider?: { name: string; keyVariable: string };
 }
@@ -96,10 +100,14 @@ export interface LiveQuestion {
 /** The agent's answer, to be said in one to three short sentences. */
 export type LiveAnswer = (question: LiveQuestion) => Promise<string>;
 export interface SocketLike {
-  send(data: string): void;
+  send(data: string | Uint8Array): void;
   close(): void;
+  /** Binary messages arrive as ArrayBuffers (a device's audio). */
+  binaryType?: string;
   addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
-  addEventListener(type: "close" | "error", listener: () => void): void;
+  addEventListener(type: "open" | "close" | "error", listener: () => void): void;
+  /** 1 once open (a real WebSocket); fakes may leave it out. */
+  readyState?: number;
 }
 /** What the voice needs to be the person's agent: its name, manner and what it knows. */
 export type LiveContext = (owner: string) => Promise<{ instructions: string }>;
@@ -246,7 +254,15 @@ export class LiveVoice {
       : "Live voice off: OPENAI_VOICE_API_KEY isn't set on this service (add it under Variables, then Deploy)";
   }
   /** Starts a conversation from the browser's WebRTC offer; returns OpenAI's answer. */
-  async start(owner: string, offer: string, rehearsal?: Rehearsal) {
+  async start(
+    owner: string,
+    offer: string | undefined,
+    rehearsal?: Rehearsal,
+    options: {
+      /** A button-held device: audio comes over a websocket (`audioSocket`), not WebRTC. */
+      device?: boolean;
+    } = {},
+  ) {
     if (!this.configured()) throw new AppError("Live voice isn’t set up yet.", 503);
     if (!(await this.allowedFor(owner).catch(() => false)))
       throw new AppError("Live voice isn’t turned on for you yet.", 403);
@@ -262,7 +278,9 @@ export class LiveVoice {
           }),
         }
       : await this.context(owner);
-    const extras = (await this.options.extras?.(owner, Boolean(rehearsal))) ?? {};
+    const device = options.device === true;
+    if (!device && typeof offer !== "string") throw new AppError("No WebRTC offer.", 400);
+    const extras = (await this.options.extras?.(owner, Boolean(rehearsal), device)) ?? {};
     const name = this.options.provider?.name ?? "OpenAI";
     const Name = capitalized(name);
     let response: Response;
@@ -305,7 +323,7 @@ export class LiveVoice {
               },
             },
           },
-          transport: { type: "webrtc", sdp: offer },
+          transport: device ? { type: "websocket" } : { type: "webrtc", sdp: offer },
           ...extras,
         }),
         signal: AbortSignal.timeout(20000),
@@ -324,8 +342,8 @@ export class LiveVoice {
       transport?: { sdp?: string };
     };
     const id = created.session?.id;
-    const sdp = created.transport?.sdp;
-    if (!id || !sdp) {
+    const sdp = device ? "" : created.transport?.sdp;
+    if (!id || (!device && !sdp)) {
       // Its shape, not its values, so the log never holds a session's details.
       console.warn(
         `[OpenMuse] Live voice: ${Name} answered without a session or SDP (keys: ${shape(created)})`,
@@ -375,7 +393,27 @@ export class LiveVoice {
       Math.min(15_000, idle / 3),
     );
     live.idle.unref?.();
-    return { sdp, sessionId: id };
+    return { sdp: sdp as string, sessionId: id };
+  }
+  /**
+   * The audio of a device's conversation: a websocket to the voice service carrying PCM both
+   * ways (16 kHz, 16-bit, mono) and a few JSON events. The caller pipes it to the device.
+   */
+  audioSocket(owner: string, id: string): SocketLike {
+    const live = this.sessions.get(id);
+    if (!live || live.owner !== owner) throw new AppError("That conversation isn’t going.", 404);
+    const url = `${this.baseUrl.replace(/^http/, "ws")}/live/sessions/${encodeURIComponent(id)}/audio`;
+    const headers = { Authorization: `Bearer ${this.options.apiKey}` };
+    const socket = this.options.socket
+      ? this.options.socket(url, headers)
+      : (new WebSocket(url, { headers } as never) as unknown as SocketLike);
+    socket.binaryType = "arraybuffer";
+    return socket;
+  }
+  /** Whether a conversation is still going (the device's call may have ended on its own). */
+  isLive(owner: string, id: string) {
+    const live = this.sessions.get(id);
+    return Boolean(live && live.owner === owner && !live.closed && !live.ending);
   }
   /** Ends a conversation; it's saved once OpenAI confirms, or after a few seconds regardless. */
   async end(owner: string, id: string, reason = "ended") {
