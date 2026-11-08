@@ -722,3 +722,14 @@ suggestion (ESP-IDF) to the Arduino IDE: Waveshare ships working Arduino example
   (11 checks; fake STT/TTS and a mock Claude) with the scratchpad venv. Fake latency, release to first audio byte: ~713 ms.
 - Not verifiable without real services: how fast Soniox answers finalize, the 24 -> 16 kHz resample with Inworld, a no-words press,
   a stuck button (no server cap on press length: the firmware must cap it, e.g. 30 s, and the call's maxSeconds still applies).
+- Firmware v0.1 (firmware/neddy_device/, Arduino sketch for the Waveshare ESP32-S3-Touch-AMOLED-2.06; owner asked for dumbed-down
+  steps to get it paired). Written from Waveshare's own examples (01_HelloWorld display setup, 08_ES8311 audio: I2S pins 41/45/40/42/16,
+  PA enable GPIO46, I2C 15/14, ES8311 driver copied under Apache-2.0, NOTICE.txt). Wi-Fi name and password are typed into settings.h
+  (no captive portal yet). Flow: Wi-Fi -> six-digit pairing code on screen -> token kept in flash (Preferences) -> websocket to
+  /api/device/audio -> hold BOOT (GPIO0) to talk (PCM 16 kHz mono, louder-of-two-channels, 20 ms chunks), playback through a stream
+  buffer task that feeds silence between words, playback.clear on barge-in, a press longer than 30 s is cut, the screen shows how long
+  the first sound took after release. Needs the extra library "WebSockets" by Markus Sattler. HOLD BOOT WHILE PLUGGING IN = forget pairing.
+  NOT COMPILED OR RUN: the sandbox declined to download and run arduino-cli (a downloaded program), so any compile error will come back
+  from the owner's PC; I reviewed it by hand and fixed one certain error (a temporary String passed to sendTXT). Known limits: TLS
+  certificate not checked yet (setInsecure) - fix before anyone else uses it; mic channel choice and gain unverified on the real board;
+  the BOOT button is also download mode (only matters at power-up). Guides: docs/Neddy-device-setup-part-2.pdf; zip docs/neddy_device.zip.
