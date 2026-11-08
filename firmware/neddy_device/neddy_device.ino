@@ -106,6 +106,9 @@ static String saying;
 static unsigned long lastSpeechDraw = 0;
 static unsigned long releasedAt = 0;
 static long lastAnswerMs = -1;
+// What the last press sent (shown on screen, so a quiet or missing microphone is easy to see).
+static long pressBytes = 0, pressPeak = 0, pressMisses = 0;
+static String lastPress;
 static bool waitingFirstSound = false;
 static String problem;
 static unsigned long problemUntil = 0;
@@ -219,6 +222,7 @@ static void screenState() {
       gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
       centered(deviceName, 240, 4, cWhite);
       centered("Hold BOOT to talk", 310, 3, cTeal);
+      if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastAnswerMs >= 0) {
         char buf[48];
         snprintf(buf, sizeof(buf), "last answer %.1f s after release", lastAnswerMs / 1000.0);
@@ -235,6 +239,7 @@ static void screenState() {
     case M_THINK:
       gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cAmber);
       centered("Thinking", 240, 4, cWhite);
+      if (lastPress.length()) centered(lastPress, 320, 2, cGrey);
       break;
     case M_SPEAK:
       gfx->fillCircle(LCD_WIDTH / 2, 90, 36, cTeal);
@@ -368,6 +373,9 @@ static void startTalking() {
   pressStart = millis();
   saying = "";
   waitingFirstSound = false;
+  pressBytes = 0;
+  pressPeak = 0;
+  pressMisses = 0;
   // Sound still playing from a last answer is cut off, as when you talk over someone.
   flushPlayback = true;
   ws.sendTXT("{\"type\":\"ptt.start\"}");
@@ -383,6 +391,12 @@ static void stopTalking() {
   held = false;
   ws.sendTXT("{\"type\":\"ptt.end\"}");
   releasedAt = millis();
+  {
+    char note[64];
+    snprintf(note, sizeof(note), "sent %ld ms, mic peak %ld", pressBytes / 32, pressPeak);
+    lastPress = note;
+    Serial.printf("[talk] %s, %ld empty reads\n", note, pressMisses);
+  }
   waitingFirstSound = true;
   setMode(M_THINK);
   Serial.println("[talk] end");
@@ -394,7 +408,10 @@ static void sendMicChunk() {
   static int16_t mono[320];
   size_t got = i2s.readBytes((char *)stereo, sizeof(stereo));
   size_t frames = got / 4;
-  if (frames == 0) return;
+  if (frames == 0) {
+    pressMisses++;
+    return;
+  }
   long peak = 0;
   for (size_t i = 0; i < frames; i++) {
     int16_t l = stereo[2 * i], r = stereo[2 * i + 1];
@@ -403,6 +420,8 @@ static void sendMicChunk() {
     if (abs((int)pick) > peak) peak = abs((int)pick);
   }
   ws.sendBIN((uint8_t *)mono, frames * 2);
+  pressBytes += frames * 2;
+  if (peak > pressPeak) pressPeak = peak;
   if (millis() - lastLevelDraw > 100) {
     lastLevelDraw = millis();
     drawLevel(constrain((int)(peak * 100 / 12000), 0, 100));

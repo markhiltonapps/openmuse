@@ -101,6 +101,8 @@ class Heard(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
+            # How much was heard, never the words (the log must not hold what people say).
+            logger.info(f"Voice call {self._call.id}: heard {len(frame.text.strip())} characters")
             await self._call.heard(frame.text)
         await self.push_frame(frame, direction)
 

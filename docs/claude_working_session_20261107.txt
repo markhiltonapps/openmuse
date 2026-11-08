@@ -735,3 +735,15 @@ suggestion (ESP-IDF) to the Arduino IDE: Waveshare ships working Arduino example
   the BOOT button is also download mode (only matters at power-up). Guides: docs/Neddy-device-setup-part-2.pdf; zip docs/neddy_device.zip.
 - Guide Part 2 detailed edition (docs/Neddy-device-setup-part-2-detailed.pdf, 11 pages): numbered micro-steps for adding the WebSockets library, Wi-Fi name/password in settings.h (how to find both), board/port/Tools settings, Upload, recovery, pairing in the app (with the Help picture) and talking; a drawing of the Arduino window with numbered callouts. Written after the owner asked for more detail on steps 2-6.
 - First compile on the owner's PC (Arduino IDE 2.3.10, esp32 3.3.11): one cause, two errors: 'Mode was not declared in this scope' at setMode(Mode) because the IDE puts auto-generated prototypes above the enum. Fixed by making setMode take an int. Lesson: in an Arduino .ino never use a user-defined type in a function signature (or put the type in a header).
+
+--- Device: "later presses get no answer" diagnostics (2026-11-08, late) ---
+Symptom: first press after pairing is answered (~1.0 s after release); later presses show Thinking
+for a couple of seconds, then back to "Hold BOOT to talk", no answer. Railway logs: new device calls
+start (api "ready in ~72 ms") but the voice service shows no turn, no model call, no hand-off, so no
+words reached the LLM. Not yet known whether the microphone sends silence/too little after the first
+call or the server's turn logic drops the press.
+Added (not pushed): voice service INFO log per press ("button released after N ms, N ms of audio,
+answering/ignored as a tap") and "heard N characters" (never the words); firmware shows
+"sent N ms, mic peak N" on the Thinking and ready screens and prints it on Serial.
+Firmware compile check: globals moved above their first use (lastPress was declared after screenState).
+Next: owner re-uploads firmware (COM9), retries, reads the screen line; push of the logging waits for "push it".

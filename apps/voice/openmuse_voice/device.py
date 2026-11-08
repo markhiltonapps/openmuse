@@ -425,6 +425,10 @@ class PushToTalk(FrameProcessor):
             press = max(audio, control.read_at - self._press_read_at)
             real = press >= MIN_PRESS_SECS and audio >= MIN_AUDIO_SECS
             self._device.released(real, control.read_at)
+            logger.info(
+                f"Voice call {self._call.id}: button released after {press * 1000:.0f} ms, "
+                f"{audio * 1000:.0f} ms of audio, {'answering' if real else 'ignored as a tap'}"
+            )
             if real:
                 if not self._released:
                     await self._release_held_back()
