@@ -254,9 +254,11 @@ static void screenSpeech() {
   wrapped(tail, 24, 205, LCD_WIDTH - 48, 3, cWhite, 11);
 }
 
-static void setMode(Mode next) {
-  if (mode == next) return;
-  mode = next;
+// (An int, not Mode: the Arduino IDE writes a list of function names above the file's first line, before
+// Mode exists, and a function using Mode there doesn't compile.)
+static void setMode(int next) {
+  if ((int)mode == next) return;
+  mode = (Mode)next;
   Serial.printf("[mode] %d\n", (int)next);
   screenState();
 }
