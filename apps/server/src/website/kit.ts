@@ -161,14 +161,14 @@ img,svg{max-width:100%}
 .brand{display:flex;align-items:center;gap:.8rem;text-decoration:none;min-width:0;min-height:2.75rem}
 .brand__mark{width:2.6rem;height:2.6rem;border-radius:.7rem;background:var(--dark);color:#fff;display:grid;place-items:center;flex:none}
 .brand__mark .icon{width:1.35rem;height:1.35rem}
-.brand__name{overflow-wrap:anywhere;font:800 1.08rem/1.15 var(--font-head);letter-spacing:-.01em;display:block}
+.brand__name{overflow-wrap:normal;hyphens:none;font:800 1.08rem/1.15 var(--font-head);letter-spacing:-.01em;display:block}
 .brand__tag{font-size:.78rem;color:var(--muted);display:block;line-height:1.3}
 a[href^="tel:"]{white-space:nowrap}
 .links{display:none;gap:2rem;font-size:.92rem;font-weight:600}
 .links a{text-decoration:none;color:var(--ink2);padding:.5rem 0}
 .links a:hover{color:var(--deep)}
 @media(min-width:900px){.links{display:flex}}
-@media(max-width:520px){.brand__tag{display:none}.nav .btn{padding:.6rem 1rem;font-size:.95rem}}
+@media(max-width:520px){.brand__tag{display:none}.nav .container{gap:.6rem}.brand{gap:.6rem}.brand__mark{width:2.25rem;height:2.25rem}.brand__name{font-size:1rem}.nav .btn{padding:.55rem .85rem;font-size:.9rem;gap:.4rem}}
 
 /* buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;min-height:3rem;padding:.75rem 1.35rem;border-radius:var(--rb);font:700 1rem/1.2 var(--font-body);text-decoration:none;border:1px solid transparent;cursor:pointer;transition:transform .15s ease,filter .15s ease,background .15s ease}

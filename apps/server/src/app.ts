@@ -47,6 +47,7 @@ import type { Store } from "./db.ts";
 import { Depth, depthModelPath } from "./depth.ts";
 import { EmailViews } from "./email-views.ts";
 import { emojiPicture } from "./emoji.ts";
+import { hourIn } from "./engine/clock.ts";
 import { ConversationAgent, localNow } from "./engine/conversation.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
@@ -113,7 +114,7 @@ import { UrgentAlerts } from "./urgent-alerts.ts";
 import { UsageMeter } from "./usage.ts";
 import { lookAtImage } from "./vision.ts";
 import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
-import { LiveVoice, liveInstructions } from "./voice-live.ts";
+import { LiveVoice, liveInstructions, pickHello } from "./voice-live.ts";
 import {
   CallVoices,
   findPerson,
@@ -553,6 +554,7 @@ export async function createApp(
         memories: memories.slice(0, 30),
         today,
         canLookUp,
+        hello: pickHello(hourIn(timeZone)),
       }),
     };
   };

@@ -11,3 +11,18 @@ export function localNow(timeZone: string, now = Date.now()) {
   });
   return `${text} (${timeZone})`;
 }
+
+/** The hour (0-23) it is now in a time zone; undefined when the zone isn't one. */
+export function hourIn(timeZone: string, now = Date.now()): number | undefined {
+  try {
+    const text = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(new Date(now));
+    const hour = Number.parseInt(text, 10);
+    return Number.isInteger(hour) ? hour % 24 : undefined;
+  } catch {
+    return undefined;
+  }
+}

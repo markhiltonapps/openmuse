@@ -5,6 +5,7 @@ import { type BaseEvent, EventType, type RunAgentInput } from "@ag-ui/core";
 import { lastValueFrom, Observable, toArray } from "rxjs";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore } from "../apps/server/src/db.ts";
+import { hourIn } from "../apps/server/src/engine/clock.ts";
 import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
 import type { HealthEntry } from "../apps/server/src/health.ts";
 import {
@@ -16,7 +17,7 @@ import {
   voiceToday,
   whereShown,
 } from "../apps/server/src/voice-brain.ts";
-import { liveInstructions, type VoiceSession } from "../apps/server/src/voice-live.ts";
+import { liveInstructions, pickHello, type VoiceSession } from "../apps/server/src/voice-live.ts";
 import type { CallDetail } from "../packages/domain/src/voice.ts";
 
 // 2 pm in Chicago on 1 October.
@@ -602,4 +603,33 @@ test("on a call, a Connect button, an own app, emails and the calendar go on scr
   assert.match(text, /- Dan <dan@x\.com> · Q3/);
   assert.match(text, /- Fri Oct 2, 9:00 AM · Dentist/);
   assert.doesNotMatch(text, /c\.io/);
+});
+
+test("calls don't all open with the same hello: the instructions carry a different one each time", () => {
+  const base = { name: "Neddy", tone: "warm", now: "Thursday" };
+  // The old fixed example is gone, so the voice has nothing to copy word for word.
+  assert.doesNotMatch(liveInstructions(base), /Hi, what’s up\?/);
+  assert.match(liveInstructions(base), /Never open two calls the same way/);
+  assert.match(
+    liveInstructions({ ...base, hello: "Morning! What are we tackling today?" }),
+    /feel of “Morning! What are we tackling today\?”/,
+  );
+  // Many calls give many different hellos, not one.
+  const seen = new Set(Array.from({ length: 200 }, () => pickHello(9)));
+  assert.ok(seen.size >= 5, `only ${seen.size} different hellos`);
+  // Time of day is honoured: a morning hello can be "good morning", an evening one never is.
+  const evenings = Array.from({ length: 300 }, () => pickHello(19)).join("|");
+  assert.doesNotMatch(evenings, /morning/i);
+  assert.match(Array.from({ length: 300 }, () => pickHello(8)).join("|"), /morning/i);
+  // No hour, no random: still a hello.
+  assert.ok(pickHello(undefined, () => 0).length > 3);
+  assert.ok(pickHello(99, () => 0.999).length > 3);
+});
+
+test("the person's hour comes from their time zone", () => {
+  const noonUtc = Date.parse("2026-11-08T17:00:00Z");
+  assert.equal(hourIn("UTC", noonUtc), 17);
+  assert.equal(hourIn("America/Chicago", noonUtc), 11);
+  assert.equal(hourIn("Asia/Tokyo", Date.parse("2026-11-08T15:30:00Z")), 0);
+  assert.equal(hourIn("Not/AZone", noonUtc), undefined);
 });

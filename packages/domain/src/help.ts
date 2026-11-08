@@ -248,6 +248,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "**End** hangs up. The call is saved in your main chat.",
     ],
     body: [
+      "{agent} says hello in a different way each call, and in the morning or evening it may fit the time of day.",
       "When {agent} has to look something up or do something, it says “One sec” and tells you when it’s done. Long answers and lists go on your screen instead of being read out. Anything to approve appears there too.",
       "Things that can’t wait (time to leave, security and money alerts) are said out loud; see **Urgent alerts on calls**.",
       "Say “brief me” any time, on a call or in the chat, for a short rundown of your day: what’s next, what’s waiting for your OK, jobs that need you, and what’s coming up.",

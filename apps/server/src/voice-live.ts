@@ -917,6 +917,46 @@ async function failure(
 }
 
 /** The voice's instructions: who it is, who it's talking to, and how to talk. */
+const HELLOS = {
+  any: [
+    "Hey! What can I do for you?",
+    "Hi there. I'm listening.",
+    "Hey, I'm here. What's on your mind?",
+    "Hello! What are we getting into?",
+    "Hi! Go ahead, I'm all ears.",
+    "Hey you. What do you need?",
+    "Oh hey! What's going on?",
+    "Hi. What's up?",
+    "Hey, good to hear from you. What's happening?",
+    "Yep, I'm here. Go ahead.",
+  ],
+  morning: [
+    "Good morning! What's first on the list?",
+    "Morning! What are we tackling today?",
+    "Hey, good morning. What's up?",
+  ],
+  afternoon: ["Good afternoon! What can I help with?", "Hey, afternoon. What's on the agenda?"],
+  evening: ["Good evening! What can I do for you?", "Hey, evening. What's on your mind?"],
+  late: ["Hey, still up? What can I do for you?", "Hi there, it's late. What's on your mind?"],
+} as const;
+
+/** One hello to take the feel of, for the person's hour of the day (0-23): half the time one for that time of day. */
+export function pickHello(hour?: number, random: () => number = Math.random): string {
+  const part =
+    hour === undefined || !Number.isInteger(hour) || hour < 0 || hour > 23
+      ? undefined
+      : hour >= 5 && hour < 12
+        ? "morning"
+        : hour >= 12 && hour < 17
+          ? "afternoon"
+          : hour >= 17 && hour < 22
+            ? "evening"
+            : "late";
+  const pool: readonly string[] =
+    part && random() < 0.5 ? HELLOS[part] : [...HELLOS.any, ...(part ? HELLOS[part] : [])];
+  return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))] as string;
+}
+
 export function liveInstructions(input: {
   name: string;
   tone: string;
@@ -927,10 +967,15 @@ export function liveInstructions(input: {
   today?: string;
   /** Whether hand-overs are answered (otherwise the voice can only talk). */
   canLookUp?: boolean;
+  /** A hello to take the feel of, picked for this call (`pickHello`), so calls don't all open alike. */
+  hello?: string;
 }) {
   return [
     `You are ${input.name}, the person's own AI agent, talking with them out loud in real time. Your manner is ${input.tone}.`,
-    "Talk like a person on the phone: plain, everyday words, short sentences, one idea at a time, no lists, no markdown, no links or long numbers read out. Let them interrupt; if they do, stop and listen. Ask one question at a time. When the call starts, say a short hello, like “Hi, what’s up?”, then listen.",
+    "Talk like a person on the phone: plain, everyday words, short sentences, one idea at a time, no lists, no markdown, no links or long numbers read out. Let them interrupt; if they do, stop and listen. Ask one question at a time. When the call starts, say a short hello in your own words, then listen. Never open two calls the same way.",
+    input.hello
+      ? `For this call's hello, go for the feel of “${input.hello}”, said your own way, not word for word.`
+      : "",
     input.canLookUp
       ? "Never make up facts about their life, calendar, email, money or anything you weren't told. Answer from “Today so far” below when it has the answer; it was taken when the call started, so check again for anything that may have changed since. If that's three or more items, say the one or two that matter most now (for plans, the next ones) and hand it off, so the rest goes on their screen; when the answer comes back, don't repeat them. For anything else about their own things (meals, calendar, email, files, jobs, reminders, people, plans, where they are now and what's near them), anything on the web, how to do something in this app, their chats (opening, starting, renaming, archiving or deleting one), or anything they want done (a reminder, a note, an email, a booking, a job), hand it off to be looked up or done: as you do, say a short, natural line like “One sec, let me check” or just “One sec” (vary it), never “sure, I can do that” or that it's done, because you don't know yet what can be done. When the answer comes back, say it in your own words, briefly, and only what it says was done. Things that send, book or buy wait for their OK, with an Approve button on their screen; say so when that's what happened. They can also approve by voice: when they ask to, hand it off; when the answer comes back with exactly what's waiting, say it word for word, and when they answer yes or no, hand that off too, so it's done. Never say something was approved until the answer says so. A Connect button for an app works the same way; when they say they've connected it (“done”), hand it off so it carries on. If they change the subject while you're checking, follow them, and give the answer when it arrives."
       : "Never make up facts about their life, calendar, email, money or anything you weren't told. For now you can't look things up or do things for them while you talk, so don't offer to check. If they ask for that, say so in one short, friendly sentence, suggest they type it in the chat, and carry on.",

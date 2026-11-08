@@ -667,3 +667,18 @@ and Arial; (3) no layout system (no grid, one breakpoint); (4) adjectives instea
   Maps link may not work on a shared page. Loosening a sandbox was blocked by the permission classifier and not done:
   needs the owner's explicit OK (could be limited to kind "website"); (c) the model never sees a screenshot yet (vision),
   only measurements; (d) no hosting on a real address (share links last 1/7/30 days).
+
+Follow-ups (2026-11-08, after the website push)
+----------------------------------------------
+- "What's new" PDF regenerated (docs/Whats-new-in-Neddy-20261108.pdf, 13 pages): new page "Websites for your business" (with its honest
+  limits and the Help picture plus a phone view of the sample page) and a line on varied greetings. Source script is in the scratchpad
+  (pdf/build.py); the sample page is drawn from website/example.ts, which is the standard the builder is held to, not a model run.
+- Varied hello on calls: the call instructions used to say “Hi, what’s up?” as an example, so the voice copied it every time. Now
+  `pickHello(hour)` (voice-live.ts) picks a feel per call (about 20 openers, some by time of day in the person's zone, `hourIn` in
+  engine/clock.ts) and the instructions say never to open two calls the same way. Same instructions feed OpenAI's voice and our own.
+  Help topic live-call mentions it. Tests in tests/voice-brain.test.ts. Takes effect on the next deploy.
+- Kit fix found while taking the PDF picture: at 390 px the brand name broke mid-word ("Constructio/n") because of overflow-wrap:anywhere
+  and the header button was wide; now words wrap only at spaces, the phone header is tighter, and a word too long to fit shows up in
+  the render check's "clipped" list.
+- Open question from the owner: Neddy gives a thumbs up before checking something when typed to. Not found in code (no thumbs-up is
+  sent by the app); asked the owner what they want changed.
