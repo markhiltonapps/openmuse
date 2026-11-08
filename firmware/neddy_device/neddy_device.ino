@@ -109,6 +109,7 @@ static long lastAnswerMs = -1;
 // What the last press sent (shown on screen, so a quiet or missing microphone is easy to see).
 static long pressBytes = 0, pressPeak = 0, pressMisses = 0;
 static String lastPress;
+static String micChip = "mic chip: not checked";
 static bool waitingFirstSound = false;
 static String problem;
 static unsigned long problemUntil = 0;
@@ -222,6 +223,7 @@ static void screenState() {
       gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
       centered(deviceName, 240, 4, cWhite);
       centered("Hold BOOT to talk", 310, 3, cTeal);
+      centered(micChip, 370, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastAnswerMs >= 0) {
         char buf[48];
@@ -289,6 +291,74 @@ static esp_err_t codecInit() {
   return ESP_OK;
 }
 
+// ---------------------------------------------------------------- the microphone chip
+// This board's microphones go through a separate chip (an ES7210), not through the speaker chip.
+// It must be told to start, or it sends nothing but zeros. The steps below follow Espressif's own
+// driver for that chip (16 kHz, 16-bit, standard I2S, clock from the board's 4.096 MHz MCLK).
+static bool es7210Write(uint8_t addr, uint8_t reg, uint8_t val) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  Wire.write(val);
+  return Wire.endTransmission() == 0;
+}
+
+static bool es7210Init() {
+  uint8_t addr = 0;
+  for (uint8_t a = 0x40; a <= 0x43; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
+      addr = a;
+      break;
+    }
+  }
+  if (!addr) {
+    micChip = "mic chip: NOT FOUND";
+    Serial.println("[mic] no ES7210 answered at 0x40-0x43");
+    return false;
+  }
+  int bad = 0;
+  auto w = [&](uint8_t reg, uint8_t val) {
+    if (!es7210Write(addr, reg, val)) bad++;
+  };
+  w(0x00, 0xFF);  // reset
+  w(0x00, 0x32);
+  delay(10);
+  w(0x09, 0x30);  // power-up timing
+  w(0x0A, 0x30);
+  w(0x23, 0x2A);  // high-pass filters
+  w(0x22, 0x0A);
+  w(0x21, 0x2A);
+  w(0x20, 0x0A);
+  w(0x11, 0x60);  // 16-bit, standard I2S
+  w(0x12, 0x00);  // no TDM
+  w(0x40, 0xC3);  // analog power
+  w(0x41, 0x70);  // microphone bias
+  w(0x42, 0x70);
+  const uint8_t gain = 0x10 | 10;  // 30 dB
+  w(0x43, gain);
+  w(0x44, gain);
+  w(0x45, gain);
+  w(0x46, gain);
+  w(0x47, 0x08);  // power on the four microphone inputs
+  w(0x48, 0x08);
+  w(0x49, 0x08);
+  w(0x4A, 0x08);
+  w(0x07, 0x20);  // 16 kHz from a 4.096 MHz clock
+  w(0x02, 0xC1);
+  w(0x04, 0x01);
+  w(0x05, 0x00);
+  w(0x06, 0x04);
+  w(0x4B, 0x0F);
+  w(0x4C, 0x0F);
+  w(0x00, 0x71);  // start
+  w(0x00, 0x41);
+  char note[48];
+  snprintf(note, sizeof(note), "mic chip 0x%02X %s", addr, bad ? "setup errors" : "ok");
+  micChip = note;
+  Serial.printf("[mic] ES7210 at 0x%02X, %d failed writes\n", addr, bad);
+  return bad == 0;
+}
+
 static bool audioInit() {
   i2s.setPins(41, 45, 40, 42, 16);  // mclk, bclk, ws, data out, data in (Waveshare's example)
   if (!i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) {
@@ -302,6 +372,7 @@ static bool audioInit() {
     Serial.println("[audio] audio chip setup failed");
     return false;
   }
+  es7210Init();  // the microphone chip; a problem is shown on screen, not fatal
   playBuffer = xStreamBufferCreate(48 * 1024, 2);
   return playBuffer != NULL;
 }

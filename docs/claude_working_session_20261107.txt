@@ -747,3 +747,15 @@ answering/ignored as a tap") and "heard N characters" (never the words); firmwar
 "sent N ms, mic peak N" on the Thinking and ready screens and prints it on Serial.
 Firmware compile check: globals moved above their first use (lastPress was declared after screenState).
 Next: owner re-uploads firmware (COM9), retries, reads the screen line; push of the logging waits for "push it".
+
+--- Device: the microphone was never switched on (2026-11-08, night) ---
+The board's screen showed "mic peak 0" on every press, so the microphone sent only zeros. Cause: this
+board's microphones are read through a separate chip, an ES7210 (I2C 0x40, data on GPIO42, shared clocks with the
+ES8311 speaker chip, per Waveshare's docs), and the firmware only set up the ES8311's own mic input.
+The earlier "answers" ("hey back", the GoHighLevel message) were the speech-to-text/model reacting to silence,
+not to the person. Fix (uncompiled, no hardware here): firmware starts the ES7210 using Espressif's driver
+sequence (16 kHz, 16-bit I2S, 4.096 MHz MCLK, 30 dB gain, bias on) and shows "mic chip 0x40 ok/NOT FOUND" on the
+ready screen. Waveshare's own 08_ES8311 example uses the same ES8311-only mic setup, so this is a guess from the
+chip list, to be proven by the next on-screen "mic peak". Lesson: check a board's schematic/chip list for which
+chip carries the microphone before writing firmware; verify with a number on screen before trusting any "answer".
+Server logging (button released after N ms ... heard N characters) was pushed (ddfa276) with the owner's OK.
