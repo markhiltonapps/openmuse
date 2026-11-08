@@ -66,6 +66,7 @@ import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-br
 import type { VoiceSession } from "../voice-live.ts";
 import { weatherInstructions, weatherToolSpecs } from "../weather.ts";
 import { webSearchInstructions, webSearchToolSpecs } from "../web-search.ts";
+import { websiteInstructions, websiteToolSpecs } from "../website/builds.ts";
 import { whereaboutsToolSpecs } from "../whereabouts.ts";
 import { answerLayoutInstructions } from "./answer-layout.ts";
 import { localNow } from "./clock.ts";
@@ -890,6 +891,9 @@ export class ConversationAgent extends AbstractAgent {
         ...shareToolSpecs(this.service.shares, this.owner),
         ...pastChatToolSpecs(new PastChats(this.service.db), this.owner),
         ...miniAppToolSpecs(this.service.miniApps, this.owner),
+        ...(this.service.websites?.available
+          ? websiteToolSpecs(this.service.websites, this.owner)
+          : []),
         ...peopleToolSpecs(this.service.people, this.owner),
         ...personaToolSpecs(this.service.persona, this.owner),
         ...(this.service.commitments
@@ -1446,6 +1450,7 @@ export class ConversationAgent extends AbstractAgent {
         browserToolInstructions +
         richCardInstructions +
         miniAppInstructions +
+        (this.service.websites?.available ? websiteInstructions : "") +
         spaceInstructions +
         (logins?.available ? signInInstructions : "") +
         (mailAlerts ? mailAlertInstructions : "") +

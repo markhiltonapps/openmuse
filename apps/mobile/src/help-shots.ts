@@ -48,5 +48,6 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   urgent: { width: 720, height: 1558 },
   watchdescribe: { width: 720, height: 2308 },
   "weather-here": { width: 720, height: 1292 },
+  website: { width: 720, height: 1846 },
   weight: { width: 720, height: 1159 },
 };

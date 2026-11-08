@@ -193,6 +193,15 @@ export function WorkspaceTools() {
       <MiniAppToolCard result={result} loading={status !== "complete"} />
     ),
   });
+  // A finished website shows as the same card, with an Open button; one still building shows nothing.
+  useRenderTool({
+    name: "check_website_build",
+    description: "Show the website the agent built",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <MiniAppToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
   useRenderTool({
     name: "change_backdrop",
     description: "Show the backdrop the agent switched to",

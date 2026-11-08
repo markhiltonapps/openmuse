@@ -1021,6 +1021,67 @@ const SHOTS = [
     },
   },
   {
+    // "Build a website for…": the finished website's card in the chat, with its Open button.
+    id: "website",
+    height: 1000,
+    go: async (p, state) => {
+      const app = {
+        ready: true,
+        measured: true,
+        id: "11111111-2222-4333-8444-555555555555",
+        title: "Maveric Construction | Roofing & Repairs in Spring, TX",
+        description:
+          "Roof replacement, roof inspections, storm and water-damage repair, fences and repairs in Spring, TX and nearby areas.",
+        kind: "website",
+        version: 1,
+        updatedAt: new Date().toISOString(),
+      };
+      state.exchange = [
+        {
+          id: "help-u1",
+          role: "user",
+          content:
+            "Build a one-page website for Maveric Construction, a roofing contractor in Spring, TX. Phone (832) 281-4674. Hours Mon–Fri 8 AM–7 PM, Sat 9 AM–6 PM.",
+        },
+        {
+          id: "help-a1",
+          role: "assistant",
+          content:
+            "Your website for Maveric Construction is ready. It’s checked on a phone and a computer. Open it below, and I can share it by link if you like.",
+          toolCalls: [
+            {
+              id: `help-call-${Date.now()}`,
+              type: "function",
+              function: { name: "check_website_build", arguments: "{}" },
+            },
+          ],
+        },
+      ];
+      state.exchange[2] = {
+        id: `help-r-${Date.now()}`,
+        role: "tool",
+        toolCallId: state.exchange[1].toolCalls[0].id,
+        content: JSON.stringify(app),
+      };
+      // The chat connected before this exchange was set: open it again.
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(2200);
+      await p.getByRole("button", { name: /^Open the website/ }).waitFor({ timeout: 20000 });
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: { find: (p) => p.getByPlaceholder(/^Message/), side: "inside-right" },
+      2: {
+        find: (p) => p.getByText("Website", { exact: true }).last(),
+        side: "left",
+        tight: true,
+      },
+      3: { find: (p) => button(p, /^Open the website/), side: "left" },
+    },
+  },
+  {
     // "I parked here": the parked-car card in the chat, with Directions and Found it.
     id: "park-car",
     height: 1000,

@@ -2133,7 +2133,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     group: "files",
     title: "Mini apps",
     summary:
-      "Small tools and dashboards {agent} builds for you: a planner, a checklist, a calculator.",
+      "Small tools and dashboards {agent} builds for you: a planner, a checklist, a calculator. (Websites for a business are built a different, much more careful way.)",
     steps: [
       "Ask: “Make me a packing checklist for our beach trip.”",
       "Open it from the chat, or later from **Files › Mini apps**.",
@@ -2141,7 +2141,44 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     say: ["Make me a budget dashboard."],
     keywords: ["mini app", "tool", "dashboard", "calculator", "checklist", "planner"],
-    related: ["share-files"],
+    related: ["share-files", "build-website"],
+  },
+  {
+    id: "build-website",
+    group: "files",
+    title: "Have {agent} build a website for a business",
+    summary:
+      "Give {agent} a business’s facts and it builds a polished one-page website, drawn and checked at phone and computer widths.",
+    shot: "website",
+    steps: [
+      "Say or type what you want, with the facts: “Build a one-page website for Maveric Construction, a roofing contractor in Spring, TX. Phone (832) 281-4674. Hours Mon–Fri 8 AM–7 PM.” (The **1** is the message box.) Put each review in quotation marks, exactly as written.",
+      "{agent} says it has started. It builds in the background, usually in a few minutes (sometimes ten), and you can keep chatting. You get a notice when it’s ready.",
+      "When the notice comes, say “Show me the website.” A card appears with a **Website** label (the **2**). Tap **Open the website** (the **3**) to see it full size. It also lives under **Files › Mini apps**.",
+      "To change it, say what you want: “Make the headline shorter.” {agent} rebuilds it from the same facts and replaces the page. To share it, say “Share the website for 7 days.”",
+    ],
+    body: [
+      "{agent} is told to use only the facts you give it: no made-up years in business, licences, awards, guarantees, prices or other towns. The page is then checked for those. Reviews you put in quotation marks are quoted word for word. It leaves out what you didn’t say.",
+      "Before you see it, the page is checked for invented claims and figures, broken links and unstyled parts. Then it is drawn in a real browser at a phone’s width and a computer’s width and measured for sideways scrolling, small buttons, hard-to-read text, cut-off text and fonts. {agent} fixes the errors it finds, up to two more times. If the browser isn’t available, or a check can’t be cleared, {agent} says so.",
+      "It’s a single page with the fonts and icons inside it: no photos (it draws shapes and icons), no forms and nothing loaded from other websites. A tap on the phone number or map link may not work inside the app or from a shared link yet; if it doesn’t, the number and address are still on the page to copy. A share link works for 1, 7 or 30 days, so it isn’t a permanent website address, and you can turn it off any time.",
+      "Building uses a stronger, more expensive AI model, so there’s a limit of six in any 24 hours (a build that fails before anything is written doesn’t count).",
+    ],
+    say: [
+      "Build a one-page website for Rosa’s Bakery on Elm St. Phone 555-0142. Open 7 to 3 daily.",
+      { text: "How is the website coming?", send: true },
+      "Show me the website.",
+      "Share the website for 7 days.",
+    ],
+    keywords: [
+      "website",
+      "web site",
+      "landing page",
+      "one page",
+      "demo site",
+      "build a site",
+      "web design",
+      "business website",
+    ],
+    related: ["mini-apps", "share-files"],
   },
   {
     id: "import-files",

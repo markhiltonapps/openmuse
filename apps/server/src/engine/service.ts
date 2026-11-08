@@ -92,6 +92,7 @@ import {
 } from "../watch-judge.ts";
 import type { WeatherService } from "../weather.ts";
 import type { WebSearch } from "../web-search.ts";
+import type { WebsiteBuilds } from "../website/builds.ts";
 import type { Whereabouts } from "../whereabouts.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending } from "./finance.ts";
@@ -1433,6 +1434,8 @@ export class AgentService {
   whereabouts?: Whereabouts;
   /** Reminders that go off on arriving at a place (while the app is open). */
   placeReminders?: PlaceReminders;
+  /** Websites built for people on a stronger model, in the background. */
+  websites?: WebsiteBuilds;
   /** Real places near where they are (OpenStreetMap), set when the server can reach the map service. */
   nearby?: Nearby;
   /** A live call's ear, for approving by voice (what was read back, and their words since). */
@@ -1507,6 +1510,15 @@ export class AgentService {
    * What a call for this job uses: the Models card's choice, or the server's own model. The chat
    * runs on CHAT_MODEL, else the quick worker model (the leaner setup), else MODEL.
    */
+  /**
+   * The model that writes a website: the strong one. On OpenRouter that is the background job's model; without
+   * it, MODEL (never the quick chat model, which made a page that looked like 2009).
+   */
+  modelForBuild(): CallPlan {
+    const background = this.models?.plan("background");
+    if (background?.job) return { ...background, maxTokens: 32_000 };
+    return { model: this.config.model ?? this.config.workerModel ?? "" };
+  }
   modelFor(job: ModelJob): CallPlan {
     return (
       this.models?.plan(job) ?? {

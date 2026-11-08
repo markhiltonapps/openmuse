@@ -131,6 +131,7 @@ import {
 import { WeatherService } from "./weather.ts";
 import { downloadToFiles } from "./web-download.ts";
 import { AnthropicWebSearch, type WebSearch } from "./web-search.ts";
+import { type BuildRecord, WebsiteBuilds, workerRenderer } from "./website/builds.ts";
 import { nominatimStreets, Whereabouts } from "./whereabouts.ts";
 import { WorkspaceService } from "./workspace.ts";
 
@@ -828,6 +829,19 @@ export async function createApp(
     () => agent.geocode,
   );
   agent.placeReminders = placeReminders;
+  // Websites for businesses: built in the background on the strong model, drawn and measured in the browser worker.
+  agent.websites = new WebsiteBuilds(db, {
+    plan: () => agent.modelForBuild(),
+    complete: (options) => agent.complete(options),
+    usage: (owner) => usage.sink(owner, "background"),
+    render: workerRenderer(config),
+    everyone: async () => (await db.scan<BuildRecord>("website-builds")).map(({ value }) => value),
+    miniApps: agent.miniApps,
+    notify: async (owner, title, body, key) => {
+      await agent.notify(owner, title, body, undefined, key);
+    },
+    ready: () => config.agentBackend === "model" && Boolean(agent.modelForBuild().model),
+  });
   whereabouts.onReport((event) => placeReminders.seen(event));
   if (config.mode === "live")
     agent.nearby = new Nearby({

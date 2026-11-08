@@ -2,16 +2,24 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import { createBrowserManager, validateSessionId } from "./browser.ts";
 import { WorkerError } from "./errors.ts";
+import { renderPage } from "./render.ts";
 
-async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(
+  request: IncomingMessage,
+  limit = 64 * 1024,
+): Promise<Record<string, unknown>> {
   if (!request.headers["content-type"]?.startsWith("application/json"))
     throw new WorkerError("INVALID_BODY", "A JSON request body is required.");
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     size += Buffer.byteLength(chunk);
-    if (size > 64 * 1024)
-      throw new WorkerError("BODY_TOO_LARGE", "Request body exceeds 64 KiB.", 413);
+    if (size > limit)
+      throw new WorkerError(
+        "BODY_TOO_LARGE",
+        `Request body exceeds ${Math.round(limit / 1024)} KiB.`,
+        413,
+      );
     chunks.push(Buffer.from(chunk));
   }
   try {
@@ -65,6 +73,15 @@ export async function createWorkerServer(options: {
       if (pathname === "/sessions" && request.method === "POST") {
         const body = await readBody(request);
         json(201, await browser.create(validateSessionId(body.id), requiredUrl(body)));
+        return;
+      }
+      if (pathname === "/render" && request.method === "POST") {
+        // A page Neddy built, drawn without any network: measurements and a picture per width.
+        const body = await readBody(request, 1024 * 1024);
+        if (typeof body.html !== "string")
+          throw new WorkerError("INVALID_BODY", "The page's html is required.", 400);
+        const widths = Array.isArray(body.widths) ? body.widths.map(Number) : [390, 1280];
+        json(200, { pages: await renderPage(body.html, widths) });
         return;
       }
       const match =

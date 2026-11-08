@@ -1,0 +1,40 @@
+Act as an expert web designer and front-end developer. Build a clean, modern, single-page demo website for a local business that currently has no website of its own.
+
+Use ONLY the facts below. Do not invent anything: no years in business, licenses, insurance, certifications, awards, guarantees, prices, team names, or other towns and cities.
+Do not ask me any questions. If something is missing or two facts disagree, make the safest choice using only the facts below, leave that detail off the page, and put a short HTML comment at the top of the file saying what you chose.
+
+BUSINESS
+- Name: Maveric Construction
+- Industry: Roofing contractor
+- Phone: (832) 281-4674 (use tel:+18322814674 for every call button)
+- Address: 2162 Spring Stuebner Rd, Spring, TX 77389
+- Service area: Spring, TX and nearby areas
+- Hours: Mon–Fri 8 AM–7 PM; Sat 9 AM–6 PM; Sun Closed
+- Google rating: 5.0 stars from 46 Google reviews
+- Google Maps listing: https://www.google.com/maps/search/?api=1&query=Maveric+Construction&query_place_id=ChIJmfuS0lc1R4YRsyMth_j_mms
+
+SERVICES
+- Work customers mention in their reviews: Roofing, Storm and water-damage repair, Fences, Repairs and maintenance.
+- Typical for this trade (not confirmed by the owner): Roof inspections, Roof repair, Roof replacement, Storm and hail damage repair, Leak repair, Gutters.
+Build the services grid from these, putting the first group first. Keep the wording general and make no specific promises about any service.
+The Google category above can be wrong or too broad. If it does not match the work customers describe in their reviews, trust the reviews: write the headline and services around that work, and do not ask me which to use.
+
+CUSTOMER REVIEWS (real Google reviews)
+1. “I recently had the pleasure of working with Maveric Roofing for a complete roof replacement, and I cannot recommend them enough! From start to finish, the entire experience was seamless and professional. The team was prompt, courteous, and extremely knowledgeable.” — Michael C., 5★, 2 years ago
+2. “I recently had the pleasure of working with Maveric Construction for a roof replacement, and I can honestly say they live up to their word about treating customers like family. From the very first phone call, it was clear that they genuinely cared about my concerns and needs.” — Alejandra T., 5★, 2 years ago
+3. “Called Maverick Construction for a roof inspection, which they did for free. Then they worked with us during our house buying process to insure the house we bought had a new roof that looks amazing.” — Nikki C., 5★, 2 years ago
+Quote these exactly as written and keep each attribution. Do not add, merge or rewrite reviews.
+Also show the overall rating (5.0 stars, 46 Google reviews).
+
+BUILD
+- One complete, responsive index.html using Tailwind CSS from the CDN (or a React + Vite project if I am working in a repo).
+- Top banner: "This is a custom preview built for Maveric Construction. Like it? Claim this website: [YOUR NAME] · [YOUR PHONE] · [YOUR EMAIL]"
+- Hero: a strong, specific headline for a roofing contractor serving Spring, TX (built around the work customers mention in their reviews), a short supporting line, and a clear call to action button "Call Now: (832) 281-4674".
+- Services overview grid with a simple icon for each service.
+- Customer reviews / social proof section built from the reviews above.
+- A "Find us" section with the hours and a link to the Google Maps listing (only the details given above; leave out anything not listed).
+- Footer that repeats the "claim this website" message with [YOUR NAME], [YOUR PHONE] and [YOUR EMAIL].
+- Design: trustworthy, clean, modern and mobile-first. Sturdy typography, generous spacing, one accent color that suits a roofing contractor. Avoid generic filler like "your trusted partner". No stock photos: use clean shapes, subtle gradients or simple icons.
+- Accessible (good contrast, labelled buttons) and fast (no heavy libraries).
+
+Return the complete code in a single file.

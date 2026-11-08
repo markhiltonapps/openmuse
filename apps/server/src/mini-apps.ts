@@ -12,6 +12,8 @@ interface MiniApp {
   id: string;
   title: string;
   description?: string;
+  /** "website" is a whole page built by the website builder (larger, with its own fonts); the rest are tools. */
+  kind?: "app" | "website";
   html: string;
   version: number;
   createdAt: string;
@@ -34,6 +36,8 @@ interface OwnShare {
 export type MiniAppView = Omit<MiniApp, "html">;
 
 const MAX_HTML = 200_000;
+/** A website carries its fonts inside the page. */
+const MAX_WEBSITE_HTML = 400_000;
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** What a mini app may do: run its own inline code and styles; no network, no outside files. */
@@ -73,10 +77,11 @@ const saveSchema = z.object({
   id: z.string().uuid().optional(),
   title: z.string().trim().min(1).max(80),
   description: z.string().trim().max(240).optional(),
+  kind: z.enum(["app", "website"]).optional(),
   html: z
     .string()
     .min(20)
-    .max(MAX_HTML, "Keep the page under 200 KB")
+    .max(MAX_WEBSITE_HTML)
     .refine(
       (html) => !ASKS_FOR_SECRETS.test(html),
       "Mini apps can’t ask for passwords, sign-in codes or card numbers.",
@@ -97,6 +102,10 @@ export class MiniApps {
       .map((a) => this.view(a))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
+  /** One mini app's details without its page (a page can be 400 KB). */
+  async summary(owner: string, id: string) {
+    return this.view(await this.get(owner, id));
+  }
   async get(owner: string, id: string) {
     const app = await this.db.get<MiniApp>(owner, "mini-apps", id);
     if (!app)
@@ -111,10 +120,16 @@ export class MiniApps {
     const input = saveSchema.parse(raw);
     const at = new Date(this.now()).toISOString();
     const existing = input.id ? await this.get(owner, input.id) : undefined;
+    // A tool stays small; a website (which carries its own fonts) may be bigger, and stays one when updated.
+    if ((input.kind ?? existing?.kind) !== "website" && input.html.length > MAX_HTML)
+      throw new AppError("Keep the page under 200 KB", 400);
     const app: MiniApp = {
       id: existing?.id ?? randomUUID(),
       title: input.title,
       ...(input.description ? { description: input.description } : {}),
+      ...(input.kind === "website" || existing?.kind === "website"
+        ? { kind: "website" as const }
+        : {}),
       html: input.html,
       version: (existing?.version ?? 0) + 1,
       createdAt: existing?.createdAt ?? at,
@@ -190,7 +205,7 @@ export function miniAppToolSpecs(apps: MiniApps, owner: string) {
     {
       name: "make_mini_app",
       description:
-        "Build (or, with id, update) a mini app: one self-contained HTML page with inline <style> and <script>. It runs sandboxed with NO network and no outside files: no CDN scripts, web fonts, remote images or fetch calls (they're blocked), and no localStorage. Draw charts with inline SVG or canvas; put any data the page needs right in it. Design mobile-first (it opens on a phone), readable in light and dark (prefers-color-scheme), with clear labels, large tap targets and real content, never placeholder text. Never make a sign-in form or ask for passwords, codes, card numbers or other personal details, and don't send the page anywhere else. Under 200 KB.",
+        "Build (or, with id, update) a mini app: one self-contained HTML page with inline <style> and <script>. It runs sandboxed with NO network and no outside files: no CDN scripts, web fonts, remote images or fetch calls (they're blocked), and no localStorage. Draw charts with inline SVG or canvas; put any data the page needs right in it. Not for websites for a business (build_website does those, much better). Design mobile-first (it opens on a phone), readable in light and dark (prefers-color-scheme), with clear labels, large tap targets and real content, never placeholder text. Never make a sign-in form or ask for passwords, codes, card numbers or other personal details, and don't send the page anywhere else. Under 200 KB.",
       parameters: z.object({
         id: z.string().uuid().optional().describe("To update an existing mini app"),
         title: z.string().trim().min(1).max(80),

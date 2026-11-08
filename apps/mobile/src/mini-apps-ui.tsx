@@ -11,6 +11,7 @@ interface MiniApp {
   id: string;
   title: string;
   description?: string;
+  kind?: "app" | "website";
   version: number;
   updatedAt: string;
 }
@@ -18,6 +19,7 @@ const appSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional(),
+  kind: z.enum(["app", "website"]).optional(),
   version: z.number(),
   updatedAt: z.string(),
 });
@@ -62,7 +64,7 @@ export function MiniAppToolCard({ result, loading }: { result: unknown; loading:
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={s.heading}>{app.title}</Text>
           <Text style={s.small}>
-            {app.version > 1 ? `Mini app · version ${app.version}` : "Mini app"}
+            {`${app.kind === "website" ? "Website" : "Mini app"}${app.version > 1 ? ` · version ${app.version}` : ""}`}
           </Text>
         </View>
       </View>
@@ -73,7 +75,7 @@ export function MiniAppToolCard({ result, loading }: { result: unknown; loading:
         style={{ alignSelf: "flex-start" }}
         onPress={() => setOpen(true)}
       >
-        Open {app.title}
+        {app.kind === "website" ? "Open the website" : `Open ${app.title}`}
       </Button>
       {open && <MiniAppSheet id={app.id} onClose={() => setOpen(false)} />}
     </Card>
@@ -118,7 +120,7 @@ export function MiniAppSheet({
   }, [api, id]);
   return (
     <Sheet
-      title={app?.title ?? "Mini app"}
+      title={app?.title ?? (app?.kind === "website" ? "Website" : "Mini app")}
       subtitle={app?.description ?? "Built by your agent"}
       onClose={onClose}
       wide
@@ -150,7 +152,7 @@ export function MiniAppSheet({
             fileId={app.id}
             name={app.title}
             base={`/api/mini-apps/${app.id}`}
-            what="mini app"
+            what={app?.kind === "website" ? "website" : "mini app"}
             note="They’ll see everything in it, including changes your agent makes later."
           />
           {confirming ? (
@@ -163,7 +165,7 @@ export function MiniAppSheet({
                   Cancel
                 </Button>
                 <Button small danger icon={Trash2} busy={busy} onPress={() => void remove()}>
-                  Delete mini app
+                  {app?.kind === "website" ? "Delete website" : "Delete mini app"}
                 </Button>
               </View>
             </View>
@@ -175,7 +177,7 @@ export function MiniAppSheet({
               style={{ alignSelf: "flex-start" }}
               onPress={() => setConfirming(true)}
             >
-              Delete mini app
+              {app?.kind === "website" ? "Delete website" : "Delete mini app"}
             </Button>
           )}
           <ErrorNotice error={error} />

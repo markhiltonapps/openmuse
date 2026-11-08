@@ -641,3 +641,14 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   time zones the end of daylight saving moves midnight by an hour: check expected instants against the real offset.
 - **Local sample server env (2026-11-08):** `apps/server` refuses to start without `CPK_INTELLIGENCE_API_KEY`; for the sample
   server give it any placeholder (`cpk-placeholder-for-local-sample`), never dig a real key out of a transcript or env.
+- **Websites for businesses (owner, 2026-11-08):** a page the quick chat model wrote through `make_mini_app` looked like 2009 beside
+  MetaMuse's: wrong tool (a sandbox with no network, so Google Fonts fell back to Times), no layout system, adjectives instead of
+  facts, and nobody looked at the result. Quality comes from the system, not the model's mood: the house kit
+  (`apps/server/src/website/kit.ts`: CSS, icons, fonts embedded in the page) so the model writes only words and markup, a strong
+  model (`modelForBuild`), code checks that stop invented facts and altered quotes, and a real-browser render that measures
+  sideways scroll, contrast, tap targets and fonts (worker `/render`). Anything else that makes a visual artifact should get the
+  same four things: a kit, a strong model, checks, a render. Fonts and icons must live inside the page; the mini-app CSP blocks
+  everything else. Loosening the mini-app sandbox (tel: and map links) needs the owner's say-so.
+  Safety checks on model-written HTML are an allow-list (what a link or style may contain), never a block-list of bad words;
+  anything paid that a retry can repeat (a build) is idempotent by its input and a job gets only the status tool; a record that
+  says "working" needs a reaper for when the process died; a render in a browser needs its own deadline and queue cap.
