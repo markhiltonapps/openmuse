@@ -680,5 +680,6 @@ Follow-ups (2026-11-08, after the website push)
 - Kit fix found while taking the PDF picture: at 390 px the brand name broke mid-word ("Constructio/n") because of overflow-wrap:anywhere
   and the header button was wide; now words wrap only at spaces, the phone header is tighter, and a word too long to fit shows up in
   the render check's "clipped" list.
-- Open question from the owner: Neddy gives a thumbs up before checking something when typed to. Not found in code (no thumbs-up is
-  sent by the app); asked the owner what they want changed.
+- Thumbs up before checking something (owner: "do whatever's easiest"): the app never sends one, so it is the model's own habit. The chat's
+  instructions now say to start with one short plain line about what she's checking, never an emoji and not the same words each time.
+  A prompt change, so it can't be proven without real model calls (owner's OK needed); watch real chats after the deploy.
