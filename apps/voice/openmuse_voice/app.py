@@ -14,6 +14,7 @@ from typing import Any
 
 import aiohttp
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketDisconnected
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pipecat.transports.base_transport import TransportParams
@@ -211,7 +212,8 @@ async def attach(socket: WebSocket, call_id: str):
                 continue
             if isinstance(event, dict):
                 await call.from_api(event)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, WebSocketDisconnected):
+        # The api went away, or the call ended and closed the socket first: nothing more to read.
         pass
     finally:
         call.detach_sideband(send)
