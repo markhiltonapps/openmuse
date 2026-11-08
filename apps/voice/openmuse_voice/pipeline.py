@@ -45,10 +45,13 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.settings import TTSSettings
 from pipecat.transports.base_transport import BaseTransport
+from pipecat.turns.user_start import ExternalUserTurnStartStrategy
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
 from .call import Call
 from .config import Config
+from .device import PushToTalk, PushToTalkTurnStop
 from .services import make_llm, make_stt, make_tts
 from .voices import RATE, Voices
 
@@ -61,6 +64,9 @@ VOICE_RULES = """How this voice works:
 - For how to use this app, answer from "How this app works" below when it covers the question; hand off anything it doesn't cover, and anything they want done.
 - Never say you've looked something up or done something unless an answer from hand_off says so.
 - The little murmurs you make while they talk ("mm-hmm", "uh-huh") can't be turned off yet. If they ask, say so kindly; never promise to stop them."""
+
+# Added for a push-to-talk device: they hold a button to talk and let go to hear the answer.
+DEVICE_RULES = """They're talking to you on a small push-to-talk device with a speaker: they hold a button while they speak and let go to hear you. Keep every reply to a sentence or two. You make no murmurs on this device, so ignore the line about them."""
 
 # A rehearsal plays someone else, so none of the assistant's rules or hand-offs apply.
 REHEARSAL_RULES = """How this voice works:
@@ -102,9 +108,10 @@ class Heard(FrameProcessor):
 class Played(FrameProcessor):
     """After the speaker: passes on the words as they're played (not those cut off)."""
 
-    def __init__(self, call: Call):
+    def __init__(self, call: Call, device=None):
         super().__init__()
         self._call = call
+        self._device = device
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -114,6 +121,8 @@ class Played(FrameProcessor):
             self._call.bot_speaking = True
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._call.bot_speaking = False
+            if self._device:
+                self._device.bot_stopped()
         await self.push_frame(frame, direction)
 
 
@@ -225,9 +234,21 @@ class Usage(BaseObserver):
 
 
 async def run_call(
-    call: Call, transport: BaseTransport, config: Config, voices: Voices | None = None
+    call: Call,
+    transport: BaseTransport,
+    config: Config,
+    voices: Voices | None = None,
+    push_to_talk: bool = False,
 ) -> None:
-    """Runs one call until it ends; `call.stop` ends it from outside."""
+    """Runs one call until it ends; `call.stop` ends it from outside.
+
+    `push_to_talk`: a device with a button (see device.py; `call.device` is its state). The button
+    makes the turns, so there is no voice detector, no turn-detection model and no murmurs, and
+    the call starts when they first press, not with a hello.
+    """
+    device = call.device if push_to_talk else None
+    if push_to_talk and device is None:
+        raise ValueError("A push-to-talk call needs its device (call.device)")
     async with aiohttp.ClientSession() as http:
         stt = make_stt(config)
         # What's the same for everyone first (rules, how the app works), then this person and
@@ -238,15 +259,22 @@ async def run_call(
         else:
             system = "\n\n".join(
                 part
-                for part in (VOICE_RULES, call.reference, call.instructions, call.allowance_note())
+                for part in (
+                    VOICE_RULES,
+                    DEVICE_RULES if push_to_talk else "",
+                    call.reference,
+                    call.instructions,
+                    call.allowance_note(),
+                )
                 if part
             )
         llm = make_llm(config, system)
         tts = make_tts(config, http, call.voice)
-        listening = Backchannel(call)
+        # The murmurs make no sense when a button decides when they're done talking.
+        listening = None if push_to_talk else Backchannel(call)
 
         async def load_clips(voice: str):
-            if not voices:
+            if not voices or not listening:
                 return
             try:
                 clips = await voices.clips(http, voice)
@@ -256,7 +284,7 @@ async def run_call(
             if call.voice == voice:
                 listening.clips = clips
 
-        if voices and voices.choosable:
+        if voices and voices.choosable and not push_to_talk:
             asyncio.create_task(load_clips(call.voice))
 
         async def on_hand_off(params: FunctionCallParams):
@@ -277,38 +305,48 @@ async def run_call(
         context = LLMContext(
             tools=ToolsSchema(standard_tools=[] if call.rehearse else [HAND_OFF])
         )
-        # Silero hears speech start and stop; the smart-turn model (the default stop strategy)
-        # decides whether a pause means they've finished. Speaking over the voice interrupts it.
-        user, assistant = LLMContextAggregatorPair(
-            context,
-            user_params=LLMUserAggregatorParams(
-                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=config.vad_stop_secs))
-            ),
-        )
-        pipeline = Pipeline(
-            [
-                transport.input(),
-                stt,
-                Heard(call),
-                user,
-                llm,
-                tts,
-                listening,
-                transport.output(),
-                Played(call),
-                assistant,
-            ]
-        )
-        latency = UserBotLatencyObserver()
+        if push_to_talk:
+            # The button says when a turn starts and ends (PushToTalk); the turn ends the moment
+            # the final transcript is in. A turn with no words is never answered, not even one
+            # that cut the voice off.
+            user, assistant = LLMContextAggregatorPair(
+                context,
+                user_params=LLMUserAggregatorParams(
+                    user_turn_strategies=UserTurnStrategies(
+                        start=[ExternalUserTurnStartStrategy()],
+                        stop=[PushToTalkTurnStop(device)],
+                    ),
+                    empty_user_turn=None,
+                ),
+            )
+            front = [transport.input(), PushToTalk(call, device), stt, Heard(call), user]
+            back = [llm, tts, transport.output(), Played(call, device), assistant]
+            observers = [Usage(call, config)]
+        else:
+            # Silero hears speech start and stop; the smart-turn model (the default stop
+            # strategy) decides whether a pause means they've finished. Speaking over the voice
+            # interrupts it.
+            user, assistant = LLMContextAggregatorPair(
+                context,
+                user_params=LLMUserAggregatorParams(
+                    vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=config.vad_stop_secs))
+                ),
+            )
+            front = [transport.input(), stt, Heard(call), user]
+            back = [llm, tts, listening, transport.output(), Played(call), assistant]
+            latency = UserBotLatencyObserver()
 
-        @latency.event_handler("on_latency_measured")
-        async def on_latency(_observer, seconds: float):
-            await call.metrics(turn={"latencyMs": round(seconds * 1000)})
+            @latency.event_handler("on_latency_measured")
+            async def on_latency(_observer, seconds: float):
+                await call.metrics(turn={"latencyMs": round(seconds * 1000)})
+
+            observers = [Usage(call, config), latency]
+        pipeline = Pipeline([*front, *back])
 
         worker = PipelineWorker(
             pipeline,
             params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
-            observers=[Usage(call, config), latency],
+            observers=observers,
             # The api hangs up quiet calls; the pipeline itself never times out.
             idle_timeout_secs=None,
             enable_rtvi=False,
@@ -331,9 +369,11 @@ async def run_call(
 
         async def set_voice(voice: str):
             logger.info(f"Voice call {call.id}: voice changed to {voice}")
-            listening.clips = []
+            if listening:
+                listening.clips = []
             await worker.queue_frames([TTSUpdateSettingsFrame(delta=TTSSettings(voice=voice))])
-            asyncio.create_task(load_clips(voice))
+            if listening:
+                asyncio.create_task(load_clips(voice))
 
         call.speak, call.note, call.stop, call.set_voice = speak, note, stop, set_voice
 
@@ -358,6 +398,9 @@ async def run_call(
         async def on_connected(_transport, _client):
             await call.emit({"type": "session.started"})
             call.start_clock()
+            if push_to_talk:
+                # The device's first press is the person's first question; nothing to say first.
+                return
             # The instructions ask for a short hello when the call starts.
             context.add_message({"role": "developer", "content": "The call just connected."})
             await worker.queue_frames([LLMRunFrame()])
@@ -372,4 +415,6 @@ async def run_call(
         try:
             await runner.run()
         finally:
+            if device:
+                device.stop()
             await call.end(call.reason or "ended")

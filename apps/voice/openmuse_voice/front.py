@@ -4,7 +4,9 @@ One Python process carries about four calls before its event loop falls behind (
 packets are handled in Python by aiortc), so the service runs VOICE_WORKERS copies of the app on
 local ports and this front sends each new call to the least busy one. A call's id names its
 worker ("pc_w3_…"), so the api's sideband for that call goes to the same place. The audio itself
-goes straight to the worker over WebRTC, not through here.
+goes straight to the worker over WebRTC, not through here. (A push-to-talk device's audio does go through: the api
+opens /v1/live/sessions/{id}/audio here and the front pipes its binary and text messages to the
+worker that holds the call.)
 """
 
 import asyncio
@@ -13,7 +15,7 @@ import os
 import re
 import sys
 
-from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
+from aiohttp import ClientSession, ClientTimeout, WSMsgType, WSServerHandshakeError, web
 from loguru import logger
 
 from .config import load
@@ -160,6 +162,50 @@ async def attach(request: web.Request):
     return downstream
 
 
+async def audio(request: web.Request):
+    """A push-to-talk device's audio and events: piped, both ways, to the worker holding the call."""
+    assert http
+    if not _signed(request.headers.get("authorization")):
+        return _refused(401, "unauthorized", "Wrong or missing VOICE_INTERNAL_TOKEN.")
+    call_id = request.match_info["call_id"]
+    match = re.match(r"pc_w(\d+)_", call_id)
+    worker = workers[int(match.group(1))] if match and int(match.group(1)) < WORKERS else None
+    if not worker:
+        return _refused(404, "not_found", "No such call.")
+    try:
+        # No compression, either side: it only adds time to small pieces of audio.
+        upstream = await http.ws_connect(
+            f"ws://127.0.0.1:{worker.port}/v1/live/sessions/{call_id}/audio",
+            headers={"authorization": request.headers.get("authorization", "")},
+            compress=0,
+        )
+    except WSServerHandshakeError:
+        # The worker turns away what it doesn't hold (or already has a device on).
+        return _refused(404, "not_found", "No such call.")
+    downstream = web.WebSocketResponse(heartbeat=20, compress=False)
+    await downstream.prepare(request)
+
+    async def pipe(source, target):
+        async for message in source:
+            if message.type == WSMsgType.BINARY:
+                await target.send_bytes(message.data)
+            elif message.type == WSMsgType.TEXT:
+                await target.send_str(message.data)
+            else:
+                break
+
+    tasks = [
+        asyncio.create_task(pipe(upstream, downstream)),
+        asyncio.create_task(pipe(downstream, upstream)),
+    ]
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    for task in tasks:
+        task.cancel()
+    await upstream.close()
+    await downstream.close()
+    return downstream
+
+
 async def list_voices(request: web.Request):
     """The voices people can choose for live calls (empty when the voice can't be chosen)."""
     assert http
@@ -263,6 +309,7 @@ def main():
     app.router.add_get("/health", health)
     app.router.add_post("/v1/live/sessions", create_session)
     app.router.add_get("/v1/live/sessions/{call_id}/attach", attach)
+    app.router.add_get("/v1/live/sessions/{call_id}/audio", audio)
     app.router.add_get("/v1/voices", list_voices)
     app.router.add_get("/v1/voices/all", all_voices)
     app.router.add_get("/v1/voices/{voice}/sample", voice_sample)

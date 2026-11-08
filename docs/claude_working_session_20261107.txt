@@ -711,3 +711,14 @@ suggestion (ESP-IDF) to the Arduino IDE: Waveshare ships working Arduino example
 - Guide for the owner: docs/Neddy-device-setup-part-1.pdf (Windows, Arduino IDE, Waveshare's own tests). Part 2 comes with the firmware.
 - Not done: the firmware itself; real-world latency (needs real Soniox/Inworld and the board); a direct device-to-voice path (the api
   hop is fine for 5 devices; revisit before selling).
+- Voice service half (apps/voice, built by a helper, reviewed and rerun by me): `device.py` (serializer, one-writer link, PushToTalk,
+  PushToTalkTurnStop), a device branch in `run_call(push_to_talk=True)` (no voice detector or turn model, no murmurs, no hello,
+  a one-line DEVICE_RULES for short replies), `POST /v1/live/sessions` with transport "websocket", `/v1/live/sessions/<id>/audio`
+  (also proxied by the front, binary), settings VOICE_DEVICE_CONNECT_SECS (20) and VOICE_DEVICE_LEAD_SECS (0.5). Choreography: press =
+  VAD-start + ProposedUserStarted; release = VAD-stop (Soniox finalizes at once) + a stop that ends the turn the moment the final
+  transcript lands (the stock external stop strategy waits 0.5 s, which made the fake test 1225 ms against 713 ms). A tap under ~0.2 s
+  is dropped; the first 200 ms of each press is held back from the STT until the press is clearly real; audio is paced at most 0.5 s
+  ahead of what the device plays; a press that barges in sends playback.clear. Python tests: `cd apps/voice && python -m tests.device_test`
+  (11 checks; fake STT/TTS and a mock Claude) with the scratchpad venv. Fake latency, release to first audio byte: ~713 ms.
+- Not verifiable without real services: how fast Soniox answers finalize, the 24 -> 16 kHz resample with Inworld, a no-words press,
+  a stuck button (no server cap on press length: the firmware must cap it, e.g. 30 s, and the call's maxSeconds still applies).

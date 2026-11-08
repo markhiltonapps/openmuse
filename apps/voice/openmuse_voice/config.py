@@ -45,6 +45,11 @@ class Config:
     vad_stop_secs: float
     # Calls one process takes at once; more are turned away (the api says live talk is busy).
     max_sessions: int
+    # A push-to-talk device's call is ended if its audio socket isn't connected within this long.
+    device_connect_secs: float
+    # How far ahead of what a push-to-talk device is playing the voice is sent (its memory, and
+    # how soon a press cuts the voice off).
+    device_lead_secs: float
 
     @property
     def tts_model(self) -> str:
@@ -96,4 +101,6 @@ def load() -> Config:
         speechify_voice=_env("SPEECHIFY_VOICE", "geffen_32"),
         vad_stop_secs=_number("VOICE_VAD_STOP_SECS", 0.2),
         max_sessions=int(_number("VOICE_MAX_SESSIONS", 50)),
+        device_connect_secs=_number("VOICE_DEVICE_CONNECT_SECS", 20),
+        device_lead_secs=_number("VOICE_DEVICE_LEAD_SECS", 0.5),
     )

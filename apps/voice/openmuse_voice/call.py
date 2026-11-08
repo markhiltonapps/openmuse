@@ -10,6 +10,9 @@ The events have the same names and shapes as OpenAI's live voice, so the api's c
 - from the api: session.commentary.append, session.thinking.append, session.close, and
   session.update (ours: a new voice chosen during the call)
 - from the browser: session.close
+
+A push-to-talk device is the "browser" of its call: it gets the same events over its audio
+websocket (plus its own, see device.py) and sends session.close the same way.
 """
 
 import asyncio
@@ -45,6 +48,7 @@ class Call:
         reference: str = "",
         voice: str = "",
         rehearse: bool = False,
+        device: bool = False,
         accepts: Callable[[Any], bool] | None = None,
         on_end: Callable[["Call"], None] | None = None,
     ):
@@ -60,6 +64,11 @@ class Call:
         self.voice = voice
         # Practising a conversation: the voice plays someone else, with no hand-offs.
         self.rehearse = rehearse
+        # A push-to-talk device: its audio comes over its own websocket (see device.py), not WebRTC.
+        self.device_call = device
+        self.device: Any = None
+        self.audio_attached = False
+        self.expiry: Any = None
         self._accepts = accepts or (lambda _voice: False)
         self._last_still = ""
         self.started = time.monotonic()

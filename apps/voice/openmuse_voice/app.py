@@ -2,6 +2,8 @@
 
 Only the api talks to this service, over Railway's private network, with the shared token. The
 browser's audio reaches it over WebRTC through the TURN relay (Railway takes no UDP from outside).
+A push-to-talk device's audio comes the other way: the api opens a websocket to
+/v1/live/sessions/{id}/audio and pipes the device's bytes through it (see device.py).
 """
 
 import asyncio
@@ -17,9 +19,11 @@ from loguru import logger
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.connection import IceServer, SmallWebRTCConnection
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 
 from .call import Call
 from .config import Config, load
+from .device import RATE, Device, DeviceLink, DeviceSerializer
 from .pipeline import run_call
 from .voices import Voices
 
@@ -105,9 +109,11 @@ async def create_session(request: Request):
         return _refused(429, "busy", "Too many calls at once on this voice service.")
     body = await request.json()
     session = body.get("session") or {}
-    offer = (body.get("transport") or {}).get("sdp")
+    wanted = body.get("transport") or {}
+    offer = wanted.get("sdp")
     extra = body.get("openmuse") or {}
-    if not isinstance(offer, str) or "v=0" not in offer:
+    device = wanted.get("type") == "websocket"
+    if not device and (not isinstance(offer, str) or "v=0" not in offer):
         return _refused(400, "bad_offer", "No WebRTC offer.")
     max_seconds = extra.get("maxSeconds")
     limit_minutes = extra.get("limitMinutes")
@@ -115,6 +121,7 @@ async def create_session(request: Request):
     voice = extra.get("voice")
     call = Call(
         rehearse=extra.get("rehearse") is True,
+        device=device,
         instructions=str(session.get("instructions") or ""),
         max_seconds=float(max_seconds) if isinstance(max_seconds, (int, float)) else None,
         limit_minutes=float(limit_minutes) if isinstance(limit_minutes, (int, float)) else None,
@@ -123,6 +130,25 @@ async def create_session(request: Request):
         accepts=voices.accepts,
         on_end=_forget,
     )
+    if device:
+        # A push-to-talk device: no WebRTC. Its audio arrives on /audio; until it does, the call
+        # holds a place, and is ended (as a lost connection) if it never comes.
+        calls[call.id] = call
+
+        def expire():
+            if call.audio_attached or call.ended:
+                return
+            logger.warning(f"Voice call {call.id}: the device never connected its audio")
+            task = asyncio.get_running_loop().create_task(call.end("connection_lost"))
+            running.add(task)
+            task.add_done_callback(running.discard)
+
+        call.expiry = asyncio.get_running_loop().call_later(config.device_connect_secs, expire)
+        logger.info(
+            f"Voice call {call.id} started for a device ({len(calls)} on this service, "
+            f"voice {call.voice})"
+        )
+        return {"session": {"id": call.id}, "transport": {"type": "websocket"}}
     connection = SmallWebRTCConnection(ice_servers=_ice_servers(extra.get("iceServers")) or None)
     try:
         await connection.initialize(sdp=offer, type="offer")
@@ -193,6 +219,46 @@ async def attach(socket: WebSocket, call_id: str):
         await asyncio.wait({writer}, timeout=2)
 
 
+@app.websocket("/v1/live/sessions/{call_id}/audio")
+async def audio(socket: WebSocket, call_id: str):
+    """A push-to-talk device's audio and events: the api pipes the device's socket to this one."""
+    if not _signed(socket.headers.get("authorization")):
+        await socket.close(code=4401)
+        return
+    call = calls.get(call_id)
+    if not call or not call.device_call or call.ended or call.audio_attached:
+        await socket.close(code=4404)
+        return
+    await socket.accept()
+    call.audio_attached = True
+    if call.expiry:
+        call.expiry.cancel()
+    link = DeviceLink(socket, lead_secs=config.device_lead_secs)
+    call.device = Device(call, link)
+    # The call's events (session.started, transcripts, session.closed) go out the same socket.
+    call.attach_browser(link.send_event)
+    transport = FastAPIWebsocketTransport(
+        websocket=link,  # type: ignore[arg-type]
+        params=FastAPIWebsocketParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            audio_in_sample_rate=RATE,
+            audio_out_sample_rate=RATE,
+            # 20 ms pieces: the first sound doesn't wait for 40 ms of voice to gather.
+            audio_out_10ms_chunks=2,
+            serializer=DeviceSerializer(link),
+            allowed_origins=[],
+            ws_close_timeout=1.5,
+        ),
+    )
+    try:
+        await run_call(call, transport, config, voices, push_to_talk=True)
+    finally:
+        await link.close()
+        if not call.ended:
+            await call.end("connection_lost")
+
+
 def main():
     import uvicorn
 
@@ -201,7 +267,10 @@ def main():
         f"Voice service: {config.stt_model} -> {config.llm_model} -> {config.tts_model}"
         + (f" (missing: {', '.join(missing)})" if missing else "")
     )
-    uvicorn.run(app, host=config.host, port=config.port, log_level="warning")
+    # No per-message compression: a device's audio is small pieces, and squeezing each only costs time.
+    uvicorn.run(
+        app, host=config.host, port=config.port, log_level="warning", ws_per_message_deflate=False
+    )
 
 
 if __name__ == "__main__":
