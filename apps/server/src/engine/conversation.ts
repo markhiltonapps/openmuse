@@ -50,6 +50,7 @@ import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
 import { pictureToolInstructions, pictureToolSpecs } from "../picture-tools.ts";
+import { placeReminderToolSpecs } from "../place-reminders.ts";
 import { guardInput, guardTools, redactionInstructions } from "../redaction.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
@@ -982,14 +983,28 @@ export class ConversationAgent extends AbstractAgent {
     const whereabouts = this.service.whereabouts;
     if (whereabouts)
       tools.push(
-        ...whereaboutsToolSpecs(whereabouts, this.owner, { geocode: this.service.geocode }).map(
-          (spec) =>
-            defineTool({
-              ...spec,
-              parameters: spec.parameters as z.ZodObject,
-              execute: async (args: unknown) =>
-                (spec.execute as (value: unknown) => Promise<unknown>)(args),
-            }),
+        ...whereaboutsToolSpecs(whereabouts, this.owner, {
+          geocode: this.service.geocode,
+          timeZone: (owner) => this.service.timeZone(owner),
+        }).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
+          }),
+        ),
+      );
+    const placeReminders = this.service.placeReminders;
+    if (placeReminders && whereabouts)
+      tools.push(
+        ...placeReminderToolSpecs(placeReminders, whereabouts, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
+          }),
         ),
       );
     const nearby = this.service.nearby;
@@ -1501,6 +1516,8 @@ export class ConversationAgent extends AbstractAgent {
           earlier = compacted.earlier;
           earlierParts = pages.pages;
           if (closed) return;
+          // Moving at car speed (from the phone, while the app is open): short answers, no screens to read.
+          const driving = await this.service.whereabouts?.driving(this.owner).catch(() => false);
           subscription = agent
             .run({
               ...input,
@@ -1514,6 +1531,15 @@ export class ConversationAgent extends AbstractAgent {
                   value: `Your name is ${identity?.name?.trim() || "Neddy"}. Your tone is ${identity?.tone?.trim() || "warm"}.`,
                 },
                 { description: "Current date and time", value: localNow(timeZone) },
+                ...(driving
+                  ? [
+                      {
+                        description: "Driving right now (from their phone's speed)",
+                        value:
+                          "Their phone is moving at car speed. They may be driving, so keep every answer to one or two short sentences made to be heard, with no lists, tables or links to read, and never ask them to type or tap. Offer to do the rest when they stop. Leave anything that needs a careful look, a long read or several steps until they stop, and say so. Don’t start anything that needs an on-screen check right now. If they say they are a passenger, call set_driving_mode with not_driving and carry on as normal.",
+                      },
+                    ]
+                  : []),
                 { description: "Mail", value: mailContext(builtInMail, Boolean(apps)) },
                 ...(about
                   ? [

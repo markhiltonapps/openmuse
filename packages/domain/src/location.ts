@@ -54,3 +54,55 @@ export function driveMinutes(meters: number) {
   const minutes = Math.max(1, Math.round(road / speed / 60));
   return minutes >= 10 ? Math.round(minutes / 5) * 5 : minutes;
 }
+
+/** "12.4 mi" (one decimal; "0.8 mi" for short drives). */
+export const milesWords = (meters: number) => `${(meters / 1609.34).toFixed(1)} mi`;
+
+/** The year, month, day and clock of a moment in a time zone. */
+function zoned(ms: number, timeZone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(ms))
+      .map((p) => [p.type, Number(p.value)]),
+  ) as Record<"year" | "month" | "day" | "hour" | "minute" | "second", number>;
+  return parts;
+}
+
+/** The moment a local day began, in the person's time zone (never from UTC's day). */
+export function localDayStart(ms: number, timeZone: string) {
+  const p = zoned(ms, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  const offset = asUtc - Math.floor(ms / 1000) * 1000;
+  return Date.UTC(p.year, p.month - 1, p.day) - offset;
+}
+
+export type MileagePeriod = "today" | "week" | "month" | "year" | "all";
+/** Where a period begins in their calendar: today, the last 7 days, this month, this year. */
+export function periodStart(period: MileagePeriod, now: number, timeZone: string) {
+  if (period === "all") return 0;
+  const dayMs = 86_400_000;
+  const today = localDayStart(now, timeZone);
+  if (period === "today") return today;
+  if (period === "week") return localDayStart(today - 6 * dayMs + 12 * 3_600_000, timeZone);
+  const p = zoned(now, timeZone);
+  const back =
+    period === "month"
+      ? p.day - 1
+      : Math.round((Date.UTC(p.year, p.month - 1, p.day) - Date.UTC(p.year, 0, 1)) / dayMs);
+  return localDayStart(today - back * dayMs + 12 * 3_600_000, timeZone);
+}
+
+/** A date in the person's calendar: "2026-11-08". */
+export function localDate(ms: number, timeZone: string) {
+  const p = zoned(ms, timeZone);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}

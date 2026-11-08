@@ -470,7 +470,7 @@ export const caches = (model: string) => /^anthropic[/:]/i.test(model.trim());
  * the same between turns, so it's cached as its own block before the conversation.
  */
 export const VOLATILE_CONTEXT =
-  /^(Current date and time|Shown on their screen|Where what you put on screen)/i;
+  /^(Current date and time|Driving right now|Shown on their screen|Where what you put on screen)/i;
 
 type ContextEntry = { description: string; value: string };
 type TextPart = { type: "text"; content: string; metadata?: Record<string, unknown> };

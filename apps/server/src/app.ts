@@ -7,6 +7,7 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { ownWords } from "../../../packages/domain/src/chat-export.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
+import { driveMinutes, metersBetween } from "../../../packages/domain/src/location.ts";
 import { PERSONA_FACTS } from "../../../packages/domain/src/persona.ts";
 import {
   CONTACT_EMAIL,
@@ -86,6 +87,7 @@ import { Nearby } from "./nearby.ts";
 import { historyStepsEmail } from "./onboarding.ts";
 import { PastChats } from "./past-chats.ts";
 import { Pictures } from "./pictures.ts";
+import { PlaceReminders } from "./place-reminders.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
 import { PushService } from "./push.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
@@ -813,8 +815,20 @@ export async function createApp(
     config.mode === "live"
       ? nominatimStreets(`Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; where am I)`)
       : undefined,
+    Date.now,
+    (owner) => agent.timeZone(owner),
   );
   agent.whereabouts = whereabouts;
+  // Reminders that go off on arriving somewhere: looked at on each fresh report from the phone.
+  const placeReminders = new PlaceReminders(
+    db,
+    async (owner, note) => {
+      await agent.notify(owner, note.title, note.body, undefined, note.key);
+    },
+    () => agent.geocode,
+  );
+  agent.placeReminders = placeReminders;
+  whereabouts.onReport((event) => placeReminders.seen(event));
   if (config.mode === "live")
     agent.nearby = new Nearby({
       userAgent: `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; places near me)`,
@@ -867,6 +881,17 @@ export async function createApp(
         { headsUpId: note.id },
         note.push,
       ),
+    // Rough minutes by car from where the phone is now (fresh spot only) to an address on the calendar.
+    driveTo: async (owner, address) => {
+      const here = await whereabouts.current(owner);
+      // A street address (it has a number), not a name that could match anywhere.
+      if (!here || here.minutesAgo > 20 || !agent.geocode || !/\b\d{1,6}\s+[A-Za-z]/.test(address))
+        return undefined;
+      const there = await agent.geocode(address).catch(() => undefined);
+      if (!there) return undefined;
+      const minutes = driveMinutes(metersBetween(here, there));
+      return minutes <= 180 ? minutes : undefined;
+    },
     email: mailer
       ? async (owner, item) => {
           const to = (await accounts.get(owner))?.email;
@@ -886,6 +911,8 @@ export async function createApp(
       : undefined,
   });
   agent.headsUps = headsUps;
+  // The phone just said where it is: plan the next trip from there, not from a usual buffer.
+  whereabouts.onReport((event) => (event.first ? headsUps.refresh(event.owner) : undefined));
   agent.backups = new Backups(db, blobs);
   void checkIns
     .adoptMealRoutines()
@@ -1346,7 +1373,7 @@ export async function createApp(
     }
   });
   app.get("/api/location", async (c) =>
-    jsonUnlessUnchanged(c, await whereabouts.view(c.get("owner"))),
+    jsonUnlessUnchanged(c, await whereabouts.view(c.get("owner"), c.req.query("device"))),
   );
   app.post("/api/location", async (c) =>
     c.json(await whereabouts.report(c.get("owner"), await c.req.json())),
@@ -1369,6 +1396,42 @@ export async function createApp(
       })
       .parse(await c.req.json());
     return c.json({ restored: await whereabouts.restoreParked(c.get("owner"), car) });
+  });
+  // Driving mode's switch, "I'm not driving", the mileage log's switch and clearing the log.
+  app.post("/api/location/driving", async (c) => {
+    const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());
+    await whereabouts.setDriving(c.get("owner"), on);
+    return c.json(await whereabouts.view(c.get("owner")));
+  });
+  app.post("/api/location/not-driving", async (c) => {
+    whereabouts.notDriving(c.get("owner"));
+    return c.json(await whereabouts.view(c.get("owner")));
+  });
+  app.post("/api/location/mileage", async (c) => {
+    const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());
+    await whereabouts.setMileage(c.get("owner"), on);
+    return c.json(await whereabouts.view(c.get("owner")));
+  });
+  app.post("/api/location/trips/clear", async (c) => {
+    const { ids } = z
+      .object({ ids: z.array(z.string().max(60)).max(500).optional() })
+      .parse(await c.req.json());
+    const removed = await whereabouts.clearTrips(c.get("owner"), ids);
+    return c.json({ removed, ...(await whereabouts.view(c.get("owner"))) });
+  });
+  // Reminders waiting for a place: shown on the location card with a way to remove each.
+  app.get("/api/location/place-reminders", async (c) =>
+    c.json({
+      reminders: (await placeReminders.list(c.get("owner"))).map(({ id, text, place }) => ({
+        id,
+        text,
+        place,
+      })),
+    }),
+  );
+  app.post("/api/location/place-reminders/cancel", async (c) => {
+    const { id } = z.object({ id: z.string().max(60) }).parse(await c.req.json());
+    return c.json(await placeReminders.cancel(c.get("owner"), id));
   });
   app.post("/api/location/sharing", async (c) => {
     const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());

@@ -3,6 +3,7 @@ import {
   Bot,
   CalendarClock,
   CalendarDays,
+  CarFront,
   Check,
   ChevronRight,
   CloudSun,
@@ -29,6 +30,7 @@ import { PlaceAnchor, usePlace } from "./app-places-ui";
 import { ApprovalCard } from "./approval-card";
 import { Mascot, useReducedMotion } from "./avatar";
 import { type AppDay, todaysEvents } from "./calendar-apps";
+import { useDriving } from "./driving";
 import { Emoji } from "./emoji";
 import { GlossFill, OnGloss } from "./gloss";
 import { comingUp, countWords as count, recentFew, scheduleWords, whenWords } from "./home-lists";
@@ -1005,9 +1007,63 @@ function Waiting({
   );
 }
 
+/**
+ * Shown while the phone looks to be in a car (owner, 2026-11-08): the app can't tell a driver from a
+ * passenger, so it says what it saw and lets them say they aren't driving. Talk below it gets bigger.
+ */
+function DrivingBanner({ agent }: { agent: string }) {
+  const { api } = useWorkspace();
+  const [busy, setBusy] = useState(false);
+  const notDriving = async () => {
+    setBusy(true);
+    try {
+      await api.request("/api/location/not-driving", {});
+      // Home hears at once; the server holds it for half an hour.
+      window.dispatchEvent(new Event("location-sharing"));
+    } catch {
+      // Still shown; the next tap tries again.
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View
+      accessibilityRole="summary"
+      style={[
+        {
+          marginHorizontal: 16,
+          marginTop: 22,
+          padding: 14,
+          borderRadius: 22,
+          gap: 8,
+          backgroundColor: colors.card,
+        },
+        !glass && { borderWidth: 1, borderColor: colors.line },
+        glassSurface,
+      ]}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <CarFront size={22} color={ink()} strokeWidth={2.2} />
+        <Text style={{ flex: 1, color: ink(), fontSize: 16, fontWeight: "700" }}>
+          Looks like you’re on the move
+        </Text>
+      </View>
+      <Text style={{ color: soft(), fontSize: 14 }}>
+        {`Talk is hands-free, and ${agent} keeps answers short. If you’re driving, please only use it when it’s safe.`}
+      </Text>
+      <View style={{ alignSelf: "flex-start" }}>
+        <Button busy={busy} onPress={() => void notDriving()}>
+          I’m not driving
+        </Button>
+      </View>
+    </View>
+  );
+}
+
 /** Talk to the agent (a live call where it's on, otherwise the chat), or type in the chat. */
 export function HomeTalkRow({ desktop }: { desktop: boolean }) {
   const { navigate, draft } = useWorkspace();
+  const movingNow = useDriving();
   const { data } = useAgentWorkspace();
   // During a live call the phone's attention goes to the voice: the hover pauses.
   const onCall = useLiveCallOn();
@@ -1018,6 +1074,8 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
   // While a meeting records, the microphone is the recorder's: Talk goes to the chat.
   const recording = useRecording();
   const calling = live === "on" && !recording;
+  // Only where Talk really is a live call: a driver is never sent to a typing screen.
+  const driving = movingNow && calling;
   const label =
     call.phase === "on"
       ? `Back to the call with ${agent}`
@@ -1036,117 +1094,136 @@ export function HomeTalkRow({ desktop }: { desktop: boolean }) {
   const [rowWidth, setRowWidth] = useState(0);
   const tight = rowWidth > 0 && rowWidth < 440;
   const round = tight ? 56 : 62;
+  const tall = driving ? 92 : 62;
   return (
-    <View
-      onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
-      style={{
-        flexDirection: "row",
-        gap: tight ? 8 : 10,
-        alignItems: "center",
-        alignSelf: "center",
-        width: "100%",
-        maxWidth: desktop ? 460 : undefined,
-        paddingHorizontal: 16,
-        paddingTop: 22,
-      }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        onPress={talk}
-        style={({ pressed }) => ({
-          flex: 1,
-          height: 62,
-          borderRadius: 31,
-          justifyContent: "center",
-          paddingLeft: tight ? 70 : 78,
-          paddingRight: tight ? 16 : 20,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
-          shadowColor: TEAL[1],
-          shadowOpacity: 0.3,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 8 },
-        })}
+    <>
+      {driving && (
+        <View style={{ width: "100%", maxWidth: desktop ? 460 : undefined, alignSelf: "center" }}>
+          <DrivingBanner agent={agent} />
+        </View>
+      )}
+      <View
+        onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
+        style={{
+          flexDirection: "row",
+          gap: tight ? 8 : 10,
+          alignItems: "center",
+          alignSelf: "center",
+          width: "100%",
+          maxWidth: desktop ? 460 : undefined,
+          paddingHorizontal: 16,
+          paddingTop: driving ? 18 : 22,
+        }}
       >
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: 31,
-            overflow: "hidden",
-          }}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          onPress={talk}
+          style={({ pressed }) => ({
+            flex: 1,
+            height: tall,
+            borderRadius: tall / 2,
+            justifyContent: "center",
+            paddingLeft: tight ? 70 : 78,
+            paddingRight: tight ? 16 : 20,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
+            shadowColor: TEAL[1],
+            shadowOpacity: 0.3,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 8 },
+          })}
         >
-          <GlossFill id="talk" from={TEAL[0]} to={TEAL[1]} radius={31} />
-        </View>
-        {/* He hovers in the bar on his jets, his head rising above it (owner, 2026-11-07: he
-            moves like the one at the top of the screen, never a still picture). */}
-        <View
-          pointerEvents="none"
-          style={{ position: "absolute", left: 0, bottom: 12, width: 78, height: 78 }}
-        >
-          <Mascot
-            size={78}
-            character="neddy"
-            eyes={data?.identity.eyes}
-            flying
-            quiet={onCall}
-            animated={!reduce}
-          />
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, position: "relative" }}>
-          <Text
-            numberOfLines={1}
+          <View
+            pointerEvents="none"
             style={{
-              flex: 1,
-              color: "#FFFFFF",
-              fontSize: 18,
-              fontWeight: "700",
-              letterSpacing: -0.2,
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              borderRadius: tall / 2,
+              overflow: "hidden",
             }}
           >
-            Talk to {agent}
-          </Text>
-          {/* A headset for a call; a microphone where talking happens in the chat. */}
-          {tight ? null : calling || call.phase === "on" ? (
-            <Headset size={26} color="#FFFFFF" />
-          ) : (
-            <Mic size={26} color="#FFFFFF" />
-          )}
-        </View>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Type a message to ${agent}`}
-        {...tipProps(`Type to ${agent}`)}
-        onPress={() => draft("")}
-        style={({ pressed }) => [
-          {
-            width: round,
-            height: round,
-            borderRadius: round / 2,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: glass ? "rgba(30, 24, 44, 0.66)" : colors.card,
-            borderWidth: 1,
-            borderColor: glass ? "rgba(255,255,255,0.18)" : colors.line,
-            transform: [{ scale: pressed ? 0.96 : 1 }],
-          },
-          !glass && {
-            shadowColor: "#132631",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.07,
-            shadowRadius: 18,
-          },
-          glassSurface,
-        ]}
-      >
-        <Keyboard size={26} color={ink()} />
-      </Pressable>
-      <HomeRecordButton glass={glass} ink={ink()} size={round} />
-    </View>
+            <GlossFill id="talk" from={TEAL[0]} to={TEAL[1]} radius={tall / 2} />
+          </View>
+          {/* He hovers in the bar on his jets, his head rising above it (owner, 2026-11-07: he
+            moves like the one at the top of the screen, never a still picture). */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: 0,
+              bottom: driving ? 14 : 12,
+              width: 78,
+              height: 78,
+            }}
+          >
+            <Mascot
+              size={78}
+              character="neddy"
+              eyes={data?.identity.eyes}
+              flying
+              quiet={onCall}
+              animated={!reduce}
+            />
+          </View>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: 10, position: "relative" }}
+          >
+            <Text
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                color: "#FFFFFF",
+                fontSize: driving ? 22 : 18,
+                fontWeight: "700",
+                letterSpacing: -0.2,
+              }}
+            >
+              Talk to {agent}
+            </Text>
+            {/* A headset for a call; a microphone where talking happens in the chat. */}
+            {tight ? null : calling || call.phase === "on" ? (
+              <Headset size={26} color="#FFFFFF" />
+            ) : (
+              <Mic size={26} color="#FFFFFF" />
+            )}
+          </View>
+        </Pressable>
+        {/* Typing and recording aren't offered while driving. */}
+        {driving ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Type a message to ${agent}`}
+            {...tipProps(`Type to ${agent}`)}
+            onPress={() => draft("")}
+            style={({ pressed }) => [
+              {
+                width: round,
+                height: round,
+                borderRadius: round / 2,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: glass ? "rgba(30, 24, 44, 0.66)" : colors.card,
+                borderWidth: 1,
+                borderColor: glass ? "rgba(255,255,255,0.18)" : colors.line,
+                transform: [{ scale: pressed ? 0.96 : 1 }],
+              },
+              !glass && {
+                shadowColor: "#132631",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.07,
+                shadowRadius: 18,
+              },
+              glassSurface,
+            ]}
+          >
+            <Keyboard size={26} color={ink()} />
+          </Pressable>
+        )}
+        {driving ? null : <HomeRecordButton glass={glass} ink={ink()} size={round} />}
+      </View>
+    </>
   );
 }

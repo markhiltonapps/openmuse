@@ -17,6 +17,7 @@ import {
   headsUpsFor,
   inQuiet,
   parseQuietHours,
+  placeOf,
   quietEnds,
   usable,
 } from "./heads-up-rules.ts";
@@ -83,6 +84,11 @@ export interface HeadsUpsDeps {
     owner: string,
     note: { id: string; title: string; body: string; key: string; push: boolean },
   ) => Promise<boolean>;
+  /**
+   * Rough minutes by car from where the phone is now to a calendar address, or undefined when the phone
+   * hasn't shared a fresh spot or the address can't be found.
+   */
+  driveTo?: (owner: string, address: string) => Promise<number | undefined>;
   /** Emails the person, when the server can send email. */
   email?: (owner: string, item: { title: string; body: string }) => Promise<void>;
   now?: () => number;
@@ -202,11 +208,25 @@ export class HeadsUps {
     if (!zoneKnown) return this.later(owner, 60 * MINUTE, { lastLook: "no-zone" });
 
     await this.reopen(owner, now, zone);
+    // Where they are now (if the phone has said) changes how long the trip takes: only for what's next.
+    const drive = new Map<string, number>();
+    if (this.deps.driveTo) {
+      const next = usable(calendar.events, now)
+        .filter((e) => placeOf(e) === "away" && e.location?.trim() && Date.parse(e.start) > now)
+        .slice(0, 3);
+      for (const event of next) {
+        const minutes = await this.deps
+          .driveTo(owner, (event.location as string).trim())
+          .catch(() => undefined);
+        if (minutes !== undefined) drive.set(event.id, minutes);
+      }
+    }
     const found = headsUpsFor(calendar.events, {
       now,
       buffer: settings.travelBuffer,
       timeZone: zone,
       chatty: settings.chatty,
+      drive,
     }).filter((c) => saysKind(settings, c.kind));
     let upcoming = Number.POSITIVE_INFINITY;
     for (const candidate of found) {

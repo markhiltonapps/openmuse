@@ -360,6 +360,72 @@ async function appsTab(page, inner) {
 }
 
 /**
+ * The location card's server answers, as the shots need them: sharing on and a parked car saved; with
+ * `driving` the phone is moving, with `mileage` the log is on with drives in it, with `waiting` a
+ * reminder is waiting for a place.
+ */
+async function mockLocation(page, { driving = false, mileage = false, waiting = false }) {
+  const day = Date.now() - 2 * 86_400_000;
+  // The browser has allowed location, so the card doesn't say it is blocked.
+  await page.context().grantPermissions(["geolocation"]);
+  await page.route(/\/api\/location(\?.*)?$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: {
+            enabled: true,
+            drivingMode: true,
+            driving,
+            mileage,
+            trips: mileage
+              ? {
+                  count: 6,
+                  monthMeters: 68_100,
+                  recent: [
+                    {
+                      id: "t1",
+                      startedAt: day,
+                      meters: 14_500,
+                      to: "Elm Street, Houston",
+                      purpose: "business",
+                    },
+                    {
+                      id: "t2",
+                      startedAt: day - 86_400_000,
+                      meters: 8_200,
+                      to: "Main Street, Midtown, Houston",
+                    },
+                    {
+                      id: "t3",
+                      startedAt: day - 3 * 86_400_000,
+                      meters: 23_900,
+                      to: "Westheimer Road, Houston",
+                    },
+                  ],
+                }
+              : { count: 0, monthMeters: 0, recent: [] },
+            sharedAt: new Date().toISOString(),
+            parked: { at: Date.now() - 35 * 60_000, place: "Main Street, Midtown, Houston" },
+          },
+        })
+      : route.fallback(),
+  );
+  // Live talk is on, so Talk is a call (the driving card is shown only then).
+  if (driving)
+    await page.route(/\/api\/voice\/live$/, (route) =>
+      route.fulfill({ json: { available: true, provider: "openai" } }),
+    );
+  await page.route(/\/api\/location\/place-reminders$/, (route) =>
+    route.fulfill({
+      json: {
+        reminders: waiting
+          ? [{ id: "p1", text: "Pick up the prescription", place: "Corner Pharmacy, Houston" }]
+          : [],
+      },
+    }),
+  );
+}
+
+/**
  * Each shot: the screen to show and the marks to put on it, numbered like the topic's steps
  * (a mark for each step that's on this screen). `clip` limits the picture to one part.
  */
@@ -1159,19 +1225,10 @@ const SHOTS = [
   },
   {
     id: "location",
+    height: 1500,
     go: async (p) => {
       // A parked car is saved, as it shows on this screen.
-      await p.route(/\/api\/location$/, (route) =>
-        route.request().method() === "GET"
-          ? route.fulfill({
-              json: {
-                enabled: true,
-                sharedAt: new Date().toISOString(),
-                parked: { at: Date.now() - 35 * 60_000, place: "Main Street, Midtown, Houston" },
-              },
-            })
-          : route.fallback(),
-      );
+      await mockLocation(p, {});
       await appsTab(p, /Account/);
       await reveal(p.getByText("Your location", { exact: true }).first());
     },
@@ -1182,6 +1239,63 @@ const SHOTS = [
         side: "top-right",
         tight: true,
       },
+    },
+  },
+  {
+    // Driving mode: Home while the phone is moving at car speed.
+    id: "driving-mode",
+    start: "home",
+    go: async (p) => {
+      await mockLocation(p, { driving: true });
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await p
+        .getByRole("button", { name: "I’m not driving", exact: true })
+        .waitFor({ timeout: 20000 });
+      await p.waitForTimeout(600);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByText("Looks like you’re on the move", { exact: true }),
+        side: "top-right",
+        tight: true,
+      },
+      2: (p) => button(p, /^Talk to /),
+      3: { find: (p) => button(p, "I’m not driving"), side: "left" },
+    },
+  },
+  {
+    // A reminder that waits for a place, on the location card with its Remove button.
+    id: "place-reminders",
+    height: 1500,
+    go: async (p) => {
+      await mockLocation(p, { waiting: true });
+      await appsTab(p, /Account/);
+      await reveal(p.getByText("Waiting for a place", { exact: true }), 300);
+    },
+    marks: {
+      1: (p) => p.getByRole("checkbox", { name: /^Share where I am/ }),
+      2: {
+        find: (p) => p.getByText("Waiting for a place", { exact: true }),
+        side: "top-right",
+        tight: true,
+      },
+      3: { find: (p) => button(p, /^Remove reminder/), side: "left" },
+    },
+  },
+  {
+    // The mileage log: its switch, this month's miles and the Clear button.
+    id: "mileage",
+    height: 1500,
+    go: async (p) => {
+      await mockLocation(p, { mileage: true });
+      await appsTab(p, /Account/);
+      await reveal(p.getByText(/^This month:/), 400);
+    },
+    marks: {
+      1: (p) => p.getByRole("checkbox", { name: /^Keep a mileage log/ }),
+      2: { find: (p) => p.getByText(/^This month:/), side: "top-right", tight: true },
+      3: { find: (p) => button(p, "Clear the log"), side: "left" },
     },
   },
   {

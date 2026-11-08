@@ -51,6 +51,11 @@ export interface RuleContext {
   buffer: number;
   timeZone: string;
   chatty: Chattiness;
+  /**
+   * Rough minutes by car from where the phone is now to an event's address (event id → minutes), for
+   * the events whose address could be found. Only there when the phone shared a fresh spot.
+   */
+  drive?: ReadonlyMap<string, number>;
 }
 export type Candidate = Omit<HeadsUp, "status" | "createdAt">;
 
@@ -132,7 +137,10 @@ export function headsUpsFor(allEvents: DayEvent[], ctx: RuleContext): Candidate[
 
     // Something away from the desk is coming: when to leave for it.
     if (placeOf(a) === "away" && at(a.start) > ctx.now) {
-      const leave = at(a.start) - buffer;
+      // From where they are now, when the phone has said and the address could be found; else their usual.
+      const drive = ctx.drive?.get(a.id);
+      const needed = drive === undefined ? ctx.buffer : drive + 5;
+      const leave = at(a.start) - needed * MINUTE;
       const crowded = previous && at(previous.end) > leave && travel(previous, a);
       if (!crowded)
         out.push({
@@ -143,8 +151,10 @@ export function headsUpsFor(allEvents: DayEvent[], ctx: RuleContext): Candidate[
             leave <= ctx.now ? `Time to leave for ${name}` : `Leave for ${name} by ${t(leave)}`,
           body:
             leave <= ctx.now
-              ? `${name} starts at ${t(a.start)}. I plan for about ${ctx.buffer} minutes to get there.`
-              : `${name} starts at ${t(a.start)}. If getting there takes about ${ctx.buffer} minutes, leave by ${t(leave)}.`,
+              ? `${name} starts at ${t(a.start)}. ${drive === undefined ? `I plan for about ${ctx.buffer} minutes to get there.` : `From where you are it’s about ${drive} minutes by car (a rough guess with no live traffic), plus a few to park.`}`
+              : drive === undefined
+                ? `${name} starts at ${t(a.start)}. If getting there takes about ${ctx.buffer} minutes, leave by ${t(leave)}.`
+                : `${name} starts at ${t(a.start)}. From where you are it’s about ${drive} minutes by car (a rough guess with no live traffic), plus a few to park. Leave by ${t(leave)}.`,
           eventIds: [a.id],
           showAt: iso(leave - 20 * MINUTE),
           expiresAt: a.start,

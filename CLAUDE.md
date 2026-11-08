@@ -630,3 +630,14 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   is a job tool; in the chat email goes through `use_app`). Anything sent to another person (a location link) must come from a
   fresh reading, not the last one an hour ago. Public map services (OpenStreetMap Overpass and Nominatim) are shared by
   everyone on the server: one request at a time, cached answers, a polite user agent, a second server as fallback.
+- **Driving, trips and arrivals (owner, 2026-11-08):** the phone can't tell a driver from a passenger, so the app says what it
+  saw (speed over ~16 mph from a good fix, held 4 minutes) and always offers "I'm not driving"; never encourage phone use on
+  the road, hide Type and Record while it shows. Everything here works only while the app is open, and every feature says so
+  (place reminders: "may not go off", mileage: "can come up short"). Settings that share one record (`location`: enabled,
+  driving, mileage) must be merged on write, or turning sharing off wipes the others. A per-turn context line that changes
+  (Driving right now) must match `VOLATILE_CONTEXT`. Anything that fires from a report (arrival) marks itself before it
+  notifies and goes back if the notice fails. A reminder made while standing at the place waits until they've been away.
+  Local days and months come from the person's zone (`periodStart` in packages/domain/src/location.ts), never UTC. In US
+  time zones the end of daylight saving moves midnight by an hour: check expected instants against the real offset.
+- **Local sample server env (2026-11-08):** `apps/server` refuses to start without `CPK_INTELLIGENCE_API_KEY`; for the sample
+  server give it any placeholder (`cpk-placeholder-for-local-sample`), never dig a real key out of a transcript or env.

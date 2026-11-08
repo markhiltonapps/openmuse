@@ -69,6 +69,7 @@ import type { Nearby } from "../nearby.ts";
 import { People } from "../people.ts";
 import { Persona } from "../persona.ts";
 import type { Pictures } from "../pictures.ts";
+import type { PlaceReminders } from "../place-reminders.ts";
 import type { Plans } from "../plans.ts";
 import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
@@ -1430,6 +1431,8 @@ export class AgentService {
   urgent?: UrgentAlerts;
   /** Where they are right now, from their phone (while the app is open and it's on). */
   whereabouts?: Whereabouts;
+  /** Reminders that go off on arriving at a place (while the app is open). */
+  placeReminders?: PlaceReminders;
   /** Real places near where they are (OpenStreetMap), set when the server can reach the map service. */
   nearby?: Nearby;
   /** A live call's ear, for approving by voice (what was read back, and their words since). */

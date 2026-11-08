@@ -537,3 +537,71 @@ Round 2 (owner: "Go ahead with round 2"): "I'm running late / tell someone where
   than the address in the places card (it's the point of a "near me" list); no "you are here" pin; the Approve button in the
   pictures still says "Approve locally" (sample server wording, as in the other Help pictures).
 - Tests 743 pass at this point; lint clean on what changed. Not pushed.
+
+
+Location rounds 3 and 4 (2026-11-08): driving mode, leave-by, place reminders, mileage log
+-------------------------------------------------------------------------------------------
+Owner: "Do round 3 and 4 please, then write up a PDF document (with images if possible) that will let
+the others who use this app know what has changed."
+- Driving mode (whereabouts.ts, home.tsx, location-ui.tsx, driving.ts): the app sends the phone's speed and
+  heading with each report (8 s apart at most); the server uses the device's speed, else works it out from
+  the last two reports. 7 m/s (about 16 mph) from a fix good to 100 m counts as driving and is held for 4
+  minutes (lights aren't the end of a drive). "I'm not driving" is believed for 30 minutes. Driving mode is
+  on unless turned off (a setting merged into the same "location" record as sharing, so turning sharing
+  off and on keeps it). While driving Home shows a banner, a bigger Talk, and hides Type and Record; the
+  chat gets a "Driving right now" context line (matches VOLATILE_CONTEXT so it sits after the
+  conversation for caching) telling the agent to answer in a sentence or two and do the rest later.
+  Tool: set_driving_mode (on / off / not_driving). The report's answer carries `driving`, so Home reacts
+  within a few seconds; the 30 s check reads it too.
+- Leave-by (heads-up-rules.ts, heads-ups.ts, app.ts): `RuleContext.drive` (event id → minutes by car)
+  replaces the fixed buffer for the next three away events that have a street address (it has a digit)
+  when the phone shared a spot in the last 20 minutes: leave = start − (drive + 5 min to park), body says
+  "about N minutes by car (a rough guess with no live traffic)". Otherwise the usual buffer, unchanged.
+  The first report in a while calls headsUps.refresh so the next pass re-plans. Honest limit: a card that
+  was already said keeps its first wording (items are inserted once).
+- Place reminders (place-reminders.ts): remind_at_place (set / list / cancel). A specific place or address
+  is looked up with the geocoder; arrival = within 200 m with a fix better than 250 m, checked on each
+  report (Whereabouts.onReport). Made while already there: waits until they've been 500 m away. Sent once
+  (a `firing` mark before notifying; put back if the notice fails). Two weeks, ten at a time. Listed on
+  the location card with Remove (GET /api/location/place-reminders, POST .../cancel). Honest limit said
+  every time: only noticed while the app is open.
+- Mileage log (whereabouts.ts): off until turned on (card or voice). Trips are built from reports while the
+  log is on: starts when moving (4 m/s), adds the distance between reports only while moving, ends after
+  5 minutes stopped or a 10-minute gap; under 800 m or 2 minutes isn't a trip. Saved (kind "mileage", at most
+  500) with the street names at each end. Tools: mileage_log (turn_on/off, summary with CSV, label, clear);
+  the card shows this month's miles, the last five drives and Clear the log. Distances only (no tax rate).
+  An open drive is lost on a server restart (kept in memory until it ends).
+- The statement "a parked car is the one thing saved" is now "a parked car and, if turned on, the mileage
+  log" in the card, Help, site and the code comment.
+- Help: new topics driving-mode, place-reminders, mileage (with pictures); location and heads-ups topics
+  updated; location picture retaken. Site: "On the road" paragraph.
+- Tests: tests/driving.test.ts (driving state, computed speed, poor fixes, tools, trips, quiet-phone close,
+  labels/CSV/clear, local-day period starts, leave-by rules, place reminders, cache regex).
+- Review round (visual, usability, copy) on rounds 3 and 4 found: three usability blockers and a copy
+  blocker; all fixed:
+  * Talk could send a moving person to the typing chat: the driving card and big Talk show only where Talk
+    is a live call (`driving && calling`), and the card no longer says "keep your eyes on the road".
+  * "I'm not driving" now also drops the trip being counted and stops counting; a trip needs two reports at
+    car speed (a bike or a bus rarely has them) to be kept.
+  * A second device (a laptop open at home) could fake driving and trips: reports carry a device id; speed is
+    worked out only from the same device's last report and only when the move is bigger than twice the fix's
+    doubt (and the fix is within 50 m); "driving" needs two fast reports within 90 s; the app asks
+    /api/location?device=… so only the moving screen shows the card; the card clears itself after 5 minutes
+    without word.
+  * "Email me my mileage … as a sheet" was not true (the CSV is text in the email, via Gmail/Outlook, with an
+    Approve): all wording now says an email written for your OK.
+  * Trip fixes: a gap isn't bridged with a straight line (≤ 180 s), the start is the previous spot only if
+    recent, a report with no speed doesn't count as stopped, street names are looked up after the save (a
+    report never waits on the shared map queue; `settled()` for tests), "This month" uses the person's zone,
+    CSV cells starting = + - @ are neutralised and capped at 300 rows, Clear the log asks first.
+  * Place reminders: one failing notice no longer stops the others in a pass; Help and the card say "open on
+    your screen"; the heads-up address needs a street-like number and name.
+  * Visual: mascot no longer touches the banner, trip rows are date | miles columns, blocks are separated by
+    a hairline, the two Remove buttons have their own labels.
+- Not done (said on purpose): place reminders that expire say nothing; the reminder shows the words typed,
+  not the matched address; "I'm not driving" lasts 30 minutes (re-tap on a long ride); Driving mode is on for
+  existing testers who already share location (the card says it uses more battery while moving).
+- Help pictures retaken: driving-mode, place-reminders, mileage, location. `help-shots.mjs`: /api/location
+  mocks must match a query string now (`?device=`), and the driving shot also mocks /api/voice/live.
+- PDF for other users: docs/Whats-new-in-Neddy-20261108.pdf (12 pages, the real Help screenshots), built from
+  HTML with Chromium; sent to the owner.
