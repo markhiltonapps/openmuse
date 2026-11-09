@@ -833,3 +833,13 @@ CORRECTION (2026-11-09 ~02:20 UTC): the line-at-a-time text drawing (e83e597) ma
 2000 ms. Every Serial.println/printf blocks ~2 s when no computer reads the USB-CDC port once its buffer is full; setMode printed once (2 s), startTalking twice (4 s),
 a message handler 2 (4 s), several together 8 s. The first press was fast because the buffer was still empty. Fix: all firmware logging goes through LOGLN/LOGF,
 compiled out unless DEBUG_SERIAL is 1 (default 0). CLAUDE.md lesson rewritten to say so (I had blamed the screen drawing, which was wrong).
+
+RESULT (2026-11-09 ~02:35 UTC): with logging off the board is fast on every press. On-screen numbers: L62 W31 M31 S30 (was 4000-8000), snd1 mode21 trash8-22 cb31,
+link drops 0, Wi-Fi -47..-49 dBm, mic peak 4600-5900, gaps 0, answers 0.9-1.0 s after release, whole sentences captured, real answers on screen
+("It's about 5:45 PM in California", "roughly 1,600 miles from New York to Houston").
+What fixed it, in order of discovery: ES7210 microphone chip started (mic was silent); server keep-alive made forgiving (it hung up after one missed check, 408576f);
+USB log messages turned off (each blocked ~2 s with no computer reading). The line-at-a-time text drawing and the sound-off setting did not matter for speed.
+Open items: (1) sound is OFF (PLAY_ANSWERS 0; the speaker wire is broken) - retest with sound on after the repair, the earlier "mic dies after an answer" may have been the
+USB-print stall too; (2) the diagnostic grey lines on the ready screen should be hidden for normal use (keep behind a setting); (3) TLS certificate isn't verified yet
+(setInsecure) - fix before other testers; (4) nicer graphics (smooth fonts, canvas, Neddy art); (5) Wi-Fi setup from the phone and updates over Wi-Fi; (6) Help topic/site wording
+for devices once it's ready for testers; (7) 3 commits not yet pushed (firmware + notes only).
