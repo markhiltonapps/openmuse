@@ -116,7 +116,7 @@ def eye_sprite(kind, level=0.0):
 EYES = [('happy', 0), ('speak', 0), ('blink', 0), ('wide0', 0), ('wide1', 1 / 3), ('wide2', 2 / 3), ('wide3', 1), ('think', 0), ('dim', 0)]
 
 # ------------------------------------------------------------------ fonts
-FONTS = [('title', 'SemiBold', 26, None), ('body', 'Regular', 19, None), ('mid', 'Medium', 16, None), ('small', 'Medium', 12, None),
+FONTS = [('title', 'SemiBold', 34, None), ('body', 'Medium', 28, None), ('mid', 'Medium', 22, None), ('small', 'Medium', 14, None),
          ('huge', 'SemiBold', 64, '0123456789 ')]   # huge: only the pairing code's digits
 
 def bake_font(style, size, chars=None):

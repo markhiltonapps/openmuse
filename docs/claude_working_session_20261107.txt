@@ -858,3 +858,7 @@ new fonts. Small grey diagnostic lines stay at the bottom (owner choice). What h
 NEDDY_MOTION is 0 (still, but blinks and the eyes change); step 2 turns motion on (breathing, floating, sway, glances, smooth shrink). Neddy shrinks to half when words show.
 Syntax-checked against stand-in Arduino headers (scratchpad/stubs); NOT compiled for the board and not run on it. Update zip: docs/neddy_device_update.zip (4 files, never settings.h).
 Next: owner tries step 1; then NEDDY_MOTION 1 (timing on the board unknown: each stage draw is ~83k pixels), smooth shrink animation, touch.
+
+STEP 1 WORKS ON THE BOARD (2026-11-09 ~02:25 UTC): it compiled and ran; owner: text too small, remove the numbers at the bottom. Fonts enlarged (title 34, words 28 Medium,
+heard 22, small 14), the diagnostic lines are off by default (NEDDY_DIAG 0 in the sketch; uiShowDiag in neddy_ui.h; the code to build them stays), words area uses the freed space.
+The robot looked whiter/pinker in the owner's phone photo than in the mockup (probably camera exposure on the AMOLED): ask if he looks wrong in person.

@@ -60,6 +60,11 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #define NEDDY_MOTION 0
 #endif
 
+// 1 = show the small lines of numbers (Wi-Fi, microphone, timings) at the bottom of the screen.
+#ifndef NEDDY_DIAG
+#define NEDDY_DIAG 0
+#endif
+
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
 static void outFill(int x, int y, int w, int h, uint16_t colour) { gfx->fillRect(x, y, w, h, colour); }
 static void clearScreen() { gfx->fillScreen(0); }
@@ -739,6 +744,7 @@ void setup() {
   uiOut.blit = outBlit;
   uiOut.fill = outFill;
   uiMotion = NEDDY_MOTION != 0;
+  uiShowDiag = NEDDY_DIAG != 0;
   screenBoot("Starting");
 
   prefs.begin("neddy", false);

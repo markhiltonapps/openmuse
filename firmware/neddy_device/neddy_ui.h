@@ -242,6 +242,7 @@ enum { UI_READY, UI_LISTEN, UI_THINK, UI_SPEAK, UI_LINK };
 static int uiMode = UI_LINK;
 static char uiWords[300], uiHeard[120], uiName[24] = "Neddy", uiDiag1[72], uiDiag2[72];
 static float uiLevel = 0;            // 0..1, how loud the person is (while listening)
+static bool uiShowDiag = false;      // the two small lines of numbers at the bottom
 static bool uiMotion = false;        // true: he moves all the time. false: still, except blinking.
 static bool uiSmall = false;         // the layout now showing
 static bool uiAll = true, uiTextDirty = true, uiLevelDirty = false;
@@ -298,7 +299,13 @@ static void uiBasePose(UiPose *p) {
 }
 
 static void uiTextAreas(int *top, int *bottom) {
-  *top = uiStageY + uiStageH + 2; *bottom = 450;
+  *top = uiStageY + uiStageH + 2; *bottom = uiShowDiag ? 450 : 496;
+}
+
+static int uiLevelY() {
+  int top, bottom;
+  uiTextAreas(&top, &bottom);
+  return top + 2 + NFONT_TITLE.h + 8;
 }
 
 static void uiDrawText() {
@@ -307,39 +314,39 @@ static void uiDrawText() {
   uiOut.fill(0, top, UI_W, bottom - top, UI_BLACK);
   uint16_t col = uiModeColour();
   uiTextCentered(NFONT_TITLE, top + 2, uiModeLabel(), col);
-  int y = top + 40;
+  int y = uiLevelY();
   if (uiMode == UI_LISTEN) {
     // a rounded level bar
-    int bx = 85, bw = 240, by = y + 4;
-    uiOut.fill(bx, by, bw, 14, uiRgb(70, 74, 80));
-    uiOut.fill(bx + 2, by + 2, bw - 4, 10, UI_BLACK);
+    int bx = 75, bw = 260, by = y + 6;
+    uiOut.fill(bx, by, bw, 18, uiRgb(70, 74, 80));
+    uiOut.fill(bx + 2, by + 2, bw - 4, 14, UI_BLACK);
     int fw = (int)((bw - 4) * uiLevel);
-    if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 10, col);
+    if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 14, col);
     return;
   }
-  if (uiHeard[0]) y = uiParagraph(NFONT_MID, y, uiHeard, UI_GREY, 330, 2, 22) + 4;
+  if (uiHeard[0]) y = uiParagraph(NFONT_MID, y, uiHeard, UI_GREY, 354, 2, NFONT_MID.h + 2) + 6;
   if (uiWords[0]) {
-    int lines = (448 - y) / 26;
+    int step = NFONT_BODY.h + 4;
+    int lines = (bottom - y) / step;
     if (lines > 9) lines = 9;
-    if (lines > 0) uiParagraph(NFONT_BODY, y, uiWords, UI_WHITE, 340, lines, 26);
+    if (lines > 0) uiParagraph(NFONT_BODY, y, uiWords, UI_WHITE, 354, lines, step);
   } else if (!uiSmall && uiName[0]) {
     uiTextCentered(NFONT_MID, y, uiName, UI_GREY);
   }
 }
 
 static void uiDrawLevelOnly() {
-  int top, bottom;
-  uiTextAreas(&top, &bottom);
-  int y = top + 40, bx = 85, bw = 240, by = y + 4;
-  uiOut.fill(bx + 2, by + 2, bw - 4, 10, UI_BLACK);
+  int y = uiLevelY(), bx = 75, bw = 260, by = y + 6;
+  uiOut.fill(bx + 2, by + 2, bw - 4, 14, UI_BLACK);
   int fw = (int)((bw - 4) * uiLevel);
-  if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 10, uiModeColour());
+  if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 14, uiModeColour());
 }
 
 static void uiDrawDiag() {
+  if (!uiShowDiag) return;
   uiOut.fill(0, 452, UI_W, 50, UI_BLACK);
-  if (uiDiag1[0]) uiTextCentered(NFONT_SMALL, 458, uiDiag1, UI_DIM);
-  if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, 475, uiDiag2, UI_DIM);
+  if (uiDiag1[0]) uiTextCentered(NFONT_SMALL, 456, uiDiag1, UI_DIM);
+  if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, 474, uiDiag2, UI_DIM);
 }
 
 // Which eye picture, and where he looks, right now.

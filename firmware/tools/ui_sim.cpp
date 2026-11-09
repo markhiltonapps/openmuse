@@ -58,6 +58,10 @@ int main(int argc, char **argv) {
   uiTick(t + 40); save(dir, "s4_speak");
   // 5. back to ready, with words kept
   uiSetMode(UI_READY); uiTick(t + 50); save(dir, "s5_ready_words");
+  // 5b. a long answer (shows the newest lines that fit)
+  uiSetMode(UI_SPEAK); uiSetHeard("What is the population of New York City and how big is the metro area?");
+  uiSetWords("New York City's population is about 8.3 million people, making it the largest city in the US. The greater metro area has over 20 million people, which makes it one of the biggest in the world. It is also the most densely populated major city in America.");
+  uiTick(t + 55); save(dir, "s5b_long");
   // 6. connecting
   uiSetMode(UI_LINK); uiSetWords(""); uiSetHeard(""); uiTick(t + 60); save(dir, "s6_link");
   // 7. motion: ready (big) at several moments, and small with words
