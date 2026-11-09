@@ -148,7 +148,13 @@ export class DeviceBridge {
       if (isBinary) this.fromAudio(connection, frameBytes(data));
       else this.fromText(connection, frameBytes(data));
     });
-    ws.on("close", () => this.gone(connection));
+    this.log(`Device ${device.name} connected`);
+    ws.on("close", (code, reason) => {
+      // Says who ended it: the device itself (1000-1006, 1009...) or this server (4000 replaced, 4403 removed, 4408 no answer).
+      const why = reason?.length ? ` ${reason.toString("utf8").slice(0, 40)}` : "";
+      this.log(`Device ${device.name} disconnected (code ${code}${why})`);
+      this.gone(connection);
+    });
     ws.on("error", () => this.gone(connection));
   }
 

@@ -788,3 +788,11 @@ Theory: the board restarts (crash, watchdog, or low power from the long USB cabl
 answer streams in, then needs seconds to reconnect; presses meanwhile do nothing. Server shows a 10 s hold delivering only 2.6 s of audio.
 Next build (uncompiled): ready screen shows "start N: <why>" from esp_reset_reason() and a counter kept across soft restarts
 (RTC memory): a count that goes up = restarting after answers (CRASH/watchdog/LOW POWER); "start 1: power on" every time = the board loses power.
+
+WORKS (2026-11-09 ~00:40 UTC): with sound off (PLAY_ANSWERS 0) and the microphone drained between presses, the board answered in words
+("Tallahassee"), start counter 1 (no restarts), gaps 0, slowest read 28 ms, send 2 ms. What fixed the earlier mic stall is not proven
+(sound off, the idle read, or the shorter read timeout); retest when the speaker is repaired and PLAY_ANSWERS is 1.
+Remaining: the second press is slow. Server answered 0.8 s after release; the board got its first sound 10.1 s after release, and the
+hold on the server was 8.3 s for 2.4 s of audio, so the path between board and server stalls for seconds, with "Connecting to Neddy" flashing.
+Added (uncommitted -> committed, NOT pushed): api logs "Device X connected / disconnected (code ...)" (device-socket.ts) and the board shows
+"link drops N, back in X s". Needs the owner's "push it" for the api logging, and an Upload for the board.

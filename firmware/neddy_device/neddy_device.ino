@@ -121,6 +121,9 @@ static String lastPress2;
 // Why the board last started (power on, a crash, a watchdog, low power...) and how many starts since power-up.
 static RTC_DATA_ATTR int bootCount = 0;
 static String resetWhy;
+static int wsDrops = 0;               // times the connection to Neddy dropped
+static unsigned long wsDropAt = 0;     // when the last drop happened
+static long wsBackMs = -1;             // how long the last reconnect took
 static const char *resetName(int r) {
   switch (r) {
     case ESP_RST_POWERON: return "power on";
@@ -269,8 +272,14 @@ static void screenState() {
         centered(deviceName, 240, 4, cWhite);
         centered("Hold BOOT to talk", 310, 3, cTeal);
       }
-      centered(resetWhy, 340, 2, cGrey);
-      centered(micChip, 372, 2, cGrey);
+      centered(resetWhy, 332, 2, cGrey);
+      {
+        char drops[48];
+        if (wsDrops && wsBackMs >= 0) snprintf(drops, sizeof(drops), "link drops %d, back in %.1f s", wsDrops, wsBackMs / 1000.0);
+        else snprintf(drops, sizeof(drops), "link drops %d", wsDrops);
+        centered(String(drops), 352, 2, cGrey);
+      }
+      centered(micChip, 374, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
       if (lastAnswerMs >= 0) {
@@ -583,6 +592,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
       Serial.println("[neddy] connected");
+      if (wsDropAt) wsBackMs = (long)(millis() - wsDropAt);
       wsUp = true;
       wsFailures = 0;
       static String info = String("{\"type\":\"device.info\",\"firmware\":\"") + FIRMWARE_VERSION + "\"}";
@@ -590,7 +600,11 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       setMode(M_READY);
       break;
     case WStype_DISCONNECTED:
-      if (wsUp) Serial.println("[neddy] disconnected");
+      if (wsUp) {
+        Serial.println("[neddy] disconnected");
+        wsDrops++;
+        wsDropAt = millis();
+      }
       wsUp = false;
       wsFailures++;
       if (held) {
