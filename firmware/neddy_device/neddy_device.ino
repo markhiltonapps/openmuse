@@ -475,6 +475,91 @@ static bool buttonDown() {
   return last;
 }
 
+
+// ---------------------------------------------------------------- touch
+// The FT3168 touch chip shares the I2C wires with the audio chips (address 0x38, reset on GPIO 9). It is read
+// about every 16 ms; neddy_ui.h turns what it reports into taps, holds, double taps and swipes.
+//
+// 1 = draw a dot under the finger while it touches (to check the touch lines up with the picture; the screen
+// is drawn again when the finger lifts). 0 = no dots.
+#ifndef TOUCH_TRAIL
+#define TOUCH_TRAIL 1
+#endif
+// If the dot is NOT under the finger, these three turn the touch around (try one at a time).
+#ifndef TOUCH_SWAP_XY
+#define TOUCH_SWAP_XY 0
+#endif
+#ifndef TOUCH_FLIP_X
+#define TOUCH_FLIP_X 0
+#endif
+#ifndef TOUCH_FLIP_Y
+#define TOUCH_FLIP_Y 0
+#endif
+static const int TP_RESET_PIN = 9;
+static const uint8_t TP_ADDR = 0x38;
+static bool touchOk = false;
+static bool touchWasDown = false;
+static unsigned long touchAt = 0;
+
+static void touchInit() {
+  pinMode(TP_RESET_PIN, OUTPUT);
+  digitalWrite(TP_RESET_PIN, HIGH);
+  delay(2);
+  digitalWrite(TP_RESET_PIN, LOW);
+  delay(20);
+  digitalWrite(TP_RESET_PIN, HIGH);
+  delay(60);
+  Wire.beginTransmission(TP_ADDR);
+  Wire.write(0xA5);  // power mode
+  Wire.write(0x00);  // active
+  touchOk = Wire.endTransmission() == 0;
+  Wire.setClock(400000);
+  LOGF("[touch] %s\n", touchOk ? "ready" : "the touch chip didn't answer");
+}
+
+// 1 = a finger (x, y set), 0 = none, -1 = couldn't read this time.
+static int touchRead(int *x, int *y) {
+  Wire.beginTransmission(TP_ADDR);
+  Wire.write(0x02);
+  if (Wire.endTransmission(false) != 0) return -1;
+  if (Wire.requestFrom((int)TP_ADDR, 5) != 5) return -1;
+  int fingers = Wire.read() & 0x0F;
+  int xh = Wire.read(), xl = Wire.read(), yh = Wire.read(), yl = Wire.read();
+  if (fingers == 0 || fingers > 2) return 0;
+  int px = ((xh & 0x0F) << 8) | xl, py = ((yh & 0x0F) << 8) | yl;
+  if (TOUCH_SWAP_XY) { int t = px; px = py; py = t; }
+  if (px >= UI_W) px = UI_W - 1;
+  if (py >= UI_H) py = UI_H - 1;
+  if (TOUCH_FLIP_X) px = UI_W - 1 - px;
+  if (TOUCH_FLIP_Y) py = UI_H - 1 - py;
+  *x = px;
+  *y = py;
+  return 1;
+}
+
+// Called every turn of the loop: reads the chip now and then and passes it on.
+static void touchLoop() {
+  if (!touchOk || !uiActive || millis() - touchAt < 16) return;
+  touchAt = millis();
+  int x = 0, y = 0;
+  int r = touchRead(&x, &y);
+  if (r < 0) return;  // a read that failed changes nothing
+  uiTouch(millis(), r == 1, x, y);
+  if (TOUCH_TRAIL) {
+    if (r == 1) {
+      int bx = (x & ~1) - 6, by = (y & ~1) - 6;
+      if (bx < 0) bx = 0;
+      if (by < 0) by = 0;
+      if (bx > UI_W - 12) bx = UI_W - 12;
+      if (by > UI_H - 12) by = UI_H - 12;
+      uiOut.fill(bx & ~1, by & ~1, 12, 12, UI_CORAL);
+    } else if (touchWasDown) {
+      uiAll = true;  // the finger lifted: draw the screen again, without the dots
+    }
+  }
+  touchWasDown = (r == 1);
+}
+
 static void startTalking() {
   if (!wsUp) return;
   held = true;
@@ -508,6 +593,7 @@ static void startTalking() {
 static void stopTalking() {
   if (!held) return;
   held = false;
+  uiTouchTalkEnded();  // a touch hold or hands-free talk lets go too
   ws.sendTXT("{\"type\":\"ptt.end\"}");
   releasedAt = millis();
   {
@@ -818,6 +904,7 @@ void setup() {
     for (;;) delay(1000);
   }
   xTaskCreatePinnedToCore(playTask, "play", 6144, NULL, 3, NULL, 1);
+  touchInit();
 }
 
 void loop() {
@@ -871,8 +958,9 @@ void loop() {
     setMode(wsUp ? M_READY : M_LINK);
   }
 
-  // 4. The button
-  bool down = buttonDown();
+  // 4. The touch screen and the button: holding Neddy (or a double tap) counts as holding the button
+  touchLoop();
+  bool down = buttonDown() || uiTouchTalk;
   if (down && !held) {
     if (wsUp && mode != M_PROBLEM) {
       unsigned long startAt = millis();

@@ -26,3 +26,15 @@ Known issues / not done:
 
 Ideas for next (owner asked what would make it really usable and interactive): see the end of the chat; chosen order recorded here
 once the owner picks.
+
+--- 2026-11-09 (after midnight UTC, "tomorrow"): touch on the watch ---
+Owner's choices: tap Neddy = giggle + eyes follow the finger; press-and-hold Neddy = talk while held; double-tap Neddy = hands-free talk until
+the next touch; tap a card = dismiss; swipe left/right = browse the last 5 cards (right = earlier; with no card up, a swipe brings back
+the latest). Then the idle face.
+- FT3168 touch chip (0x38 on the shared I2C, reset GPIO 9) is read about every 16 ms by polling registers 0x02..0x06 (finger count and X/Y);
+  no library. Facts checked in Waveshare's pin table and the open driver source; NOT yet tested on the real board.
+- Gestures live in neddy_ui.h (uiTouch), tested on the PC with scripted fingers: firmware/tools/touch_test.cpp (28 checks pass), plus
+  giggle/look frames in ui_sim.cpp. A hold or hands-free talk sets uiTouchTalk, which the sketch ORs with the BOOT button.
+- FIRST BUILD DRAWS A DOT UNDER THE FINGER (TOUCH_TRAIL 1) so the owner can see whether touch lines up with the screen; if not, one of
+  TOUCH_SWAP_XY / TOUCH_FLIP_X / TOUCH_FLIP_Y turns it around. Turn the dots off (TOUCH_TRAIL 0) once confirmed.
+- Hold-to-talk starts after about half a second (BOOT is instant); the hold only counts on Neddy.

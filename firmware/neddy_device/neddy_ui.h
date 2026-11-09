@@ -300,6 +300,15 @@ static uint16_t uiIconBuf[UI_ICON * UI_ICON];
 static uint32_t uiNowMs = 0;
 #define UI_CARD_MS 60000
 
+// ---- touch: what he does when touched, and the cards he remembers
+static uint32_t uiReactUntil = 0;            // a giggle in progress
+static uint32_t uiLookUntil = 0;             // his eyes follow a finger until then
+static int uiLookX = 0, uiLookY = 0;
+static bool uiTouchTalk = false;             // a hold or a hands-free double tap wants the microphone (the sketch reads this)
+#define UI_HIST 5
+static UiCard uiHist[UI_HIST];
+static int uiHistN = 0, uiHistAt = -1;
+
 static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng >> 8; }
 
 static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
@@ -582,15 +591,6 @@ static void uiFit(char *dst, size_t cap, const NeddyFont &f, const char *src, in
     while (n > 2 && dst[n - 2] == ' ') { dst[n - 2] = '.'; dst[n - 1] = 0; n--; }   // no space before the dot
   }
 }
-// The biggest number font the value fits in (digits and a few symbols only), else a plain font.
-static const NeddyFont *uiValueFont(const char *s, int maxw) {
-  bool digits = true;
-  for (const char *p = s; *p; p++) if (!strchr("0123456789-.,:%$+ \x7f", *p)) { digits = false; break; }
-  if (digits && uiTextWidth(NFONT_TEMP, s) <= maxw) return &NFONT_TEMP;
-  if (digits && uiTextWidth(NFONT_BIG, s) <= maxw) return &NFONT_BIG;
-  if (uiTextWidth(NFONT_TITLE, s) <= maxw) return &NFONT_TITLE;
-  return &NFONT_BODY;
-}
 static void uiCardHeader(const char *text) {
   if (!text[0]) return;
   char buf[32];
@@ -707,6 +707,28 @@ static void uiDrawCard() {
   uiBg = UI_BLACK;
 }
 
+// The last few cards are remembered, so a swipe can bring one back.
+static void uiRemember() {
+  if (uiHistN == UI_HIST) { for (int i = 1; i < UI_HIST; i++) uiHist[i - 1] = uiHist[i]; uiHistN--; }
+  uiHist[uiHistN] = uiCard;
+  uiHistAt = uiHistN;
+  uiHistN++;
+}
+static void uiShowFromHistory(uint32_t ms, int i) {
+  uiCard = uiHist[i];
+  uiCard.on = true; uiCard.since = ms;
+  uiHistAt = i; uiAll = true;
+}
+// Swipe right: the one before (or, with no card up, the last one). Swipe left: the one after.
+static void uiCardBack(uint32_t ms) {
+  if (!uiHistN) return;
+  if (!uiCard.on) uiShowFromHistory(ms, uiHistAt >= 0 && uiHistAt < uiHistN ? uiHistAt : uiHistN - 1);
+  else if (uiHistAt > 0) uiShowFromHistory(ms, uiHistAt - 1);
+}
+static void uiCardForward(uint32_t ms) {
+  if (uiCard.on && uiHistAt >= 0 && uiHistAt < uiHistN - 1) uiShowFromHistory(ms, uiHistAt + 1);
+}
+
 static void uiCopyTrim(char *dst, size_t cap, const char *s) {
   size_t n = strlen(s);
   if (n >= cap) n = cap - 1;
@@ -721,6 +743,7 @@ static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, c
   uiCard.icon = icon < 0 || icon > UI_ICON_WIND ? UI_ICON_CLOUD : icon;
   uiCard.kind = UI_CARD_WEATHER;
   uiCard.since = ms; uiCard.on = true; uiAll = true;
+  uiRemember();
 }
 
 static void uiStartCard(uint32_t ms, int kind) { memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
@@ -732,6 +755,7 @@ static void uiShowScore(uint32_t ms, const char *league, const char *status, con
   uiCopyTrim(uiCard.away, sizeof(uiCard.away), away);
   uiCopyTrim(uiCard.home, sizeof(uiCard.home), home);
   uiCard.awayScore = awayScore; uiCard.homeScore = homeScore;
+  uiRemember();
 }
 // One headline value. tone: 0 plain, 1 good (green), 2 bad (red).
 static void uiShowFact(uint32_t ms, const char *label, const char *value, const char *sub, const char *note, int tone) {
@@ -741,6 +765,7 @@ static void uiShowFact(uint32_t ms, const char *label, const char *value, const 
   uiCopyTrim(uiCard.sub, sizeof(uiCard.sub), sub);
   uiCopyTrim(uiCard.note, sizeof(uiCard.note), note);
   uiCard.tone = tone;
+  uiRemember();
 }
 // Up to five rows.
 static void uiShowList(uint32_t ms, const char *title, int n, const char **labels, const char **values) {
@@ -751,6 +776,65 @@ static void uiShowList(uint32_t ms, const char *title, int n, const char **label
     uiCopyTrim(uiCard.rowLabel[i], sizeof(uiCard.rowLabel[i]), labels[i]);
     uiCopyTrim(uiCard.rowValue[i], sizeof(uiCard.rowValue[i]), values[i]);
   }
+  uiRemember();
+}
+
+// ---- touch gestures. The sketch reads the touch chip and calls uiTouch about every 16 ms.
+//   tap Neddy: he giggles. Finger on Neddy: his eyes follow it. Hold Neddy (about half a second): talk while held.
+//   Double-tap Neddy: talk hands-free until the next touch. Tap a card: it goes away. Swipe: earlier / later cards.
+#define UI_HOLD_MS 450
+#define UI_TAP_MS 450
+#define UI_DOUBLE_MS 380
+#define UI_SLOP 30
+#define UI_SWIPE 60
+static bool uiTchWas = false, uiTchHold = false, uiTchLatched = false, uiTchIgnore = false, uiTchOnNeddy = false;
+static uint32_t uiTchDownAt = 0, uiTchLastTap = 0;
+static int uiTchX0 = 0, uiTchY0 = 0, uiTchX = 0, uiTchY = 0, uiTchMove = 0;
+
+static bool uiHitNeddy(int x, int y) {
+  return x >= uiStageX - 16 && x < uiStageX + uiStageW + 16 && y >= uiStageY - 16 && y < uiStageY + uiStageH + 16;
+}
+static bool uiHitCard(int x, int y) { return uiCard.on && x >= 14 && x < 396 && y >= 10 && y < 346; }
+static void uiReact(uint32_t ms) { uiReactUntil = ms + 1000; }
+static void uiLook(uint32_t ms, int x, int y) { uiLookX = x; uiLookY = y; uiLookUntil = ms + 600; }
+// The sketch calls this when talking ended (the button, the time limit), so a hold or hands-free talk lets go.
+static void uiTouchTalkEnded() { uiTouchTalk = false; uiTchLatched = false; }
+
+static void uiTouch(uint32_t ms, bool down, int x, int y) {
+  if (down && !uiTchWas) {                           // a finger just touched
+    uiTchDownAt = ms; uiTchX0 = uiTchX = x; uiTchY0 = uiTchY = y; uiTchMove = 0;
+    uiTchHold = false; uiTchIgnore = false;
+    uiTchOnNeddy = uiHitNeddy(x, y) && !uiHitCard(x, y);
+    if (uiTchLatched) {                              // any touch ends hands-free talking
+      uiTchLatched = false; uiTouchTalk = false; uiTchIgnore = true;
+    }
+  } else if (down) {                                 // still touching
+    uiTchX = x; uiTchY = y;
+    int mx = x > uiTchX0 ? x - uiTchX0 : uiTchX0 - x, my = y > uiTchY0 ? y - uiTchY0 : uiTchY0 - y;
+    int m = mx > my ? mx : my;
+    if (m > uiTchMove) uiTchMove = m;
+    if (uiTchOnNeddy && !uiTchIgnore && !uiTchHold && uiMode != UI_LISTEN) uiLook(ms, x, y);
+    if (uiTchOnNeddy && !uiTchIgnore && !uiTchHold && uiTchMove < UI_SLOP && ms - uiTchDownAt >= UI_HOLD_MS) {
+      uiTchHold = true; uiTouchTalk = true;          // holding Neddy = holding the button
+    }
+  } else if (uiTchWas) {                             // the finger lifted
+    uint32_t held = ms - uiTchDownAt;
+    if (uiTchHold) { uiTchHold = false; uiTouchTalk = false; }
+    else if (!uiTchIgnore) {
+      int dx = uiTchX - uiTchX0, dy = uiTchY - uiTchY0;
+      int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+      if (adx >= UI_SWIPE && adx * 2 > ady * 3 && held < 800) {
+        if (dx > 0) uiCardBack(ms); else uiCardForward(ms);
+      } else if (uiTchMove < UI_SLOP && held < UI_TAP_MS) {
+        if (uiHitCard(uiTchX0, uiTchY0)) { uiClearCard(); uiTchLastTap = 0; }
+        else if (uiTchOnNeddy) {
+          if (uiTchLastTap && ms - uiTchLastTap < UI_DOUBLE_MS) { uiTchLatched = true; uiTouchTalk = true; uiTchLastTap = 0; }
+          else { uiReact(ms); uiTchLastTap = ms; }
+        }
+      }
+    }
+  }
+  uiTchWas = down;
 }
 
 static void uiBasePose(UiPose *p) {
@@ -828,7 +912,16 @@ static void uiEyes(uint32_t ms, UiPose *p) {
     if (ms >= uiNextBlink) { uiBlinkUntil = ms + 140; uiNextBlink = ms + 2500 + (uiRand() % 3500); }
     if (ms < uiBlinkUntil) eye = EYE_BLINK;
   }
-  if (uiMotion) {
+  if (ms < uiReactUntil && uiMode != UI_LISTEN) eye = EYE_HAPPY;    // a giggle: a big smile throughout
+  if (ms < uiLookUntil && uiMode != UI_LISTEN) {
+    // His eyes follow a finger: where it is, relative to where his eyes are on the screen.
+    float ex = p->footX + (NEDDY_EYE_CX - NEDDY_BODY_W * 0.5f) * p->scale;
+    float ey = p->footY - (NEDDY_BODY_H - NEDDY_EYE_CY) * p->scale;
+    float dx = (uiLookX - ex) / p->scale * 0.16f, dy = (uiLookY - ey) / p->scale * 0.12f;
+    p->eyeDx = dx < -10 ? -10 : (dx > 10 ? 10 : dx);
+    p->eyeDy = dy < -5.5f ? -5.5f : (dy > 5.5f ? 5.5f : dy);
+    uiGlanceUntil = 0;
+  } else if (uiMotion) {
     if (uiMode == UI_READY && ms >= uiNextGlance) { uiGlanceUntil = ms + 800; uiNextGlance = ms + 4000 + (uiRand() % 5000); uiGlanceDx = (uiRand() & 1) ? 4.0f : -4.0f; }
     if (ms < uiGlanceUntil) p->eyeDx = uiGlanceDx;
     if (uiMode == UI_THINK) p->eyeDx = 4.0f * sinf(ms * 0.0028f);
@@ -848,6 +941,14 @@ static void uiPoseNow(uint32_t ms, UiPose *p) {
     p->breath = sinf(t * 1.85f * speed) * 0.012f;
     p->sway = sinf(t * 0.97f * speed) * (uiMode == UI_THINK ? 5.0f : 3.0f) * p->scale * 2.0f;
     if (uiMode == UI_LISTEN) p->scale *= 1.02f;
+  }
+  if (ms < uiReactUntil) {
+    // The giggle: quick little hops and a wiggle that settle over a second (works even with motion off).
+    float k = (uiReactUntil - ms) / 1000.0f, t = (1.0f - k);
+    float hop = fabsf(sinf(t * 22.0f)) * 9.0f * k * p->scale;
+    p->footY -= hop;
+    p->sway += sinf(t * 31.0f) * 7.0f * k * p->scale;
+    p->breath += sinf(t * 25.0f) * 0.02f * k;
   }
   uiEyes(ms, p);
 }
@@ -893,7 +994,7 @@ static void uiTick(uint32_t ms) {
     if (need > gap) gap = need;
     if (uiMode == UI_LISTEN && gap < 150) gap = 150;
   }
-  if (uiMotion && ms - uiLastStage >= gap) draw = true;
+  if ((uiMotion || ms < uiReactUntil || ms < uiLookUntil) && ms - uiLastStage >= gap) draw = true;
   if (draw) {
     uiDrawStage(p);
     uiLastEye = p.eye; uiLastStage = ms;

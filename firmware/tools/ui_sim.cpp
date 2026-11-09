@@ -117,6 +117,16 @@ int main(int argc, char **argv) {
     uiShowList(tg, "Today", 5, labels, values); uiTick(tg); save(dir, "g8_list_five");
     uiShowList(tg, "Next up", 3, labels, values); uiTick(tg); save(dir, "g9_list_three");
   }
+  // 10. touch: a giggle (frames while he hops) and his eyes following a finger
+  uiClearCard(); uiMotion = true; uiSetMode(UI_READY); uiSetWords(""); uiSetHeard(""); uiAll = true; uiNextBlink = 999999; uiNextGlance = 999999;
+  uint32_t th = 60000; uiTick(th);
+  int gx = uiStageX + uiStageW / 2, gy = uiStageY + uiStageH / 2;
+  uiTouch(th, true, gx, gy); uiTick(th); th += 60; uiTouch(th, false, gx, gy); uiTick(th);
+  const uint32_t giggleAt[] = { 60, 160, 260, 380 };
+  for (int i = 0; i < 4; i++) { uiTick(th + giggleAt[i]); char nm[40]; snprintf(nm, sizeof nm, "t%d_giggle", i); save(dir, nm); }
+  th += 3000; uiTick(th);
+  uiTouch(th, true, 380, 120); uiTick(th); th += 100; uiTouch(th, true, 380, 120); uiTick(th); save(dir, "t4_look_right");
+  uiTouch(th, true, 40, 400); th += 100; uiTouch(th, true, 40, 400); uiTick(th); save(dir, "t5_look_left_down");
   // timing of one frame (host speed, not the watch's)
   UiPose p; uiPoseNow(7000, &p);
   double t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);

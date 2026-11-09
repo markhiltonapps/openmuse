@@ -690,3 +690,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   model (a 10 AM meeting said as 9 AM, an interview at 2:30 PM as "9 AM"). Give it the person's own clock in words (`when`, `now`
   from `whenText` in day-tools.ts) and tell it not to convert. A tool result must also never claim a card is on screen on a call
   from the watch (`device` option): it has no call screen.
+- **Touch on the watch (2026-11-09, owner's choices):** gestures are decided in `neddy_ui.h` (`uiTouch`) from plain finger samples, so
+  `firmware/tools/touch_test.cpp` can run scripted fingers on a computer; the sketch only reads the FT3168 (0x38, GPIO 9 reset, polling
+  regs 0x02..0x06) and ORs `uiTouchTalk` with the BOOT button. A new touch build starts with `TOUCH_TRAIL 1` (a dot under the finger) because
+  the coordinates can't be checked without the real board; the three TOUCH_* switches turn the touch around if the dot is off.
