@@ -1,0 +1,28 @@
+Claude working session, 2026-11-09 (the watch device: screen, motion, cards)
+=====================================================================
+Details of each step are in docs/claude_working_session_20261107.txt (the device notes run on from there).
+
+What changed today (all pushed; api deployed, firmware zip delivered and installed by the owner):
+- Screen: words at the top with a small Neddy tucked at the bottom middle; every drawn window even-aligned (the AMOLED chip shears
+  odd ones: the garbled text line).
+- Motion: Neddy moves all the time (breath, float, sway, glances), frames paced by measured cost, fixed-point drawing.
+- Cards on the watch, drawn by the device from facts the server sends: weather (any place worldwide: Weather Service in the US,
+  Open-Meteo elsewhere), score, fact, list. The agent chooses a card by default whenever an answer fits one (show_on_watch).
+- Calendar answers: each event now carries its time in the person's own clock (the model no longer converts UTC; a 10 AM meeting had
+  been said as 9 AM). No "it's on your screen" claim on a watch call.
+- Tests: 795 pass (6 new); tsc and biome clean.
+
+Test results: owner confirmed on the real watch: motion smooth and fast; clean text; weather card for home and other places, other
+cards and the calendar times worked ("That worked").
+
+Known issues / not done:
+- The speaker is broken (a wire), so answers are shown, not heard; PLAY_ANSWERS is 0.
+- No touch yet; the layout change (big <-> small) still jumps instead of animating.
+- TLS certificate on the device isn't verified yet (setInsecure); Wi-Fi name/password are still typed into settings.h; updates are
+  by hand (zip + Arduino).
+- Open-Meteo, scores from web search and "which saved time zone" were not confirmed beyond the owner's tests.
+- Railway sometimes takes ~7 minutes to start a deploy: after a push, wait for SUCCESS and "Starting Container" before testing.
+- Help and the website don't mention the device yet (it isn't offered to testers).
+
+Ideas for next (owner asked what would make it really usable and interactive): see the end of the chat; chosen order recorded here
+once the owner picks.
