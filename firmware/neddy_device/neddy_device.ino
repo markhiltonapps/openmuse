@@ -24,6 +24,13 @@
 #include "es8311.h"
 #include "settings.h"
 
+// 1 = play Neddy's voice through the speaker. 0 = words on screen only (the speaker stays silent and its
+// amplifier off). The prototype's speaker wire is broken, and after an answer was played the microphone
+// stopped delivering sound, so this is off while that is being tracked down.
+#ifndef PLAY_ANSWERS
+#define PLAY_ANSWERS 0
+#endif
+
 // ---------------------------------------------------------------- screen
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -229,10 +236,20 @@ static void screenState() {
       centered("Connecting to Neddy", 180, 3, cWhite);
       break;
     case M_READY: {
-      gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
-      centered(deviceName, 240, 4, cWhite);
-      centered("Hold BOOT to talk", 310, 3, cTeal);
-      centered(micChip, 370, 2, cGrey);
+      if (saying.length()) {
+        // What Neddy last said stays on screen (the speaker may be off or broken).
+        gfx->fillCircle(LCD_WIDTH / 2, 60, 28, cGreen);
+        centered(deviceName, 104, 3, cWhite);
+        centered("Hold BOOT to talk", 138, 2, cTeal);
+        String tail = saying;
+        if (tail.length() > 235) tail = String("...") + tail.substring(tail.length() - 232);
+        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 8);
+      } else {
+        gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
+        centered(deviceName, 240, 4, cWhite);
+        centered("Hold BOOT to talk", 310, 3, cTeal);
+      }
+      centered(micChip, 372, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastAnswerMs >= 0) {
         char buf[48];
@@ -377,7 +394,7 @@ static bool audioInit() {
   i2s.setTimeout(100);  // a read that finds no sound gives up quickly instead of freezing everything
   Wire.begin(IIC_SDA, IIC_SCL);
   pinMode(46, OUTPUT);
-  digitalWrite(46, HIGH);  // speaker amplifier on
+  digitalWrite(46, PLAY_ANSWERS ? HIGH : LOW);  // speaker amplifier
   if (codecInit() != ESP_OK) {
     Serial.println("[audio] audio chip setup failed");
     return false;
@@ -424,8 +441,9 @@ static void playTask(void *) {
     }
     size_t samples = got / 2;
     for (size_t i = 0; i < samples; i++) {
-      stereo[2 * i] = mono[i];
-      stereo[2 * i + 1] = mono[i];
+      int16_t v = PLAY_ANSWERS ? mono[i] : 0;  // words only: the same amount of data goes out, but silent
+      stereo[2 * i] = v;
+      stereo[2 * i + 1] = v;
     }
     i2s.write((uint8_t *)stereo, samples * 4);
   }
@@ -474,11 +492,10 @@ static void stopTalking() {
   releasedAt = millis();
   {
     char note[64];
-    snprintf(note, sizeof(note), "sent %ld ms, mic peak %ld", pressBytes / 32, pressPeak);
+    snprintf(note, sizeof(note), "sent %ld ms peak %ld gaps %ld", pressBytes / 32, pressPeak, pressMisses);
     lastPress = note;
     Serial.printf("[talk] %s, %ld empty reads\n", note, pressMisses);
   }
-  es7210Init();  // start the microphone chip afresh for the next press (it went quiet after the first)
   waitingFirstSound = true;
   setMode(M_THINK);
   Serial.println("[talk] end");
@@ -567,6 +584,10 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       } else if (kind == "session.output_transcript.delta") {
         saying += plain(jsonString(text, "delta"));
         if (mode == M_SPEAK) screenSpeech();
+        else if (mode == M_READY && millis() - lastSpeechDraw > 500) {
+          lastSpeechDraw = millis();
+          screenState();
+        }
       } else if (kind == "latency") {
         Serial.printf("[latency] server says %s ms\n", text.c_str());
       } else if (kind == "error") {

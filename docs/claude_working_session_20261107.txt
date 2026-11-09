@@ -768,3 +768,12 @@ Cause unknown. Firmware 0.1 build now (uncompiled): (a) live green mic bar at th
 (the mic is read and thrown away between presses, so its buffer can't overflow; sqrt scale so a quiet room still shows),
 (b) i2s.setTimeout(100) so a read with no sound can't freeze the loop for a second, (c) experiment: ES7210 is
 started again after every press. Reading the bar tells whether the mic dies after a press, after an answer, or never.
+
+Server logs show the pattern (2026-11-09 00:00-00:20): the FIRST press after each board restart works ("released after
+2500 ms, 2500 ms of audio, answering", answered ~1.0 s later); every later press holds 5-8 s but only 20-100 ms of audio
+arrives ("ignored as a tap"): the board's I2S microphone read stops delivering after the first answer.
+Next build (uncompiled): PLAY_ANSWERS 0 (speaker amplifier off, same amount of silent data written, speaker wire is
+broken anyway), a "gaps" count on screen (empty microphone reads), Neddy's last words stay on the ready screen
+(hand-off answers were invisible because the screen went back to "Hold BOOT" when the voice went idle).
+If the microphone survives with sound off: the playback path breaks the microphone read (check the write timeout,
+the shared I2S clocks, the amplifier). If it still stops: look at the receive side (WebSocket/TLS load, task priorities).
