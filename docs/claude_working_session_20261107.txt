@@ -777,3 +777,7 @@ broken anyway), a "gaps" count on screen (empty microphone reads), Neddy's last 
 (hand-off answers were invisible because the screen went back to "Hold BOOT" when the voice went idle).
 If the microphone survives with sound off: the playback path breaks the microphone read (check the write timeout,
 the shared I2S clocks, the amplifier). If it still stops: look at the receive side (WebSocket/TLS load, task priorities).
+
+More server evidence (00:23-00:26): a press held 9363 ms delivered only 1800 ms of audio, so sound stops mid-press (not only
+at the start). Sound-off build did not cure it. Next build adds "slowest read / send ms" on screen to tell a stalled
+microphone read from a stalled WebSocket send. If sends stall: decouple capture from the network (a mic task feeding a buffer).

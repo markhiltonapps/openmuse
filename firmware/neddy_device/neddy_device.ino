@@ -116,6 +116,8 @@ static long lastAnswerMs = -1;
 // What the last press sent (shown on screen, so a quiet or missing microphone is easy to see).
 static long pressBytes = 0, pressPeak = 0, pressMisses = 0;
 static String lastPress;
+static String lastPress2;
+static unsigned long slowRead = 0, slowSend = 0;
 static String micChip = "mic chip: not checked";
 static bool waitingFirstSound = false;
 static String problem;
@@ -251,6 +253,7 @@ static void screenState() {
       }
       centered(micChip, 372, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
+      if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
       if (lastAnswerMs >= 0) {
         char buf[48];
         snprintf(buf, sizeof(buf), "last answer %.1f s after release", lastAnswerMs / 1000.0);
@@ -268,6 +271,7 @@ static void screenState() {
       gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cAmber);
       centered("Thinking", 240, 4, cWhite);
       if (lastPress.length()) centered(lastPress, 320, 2, cGrey);
+      if (lastPress2.length()) centered(lastPress2, 344, 2, cGrey);
       break;
     case M_SPEAK:
       gfx->fillCircle(LCD_WIDTH / 2, 90, 36, cTeal);
@@ -475,6 +479,8 @@ static void startTalking() {
   pressBytes = 0;
   pressPeak = 0;
   pressMisses = 0;
+  slowRead = 0;
+  slowSend = 0;
   // Sound still playing from a last answer is cut off, as when you talk over someone.
   flushPlayback = true;
   ws.sendTXT("{\"type\":\"ptt.start\"}");
@@ -494,7 +500,10 @@ static void stopTalking() {
     char note[64];
     snprintf(note, sizeof(note), "sent %ld ms peak %ld gaps %ld", pressBytes / 32, pressPeak, pressMisses);
     lastPress = note;
-    Serial.printf("[talk] %s, %ld empty reads\n", note, pressMisses);
+    char note2[64];
+    snprintf(note2, sizeof(note2), "slowest read %lu ms, send %lu ms", slowRead, slowSend);
+    lastPress2 = note2;
+    Serial.printf("[talk] %s, %s\n", note, note2);
   }
   waitingFirstSound = true;
   setMode(M_THINK);
@@ -505,7 +514,9 @@ static void stopTalking() {
 static void sendMicChunk() {
   static int16_t stereo[640];  // 320 frames of 2 x 16-bit = 20 ms
   static int16_t mono[320];
+  unsigned long t0 = millis();
   size_t got = i2s.readBytes((char *)stereo, sizeof(stereo));
+  if (millis() - t0 > slowRead) slowRead = millis() - t0;
   size_t frames = got / 4;
   if (frames == 0) {
     pressMisses++;
@@ -518,7 +529,9 @@ static void sendMicChunk() {
     mono[i] = pick;
     if (abs((int)pick) > peak) peak = abs((int)pick);
   }
+  unsigned long t1 = millis();
   ws.sendBIN((uint8_t *)mono, frames * 2);
+  if (millis() - t1 > slowSend) slowSend = millis() - t1;
   pressBytes += frames * 2;
   if (peak > pressPeak) pressPeak = peak;
   if (millis() - lastLevelDraw > 100) {
