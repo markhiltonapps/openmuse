@@ -60,3 +60,8 @@ Owner: "The dot is right under my finger": the FT3168 reading and orientation ar
 (the dots are off) in the next build. Pushed: server idle facts + settings (deploy d0abe74b SUCCESS 12:33 UTC, commit b04a111) and the
 combined touch + idle firmware zip was delivered. Still to hear: tap/hold/double-tap results, the idle face on the watch, dimming, and
 the voice settings.
+
+Watch idle-screen by voice (owner test): asked "make the watch idle screen come on after 30 seconds" and the agent said it couldn't.
+Cause (owner found it): the agent only knew "device", not "watch". Fixed: manage_devices description and DEVICE_SCREEN say "watch",
+`pick` ignores kind words (watch, wearable, screen...) unless a device is really named that, the voice service's DEVICE_RULES says
+watch requests are handed off. New test in tests/device-idle.test.ts. Held locally until "push it" (api + voice both redeploy).

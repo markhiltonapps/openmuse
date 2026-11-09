@@ -302,9 +302,19 @@ export function deviceToolSpecs(
   /** Which device a spoken request means: its name, or any of its words, or "the first / second / last one". */
   const pick = (list: Device[], wanted?: string) => {
     const said = (wanted ?? "").toLowerCase().replace(/[^a-z0-9 ]/g, " ");
+    // People call it "my watch", "the wearable", "the screen": those words only name the kind of
+    // thing, unless one of their devices is really called that.
+    const kind = ["watch", "wearable", "board", "gadget", "screen", "neddy", "little", "small"];
     const words = said
       .split(/\s+/)
-      .filter((word) => word && !["my", "the", "device", "one"].includes(word));
+      .filter(
+        (word) =>
+          word &&
+          !["my", "the", "device", "one"].includes(word) &&
+          !(
+            kind.includes(word) && !list.some((device) => device.name.toLowerCase().includes(word))
+          ),
+      );
     if (!words.length) return list.length === 1 ? list[0] : undefined;
     const ordinal = { first: 0, second: 1, third: 2, last: list.length - 1 } as Record<
       string,
@@ -325,7 +335,7 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's small Neddy devices (a watch-style board they hold a button on to talk). Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (the clock, weather and next meeting it shows after a quiet spell): idle_after_seconds (0 turns the idle screen off), dim (dim after a minute), show_weather, show_meeting, for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (the clock, weather and next meeting it shows after a quiet spell): idle_after_seconds (0 turns the idle screen off), dim (dim the screen after a minute of quiet; there is no brightness level to set, so for “turn the screen down” use dim and say so), show_weather, show_meeting, for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
         do: z.enum(["pair", "list", "rename", "remove", "settings"]),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),

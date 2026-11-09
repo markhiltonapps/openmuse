@@ -703,3 +703,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   to touch is at least ~100 px across with a generous hit area (`UI_HIT_MARGIN`), whole cards are one big target, and swipes need
   ~60 px. Never put two small buttons side by side; prefer one big target or a gesture. A round board needs its own safe area:
   corners are cut, so targets and text stay inside the circle.
+- **Say it the way people do (2026-11-09):** the owner asked the watch to change its idle screen and the agent said it couldn't, because
+  its tool called the thing a "device" and the owner said "watch". A tool's description and the call's instructions must use the
+  words people use ("my watch", "the screen"), and a spoken name that is only the kind of thing ("my watch") must still find the
+  one device they have (`pick` in devices.ts). The voice model's own rules (apps/voice pipeline.py) must say such requests are handed
+  off, never "can't". There is no brightness level, only dim after quiet: say so.

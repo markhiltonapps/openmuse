@@ -164,6 +164,34 @@ test("the person's settings turn parts of the idle screen off, and 0 turns it of
   assert.deepEqual(settingsOf({}), DEFAULT_DEVICE_SETTINGS);
 });
 
+test('"my watch" finds the device, whatever it is named', async () => {
+  const db = await createStore();
+  const devices = new Devices(db);
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const [tool] = deviceToolSpecs(devices, "o");
+  assert.ok(tool);
+  // One device: "my watch" names the kind of thing, not the device, so it still finds it.
+  const one = (await tool.execute({
+    do: "settings",
+    name: "my watch",
+    idle_after_seconds: 30,
+  })) as { changed?: boolean; error?: string };
+  assert.equal(one.changed, true, one.error);
+  assert.match(String(tool.description), /watch/);
+  // Two devices, one really named Watch: the word picks it.
+  const second = await devices.start("Waveshare", "1.2.3.5");
+  await devices.claim("o", pairClaimSchema.parse({ code: second.code, name: "Watch" }));
+  const two = (await tool.execute({
+    do: "settings",
+    name: "the watch",
+    idle_after_seconds: 45,
+  })) as { changed?: boolean; message?: string };
+  assert.equal(two.changed, true);
+  assert.match(two.message ?? "", /^Done\. Watch's idle screen/);
+  await db.close();
+});
+
 test("the chat changes a device's idle screen by what's said", async () => {
   const db = await createStore();
   const devices = new Devices(db);
