@@ -812,3 +812,11 @@ ROOT OF THE DROPS (api log 01:14:18): "Device Phone ended by this server (4408 n
 missed check; every drop cost the board a ~7 s reconnect (TLS) and made the next press slow. Fix (committed, not pushed): three missed checks in a row
 (about a minute) before letting go, and the device's own pings count as signs of life (`MISSED_LIMIT`, `ws.on("ping")` in device-socket.ts).
 Still unknown: why the board went 20+ s without answering a ping (a busy/blocked main loop?). The "L W M S H" line on the board will show it.
+
+NEW DATA (2026-11-09 01:2x UTC): on the 2nd/3rd press "S6040" = starting a press (startTalking) took 6 s (45 ms on the 1st press); the longest connection
+turn (W) was 4-6.6 s; the longest loop turn (L) 6-8 s; mic read and send are fine (28 ms / 3 ms); link drops 1, back in 6.7 s; Wi-Fi -44..-54 dBm. The api
+logged a device disconnect (code 1006) with NO "ended by this server" line, so the board closed the connection itself (a stuck send timing out ~6 s, then
+reconnecting). The first words of a long sentence are lost during the freeze ("it only captured the first word").
+(The api keep-alive fix 408576f went live at 01:20; the earlier rounds ran on the old server.)
+Next build splits S into: snd (the ptt.start send), mode (drawing the Listening screen), trash (the two microphone reads), cb (longest socket callback),
+q (seconds since anything came from Neddy before the press).

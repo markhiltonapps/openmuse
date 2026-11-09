@@ -122,6 +122,8 @@ static String lastPress3;
 // Where the time goes between presses: the longest turn of the main loop, of the connection's own work,
 // of the idle microphone read and of starting a press; and how long a press was held without starting.
 static unsigned long maxLoop = 0, maxWs = 0, maxIdle = 0, maxStart = 0, loopPrev = 0, blockedMs = 0, blockedPrev = 0;
+static unsigned long tSnd = 0, tMode = 0, tTrash = 0, maxCb = 0, lastRxAt = 0, quietAtPress = 0;
+static String lastPress4;
 static char blockedWhy = '-';  // L = link down, P = a problem screen was showing
 // Why the board last started (power on, a crash, a watchdog, low power...) and how many starts since power-up.
 static RTC_DATA_ATTR int bootCount = 0;
@@ -282,7 +284,7 @@ static void screenState() {
         centered("Hold BOOT to talk", 138, 2, cTeal);
         String tail = saying;
         if (tail.length() > 235) tail = String("...") + tail.substring(tail.length() - 232);
-        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 6);
+        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 5);
       } else {
         gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
         centered(deviceName, 240, 4, cWhite);
@@ -298,7 +300,8 @@ static void screenState() {
       centered(micChip + ", Wi-Fi " + String(WiFi.RSSI()) + " dBm", 374, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
-      if (lastPress3.length()) centered(lastPress3, 312, 2, cGrey);
+      if (lastPress3.length()) centered(lastPress3, 288, 2, cGrey);
+      if (lastPress4.length()) centered(lastPress4, 310, 2, cGrey);
       if (lastAnswerMs >= 0) {
         char buf[48];
         snprintf(buf, sizeof(buf), "last answer %.1f s after release", lastAnswerMs / 1000.0);
@@ -318,6 +321,7 @@ static void screenState() {
       if (lastPress.length()) centered(lastPress, 320, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 344, 2, cGrey);
       if (lastPress3.length()) centered(lastPress3, 368, 2, cGrey);
+      if (lastPress4.length()) centered(lastPress4, 392, 2, cGrey);
       break;
     case M_SPEAK:
       gfx->fillCircle(LCD_WIDTH / 2, 90, 36, cTeal);
@@ -529,11 +533,19 @@ static void startTalking() {
   slowSend = 0;
   // Sound still playing from a last answer is cut off, as when you talk over someone.
   flushPlayback = true;
+  quietAtPress = millis() - lastRxAt;  // how long since anything came from Neddy
+  unsigned long a = millis();
   ws.sendTXT("{\"type\":\"ptt.start\"}");
+  unsigned long b = millis();
   setMode(M_LISTEN);
+  unsigned long c = millis();
   // Throw away what the microphone heard before the press.
   static uint8_t trash[1280];
   for (int i = 0; i < 2; i++) i2s.readBytes((char *)trash, sizeof(trash));  // about 40 ms of old sound
+  unsigned long d = millis();
+  tSnd = b - a;
+  tMode = c - b;
+  tTrash = d - c;
   Serial.println("[talk] start");
 }
 
@@ -553,9 +565,13 @@ static void stopTalking() {
     snprintf(note3, sizeof(note3), "L%lu W%lu M%lu S%lu H%lu%c", maxLoop, maxWs, maxIdle, maxStart,
              blockedMs, blockedWhy);
     lastPress3 = note3;
+    char note4[64];
+    snprintf(note4, sizeof(note4), "snd%lu mode%lu trash%lu cb%lu q%lu", tSnd, tMode, tTrash, maxCb, quietAtPress / 1000);
+    lastPress4 = note4;
+    tSnd = tMode = tTrash = maxCb = 0;
     maxLoop = maxWs = maxIdle = maxStart = blockedMs = blockedPrev = 0;
     blockedWhy = '-';
-    Serial.printf("[talk] %s, %s, %s\n", note, note2, note3);
+    Serial.printf("[talk] %s, %s, %s, %s\n", note, note2, note3, note4);
   }
   waitingFirstSound = true;
   setMode(M_THINK);
@@ -612,7 +628,17 @@ static void idleMic() {
 }
 
 // ---------------------------------------------------------------- the connection to Neddy
+struct CallbackTimer {  // how long this handler took (the longest is shown on screen)
+  unsigned long t = millis();
+  ~CallbackTimer() {
+    unsigned long d = millis() - t;
+    if (d > maxCb) maxCb = d;
+  }
+};
+
 static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
+  CallbackTimer timer;
+  lastRxAt = millis();
   switch (type) {
     case WStype_CONNECTED:
       Serial.println("[neddy] connected");
