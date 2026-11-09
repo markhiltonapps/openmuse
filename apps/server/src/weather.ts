@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { weatherIconFor } from "../../../packages/domain/src/device-card.ts";
 import { sunTimes } from "../../../packages/domain/src/sun.ts";
 import {
   precipWord,
@@ -581,6 +582,18 @@ export function weatherToolSpecs(
           timeZone: w.timeZone,
           localTime: clock(Date.now(), w.timeZone),
           now: `${w.now.temp}°F, ${w.now.sky.toLowerCase()}${feels}`,
+          // What the watch-style device draws as a card (the numbers it needs; other screens ignore it).
+          deviceCard: {
+            place: w.place,
+            temp: w.now.temp,
+            feels: w.now.feelsLike,
+            sky: w.now.sky,
+            icon: weatherIconFor(w.now.emoji),
+            high: w.today.high,
+            low: w.today.low,
+            rain: w.today.rain,
+            alert: w.alerts[0]?.event,
+          },
           today: [
             w.today.high !== undefined ? `High ${w.today.high}°F` : "",
             w.today.low !== undefined ? `low ${w.today.low}°F` : "",

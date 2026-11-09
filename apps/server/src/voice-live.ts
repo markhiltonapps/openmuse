@@ -1,3 +1,4 @@
+import type { DeviceCard } from "../../../packages/domain/src/device-card.ts";
 import { type CallDetail, LIVE_UNAVAILABLE } from "../../../packages/domain/src/voice.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -95,6 +96,10 @@ export interface LiveQuestion {
   shown?: CallDetail[];
   /** The call is shrunk to its bar in the app, so what's shown waits behind its See it button. */
   shrunk?: boolean;
+  /** The call is on a watch-style device: it draws a few cards itself (`card`) and has no other screen. */
+  device?: boolean;
+  /** Sends a card to the device's screen. */
+  card?: (card: DeviceCard) => void;
   signal: AbortSignal;
 }
 /** The agent's answer, to be said in one to three short sentences. */
@@ -155,6 +160,8 @@ interface Live {
   quietUntil?: number;
   /** The app has the call shrunk to its bar (the person is elsewhere in the app). */
   shrunk?: boolean;
+  /** A watch-style device's call: it draws a few cards itself instead of having a call screen. */
+  device?: boolean;
   lastHeard: number;
   /** Hand-overs are answered one at a time, in order; all stop when the call ends. */
   queue: Promise<void>;
@@ -206,6 +213,8 @@ const NOT_YET =
 
 export class LiveVoice {
   private readonly sessions = new Map<string, Live>();
+  /** Who wants the cards of a device's call (the device's bridge), by conversation. */
+  private readonly cardWatchers = new Map<string, (card: DeviceCard) => void>();
   private readonly model: string;
   private readonly voice: string;
   private readonly baseUrl: string;
@@ -362,6 +371,7 @@ export class LiveVoice {
       stopAnswers: new AbortController(),
       after: [],
       details: [],
+      ...(device ? { device: true } : {}),
       seconds: 0,
       recorded: 0,
       turns: [],
@@ -409,6 +419,15 @@ export class LiveVoice {
       : (new WebSocket(url, { headers } as never) as unknown as SocketLike);
     socket.binaryType = "arraybuffer";
     return socket;
+  }
+  /** Cards for a device's conversation go to `send` until the returned function is called. */
+  watchCards(owner: string, id: string, send: (card: DeviceCard) => void): () => void {
+    const live = this.sessions.get(id);
+    if (!live || live.owner !== owner || !live.device) return () => undefined;
+    this.cardWatchers.set(id, send);
+    return () => {
+      if (this.cardWatchers.get(id) === send) this.cardWatchers.delete(id);
+    };
   }
   /** Whether a conversation is still going (the device's call may have ended on its own). */
   isLive(owner: string, id: string) {
@@ -708,6 +727,14 @@ export class LiveVoice {
           progress,
           shown: [...live.details],
           shrunk: live.shrunk === true,
+          ...(live.device
+            ? {
+                device: true,
+                card: (card: DeviceCard) => {
+                  if (!live.stopAnswers.signal.aborted) this.cardWatchers.get(live.id)?.(card);
+                },
+              }
+            : {}),
           show: (items, title) => {
             if (!items.length || live.stopAnswers.signal.aborted) return;
             // A Connect button: signing in on the app's page is mostly quiet and can take a few

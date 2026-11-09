@@ -299,6 +299,18 @@ test("the service finds the city once, shares forecasts, and says why when there
     alerts: { event: string; until?: string }[];
   };
   assert.equal(said.now, "90°F, mostly sunny, feels like 100°F");
+  // What the watch-style device draws: the numbers and a picture, with the same forecast's words.
+  assert.deepEqual((said as unknown as { deviceCard: unknown }).deviceCard, {
+    place: "Houston, Texas",
+    temp: 90,
+    feels: 100,
+    sky: "Mostly sunny",
+    icon: "sun-cloud",
+    high: 91,
+    low: 74,
+    rain: 40,
+    alert: said.alerts[0]?.event,
+  });
   assert.equal(said.today, "High 91°F, low 74°F, 40% chance of rain");
   assert.equal(said.nextHours[0], "Wed 3 PM: 90°F, mostly sunny, 5% chance of rain");
   assert.equal(said.days.length, 3);

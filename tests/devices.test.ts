@@ -14,6 +14,7 @@ import {
 } from "../apps/server/src/devices.ts";
 import { AppError } from "../apps/server/src/errors.ts";
 import type { SocketLike } from "../apps/server/src/voice-live.ts";
+import type { DeviceCard } from "../packages/domain/src/device-card.ts";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(check: () => boolean, what: string, ms = 2000) {
@@ -176,6 +177,16 @@ class FakeVoice implements DeviceVoice {
     const socket = new FakeVoiceSocket();
     this.sockets.push(socket);
     return socket;
+  }
+  /** Who wants cards, by conversation; `stopped` counts the ones who stopped. */
+  watchers = new Map<string, (card: DeviceCard) => void>();
+  stopped = 0;
+  watchCards(_owner: string, id: string, send: (card: DeviceCard) => void) {
+    this.watchers.set(id, send);
+    return () => {
+      this.stopped++;
+      this.watchers.delete(id);
+    };
   }
   async end(_owner: string, id: string) {
     this.ended.push(id);
@@ -449,4 +460,37 @@ test("the chat can pair, list, rename and remove devices by what's said, and ask
   const quietAnswer = (await silentTool.execute({ do: "pair", code })) as Record<string, unknown>;
   assert.match(String(quietAnswer.message), /isn’t switched on yet/);
   await quiet.close();
+});
+
+test("a card the agent makes during a call is drawn on the device, and stops when the call ends", async () => {
+  const { voice, connect, stop } = await bridge();
+  const device = await connect();
+  device.ws.send(JSON.stringify({ type: "ptt.start" }));
+  await until(() => voice.sockets.length === 1, "the call");
+  voice.sockets[0]?.open();
+  await until(() => voice.watchers.has("pc_w0_1"), "the card watch");
+
+  const card: DeviceCard = {
+    kind: "weather",
+    place: "Houston",
+    temp: 72,
+    sky: "Partly cloudy",
+    icon: "partly",
+    high: 80,
+    low: 65,
+  };
+  voice.watchers.get("pc_w0_1")?.(card);
+  await until(() => device.text.some((event) => event.type === "card"), "the card");
+  assert.deepEqual(
+    device.text.find((event) => event.type === "card"),
+    { type: "card", ...card },
+  );
+
+  // When the conversation ends, nobody keeps sending to this device.
+  voice.sockets[0]?.emit("message", JSON.stringify({ type: "session.closed", reason: "idle" }));
+  voice.sockets[0]?.emit("close", undefined);
+  await until(() => voice.stopped === 1, "the watch to stop");
+  assert.equal(voice.watchers.size, 0);
+  device.ws.close();
+  await stop();
 });

@@ -3,6 +3,7 @@ import { type BaseEvent, EventType, type Message, type RunAgentInput } from "@ag
 import type { Observable } from "rxjs";
 import { z } from "zod";
 import type { AgentTask } from "../../../packages/domain/src/agent.ts";
+import { type DeviceCard, weatherDeviceCard } from "../../../packages/domain/src/device-card.ts";
 import type { ActionProposal } from "../../../packages/domain/src/index.ts";
 import {
   CALL_DETAIL_TOOLS,
@@ -150,6 +151,27 @@ function shown(tool: CallDetailTool, raw: string) {
         : undefined;
   }
 }
+/**
+ * The card a watch-style device draws for a tool's result, or undefined when there's none. Only
+ * what the device can really show counts: a result with no card gets no claim of one.
+ */
+export function deviceCardFrom(tool: string, raw: string): DeviceCard | undefined {
+  if (tool !== "get_weather") return undefined;
+  try {
+    const result = JSON.parse(raw) as { deviceCard?: unknown };
+    return weatherDeviceCard(result?.deviceCard);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Where what's put on screen appears on a watch-style device: its small screen draws only the
+ * weather, as a card that stays until the next press.
+ */
+export const DEVICE_SCREEN =
+  "They're talking through a small watch-style device. Its screen can show only one thing besides words: the weather, as a card (the look-up shows it by itself when you call get_weather for their home city or where they are). When you have looked up the weather, say the key facts in a sentence or two and that the card is on the watch screen. Nothing else (lists, emails, buttons, documents) can show there, so never say anything is on their screen; say what they need.";
+
 const titleOf = (item: CallDetail["items"][number]) => {
   // An Approve card has its own title; the answer's heading comes from what was found.
   if (item.tool === "approval") return undefined;
@@ -424,6 +446,8 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
     show,
     shown: onScreen,
     shrunk = false,
+    device = false,
+    card,
     signal,
   }) => {
     const [chat, name] = await Promise.all([
@@ -457,7 +481,10 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
               },
             ]
           : []),
-        { description: "Where what you put on screen appears", value: whereShown(shrunk) },
+        {
+          description: "Where what you put on screen appears",
+          value: device ? DEVICE_SCREEN : whereShown(shrunk),
+        },
       ],
       state: {},
       // A call's look-ups use their own model (the Models card's "Look-ups during calls").
@@ -517,6 +544,11 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
                 ? shown(tool, e.content)
                 : undefined;
             if (tool && result) items.push({ tool, result });
+            // A watch-style device draws a few cards itself; the weather is one.
+            if (device && card && called) {
+              const deviceCard = deviceCardFrom(called, e.content);
+              if (deviceCard) card(deviceCard);
+            }
             try {
               const result = JSON.parse(e.content) as {
                 status?: unknown;

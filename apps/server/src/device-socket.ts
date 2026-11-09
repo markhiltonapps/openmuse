@@ -1,6 +1,7 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
+import type { DeviceCard } from "../../../packages/domain/src/device-card.ts";
 import type { Device, Devices } from "./devices.ts";
 import { AppError } from "./errors.ts";
 import type { SocketLike } from "./voice-live.ts";
@@ -15,6 +16,8 @@ export interface DeviceVoice {
     options: { device: true },
   ): Promise<{ sessionId: string }>;
   audioSocket(owner: string, id: string): SocketLike;
+  /** Cards (the weather) the conversation wants on the device's screen; returns how to stop. */
+  watchCards?(owner: string, id: string, send: (card: DeviceCard) => void): () => void;
   end(owner: string, id: string, reason?: string): Promise<void>;
 }
 
@@ -40,6 +43,8 @@ interface Call {
   socket: SocketLike;
   open: boolean;
   ended: boolean;
+  /** Stops sending this conversation's cards to the device. */
+  unwatch?: () => void;
 }
 interface Connection {
   owner: string;
@@ -248,6 +253,10 @@ export class DeviceBridge {
       const socket = voice.audioSocket(connection.owner, sessionId);
       const call: Call = { id: sessionId, socket, open: false, ended: false };
       connection.call = call;
+      // The weather (and any other card) the agent looks up while they talk: drawn on the device's screen.
+      call.unwatch = voice.watchCards?.(connection.owner, sessionId, (card) =>
+        this.sendText(connection, { type: "card", ...card }),
+      );
       const opened = () => {
         if (call.open) return;
         call.open = true;
@@ -278,6 +287,7 @@ export class DeviceBridge {
         }
       });
       const lost = () => {
+        call.unwatch?.();
         if (connection.call !== call) return;
         connection.call = undefined;
         if (!call.ended) {
@@ -309,6 +319,7 @@ export class DeviceBridge {
       this.connections.delete(connection.device.id);
     const call = connection.call;
     connection.call = undefined;
+    call?.unwatch?.();
     if (call && !call.ended) {
       call.ended = true;
       try {
