@@ -117,16 +117,18 @@ EYES = [('happy', 0), ('speak', 0), ('blink', 0), ('wide0', 0), ('wide1', 1 / 3)
 
 # ------------------------------------------------------------------ fonts
 FONTS = [('title', 'SemiBold', 34, None), ('body', 'Medium', 28, None), ('mid', 'Medium', 22, None), ('small', 'Medium', 14, None),
-         ('huge', 'SemiBold', 64, '0123456789 ')]   # huge: only the pairing code's digits
+         ('huge', 'SemiBold', 64, '0123456789 '),   # huge: only the pairing code's digits
+         ('temp', 'SemiBold', 88, '0123456789-\x7f')]   # temp: the weather card's big temperature (code 127 is the degree sign)
 
 def bake_font(style, size, chars=None):
     f = ImageFont.truetype(os.path.join(FONT_DIR, f'Inter-{style}.otf'), size)
     asc, desc = f.getmetrics(); h = asc + desc
     adv, bits = [], []
-    for code in range(32, 127):
+    for code in range(32, 128):
         ch = chr(code)
         if chars is not None and ch not in chars:
             adv.append(0); bits.append(np.zeros(0, dtype=np.uint8)); continue
+        if code == 127: ch = '\u00b0'   # the degree sign lives at 127 (DEL isn't text)
         a = max(1, int(round(f.getlength(ch))))
         im = Image.new('L', (a + 2, h), 0)
         ImageDraw.Draw(im).text((0, 0), ch, font=f, fill=255)
@@ -161,7 +163,7 @@ def main():
     art.append(c_array('NEDDY_EYES', np.concatenate(sprites)))
     open(os.path.join(OUT, 'neddy_art.h'), 'w').write(''.join(art))
 
-    fh = ['// Made by firmware/tools/make_neddy_art.py (Inter, ASCII 32-126, 8-bit coverage). Do not edit.\n',
+    fh = ['// Made by firmware/tools/make_neddy_art.py (Inter, ASCII 32-126 plus the degree sign at 127, 8-bit coverage). Do not edit.\n',
           '#pragma once\n#include <stdint.h>\n#ifndef PROGMEM\n#define PROGMEM\n#endif\n',
           'struct NeddyFont { uint8_t h; const uint8_t *adv; const uint32_t *off; const uint8_t *bits; };\n']
     names = []

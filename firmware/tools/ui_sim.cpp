@@ -77,6 +77,30 @@ int main(int argc, char **argv) {
   uiSetMode(UI_SPEAK); uiSetWords("It's about 5:45 PM in California, three hours behind you.");
   uiTick(5000);
   for (int i = 0; i < 5; i++) { uiTick(5100 + i * 90); char nm[40]; snprintf(nm, sizeof nm, "m2_small_%d", i); save(dir, nm); }
+  // 8. weather cards (and every picture)
+  uiMotion = false; uiNextBlink = 999999; uiSetMode(UI_READY); uiSetWords(""); uiSetHeard("");
+  {
+    uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
+    uint16_t panel = uiRgb(20, 28, 36);
+    for (int i = 0; i < 11; i++) {
+      uiRenderIcon(i, panel);
+      uiOut.blit(6 + (i % 3) * 132, 4 + (i / 3) * 124, UI_ICON, UI_ICON, uiIconBuf);
+    }
+    save(dir, "c0_icons");
+  }
+  uint32_t tc = 20000;
+  uiShowWeather(tc, "Houston", 72, UI_NONE, "Partly cloudy", UI_ICON_PARTLY, 80, 65, 30, ""); uiTick(tc); save(dir, "c1_partly");
+  uiShowWeather(tc, "Houston", 96, 108, "Chance showers and thunderstorms", UI_ICON_STORM, 99, 77, 70, "Heat Advisory"); uiTick(tc); save(dir, "c2_storm_alert");
+  uiShowWeather(tc, "Fargo", -12, -25, "Snow", UI_ICON_SNOW, -4, -18, 90, ""); uiTick(tc); save(dir, "c3_snow_negative");
+  uiShowWeather(tc, "San Francisco", 58, 55, "Mostly clear", UI_ICON_MOON, UI_NONE, 52, 0, ""); uiTick(tc); save(dir, "c4_night_no_high");
+  uiShowWeather(tc, "Houston", 104, 110, "Sunny", UI_ICON_SUN, 106, 84, 0, ""); uiTick(tc); save(dir, "c5_sun_three_digit");
+  uiShowWeather(tc, "Chicago", 41, 34, "Light rain", UI_ICON_RAIN, 45, 36, 80, ""); uiMotion = true; uiTick(tc); uiTick(tc + 90); save(dir, "c6_rain_motion");
+  uiMotion = false;
+  // words that arrive while the card is up wait behind it; the next press (listening) clears it
+  uiSetWords("It's 41 degrees and raining."); uiTick(tc + 300); save(dir, "c7_words_behind_card");
+  uiSetMode(UI_LISTEN); uiTick(tc + 400); save(dir, "c8_cleared_by_press");
+  uiSetMode(UI_READY); uiShowWeather(tc + 500, "Houston", 72, UI_NONE, "Sunny", UI_ICON_SUN, 80, 65, 0, ""); uiTick(tc + 500);
+  uiTick(tc + 500 + UI_CARD_MS + 10); save(dir, "c9_timed_out");
   // timing of one frame (host speed, not the watch's)
   UiPose p; uiPoseNow(7000, &p);
   double t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);

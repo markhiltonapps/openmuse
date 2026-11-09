@@ -92,7 +92,7 @@ export function weatherDeviceCard(raw: unknown): WeatherDeviceCard | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const r = raw as Record<string, unknown>;
   const temp = whole(r.temp, -100, 150);
-  const sky = plainForDevice(r.sky, 28);
+  const sky = plainForDevice(r.sky, 40);
   if (temp === undefined || !sky) return undefined;
   const icon = (WEATHER_ICONS as readonly string[]).includes(String(r.icon))
     ? (r.icon as WeatherIcon)
@@ -101,7 +101,7 @@ export function weatherDeviceCard(raw: unknown): WeatherDeviceCard | undefined {
   const high = whole(r.high, -100, 150);
   const low = whole(r.low, -100, 150);
   const rain = whole(r.rain, 0, 100);
-  const alert = plainForDevice(r.alert, 30);
+  const alert = plainForDevice(r.alert, 24);
   return {
     kind: "weather",
     place: plainForDevice(r.place, 24).replace(/,.*$/, "").trim() || "Here",

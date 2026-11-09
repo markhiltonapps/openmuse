@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 #include "neddy_art.h"
 #include "neddy_font.h"
 
@@ -32,12 +33,13 @@ static constexpr uint16_t UI_WHITE = uiRgb(240, 240, 244);
 
 // ------------------------------------------------------------------ smooth text
 static uint16_t uiLine[UI_W * 33];  // one line of text, built here and sent to the screen in one go
+static uint16_t uiBg = 0;           // what's behind the text (black, or a card's colour): letters blend into it
 
 static int uiTextWidth(const NeddyFont &f, const char *s) {
   int w = 0;
   for (; *s; s++) {
     int c = (uint8_t)*s;
-    if (c < 32 || c > 126) c = '?';
+    if (c < 32 || c > 127) c = '?';
     w += f.adv[c - 32];
   }
   return w;
@@ -58,20 +60,24 @@ static void uiText(const NeddyFont &f, int x, int y, const char *s, uint16_t fg)
   if (chunk > hEven) chunk = hEven;
   if (chunk < 2) chunk = 2;
   int fr = (fg >> 11) & 31, fgc = (fg >> 5) & 63, fb = fg & 31;
+  int br = (uiBg >> 11) & 31, bgc = (uiBg >> 5) & 63, bb = uiBg & 31;
   for (int r0 = 0; r0 < hEven; r0 += chunk) {
     int rows = hEven - r0 < chunk ? hEven - r0 : chunk;
-    memset(uiLine, 0, (size_t)w * rows * 2);
+    if (uiBg == 0) memset(uiLine, 0, (size_t)w * rows * 2);
+    else for (int i = 0; i < w * rows; i++) uiLine[i] = uiBg;
     int cx = 0;
     for (const char *p = s; *p && cx < w; p++) {
       int c = (uint8_t)*p;
-      if (c < 32 || c > 126) c = '?';
+      if (c < 32 || c > 127) c = '?';
       int a = f.adv[c - 32];
       const uint8_t *g = f.bits + f.off[c - 32];
       for (int row = r0; row < r0 + rows && row < h; row++) {
         for (int col = 0; col < a && cx + col < w; col++) {
           int al = g[row * a + col];
           if (!al) continue;
-          int r = (fr * al + 127) / 255, gg = (fgc * al + 127) / 255, b = (fb * al + 127) / 255;
+          int r = br + ((fr - br) * al + (fr >= br ? 127 : -127)) / 255;
+          int gg = bgc + ((fgc - bgc) * al + (fgc >= bgc ? 127 : -127)) / 255;
+          int b = bb + ((fb - bb) * al + (fb >= bb ? 127 : -127)) / 255;
           uiLine[(row - r0) * w + cx + col] = (uint16_t)((r << 11) | (gg << 5) | b);
         }
       }
@@ -96,7 +102,7 @@ static int uiWrap(const NeddyFont &f, const char *s, int maxw, int *start, int *
     int j = i;
     while (j < total) {
       int c = (uint8_t)s[j];
-      if (c < 32 || c > 126) c = '?';
+      if (c < 32 || c > 127) c = '?';
       int a = f.adv[c - 32];
       if (w + a > maxw && j > lineStart) break;
       if (s[j] == ' ') { lastSpace = j; wAtSpace = w; }
@@ -267,9 +273,33 @@ static uint32_t uiLastStage = 0, uiLastText = 0;
 static uint32_t (*uiMicros)() = nullptr;
 static float uiRenderMs = 0;         // how long one frame of him takes to draw (smoothed)
 
+// ------------------------------------------------------------------ cards (the weather)
+// A card is drawn from a few plain facts the server sends; it stays until the next press (or a minute), and he
+// stays small at the bottom, still moving.
+enum { UI_ICON_SUN, UI_ICON_MOON, UI_ICON_SUN_CLOUD, UI_ICON_PARTLY, UI_ICON_CLOUD, UI_ICON_SUN_RAIN, UI_ICON_RAIN,
+       UI_ICON_STORM, UI_ICON_SNOW, UI_ICON_FOG, UI_ICON_WIND };
+#define UI_NONE (-9999)
+#define UI_ICON 112
+struct UiCard {
+  bool on;
+  uint32_t since;
+  char place[28], sky[44], alert[28];
+  int temp, feels, high, low, rain, icon;
+};
+static UiCard uiCard;
+static uint16_t uiIconBuf[UI_ICON * UI_ICON];
+static uint32_t uiNowMs = 0;
+#define UI_CARD_MS 60000
+
 static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng >> 8; }
 
-static void uiSetMode(int m) { if (m != uiMode) { uiMode = m; uiAll = true; } }
+static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
+static void uiSetMode(int m) {
+  if (m != uiMode) {
+    uiMode = m; uiAll = true;
+    if (m == UI_LISTEN || m == UI_LINK) uiCard.on = false;   // a new press or a lost link ends the card
+  }
+}
 static void uiSetLevel(float l) {
   if (l < 0) l = 0;
   if (l > 1) l = 1;
@@ -305,6 +335,242 @@ static const char *uiModeLabel() {
   }
 }
 
+// ---- the weather pictures: drawn from shapes with soft edges, once per card (no picture files)
+static inline float uiClamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+static inline float uiCov(float d) { return uiClamp01(0.5f - d); }
+static inline float sdCircle(float x, float y, float cx, float cy, float r) { float dx = x - cx, dy = y - cy; return sqrtf(dx * dx + dy * dy) - r; }
+static inline float sdSeg(float x, float y, float x1, float y1, float x2, float y2, float r) {
+  float px = x - x1, py = y - y1, ex = x2 - x1, ey = y2 - y1;
+  float t = (px * ex + py * ey) / (ex * ex + ey * ey + 1e-6f);
+  t = t < 0 ? 0 : (t > 1 ? 1 : t);
+  float dx = px - ex * t, dy = py - ey * t;
+  return sqrtf(dx * dx + dy * dy) - r;
+}
+static inline float sdBox(float x, float y, float cx, float cy, float hw, float hh, float r) {
+  float qx = fabsf(x - cx) - (hw - r), qy = fabsf(y - cy) - (hh - r);
+  float ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+  float in = qx > qy ? qx : qy; if (in > 0) in = 0;
+  return sqrtf(ox * ox + oy * oy) + in - r;
+}
+static inline float sdCloud(float x, float y, float cx, float cy, float s) {
+  float lx = (x - cx) / s, ly = (y - cy) / s;
+  float d = sdCircle(lx, ly, -24, 4, 20);
+  d = fminf(d, sdCircle(lx, ly, 2, -6, 27));
+  d = fminf(d, sdCircle(lx, ly, 26, 6, 19));
+  d = fminf(d, sdBox(lx, ly, 0, 10, 41, 13, 13));
+  return d * s;
+}
+static inline void uiPaint(float *c, float cov, float r, float g, float b) {
+  if (cov <= 0) return;
+  c[0] += (r - c[0]) * cov; c[1] += (g - c[1]) * cov; c[2] += (b - c[2]) * cov;
+}
+static void uiSunLayer(float *c, float x, float y, float cx, float cy, float r, float rayIn, float rayOut) {
+  float d = sqrtf((x - cx) * (x - cx) + (y - cy) * (y - cy));
+  if (d > r) { float a = 1.0f - (d - r) / 30.0f; if (a > 0) uiPaint(c, a * a * 0.30f, 255, 196, 64); }   // glow
+  if (d < rayOut + 3) {
+    float ray = 1000;
+    for (int k = 0; k < 8; k++) {
+      float a = k * 0.785398f, ca = cosf(a), sa = sinf(a);
+      float dd = sdSeg(x, y, cx + ca * rayIn, cy + sa * rayIn, cx + ca * rayOut, cy + sa * rayOut, 2.4f);
+      if (dd < ray) ray = dd;
+    }
+    uiPaint(c, uiCov(ray), 255, 196, 64);
+  }
+  float t = uiClamp01((y - (cy - r)) / (2 * r));
+  uiPaint(c, uiCov(d - r), 255 - 0 * t, 218 - 44 * t, 112 - 62 * t);
+}
+static void uiCloudLayer(float *c, float x, float y, float cx, float cy, float s, bool dark) {
+  float cov = uiCov(sdCloud(x, y, cx, cy, s));
+  if (cov <= 0) return;
+  float t = uiClamp01((y - (cy - 33 * s)) / (56 * s));
+  if (dark) uiPaint(c, cov, 134 - 46 * t, 148 - 48 * t, 166 - 48 * t);
+  else uiPaint(c, cov, 242 - 64 * t, 247 - 55 * t, 252 - 42 * t);
+}
+static void uiDrop(float *c, float x, float y, float x0, float y0) {
+  uiPaint(c, uiCov(sdSeg(x, y, x0, y0, x0 - 5, y0 + 13, 2.6f)), 110, 190, 255);
+}
+static void uiFlake(float *c, float x, float y, float cx, float cy) {
+  float d = 1000;
+  for (int k = 0; k < 3; k++) {
+    float a = k * 1.047198f, ca = cosf(a) * 8, sa = sinf(a) * 8;
+    float dd = sdSeg(x, y, cx - ca, cy - sa, cx + ca, cy + sa, 1.5f);
+    if (dd < d) d = dd;
+  }
+  uiPaint(c, uiCov(d), 214, 232, 255);
+}
+static void uiHook(float *c, float x, float y, float x1, float x2, float yy, float hy, bool up) {
+  float d = sdSeg(x, y, x1, yy, x2, yy, 3.0f);
+  float dx = x - x2, dy = y - hy;
+  if (x >= x2 && ((up && y <= yy + 2) || (!up && y >= yy - 2))) { float r = sqrtf(dx * dx + dy * dy) - 6.0f; float dd = fabsf(r) - 3.0f; if (dd < d) d = dd; }
+  uiPaint(c, uiCov(d), 170, 202, 228);
+}
+static void uiIconPixel(int icon, float x, float y, float *c) {
+  switch (icon) {
+    case UI_ICON_SUN: uiSunLayer(c, x, y, 56, 56, 22, 33, 46); break;
+    case UI_ICON_MOON: {
+      float d = fmaxf(sdCircle(x, y, 50, 56, 27), -sdCircle(x, y, 64, 46, 23));
+      uiPaint(c, uiCov(d), 240, 234, 190);
+      uiPaint(c, uiCov(sdCircle(x, y, 86, 28, 2.6f)), 236, 236, 214);
+      uiPaint(c, uiCov(sdCircle(x, y, 94, 54, 2.0f)), 236, 236, 214);
+      break;
+    }
+    case UI_ICON_SUN_CLOUD: uiSunLayer(c, x, y, 40, 40, 16, 23, 32); uiCloudLayer(c, x, y, 62, 68, 0.78f, false); break;
+    case UI_ICON_PARTLY: uiSunLayer(c, x, y, 38, 38, 15, 22, 31); uiCloudLayer(c, x, y, 60, 66, 1.0f, false); break;
+    case UI_ICON_CLOUD: uiCloudLayer(c, x, y, 70, 48, 0.7f, true); uiCloudLayer(c, x, y, 52, 66, 0.95f, false); break;
+    case UI_ICON_SUN_RAIN:
+      uiSunLayer(c, x, y, 38, 34, 14, 20, 28);
+      uiCloudLayer(c, x, y, 62, 56, 0.85f, false);
+      uiDrop(c, x, y, 44, 82); uiDrop(c, x, y, 62, 88); uiDrop(c, x, y, 80, 82);
+      break;
+    case UI_ICON_RAIN:
+      uiCloudLayer(c, x, y, 56, 46, 0.95f, true);
+      uiDrop(c, x, y, 34, 80); uiDrop(c, x, y, 50, 88); uiDrop(c, x, y, 66, 80); uiDrop(c, x, y, 82, 88);
+      break;
+    case UI_ICON_STORM: {
+      uiCloudLayer(c, x, y, 56, 44, 0.95f, true);
+      float d = sdSeg(x, y, 62, 62, 48, 84, 3.4f);
+      d = fminf(d, sdSeg(x, y, 48, 84, 60, 84, 3.4f));
+      d = fminf(d, sdSeg(x, y, 60, 84, 46, 106, 3.4f));
+      uiPaint(c, uiCov(d), 255, 204, 72);
+      break;
+    }
+    case UI_ICON_SNOW:
+      uiCloudLayer(c, x, y, 56, 44, 0.95f, false);
+      uiFlake(c, x, y, 34, 88); uiFlake(c, x, y, 56, 100); uiFlake(c, x, y, 78, 88);
+      break;
+    case UI_ICON_FOG: {
+      uiCloudLayer(c, x, y, 56, 36, 0.8f, true);
+      float d = sdSeg(x, y, 22, 68, 90, 68, 3.5f);
+      d = fminf(d, sdSeg(x, y, 30, 82, 98, 82, 3.5f));
+      d = fminf(d, sdSeg(x, y, 22, 96, 78, 96, 3.5f));
+      uiPaint(c, uiCov(d), 172, 186, 200);
+      break;
+    }
+    default:  // wind
+      uiHook(c, x, y, 14, 72, 38, 32, true);
+      uiHook(c, x, y, 14, 88, 56, 62, false);
+      uiHook(c, x, y, 26, 66, 76, 70, false);
+      break;
+  }
+}
+static void uiRenderIcon(int icon, uint16_t bg) {
+  const float br = ((bg >> 11) & 31) * 255.0f / 31, bgc = ((bg >> 5) & 63) * 255.0f / 63, bb = (bg & 31) * 255.0f / 31;
+  for (int y = 0; y < UI_ICON; y++) {
+    for (int x = 0; x < UI_ICON; x++) {
+      float c[3] = { br, bgc, bb };
+      uiIconPixel(icon, x + 0.5f, y + 0.5f, c);
+      int r = (int)(c[0] + 0.5f), g = (int)(c[1] + 0.5f), b = (int)(c[2] + 0.5f);
+      if (r > 255) r = 255;
+      if (g > 255) g = 255;
+      if (b > 255) b = 255;
+      uiIconBuf[y * UI_ICON + x] = uiRgb(r, g, b);
+    }
+  }
+}
+
+// A rounded panel: straight parts as rectangles, the four corners as small soft-edged tiles.
+static void uiRoundPanel(int x, int y, int w, int h, int R, uint16_t border, uint16_t fill) {
+  uiOut.fill(x + R, y, w - 2 * R, 2, border);
+  uiOut.fill(x + R, y + h - 2, w - 2 * R, 2, border);
+  uiOut.fill(x + R, y + 2, w - 2 * R, h - 4, fill);
+  uiOut.fill(x, y + R, 2, h - 2 * R, border);
+  uiOut.fill(x + w - 2, y + R, 2, h - 2 * R, border);
+  uiOut.fill(x + 2, y + R, w - 4, h - 2 * R, fill);
+  const int bR = (border >> 11) & 31, bG = (border >> 5) & 63, bB = border & 31;
+  const int fR = (fill >> 11) & 31, fG = (fill >> 5) & 63, fB = fill & 31;
+  for (int corner = 0; corner < 4; corner++) {
+    bool right = corner & 1, bottom = corner & 2;
+    for (int ty = 0; ty < R; ty++) {
+      for (int tx = 0; tx < R; tx++) {
+        int sx = right ? R - 1 - tx : tx, sy = bottom ? R - 1 - ty : ty;
+        float dx = sx + 0.5f - R, dy = sy + 0.5f - R;
+        float d = sqrtf(dx * dx + dy * dy);
+        float co = uiCov(d - R), ci = uiCov(d - (R - 2));
+        float r = bR * co, g = bG * co, b = bB * co;      // black outside, border ring, then the fill
+        r += (fR - r) * ci; g += (fG - g) * ci; b += (fB - b) * ci;
+        uiBand[ty * R + tx] = (uint16_t)(((int)(r + 0.5f) << 11) | ((int)(g + 0.5f) << 5) | (int)(b + 0.5f));
+      }
+    }
+    uiOut.blit(right ? x + w - R : x, bottom ? y + h - R : y, R, R, uiBand);
+  }
+}
+
+static void uiNumDeg(char *out, int v) { snprintf(out, 12, "%d%c", v, (char)127); }
+
+static void uiDrawCard() {
+  const int PX = 14, PY = 10, PW = 382, PH = 336;
+  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
+  uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
+  uiBg = panel;
+  char buf[48];
+  // the place, in capitals
+  int n = 0;
+  for (const char *p = uiCard.place; *p && n < 30; p++) buf[n++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : *p;
+  buf[n] = 0;
+  uiTextCentered(NFONT_MID, 16, buf, UI_TEAL);
+  // the picture on the left, the temperature on the right
+  uiRenderIcon(uiCard.icon, panel);
+  uiOut.blit(34, 48, UI_ICON, UI_ICON, uiIconBuf);
+  uiNumDeg(buf, uiCard.temp);
+  int tw = uiTextWidth(NFONT_TEMP, buf);
+  uiText(NFONT_TEMP, 272 - tw / 2, 48 + (UI_ICON - NFONT_TEMP.h) / 2, buf, UI_WHITE);
+  // what it's like: the sky, then a warning (or what it feels like), centred in the room between
+  int start[2], len[2];
+  int lines = uiWrap(NFONT_BODY, uiCard.sky, 340, start, len, 2);
+  bool extra = uiCard.alert[0] || uiCard.feels != UI_NONE;
+  int contentH = lines * 32 + (extra ? 28 : 0);
+  int y = 164 + (94 - contentH) / 2;
+  char line[48];
+  for (int i = 0; i < lines; i++) {
+    int l = len[i] < 47 ? len[i] : 47;
+    memcpy(line, uiCard.sky + start[i], l); line[l] = 0;
+    uiTextCentered(NFONT_BODY, y, line, UI_WHITE);
+    y += 32;
+  }
+  if (uiCard.alert[0]) uiTextCentered(NFONT_MID, y, uiCard.alert, UI_CORAL);
+  else if (uiCard.feels != UI_NONE) {
+    char f[12]; uiNumDeg(f, uiCard.feels);
+    snprintf(line, sizeof(line), "Feels like %s", f);
+    uiTextCentered(NFONT_MID, y, line, UI_GREY);
+  }
+  // today's high and low, and the chance of rain, in small tiles
+  struct Tile { const char *label; char value[12]; uint16_t colour; } tiles[3];
+  int count = 0;
+  if (uiCard.high != UI_NONE) { tiles[count].label = "High"; uiNumDeg(tiles[count].value, uiCard.high); tiles[count].colour = UI_AMBER; count++; }
+  if (uiCard.low != UI_NONE) { tiles[count].label = "Low"; uiNumDeg(tiles[count].value, uiCard.low); tiles[count].colour = UI_CYAN; count++; }
+  if (uiCard.rain > 0) { tiles[count].label = "Rain"; snprintf(tiles[count].value, 12, "%d%%", uiCard.rain); tiles[count].colour = UI_TEAL; count++; }
+  if (count) {
+    uiOut.fill(PX + 28, 262, PW - 56, 2, border);
+    for (int i = 0; i < count; i++) {
+      int cx = 205 + (int)((i - (count - 1) / 2.0f) * 118);
+      uiText(NFONT_MID, cx - uiTextWidth(NFONT_MID, tiles[i].label) / 2, 268, tiles[i].label, UI_GREY);
+      uiText(NFONT_BODY, cx - uiTextWidth(NFONT_BODY, tiles[i].value) / 2, 296, tiles[i].value, tiles[i].colour);
+    }
+  }
+  uiBg = UI_BLACK;
+}
+
+// The server names the picture; unknown names get a plain cloud.
+static int uiIconByName(const char *name) {
+  static const char *names[] = { "sun", "moon", "sun-cloud", "partly", "cloud", "sun-rain", "rain", "storm", "snow", "fog", "wind" };
+  for (int i = 0; i < 11; i++) if (strcmp(name, names[i]) == 0) return i;
+  return UI_ICON_CLOUD;
+}
+static void uiCopyTrim(char *dst, size_t cap, const char *s) {
+  size_t n = strlen(s);
+  if (n >= cap) n = cap - 1;
+  memcpy(dst, s, n); dst[n] = 0;
+}
+// Shows the weather card. Numbers the server didn't send are UI_NONE.
+static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, const char *sky, int icon, int high, int low, int rain, const char *alert) {
+  uiCopyTrim(uiCard.place, sizeof(uiCard.place), place);
+  uiCopyTrim(uiCard.sky, sizeof(uiCard.sky), sky);
+  uiCopyTrim(uiCard.alert, sizeof(uiCard.alert), alert);
+  uiCard.temp = temp; uiCard.feels = feels; uiCard.high = high; uiCard.low = low; uiCard.rain = rain;
+  uiCard.icon = icon < 0 || icon > UI_ICON_WIND ? UI_ICON_CLOUD : icon;
+  uiCard.since = ms; uiCard.on = true; uiAll = true;
+}
+
 static void uiBasePose(UiPose *p) {
   p->breath = 0; p->sway = 0; p->eyeDx = 0; p->eyeDy = 0; p->eye = EYE_HAPPY;
   p->glow = uiModeColour();
@@ -325,6 +591,7 @@ static int uiLevelY() {
 }
 
 static void uiDrawText() {
+  if (uiCard.on) { uiDrawCard(); return; }
   int top, bottom;
   uiTextAreas(&top, &bottom);
   uiOut.fill(0, top, UI_W, bottom - top, UI_BLACK);
@@ -414,7 +681,9 @@ static void uiDrawStage(const UiPose &p) {
 }
 
 static void uiTick(uint32_t ms) {
-  bool wantSmall = (uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK;
+  uiNowMs = ms;
+  if (uiCard.on && ms - uiCard.since >= UI_CARD_MS) uiClearCard();
+  bool wantSmall = uiCard.on || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
   if (wantSmall != uiSmall) { uiSmall = wantSmall; uiAll = true; }
   UiPose p;
   uiPoseNow(ms, &p);
@@ -428,8 +697,9 @@ static void uiTick(uint32_t ms) {
     uiAll = false; uiTextDirty = false; uiLevelDirty = false; uiLastEye = p.eye; uiLastStage = ms;
     return;
   }
-  if (uiTextDirty && ms - uiLastText >= 120) { uiDrawText(); uiDrawDiag(); uiTextDirty = false; uiLevelDirty = false; uiLastText = ms; }
-  else if (uiLevelDirty) { if (uiMode == UI_LISTEN) uiDrawLevelOnly(); uiLevelDirty = false; }
+  // A card is drawn once (words that arrive meanwhile wait behind it); the level bar only shows while listening.
+  if (uiTextDirty && ms - uiLastText >= 120) { if (!uiCard.on) { uiDrawText(); uiDrawDiag(); } uiTextDirty = false; uiLevelDirty = false; uiLastText = ms; }
+  else if (uiLevelDirty) { if (uiMode == UI_LISTEN && !uiCard.on) uiDrawLevelOnly(); uiLevelDirty = false; }
   bool draw = false;
   if (p.eye != uiLastEye) draw = true;                       // eyes changed (blink, listening level...)
   // Moving: about 16 frames a second, but never more often than drawing allows (drawing may take 40% of the time at most;

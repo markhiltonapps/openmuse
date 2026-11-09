@@ -887,3 +887,29 @@ motion first, then the weather card.
 - NOT known: how long a frame really takes on the board. The pacing adapts, but if it feels jerky or the mic suffers, tell me;
   options are a lower frame rate or redrawing only the head.
 - Not done: smooth animated shrink between layouts (it still jumps), touch, weather card.
+
+--- 2026-11-09 (evening): the weather card on the watch ---
+Owner confirmed step 2 (motion) is smooth and answers are still fast, and pushed (6c6c88c). Owner's choices for the card:
+"Now + today", stays until the next press (or about a minute), home city.
+SERVER (commit c69d680, not pushed yet; restarts the api when pushed):
+- packages/domain/src/device-card.ts: DeviceCard / WeatherDeviceCard, weatherIconFor(emoji), plainForDevice (ASCII, one line), weatherDeviceCard.
+- weather.ts get_weather result now carries `deviceCard` (numbers + a picture name; the model sees it, other screens ignore it).
+- voice-brain.ts: deviceCardFrom(tool, result), DEVICE_SCREEN (what the agent is told about a watch: only the weather shows there, never "on
+  your screen" for anything else); voiceAnswer(device, card).
+- voice-live.ts: Live.device, LiveVoice.watchCards(); the hand-over passes `device` and `card` only on a device's call.
+- device-socket.ts: the bridge sends {type:"card", ...} to the device and stops watching when the call ends.
+- Tests: tests/device-card.test.ts (new, 5), devices.test.ts (+1), weather.test.ts (+card). 30 pass; tsc and biome clean.
+FIRMWARE (uncommitted until this note's commit):
+- neddy_ui.h: weather card (rounded panel, 11 weather pictures drawn from shapes with soft edges, big temperature in its own 88 px font,
+  sky words, feels-like or warning, High / Low / Rain tiles), `uiShowWeather`, `uiClearCard`, text drawn over a coloured background (uiBg),
+  font code 127 = degree sign. The card is drawn once; words that arrive behind it wait; a press (listening) or a lost link clears it;
+  a minute without a press clears it (back to the words). He stays small at the bottom, moving.
+- neddy_device.ino: reads {"type":"card"} (jsonInt added), ignored while the button is held.
+- make_neddy_art.py: new 'temp' font and the degree glyph; neddy_art.h unchanged (checked).
+- tools/ui_sim.cpp: scenarios c0..c9 (every picture, five cards, words behind the card, clear on press, timeout).
+- Checked on the PC: even windows (0 odd), the firmware's own JSON reading run against the server's real message.
+NOT PROVEN: the whole path on the real service (the agent calling get_weather for a device's voice, and saying it's on the watch). The
+server must be deployed (push) BEFORE the card can appear; with the new firmware alone nothing changes.
+Help/site: the device isn't in the app's Help or the site yet (not offered to testers), so nothing to update there; do it with the
+device's first public wording.
+Next: smooth shrink between layouts, touch, sports score card (check whether scores come back as clean data), speaker repair.

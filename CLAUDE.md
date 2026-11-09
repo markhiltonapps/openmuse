@@ -676,3 +676,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   an even number; odd ones shift rows and text looks sheared. `neddy_ui.h` lines everything up on even numbers and
   `tools/ui_sim.cpp` counts odd windows (must print 0). Words on screen: Neddy shrinks and stands at the bottom middle,
   the text uses the space above him (owner's reference, 2026-11-09).
+- **Cards on the watch (2026-11-09):** the server sends facts, never pictures (`{type:"card", kind:"weather", temp, icon, …}` from
+  `deviceCard` in the get_weather result), and the device draws them itself. The agent may say "it's on the watch screen" only on a
+  device's call and only for what the device can draw (`DEVICE_SCREEN`); everywhere else a card is not claimed. Text for the
+  device is plain ASCII (`plainForDevice`); code 127 in the baked fonts is the degree sign. A card is drawn once, never redrawn
+  as words stream in behind it. The firmware's JSON reader is tested on the PC against the server's real message.

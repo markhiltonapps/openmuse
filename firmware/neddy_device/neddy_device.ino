@@ -185,6 +185,19 @@ static String jsonString(const String &body, const char *key) {
   return out;
 }
 
+// Reads  "key":123  (a whole number, maybe negative) out of a small JSON text; `none` when it isn't there.
+static int jsonInt(const String &body, const char *key, int none) {
+  String find = String("\"") + key + "\":";
+  int at = body.indexOf(find);
+  if (at < 0) return none;
+  at += find.length();
+  int end = at;
+  if (end < (int)body.length() && body[end] == '-') end++;
+  while (end < (int)body.length() && body[end] >= '0' && body[end] <= '9') end++;
+  if (end == at || (end == at + 1 && body[at] == '-')) return none;
+  return body.substring(at, end).toInt();
+}
+
 static String httpPost(const String &path, const String &body, int &status) {
   WiFiClientSecure client;
   client.setInsecure();  // Early testing: the connection is encrypted but the server's identity isn't checked yet.
@@ -257,6 +270,7 @@ static void screenState() {
   switch (mode) {
     case M_WIFI:
       uiActive = false;
+      uiClearCard();
       clearScreen();
       uiTextCentered(NFONT_TITLE, 150, "Joining Wi-Fi", UI_WHITE);
       uiTextCentered(NFONT_BODY, 230, WIFI_NAME, UI_GREY);
@@ -276,6 +290,7 @@ static void screenState() {
     }
     default:
       uiActive = false;
+      uiClearCard();
       clearScreen();
       break;
   }
@@ -621,6 +636,15 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       } else if (kind == "session.input_transcript.delta") {
         heard += plain(jsonString(text, "delta"));
         uiSetHeard(heard.c_str());
+      } else if (kind == "card") {
+        // The weather (so far): drawn as a card until the next press. Ignored while the button is held.
+        if (jsonString(text, "kind") == "weather" && !held && jsonInt(text, "temp", UI_NONE) != UI_NONE) {
+          uiShowWeather(millis(), plain(jsonString(text, "place")).c_str(), jsonInt(text, "temp", UI_NONE),
+                        jsonInt(text, "feels", UI_NONE), plain(jsonString(text, "sky")).c_str(),
+                        uiIconByName(jsonString(text, "icon").c_str()), jsonInt(text, "high", UI_NONE),
+                        jsonInt(text, "low", UI_NONE), jsonInt(text, "rain", UI_NONE),
+                        plain(jsonString(text, "alert")).c_str());
+        }
       } else if (kind == "latency") {
         LOGF("[latency] server says %s ms\n", text.c_str());
       } else if (kind == "error") {
