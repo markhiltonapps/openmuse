@@ -796,3 +796,9 @@ Remaining: the second press is slow. Server answered 0.8 s after release; the bo
 hold on the server was 8.3 s for 2.4 s of audio, so the path between board and server stalls for seconds, with "Connecting to Neddy" flashing.
 Added (uncommitted -> committed, NOT pushed): api logs "Device X connected / disconnected (code ...)" (device-socket.ts) and the board shows
 "link drops N, back in X s". Needs the owner's "push it" for the api logging, and an Upload for the board.
+
+LINK DROPS CONFIRMED (2026-11-09 ~00:45 UTC): the board showed "link drops 2, back in 6.8 s"; the api logged "Device Phone disconnected (code 1006)"
+about 40 s after a call started, then "connected" 2 s later (the rest is the board's TLS reconnect). One send also blocked 1597 ms. So the second
+press is slow because the connection dropped and the board is reconnecting. Cause not yet known (poor Wi-Fi? heartbeat too strict? who closed it?).
+Changes (not yet pushed/uploaded): board heartbeat 20 s / 10 s / 3 misses (was 15/4/2), reconnect interval 1 s (was 3), Wi-Fi strength (dBm) on the
+ready screen, JSON \uXXXX decoding (an em dash showed as "u2014"); api logs "ended by this server (code reason)" when it drops a device itself.

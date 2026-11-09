@@ -178,7 +178,18 @@ static String jsonString(const String &body, const char *key) {
     char c = body[at++];
     if (c == '\\' && at < (int)body.length()) {
       char n = body[at++];
-      out += (n == 'n') ? ' ' : n;
+      if (n == 'u' && at + 4 <= (int)body.length()) {
+        long cp = strtol(body.substring(at, at + 4).c_str(), NULL, 16);
+        at += 4;
+        if (cp < 0x80) out += (char)cp;
+        else if (cp == 0x2018 || cp == 0x2019) out += '\'';
+        else if (cp == 0x201C || cp == 0x201D) out += '"';
+        else if (cp == 0x2013 || cp == 0x2014) out += '-';
+        else if (cp == 0x2026) out += "...";
+        else if (cp == 0xA0) out += ' ';
+      } else {
+        out += (n == 'n') ? ' ' : n;
+      }
     } else if (c == '"') {
       break;
     } else {
@@ -279,7 +290,7 @@ static void screenState() {
         else snprintf(drops, sizeof(drops), "link drops %d", wsDrops);
         centered(String(drops), 352, 2, cGrey);
       }
-      centered(micChip, 374, 2, cGrey);
+      centered(micChip + ", Wi-Fi " + String(WiFi.RSSI()) + " dBm", 374, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
       if (lastAnswerMs >= 0) {
@@ -669,8 +680,8 @@ static void startSocket() {
   ws.beginSSL(NEDDY_SERVER, 443, "/api/device/audio");
   ws.setExtraHeaders(wsHeader.c_str());
   ws.onEvent(onSocket);
-  ws.setReconnectInterval(3000);
-  ws.enableHeartbeat(15000, 4000, 2);
+  ws.setReconnectInterval(1000);
+  ws.enableHeartbeat(20000, 10000, 3);  // a short Wi-Fi hiccup shouldn't end the link
 }
 
 // ---------------------------------------------------------------- Wi-Fi and pairing

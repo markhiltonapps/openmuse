@@ -316,6 +316,7 @@ export class DeviceBridge {
   }
 
   private drop(connection: Connection, code: number, reason: string) {
+    this.log(`Device ${connection.device.name} ended by this server (${code} ${reason})`);
     try {
       connection.ws.close(code, reason);
     } catch {
