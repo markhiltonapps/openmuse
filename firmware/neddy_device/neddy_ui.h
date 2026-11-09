@@ -357,10 +357,17 @@ static void uiCopy(char *dst, size_t cap, const char *s) {
   if (strcmp(dst, s) != 0) { uiTextDirty = true; uiActivity(uiNowMs); }
   memcpy(dst, s, n); dst[n] = 0;
 }
+// The same, but not "someone is using it": the small diagnostic lines change every second (Wi-Fi strength, timings).
+static void uiCopyQuiet(char *dst, size_t cap, const char *s) {
+  size_t n = strlen(s);
+  if (n >= cap) { s += n - (cap - 1); n = cap - 1; }
+  if (strcmp(dst, s) != 0) uiTextDirty = true;
+  memcpy(dst, s, n); dst[n] = 0;
+}
 static void uiSetWords(const char *s) { uiCopy(uiWords, sizeof(uiWords), s); }
 static void uiSetHeard(const char *s) { uiCopy(uiHeard, sizeof(uiHeard), s); }
 static void uiSetName(const char *s) { uiCopy(uiName, sizeof(uiName), s); }
-static void uiSetDiag(const char *a, const char *b) { uiCopy(uiDiag1, sizeof(uiDiag1), a); uiCopy(uiDiag2, sizeof(uiDiag2), b); }
+static void uiSetDiag(const char *a, const char *b) { uiCopyQuiet(uiDiag1, sizeof(uiDiag1), a); uiCopyQuiet(uiDiag2, sizeof(uiDiag2), b); }
 
 static uint16_t uiModeColour() {
   switch (uiMode) {

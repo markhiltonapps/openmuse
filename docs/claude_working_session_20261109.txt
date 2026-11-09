@@ -71,3 +71,8 @@ still on). Flashed the newer zip: dot gone, but no dim after ~2 minutes (dim com
 with a 30 s setting). Added NEDDY_IDLE_DEBUG (default 1 in this test build): one line at the bottom, "g1 a30 m0 k0 i0 d10 q12" =
 got idle facts, idle-after seconds, mode (0 ready), card on, idle face on, dim on/dimmed, quiet seconds. Turn it to 0 once it works.
 Zip rebuilt, committed locally, not pushed (a push restarts the api).
+
+FOUND: owner's photo showed "g1 a30 m0 k0 i0 d10 q6": settings arrived, ready, no card, but quiet only 6 s after minutes. Cause: uiSetDiag
+(Wi-Fi RSSI etc., changing every second) went through uiCopy, which counts any text change as activity, so the quiet timer restarted forever.
+Fix: uiCopyQuiet for diagnostics. New check in firmware/tools/touch_test.cpp (31 checks): idle face comes while diag lines change, dims 60 s
+later, a touch wakes it and restores brightness 255; it fails (3) on the old code. The idle debug line stays on one more test round.

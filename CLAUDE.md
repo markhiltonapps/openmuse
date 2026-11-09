@@ -708,3 +708,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   words people use ("my watch", "the screen"), and a spoken name that is only the kind of thing ("my watch") must still find the
   one device they have (`pick` in devices.ts). The voice model's own rules (apps/voice pipeline.py) must say such requests are handed
   off, never "can't". There is no brightness level, only dim after quiet: say so.
+- **Anything that changes by itself must not count as "someone is using it" (2026-11-09):** the watch's idle face never came because the
+  small diagnostic lines (Wi-Fi strength, timings) changed every second and `uiCopy` treated every text change as activity, so the quiet
+  timer restarted forever (the test line showed `q6` after minutes). Text the person didn't cause (diagnostics) uses `uiCopyQuiet`.
+  Putting the state on the screen (NEDDY_IDLE_DEBUG) found it in one photo; do that first for anything timing-based on a device.

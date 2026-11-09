@@ -126,6 +126,26 @@ int main() {
   uiSetMode(UI_LISTEN);
   CHECK(!uiCard.on, "listening clears the card");
 
+  // The watch's own diagnostic lines (Wi-Fi strength, timings) change every second; that must not count as someone using it,
+  // or the idle face never comes (found on the real board: the quiet timer kept restarting).
+  static int level = -1;
+  uiOut.brightness = [](int l) { level = l; };
+  uiClearCard(); uiSetMode(UI_READY);
+  uiIdle.have = true; uiIdle.after = 20; uiIdle.dim = true; uiIdle.baseUtc = 1800000000; uiIdle.baseMs = now; uiIdle.off = 0;
+  uiSetWords(""); uiSetHeard(""); uiActivity(now);
+  for (int sec = 0; sec < 25; sec++) {
+    char a[40]; snprintf(a, sizeof(a), "Wi-Fi -%d dBm", 40 + sec);
+    uiSetDiag(a, "line two"); pause(1000);
+  }
+  CHECK(uiIdleOn, "the idle face comes even while the diagnostic lines keep changing");
+  for (int sec = 0; sec < 70; sec++) {
+    char a[40]; snprintf(a, sizeof(a), "Wi-Fi -%d dBm", 40 + sec % 9);
+    uiSetDiag(a, "line two"); pause(1000);
+  }
+  CHECK(uiDimmed && level == UI_DIM_LEVEL, "it dims a minute after the idle face came");
+  uiTouch(now, true, 100, 100); frame(); now += 16; uiTouch(now, false, 100, 100); frame();
+  CHECK(!uiIdleOn && !uiDimmed && level == 255, "a touch wakes it and restores the brightness");
+
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }
