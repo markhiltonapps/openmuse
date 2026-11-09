@@ -76,3 +76,9 @@ FOUND: owner's photo showed "g1 a30 m0 k0 i0 d10 q6": settings arrived, ready, n
 (Wi-Fi RSSI etc., changing every second) went through uiCopy, which counts any text change as activity, so the quiet timer restarted forever.
 Fix: uiCopyQuiet for diagnostics. New check in firmware/tools/touch_test.cpp (31 checks): idle face comes while diag lines change, dims 60 s
 later, a touch wakes it and restores brightness 255; it fails (3) on the old code. The idle debug line stays on one more test round.
+
+Idle face and dimming confirmed working on the real watch (after pushing 6f46230 and flashing the fixed zip).
+Owner asked about a text flicker every second: the diagnostic lines (Wi-Fi strength, timings; and the idle test line) changed every second and each change
+marked the whole text area dirty, so the words were blanked and redrawn once a second. Fix: diagnostics only mark a small band dirty (uiDiagDirty), redrawn
+at most every ~1 s and only when shown; nothing when hidden. New checks in firmware/tools/touch_test.cpp (33 checks): fail (2) on the old code. The idle
+test line is now off (NEDDY_IDLE_DEBUG 0), so the bottom lines are gone unless NEDDY_DIAG is set to 1. Zip rebuilt; committed locally, not pushed.

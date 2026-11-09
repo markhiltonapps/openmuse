@@ -262,13 +262,13 @@ static float uiLevel = 0;            // 0..1, how loud the person is (while list
 static bool uiShowDiag = false;      // the two small lines of numbers at the bottom
 static bool uiMotion = false;        // true: he moves all the time. false: still, except blinking.
 static bool uiSmall = false;         // the layout now showing
-static bool uiAll = true, uiTextDirty = true, uiLevelDirty = false;
+static bool uiAll = true, uiTextDirty = true, uiLevelDirty = false, uiDiagDirty = false;
 static uint32_t uiNextBlink = 0, uiBlinkUntil = 0, uiNextGlance = 0, uiGlanceUntil = 0;
 static float uiGlanceDx = 0;
 static uint32_t uiRng = 12345;
 static int uiLastEye = -1;
 static int uiStageX = 0, uiStageY = 0, uiStageW = 0, uiStageH = 0;
-static uint32_t uiLastStage = 0, uiLastText = 0;
+static uint32_t uiLastStage = 0, uiLastText = 0, uiLastDiag = 0;
 // Optional: a clock in microseconds (the watch gives micros). With it, the screen measures how long drawing him takes
 // and spaces the frames so drawing never takes more than a share of each turn of the main loop (the microphone and the
 // link come first).
@@ -361,7 +361,7 @@ static void uiCopy(char *dst, size_t cap, const char *s) {
 static void uiCopyQuiet(char *dst, size_t cap, const char *s) {
   size_t n = strlen(s);
   if (n >= cap) { s += n - (cap - 1); n = cap - 1; }
-  if (strcmp(dst, s) != 0) uiTextDirty = true;
+  if (strcmp(dst, s) != 0) uiDiagDirty = true;   // only the small bottom lines change: never redraw the words for that
   memcpy(dst, s, n); dst[n] = 0;
 }
 static void uiSetWords(const char *s) { uiCopy(uiWords, sizeof(uiWords), s); }
@@ -984,7 +984,7 @@ static void uiIdleTick(uint32_t ms) {
       lastDbg = ms;
       char b[72];
       snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000));
-      if (strcmp(b, uiIdleDbg) != 0) { strcpy(uiIdleDbg, b); if (!uiIdleOn) uiTextDirty = true; }
+      if (strcmp(b, uiIdleDbg) != 0) { strcpy(uiIdleDbg, b); uiDiagDirty = true; }
     }
   }
   if (!uiIdleOn) {
@@ -1152,6 +1152,11 @@ static void uiTick(uint32_t ms) {
   // A card is drawn once (words that arrive meanwhile wait behind it); the level bar only shows while listening.
   if (uiTextDirty && ms - uiLastText >= 120) { if (!uiCard.on) { uiDrawText(); uiDrawDiag(); } uiTextDirty = false; uiLevelDirty = false; uiLastText = ms; }
   else if (uiLevelDirty) { if (uiMode == UI_LISTEN && !uiCard.on) uiDrawLevelOnly(); uiLevelDirty = false; }
+  // The small diagnostic lines at the bottom change by themselves (Wi-Fi strength, timings): redraw only that band, and only when it is shown.
+  if (uiDiagDirty) {
+    if (uiShowDiag && !uiCard.on && !uiIdleOn && uiMode != UI_LISTEN && ms - uiLastDiag >= 900) { uiDrawDiag(); uiDiagDirty = false; uiLastDiag = ms; }
+    else if (!uiShowDiag || uiCard.on || uiIdleOn) uiDiagDirty = false;
+  }
   bool draw = false;
   if (p.eye != uiLastEye) draw = true;                       // eyes changed (blink, listening level...)
   // Moving: about 16 frames a second, but never more often than drawing allows (drawing may take 40% of the time at most;

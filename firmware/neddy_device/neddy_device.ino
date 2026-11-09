@@ -65,9 +65,9 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #define NEDDY_DIAG 0
 #endif
 
-// 1 = show a line of idle-face numbers at the bottom (test builds only; turn it back to 0 when the idle face works).
+// 1 = show a line of idle-face numbers at the bottom (test builds only; the idle face works, so it is off).
 #ifndef NEDDY_IDLE_DEBUG
-#define NEDDY_IDLE_DEBUG 1
+#define NEDDY_IDLE_DEBUG 0
 #endif
 
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }

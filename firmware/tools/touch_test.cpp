@@ -9,7 +9,9 @@ static uint16_t fb[UI_W * UI_H];
 static void simBlit(int x, int y, int w, int h, uint16_t *px) {
   for (int r = 0; r < h; r++) for (int c = 0; c < w; c++) if (x + c >= 0 && x + c < UI_W && y + r >= 0 && y + r < UI_H) fb[(y + r) * UI_W + x + c] = px[r * w + c];
 }
+static long fillsAbove = 0;   // fills that start above the diagnostic band (y < 450)
 static void simFill(int x, int y, int w, int h, uint16_t col) {
+  if (y < 450) fillsAbove++;
   for (int r = 0; r < h; r++) for (int c = 0; c < w; c++) if (x + c >= 0 && x + c < UI_W && y + r >= 0 && y + r < UI_H) fb[(y + r) * UI_W + x + c] = col;
 }
 static int failures = 0, checks = 0;
@@ -145,6 +147,21 @@ int main() {
   CHECK(uiDimmed && level == UI_DIM_LEVEL, "it dims a minute after the idle face came");
   uiTouch(now, true, 100, 100); frame(); now += 16; uiTouch(now, false, 100, 100); frame();
   CHECK(!uiIdleOn && !uiDimmed && level == 255, "a touch wakes it and restores the brightness");
+
+  // The diagnostic lines change every second. They must never make the words blink (the whole text area redrawn), shown or not.
+  uiOut.brightness = nullptr;
+  uiIdle.have = false; uiIdleOn = false; uiClearCard(); uiSetMode(UI_READY); uiSetWords("Hold BOOT to talk"); pause(500);
+  for (int shown = 0; shown < 2; shown++) {
+    uiShowDiag = shown == 1;
+    pause(1000);
+    long before = fillsAbove;
+    for (int sec = 0; sec < 10; sec++) {
+      char a[40]; snprintf(a, sizeof(a), "Wi-Fi -%d dBm", 50 + sec);
+      uiSetDiag(a, "line two"); pause(1000);
+    }
+    CHECK(fillsAbove == before, shown ? "changing diagnostic lines don't redraw the words (shown)" : "changing diagnostic lines don't redraw the words (hidden)");
+  }
+  uiShowDiag = false;
 
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;

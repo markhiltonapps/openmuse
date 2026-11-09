@@ -712,3 +712,6 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   small diagnostic lines (Wi-Fi strength, timings) changed every second and `uiCopy` treated every text change as activity, so the quiet
   timer restarted forever (the test line showed `q6` after minutes). Text the person didn't cause (diagnostics) uses `uiCopyQuiet`.
   Putting the state on the screen (NEDDY_IDLE_DEBUG) found it in one photo; do that first for anything timing-based on a device.
+- **Don't redraw more than changed (2026-11-09):** the watch's text blinked once a second because a small changing line (Wi-Fi strength) marked the
+  whole text area dirty, so the words were blanked and redrawn. Anything that changes by itself gets its own dirty flag and band (`uiDiagDirty`), and
+  nothing at all when it isn't shown. A test counts fills outside the band (`fillsAbove` in touch_test.cpp).
