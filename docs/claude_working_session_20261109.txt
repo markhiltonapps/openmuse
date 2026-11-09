@@ -65,3 +65,9 @@ Watch idle-screen by voice (owner test): asked "make the watch idle screen come 
 Cause (owner found it): the agent only knew "device", not "watch". Fixed: manage_devices description and DEVICE_SCREEN say "watch",
 `pick` ignores kind words (watch, wearable, screen...) unless a device is really named that, the voice service's DEVICE_RULES says
 watch requests are handed off. New test in tests/device-idle.test.ts. Held locally until "push it" (api + voice both redeploy).
+
+Idle face not showing / not dimming on the real watch (owner): the first cause was an older build still on the board (the touch dot was
+still on). Flashed the newer zip: dot gone, but no dim after ~2 minutes (dim comes 60 s after the idle face appears, so ~90 s of quiet
+with a 30 s setting). Added NEDDY_IDLE_DEBUG (default 1 in this test build): one line at the bottom, "g1 a30 m0 k0 i0 d10 q12" =
+got idle facts, idle-after seconds, mode (0 ready), card on, idle face on, dim on/dimmed, quiet seconds. Turn it to 0 once it works.
+Zip rebuilt, committed locally, not pushed (a push restarts the api).

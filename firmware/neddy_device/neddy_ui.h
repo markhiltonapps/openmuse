@@ -257,7 +257,7 @@ static void uiRenderStage(const UiPose &p, int sx0, int sy0, int sw, int sh) {
 enum { UI_READY, UI_LISTEN, UI_THINK, UI_SPEAK, UI_LINK };
 
 static int uiMode = UI_LINK;
-static char uiWords[300], uiHeard[120], uiName[24] = "Neddy", uiDiag1[72], uiDiag2[72];
+static char uiWords[300], uiHeard[120], uiName[24] = "Neddy", uiDiag1[72], uiDiag2[72], uiIdleDbg[72];
 static float uiLevel = 0;            // 0..1, how loud the person is (while listening)
 static bool uiShowDiag = false;      // the two small lines of numbers at the bottom
 static bool uiMotion = false;        // true: he moves all the time. false: still, except blinking.
@@ -971,6 +971,15 @@ static void uiDrawIdle(uint32_t ms) {
 
 // Decides when the idle face comes and goes, and dims the screen after a while. Called from uiTick.
 static void uiIdleTick(uint32_t ms) {
+  if (uiShowDiag) {   // test builds: what the idle face thinks, once a second ("g" got facts, "a" after, "m" mode, "k" card, "i" idle on, "d" dim on / dimmed, "q" quiet seconds)
+    static uint32_t lastDbg = 0;
+    if (ms - lastDbg >= 1000) {
+      lastDbg = ms;
+      char b[72];
+      snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000));
+      if (strcmp(b, uiIdleDbg) != 0) { strcpy(uiIdleDbg, b); if (!uiIdleOn) uiTextDirty = true; }
+    }
+  }
   if (!uiIdleOn) {
     if (uiIdle.have && uiIdle.after > 0 && uiMode == UI_READY && !uiCard.on && ms - uiLastActive >= (uint32_t)uiIdle.after * 1000UL) {
       uiIdleOn = true; uiIdleSince = ms; uiDimmed = false; uiIdleMinute = -1;
@@ -1046,7 +1055,8 @@ static void uiDrawDiag() {
   if (!uiShowDiag) return;
   uiOut.fill(0, 452, UI_W, 50, UI_BLACK);
   if (uiDiag1[0]) uiTextCentered(NFONT_SMALL, 456, uiDiag1, UI_DIM);
-  if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, 474, uiDiag2, UI_DIM);
+  if (uiIdleDbg[0]) uiTextCentered(NFONT_SMALL, 474, uiIdleDbg, UI_DIM);
+  else if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, 474, uiDiag2, UI_DIM);
 }
 
 // Which eye picture, and where he looks, right now.
