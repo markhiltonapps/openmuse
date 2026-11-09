@@ -27,6 +27,8 @@ const MAX_WAITING_BYTES = 320_000;
 /** One chunk of audio is at most this much (a few hundred milliseconds). */
 const MAX_CHUNK_BYTES = 16_384;
 const PING_MS = 20_000;
+/** Checks without any sign of life before a device is let go. */
+const MISSED_LIMIT = 3;
 const SLOW_START_MS = 1500;
 
 interface Waiting {
@@ -48,6 +50,8 @@ interface Connection {
   waiting: Waiting[];
   waitingBytes: number;
   alive: boolean;
+  /** Checks in a row that found no sign of life. */
+  missed: number;
 }
 
 function frameBytes(data: RawData): Uint8Array {
@@ -82,7 +86,10 @@ export class DeviceBridge {
     // A device that vanished without saying goodbye (battery, Wi-Fi) is noticed and let go.
     this.timer = setInterval(() => {
       for (const connection of this.connections.values()) {
-        if (!connection.alive) {
+        // One missed check isn't enough (a busy device or a slow moment on Wi-Fi answers late, and each
+        // reconnect costs the person several seconds); three in a row, about a minute, is.
+        if (connection.alive) connection.missed = 0;
+        else if (++connection.missed >= MISSED_LIMIT) {
           this.drop(connection, 4408, "no answer");
           continue;
         }
@@ -132,6 +139,7 @@ export class DeviceBridge {
       waiting: [],
       waitingBytes: 0,
       alive: true,
+      missed: 0,
     };
     this.connections.set(device.id, connection);
     this.sendText(connection, {
@@ -141,6 +149,10 @@ export class DeviceBridge {
     });
     void this.devices.touch(owner, device).catch(() => undefined);
     ws.on("pong", () => {
+      connection.alive = true;
+    });
+    // The device's own keep-alive pings count too.
+    ws.on("ping", () => {
       connection.alive = true;
     });
     ws.on("message", (data, isBinary) => {

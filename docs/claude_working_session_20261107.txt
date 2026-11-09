@@ -807,3 +807,8 @@ GOOD (2026-11-09 ~01:25 UTC, after the 9f3e550 push): "link drops 0", Wi-Fi -37/
 Still: on the 2nd and 3rd press the sound bar starts 4-5 s after BOOT is pressed. Not the link, not the mic read (28 ms), not sending (2 ms):
 the main loop is busy or the press isn't being accepted (an "error" screen holds off presses for 5 s: mode M_PROBLEM). New on-screen line
 "L W M S H": longest loop turn, longest connection (ws.loop) turn, longest idle mic read, press start time, ms held without starting (L link down / P problem screen).
+
+ROOT OF THE DROPS (api log 01:14:18): "Device Phone ended by this server (4408 no answer)". The api pinged every 20 s and let a device go after ONE
+missed check; every drop cost the board a ~7 s reconnect (TLS) and made the next press slow. Fix (committed, not pushed): three missed checks in a row
+(about a minute) before letting go, and the device's own pings count as signs of life (`MISSED_LIMIT`, `ws.on("ping")` in device-socket.ts).
+Still unknown: why the board went 20+ s without answering a ping (a busy/blocked main loop?). The "L W M S H" line on the board will show it.
