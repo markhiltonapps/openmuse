@@ -755,6 +755,33 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
           }
           if (n > 0) uiShowList(millis(), plain(jsonString(text, "title")).c_str(), n, labelPtr, valuePtr);
         }
+      } else if (kind == "idle") {
+        // The idle face's facts: the time in the person's zone, the weather in brief, the next meeting, and the settings.
+        uiIdle.have = true;
+        uiIdle.baseUtc = (uint32_t)jsonInt(text, "t", 0);
+        uiIdle.baseMs = millis();
+        uiIdle.off = jsonInt(text, "off", 0);
+        uiIdle.after = jsonInt(text, "after", 20);
+        uiIdle.dim = jsonInt(text, "dim", 1) != 0;
+        uiIdle.showW = jsonInt(text, "sw", 1) != 0;
+        uiIdle.showM = jsonInt(text, "sm", 1) != 0;
+        uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
+        if (uiIdle.haveW) {
+          uiIdle.wt = jsonInt(text, "wt", 0);
+          uiIdle.wi = uiIconByName(jsonString(text, "wi").c_str());
+          uiIdle.wh = jsonInt(text, "wh", UI_NONE);
+          uiIdle.wl = jsonInt(text, "wl", UI_NONE);
+          uiCopyTrim(uiIdle.ws, sizeof(uiIdle.ws), plain(jsonString(text, "ws")).c_str());
+        }
+        uiIdle.mc = jsonInt(text, "mc", 0) != 0;
+        uiIdle.haveM = jsonInt(text, "ms", 0) != 0;
+        if (uiIdle.haveM) {
+          uiCopyTrim(uiIdle.mt, sizeof(uiIdle.mt), plain(jsonString(text, "mt")).c_str());
+          uiIdle.ms = (uint32_t)jsonInt(text, "ms", 0);
+          uiIdle.me = (uint32_t)jsonInt(text, "me", 0);
+        }
+        uiIdleMinute = -1;
+        if (uiIdleOn) uiAll = true;  // a change (a setting, a new meeting) shows at once
       } else if (kind == "latency") {
         LOGF("[latency] server says %s ms\n", text.c_str());
       } else if (kind == "error") {
@@ -878,6 +905,12 @@ void setup() {
   uiOut.blit = outBlit;
   uiOut.fill = outFill;
   uiMicros = []() -> uint32_t { return (uint32_t)micros(); };
+  // The idle face dims the screen with the display chip's own brightness command (0x51).
+  uiOut.brightness = [](int level) {
+    bus->beginWrite();
+    bus->writeC8D8(0x51, (uint8_t)level);
+    bus->endWrite();
+  };
   uiMotion = NEDDY_MOTION != 0;
   uiShowDiag = NEDDY_DIAG != 0;
   screenBoot("Starting");

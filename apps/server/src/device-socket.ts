@@ -33,6 +33,8 @@ const PING_MS = 20_000;
 /** Checks without any sign of life before a device is let go. */
 const MISSED_LIMIT = 3;
 const SLOW_START_MS = 1500;
+/** How often a device gets fresh idle-screen facts (the time zone offset, weather, next meeting). */
+const IDLE_EVERY_MS = 5 * 60_000;
 
 interface Waiting {
   text?: string;
@@ -57,6 +59,8 @@ interface Connection {
   alive: boolean;
   /** Checks in a row that found no sign of life. */
   missed: number;
+  /** When the idle screen's facts (time, weather, next meeting) were last sent. */
+  idleAt: number;
 }
 
 function frameBytes(data: RawData): Uint8Array {
@@ -83,7 +87,16 @@ export class DeviceBridge {
     private readonly voice: () => DeviceVoice | undefined,
     private readonly log: (line: string) => void = (line) => console.log(`[OpenMuse] ${line}`),
     private readonly now: () => number = Date.now,
+    /** What the device's idle screen shows; best effort, the bridge works without it. */
+    private readonly idle?: (
+      owner: string,
+      device: Device,
+    ) => Promise<Record<string, unknown> | undefined>,
   ) {
+    devices.onSettingsChanged((deviceId) => {
+      const connection = this.connections.get(deviceId);
+      if (connection) void this.pushIdle(connection);
+    });
     devices.onRemoved((deviceId) => {
       const connection = this.connections.get(deviceId);
       if (connection) this.drop(connection, 4403, "removed");
@@ -98,6 +111,7 @@ export class DeviceBridge {
           this.drop(connection, 4408, "no answer");
           continue;
         }
+        if (this.now() - connection.idleAt >= IDLE_EVERY_MS) void this.pushIdle(connection);
         connection.alive = false;
         try {
           connection.ws.ping();
@@ -145,6 +159,7 @@ export class DeviceBridge {
       waitingBytes: 0,
       alive: true,
       missed: 0,
+      idleAt: 0,
     };
     this.connections.set(device.id, connection);
     this.sendText(connection, {
@@ -153,6 +168,7 @@ export class DeviceBridge {
       time: new Date(this.now()).toISOString(),
     });
     void this.devices.touch(owner, device).catch(() => undefined);
+    void this.pushIdle(connection);
     ws.on("pong", () => {
       connection.alive = true;
     });
@@ -173,6 +189,21 @@ export class DeviceBridge {
       this.gone(connection);
     });
     ws.on("error", () => this.gone(connection));
+  }
+
+  /** Sends the idle screen's facts (and settings), fresh. Never throws: a device without them just shows less. */
+  private async pushIdle(connection: Connection) {
+    if (!this.idle) return;
+    connection.idleAt = this.now();
+    try {
+      const fresh =
+        (await this.devices.get(connection.owner, connection.device.id)) ?? connection.device;
+      const info = await this.idle(connection.owner, fresh);
+      if (info && this.connections.get(connection.device.id) === connection)
+        this.sendText(connection, info);
+    } catch {
+      // Best effort.
+    }
   }
 
   private sendText(connection: Connection, event: Record<string, unknown>) {

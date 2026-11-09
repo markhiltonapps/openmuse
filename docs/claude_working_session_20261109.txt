@@ -38,3 +38,19 @@ the latest). Then the idle face.
 - FIRST BUILD DRAWS A DOT UNDER THE FINGER (TOUCH_TRAIL 1) so the owner can see whether touch lines up with the screen; if not, one of
   TOUCH_SWAP_XY / TOUCH_FLIP_X / TOUCH_FLIP_Y turns it around. Turn the dots off (TOUCH_TRAIL 0) once confirmed.
 - Hold-to-talk starts after about half a second (BOOT is instant); the hold only counts on Neddy.
+
+--- idle face (built, not yet on the watch) ---
+Owner's choices: all four parts (big clock + date, today's weather, next meeting, small moving Neddy), after 20 seconds of quiet with
+user options, dimming after a minute (wakes on touch or press).
+SERVER (needs a push; restarts the api): device-idle.ts builds the idle facts (UTC seconds, the person's offset in minutes, weather in
+brief, next timed meeting that hasn't ended, settings) as flat keys; the bridge sends them when a device connects, every 5 minutes and
+at once when its settings change. Device settings (devices.ts): idleAfter (0 = never), dim, showWeather, showMeeting, changed by
+voice or chat through manage_devices `do: "settings"` (and shown in `list`). The app has NO settings screen for this yet (voice/chat
+only): a small section in the device's row would be the next step (with Help).
+FIRMWARE: neddy_ui.h idle face (clock in the TEMP font, date, weather row with a small picture, meeting title and "in 25 min  4:40 PM",
+small Neddy below; the clock drifts a few pixels every few minutes against burn-in; redraws once a minute); dims with the display
+chip's brightness command 0x51 through the bus (uiOut.brightness); any touch, press, words or card wakes it and it starts fresh.
+Checked on the PC: idle renders (5 variants), timing, dimming and waking, even windows; the sketch's reader run against the server's
+real idle message. NOT verified on the board: the brightness command (CO5300 0x51), and the clock needs the server's message first
+(without it the watch shows no idle face).
+Tests: device-idle (new, 5), devices, device-card, weather, day-tools, voice-brain, conversation-device: 44 pass; tsc, biome clean.

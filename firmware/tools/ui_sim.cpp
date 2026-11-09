@@ -40,6 +40,7 @@ static void save(const char *dir, const char *name) {
   }
   fclose(f);
 }
+#define CHECK_IDLE(cond, what) do { if (!(cond)) { printf("IDLE CHECK FAILED: %s\n", what); } } while (0)
 static double now() { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 int main(int argc, char **argv) {
@@ -127,6 +128,26 @@ int main(int argc, char **argv) {
   th += 3000; uiTick(th);
   uiTouch(th, true, 380, 120); uiTick(th); th += 100; uiTouch(th, true, 380, 120); uiTick(th); save(dir, "t4_look_right");
   uiTouch(th, true, 40, 400); th += 100; uiTouch(th, true, 40, 400); uiTick(th); save(dir, "t5_look_left_down");
+  // 11. the idle face: 4:15 PM on Monday 9 Nov 2026 in Chicago; a meeting in 25 minutes
+  uiClearCard(); uiMotion = true; uiSetMode(UI_READY); uiAll = true; uiNextBlink = 999999; uiNextGlance = 999999;
+  uiIdle.have = true; uiIdle.baseUtc = 1794262500u; uiIdle.baseMs = 200000; uiIdle.off = -360; uiIdle.after = 20;
+  uiIdle.dim = true; uiIdle.showW = true; uiIdle.showM = true;
+  uiIdle.haveW = true; uiIdle.wt = 72; uiIdle.wi = UI_ICON_PARTLY; strcpy(uiIdle.ws, "Partly cloudy"); uiIdle.wh = 80; uiIdle.wl = 65;
+  uiIdle.mc = true; uiIdle.haveM = true; strcpy(uiIdle.mt, "Team sync"); uiIdle.ms = 1794264000u; uiIdle.me = 1794264000u + 1800;
+  uiLastActive = 200000; uiTick(200100); uiTick(200000 + 20100);
+  CHECK_IDLE(uiIdleOn, "the idle face comes after 20 s of quiet");
+  save(dir, "i1_idle_meeting_soon");
+  uiIdle.ms = 1794326400u; uiIdle.me = 1794326400u + 3600; strcpy(uiIdle.mt, "Amazon interview with Dana"); uiIdleMinute = -1; uiAll = true; uiTick(200000 + 20200); save(dir, "i2_idle_meeting_tomorrow");
+  uiIdle.haveM = false; uiAll = true; uiTick(200000 + 20300); save(dir, "i3_idle_no_meetings");
+  uiIdle.haveW = false; uiIdle.haveM = true; uiAll = true; uiTick(200000 + 20400); save(dir, "i4_idle_no_weather");
+  uiIdle.haveW = true; uiIdle.wi = UI_ICON_MOON; strcpy(uiIdle.ws, "Mostly clear, chilly"); uiAll = true; uiTick(200000 + 20500); save(dir, "i5_idle_night_long_sky");
+  uiTick(200000 + 20100 + 61000);
+  CHECK_IDLE(uiDimmed, "dims after a minute");
+  uiActivity(200000 + 90000); uiTick(200000 + 90100);
+  CHECK_IDLE(!uiIdleOn && !uiDimmed, "any activity wakes it");
+  uiIdle.after = 0; uiTick(200000 + 300000);
+  CHECK_IDLE(!uiIdleOn, "with idle turned off it never comes");
+  uiIdle.after = 20;
   // timing of one frame (host speed, not the watch's)
   UiPose p; uiPoseNow(7000, &p);
   double t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);

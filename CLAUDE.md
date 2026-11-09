@@ -694,3 +694,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   `firmware/tools/touch_test.cpp` can run scripted fingers on a computer; the sketch only reads the FT3168 (0x38, GPIO 9 reset, polling
   regs 0x02..0x06) and ORs `uiTouchTalk` with the BOOT button. A new touch build starts with `TOUCH_TRAIL 1` (a dot under the finger) because
   the coordinates can't be checked without the real board; the three TOUCH_* switches turn the touch around if the dot is off.
+- **The watch keeps its own clock (2026-11-09):** the device has no time zone, so the server sends `idle` facts (UTC seconds + the person's
+  offset in minutes, refreshed every 5 minutes so daylight saving follows) and the device counts from its own `millis()`. Device
+  settings (`idleAfter`, `dim`, `showWeather`, `showMeeting`) live on the device record and change by voice or chat (`manage_devices`
+  settings); the app has no screen for them yet. The idle face must clear what was said, restart the quiet timer on any touch, press,
+  words or card, and dim with the display's brightness command (0x51) through the bus, not a library call that may not exist.

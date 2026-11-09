@@ -18,6 +18,7 @@
 struct UiOut {
   void (*blit)(int x, int y, int w, int h, uint16_t *px);
   void (*fill)(int x, int y, int w, int h, uint16_t colour);
+  void (*brightness)(int level);   // optional: 0..255
 };
 static UiOut uiOut;
 
@@ -300,6 +301,24 @@ static uint16_t uiIconBuf[UI_ICON * UI_ICON];
 static uint32_t uiNowMs = 0;
 #define UI_CARD_MS 60000
 
+// ---- the idle face: the time, the weather, the next meeting; shown after a quiet spell
+struct UiIdle {
+  bool have;                      // the server has told us the time
+  uint32_t baseUtc, baseMs;       // the server's time (seconds since 1970, UTC) and our clock when it arrived
+  int off;                        // the person's offset from UTC, in minutes
+  int after;                      // seconds of quiet before the idle face (0 = never)
+  bool dim, showW, showM;
+  bool haveW; int wt, wi, wh, wl; char ws[32];
+  bool mc, haveM;                 // the calendar was read / there is a next meeting
+  char mt[32]; uint32_t ms, me;   // its title, start and end (UTC seconds)
+};
+static UiIdle uiIdle = { false, 0, 0, 0, 20, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0 };
+static bool uiIdleOn = false, uiDimmed = false;
+static uint32_t uiLastActive = 0, uiIdleSince = 0;
+static int uiIdleMinute = -1;
+#define UI_IDLE_DIM_MS 60000
+#define UI_DIM_LEVEL 40
+
 // ---- touch: what he does when touched, and the cards he remembers
 static uint32_t uiReactUntil = 0;            // a giggle in progress
 static uint32_t uiLookUntil = 0;             // his eyes follow a finger until then
@@ -312,8 +331,17 @@ static int uiHistN = 0, uiHistAt = -1;
 static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng >> 8; }
 
 static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
+// Anything happening (a touch, a press, words, a card) wakes the idle face and restarts the wait for it.
+static void uiActivity(uint32_t ms) {
+  uiLastActive = ms;
+  if (uiIdleOn) {
+    uiIdleOn = false; uiAll = true;
+    if (uiDimmed) { uiDimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
+  }
+}
 static void uiSetMode(int m) {
   if (m != uiMode) {
+    uiActivity(uiNowMs);
     uiMode = m; uiAll = true;
     if (m == UI_LISTEN || m == UI_LINK) uiCard.on = false;   // a new press or a lost link ends the card
   }
@@ -326,7 +354,7 @@ static void uiSetLevel(float l) {
 static void uiCopy(char *dst, size_t cap, const char *s) {
   size_t n = strlen(s);
   if (n >= cap) { s += n - (cap - 1); n = cap - 1; }   // keep the newest words
-  if (strcmp(dst, s) != 0) uiTextDirty = true;
+  if (strcmp(dst, s) != 0) { uiTextDirty = true; uiActivity(uiNowMs); }
   memcpy(dst, s, n); dst[n] = 0;
 }
 static void uiSetWords(const char *s) { uiCopy(uiWords, sizeof(uiWords), s); }
@@ -742,11 +770,12 @@ static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, c
   uiCard.temp = temp; uiCard.feels = feels; uiCard.high = high; uiCard.low = low; uiCard.rain = rain;
   uiCard.icon = icon < 0 || icon > UI_ICON_WIND ? UI_ICON_CLOUD : icon;
   uiCard.kind = UI_CARD_WEATHER;
+  uiActivity(ms);
   uiCard.since = ms; uiCard.on = true; uiAll = true;
   uiRemember();
 }
 
-static void uiStartCard(uint32_t ms, int kind) { memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
+static void uiStartCard(uint32_t ms, int kind) { uiActivity(ms); memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
 // A game. Scores the server didn't send are UI_NONE (a game still to come).
 static void uiShowScore(uint32_t ms, const char *league, const char *status, const char *away, int awayScore, const char *home, int homeScore) {
   uiStartCard(ms, UI_CARD_SCORE);
@@ -801,6 +830,7 @@ static void uiLook(uint32_t ms, int x, int y) { uiLookX = x; uiLookY = y; uiLook
 static void uiTouchTalkEnded() { uiTouchTalk = false; uiTchLatched = false; }
 
 static void uiTouch(uint32_t ms, bool down, int x, int y) {
+  if (down) uiActivity(ms);
   if (down && !uiTchWas) {                           // a finger just touched
     uiTchDownAt = ms; uiTchX0 = uiTchX = x; uiTchY0 = uiTchY = y; uiTchMove = 0;
     uiTchHold = false; uiTchIgnore = false;
@@ -837,6 +867,123 @@ static void uiTouch(uint32_t ms, bool down, int x, int y) {
   uiTchWas = down;
 }
 
+static void uiTextAreas(int *top, int *bottom);
+// ---- the idle face
+static int64_t uiUtcNow(uint32_t ms) { return (int64_t)uiIdle.baseUtc + (int64_t)((uint32_t)(ms - uiIdle.baseMs) / 1000); }
+// Splits seconds-since-1970 (already in the person's clock) into date and time.
+static void uiCivil(int64_t local, int *year, int *month, int *day, int *hour, int *minute, int *weekday) {
+  int64_t days = local / 86400; int64_t rem = local % 86400;
+  if (rem < 0) { rem += 86400; days -= 1; }
+  *hour = (int)(rem / 3600); *minute = (int)((rem % 3600) / 60);
+  *weekday = (int)(((days % 7) + 11) % 7);            // 1970-01-01 was a Thursday
+  int64_t z = days + 719468;
+  int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+  int64_t doe = z - era * 146097;
+  int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  int64_t y = yoe + era * 400;
+  int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  int64_t mp = (5 * doy + 2) / 153;
+  *day = (int)(doy - (153 * mp + 2) / 5 + 1);
+  *month = (int)(mp < 10 ? mp + 3 : mp - 9);
+  *year = (int)(y + (*month <= 2));
+}
+static const char *uiDays[7] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+static const char *uiMonths[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+// "2:41" and "PM" for an hour and minute.
+static void uiClockText(char *time, char *ampm, int hour, int minute) {
+  int h = hour % 12; if (h == 0) h = 12;
+  snprintf(time, 8, "%d:%02d", h, minute);
+  strcpy(ampm, hour < 12 ? "AM" : "PM");
+}
+
+// The weather picture at a smaller size (the same shapes as the card's).
+static void uiRenderIconSmall(int icon, uint16_t bg, int size) {
+  const float br = ((bg >> 11) & 31) * 255.0f / 31, bgc = ((bg >> 5) & 63) * 255.0f / 63, bb = (bg & 31) * 255.0f / 31;
+  const float k = (float)UI_ICON / size;
+  for (int y = 0; y < size; y++) {
+    for (int x = 0; x < size; x++) {
+      float c[3] = { br, bgc, bb };
+      uiIconPixel(icon, (x + 0.5f) * k, (y + 0.5f) * k, c);
+      int r = (int)(c[0] + 0.5f), g = (int)(c[1] + 0.5f), b = (int)(c[2] + 0.5f);
+      if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+      uiIconBuf[y * size + x] = uiRgb(r, g, b);
+    }
+  }
+}
+
+// The whole idle face above Neddy. The clock drifts a few pixels now and then so no pixel stays lit (the screen is AMOLED).
+static void uiDrawIdle(uint32_t ms) {
+  int top, bottom;
+  uiTextAreas(&top, &bottom);
+  uiOut.fill(0, top, UI_W, bottom - top, UI_BLACK);
+  int64_t local = uiUtcNow(ms) + (int64_t)uiIdle.off * 60;
+  int Y, Mo, D, h, mi, wd;
+  uiCivil(local, &Y, &Mo, &D, &h, &mi, &wd);
+  uiIdleMinute = (int)(local / 60);
+  int dx = (((int)(local / 300)) % 5 - 2) * 2, dy = (((int)(local / 420)) % 3 - 1) * 2;
+  char tm[10], ap[4], line[48];
+  uiClockText(tm, ap, h, mi);
+  int tw = uiTextWidth(NFONT_TEMP, tm), aw = uiTextWidth(NFONT_TITLE, ap);
+  int x = (UI_W - (tw + 8 + aw)) / 2 + dx;
+  uiText(NFONT_TEMP, x, top + dy, tm, UI_WHITE);
+  uiText(NFONT_TITLE, x + tw + 8, top + dy + NFONT_TEMP.h - NFONT_TITLE.h - 14, ap, UI_GREY);
+  snprintf(line, sizeof(line), "%s, %s %d", uiDays[wd], uiMonths[Mo - 1], D);
+  uiTextCentered(NFONT_BODY, top + dy + NFONT_TEMP.h + 2, line, UI_GREY);
+  int y = (top + NFONT_TEMP.h + NFONT_BODY.h + 22) & ~1;
+  if (uiIdle.showW && uiIdle.haveW) {
+    char tp[12], sk[34];
+    snprintf(tp, sizeof(tp), "%d%c", uiIdle.wt, (char)127);
+    uiFit(sk, sizeof(sk), NFONT_MID, uiIdle.ws, 250);
+    int tw2 = uiTextWidth(NFONT_TITLE, tp), sw = uiTextWidth(NFONT_MID, sk);
+    int rowW = 64 + 14 + (tw2 > sw ? tw2 : sw);
+    int x0 = ((UI_W - rowW) / 2 + dx) & ~1;                      // the row is centred under the clock
+    uiRenderIconSmall(uiIdle.wi, UI_BLACK, 64);
+    uiOut.blit(x0, y + dy, 64, 64, uiIconBuf);
+    uiText(NFONT_TITLE, x0 + 78, y + dy - 2, tp, UI_WHITE);
+    uiText(NFONT_MID, x0 + 78, y + dy + 38, sk, UI_GREY);
+    y += 76;
+  }
+  if (uiIdle.showM && (uiIdle.haveM || uiIdle.mc)) {
+    if (uiIdle.haveM) {
+      char t2[34];
+      uiFit(t2, sizeof(t2), NFONT_BODY, uiIdle.mt, 340);
+      uiTextCentered(NFONT_BODY, y + dy, t2, UI_WHITE);
+      int64_t now = uiUtcNow(ms);
+      int64_t until = (int64_t)uiIdle.ms - now;
+      char when[24], hh[8], aa[4];
+      int Y2, M2, D2, h2, m2, w2;
+      uiCivil((int64_t)uiIdle.ms + (int64_t)uiIdle.off * 60, &Y2, &M2, &D2, &h2, &m2, &w2);
+      uiClockText(hh, aa, h2, m2);
+      if (now >= (int64_t)uiIdle.ms) snprintf(when, sizeof(when), "now");
+      else if (until < 3600) snprintf(when, sizeof(when), "in %d min", (int)((until + 59) / 60));
+      else if (until < 86400) snprintf(when, sizeof(when), "in %d h %d min", (int)(until / 3600), (int)((until % 3600) / 60));
+      else snprintf(when, sizeof(when), "tomorrow");
+      snprintf(line, sizeof(line), "%s  %s %s", when, hh, aa);
+      uiTextCentered(NFONT_MID, y + dy + NFONT_BODY.h + 2, line, UI_TEAL);
+    } else {
+      uiTextCentered(NFONT_MID, y + dy + 14, "No more meetings", UI_GREY);
+    }
+  }
+}
+
+// Decides when the idle face comes and goes, and dims the screen after a while. Called from uiTick.
+static void uiIdleTick(uint32_t ms) {
+  if (!uiIdleOn) {
+    if (uiIdle.have && uiIdle.after > 0 && uiMode == UI_READY && !uiCard.on && ms - uiLastActive >= (uint32_t)uiIdle.after * 1000UL) {
+      uiIdleOn = true; uiIdleSince = ms; uiDimmed = false; uiIdleMinute = -1;
+      uiWords[0] = 0; uiHeard[0] = 0;       // what was said is gone from the screen; waking starts fresh
+      uiAll = true;
+    }
+    return;
+  }
+  if (uiMode != UI_READY || uiCard.on || !uiIdle.have || uiIdle.after == 0) { uiActivity(ms); return; }
+  if (uiIdle.dim && !uiDimmed && ms - uiIdleSince >= UI_IDLE_DIM_MS) {
+    uiDimmed = true;
+    if (uiOut.brightness) uiOut.brightness(UI_DIM_LEVEL);
+  }
+  if ((int)((uiUtcNow(ms) + (int64_t)uiIdle.off * 60) / 60) != uiIdleMinute && !uiAll) { uiDrawIdle(ms); }   // a new minute
+}
+
 static void uiBasePose(UiPose *p) {
   p->breath = 0; p->sway = 0; p->eyeDx = 0; p->eyeDy = 0; p->eye = EYE_HAPPY;
   p->glow = uiModeColour();
@@ -858,6 +1005,7 @@ static int uiLevelY() {
 
 static void uiDrawText() {
   if (uiCard.on) { uiDrawCard(); return; }
+  if (uiIdleOn) { uiDrawIdle(uiNowMs); return; }
   int top, bottom;
   uiTextAreas(&top, &bottom);
   uiOut.fill(0, top, UI_W, bottom - top, UI_BLACK);
@@ -966,7 +1114,8 @@ static void uiDrawStage(const UiPose &p) {
 static void uiTick(uint32_t ms) {
   uiNowMs = ms;
   if (uiCard.on && ms - uiCard.since >= UI_CARD_MS) uiClearCard();
-  bool wantSmall = uiCard.on || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
+  uiIdleTick(ms);
+  bool wantSmall = uiCard.on || uiIdleOn || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
   if (wantSmall != uiSmall) { uiSmall = wantSmall; uiAll = true; }
   UiPose p;
   uiPoseNow(ms, &p);

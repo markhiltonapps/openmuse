@@ -45,6 +45,7 @@ import { DataControls, type ThreadStore } from "./data-controls.ts";
 import { withOwnCalendar } from "./day-tools.ts";
 import type { Store } from "./db.ts";
 import { Depth, depthModelPath } from "./depth.ts";
+import { idleInfo } from "./device-idle.ts";
 import { DeviceBridge } from "./device-socket.ts";
 import { Devices, pairClaimSchema } from "./devices.ts";
 import { EmailViews } from "./email-views.ts";
@@ -656,7 +657,23 @@ export async function createApp(
   const voiceFor = (id: string) => (pipecatVoice && isPipecatCall(id) ? pipecatVoice : liveVoice);
   // Small button-held devices (the watch-style board) talk on our own voice, over one websocket.
   const devices = new Devices(db);
-  const deviceBridge = new DeviceBridge(devices, () => pipecatVoice);
+  const deviceBridge = new DeviceBridge(
+    devices,
+    () => pipecatVoice,
+    undefined,
+    undefined,
+    // The idle screen's facts: the person's clock, the weather in brief and the next meeting.
+    (owner, device) =>
+      idleInfo(
+        {
+          timeZone: (who) => agent.timeZone(who),
+          weather: () => agent.weather,
+          calendar: async (who, from, to) => agent.calendarRange?.(who, from, to),
+        },
+        owner,
+        device,
+      ),
+  );
   agent.devices = devices;
   agent.devicesTalkReady = Boolean(pipecatVoice);
   /** Both voices side by side, for everyone's calls over the last few days (the admin's). */

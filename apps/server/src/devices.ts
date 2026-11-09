@@ -10,6 +10,26 @@ import { AppError } from "./errors.ts";
  * sign-in) for everything after. Only a hash of a token is kept, so a copy of the database
  * can't speak as a device, and one tap in the app turns a device off for good.
  */
+/** What a device's idle screen (clock, weather, next meeting) does; the person changes these by voice or chat. */
+export interface DeviceSettings {
+  /** Seconds of quiet before the idle screen shows; 0 = never. */
+  idleAfter: number;
+  /** Dim the screen after a minute of idle. */
+  dim: boolean;
+  showWeather: boolean;
+  showMeeting: boolean;
+}
+export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
+  idleAfter: 20,
+  dim: true,
+  showWeather: true,
+  showMeeting: true,
+};
+export const settingsOf = (device: Pick<Device, "settings">): DeviceSettings => ({
+  ...DEFAULT_DEVICE_SETTINGS,
+  ...(device.settings ?? {}),
+});
+
 export interface Device {
   id: string;
   name: string;
@@ -19,6 +39,7 @@ export interface Device {
   lastSeenAt?: string;
   /** The firmware it last said it runs. */
   firmware?: string;
+  settings?: Partial<DeviceSettings>;
 }
 
 /** A code on a device's screen, waiting for the person to type it in the app. */
@@ -63,6 +84,7 @@ export class Devices {
   private readonly wrong = new Map<string, number[]>();
   private readonly seen = new Map<string, number>();
   private readonly removedHooks: ((deviceId: string) => void)[] = [];
+  private readonly settingsHooks: ((deviceId: string) => void)[] = [];
   constructor(
     private readonly db: Store,
     private readonly now: () => number = Date.now,
@@ -215,8 +237,28 @@ export class Devices {
     this.removedHooks.push(hook);
   }
 
+  /** Told when a device's settings change, so it can be sent the new ones at once. */
+  onSettingsChanged(hook: (deviceId: string) => void) {
+    this.settingsHooks.push(hook);
+  }
+
   list(owner: string) {
     return this.db.list<Device>(owner, "devices");
+  }
+
+  get(owner: string, id: string) {
+    return this.db.get<Device>(owner, "devices", id);
+  }
+
+  /** Changes some of a device's idle-screen settings (the rest stay as they were). */
+  async setSettings(owner: string, id: string, patch: Partial<DeviceSettings>) {
+    const device = await this.db.get<Device>(owner, "devices", id);
+    if (!device) throw new AppError("That device isn’t on your list.", 404);
+    const next = { ...settingsOf(device), ...patch };
+    next.idleAfter = Math.max(0, Math.min(600, Math.round(next.idleAfter)));
+    await this.db.put(owner, "devices", { ...device, settings: next });
+    for (const hook of this.settingsHooks) hook(id);
+    return next;
   }
 
   async rename(owner: string, id: string, name: string) {
@@ -237,6 +279,18 @@ export class Devices {
     for (const hook of this.removedHooks) hook(id);
     return { ok: true as const, id };
   }
+}
+
+/** The idle-screen settings in plain words, for the agent to say. */
+export function describeSettings(settings: DeviceSettings) {
+  const shows = [
+    "the clock",
+    ...(settings.showWeather ? ["the weather"] : []),
+    ...(settings.showMeeting ? ["the next meeting"] : []),
+  ];
+  return settings.idleAfter === 0
+    ? "the idle screen is off"
+    : `after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? "dims after a minute" : "stays bright"}`;
 }
 
 /** The chat's one tool for devices: pair one with the code on its screen, list, rename or remove. */
@@ -271,16 +325,30 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's small Neddy devices (a watch-style board they hold a button on to talk). Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them; 'rename' needs name (which one) and new_name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's small Neddy devices (a watch-style board they hold a button on to talk). Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (the clock, weather and next meeting it shows after a quiet spell): idle_after_seconds (0 turns the idle screen off), dim (dim after a minute), show_weather, show_meeting, for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
-        do: z.enum(["pair", "list", "rename", "remove"]),
+        do: z.enum(["pair", "list", "rename", "remove", "settings"]),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),
         name: z.string().max(40).optional().describe("The device's name, or how they described it"),
         new_name: z.string().max(40).optional(),
         confirm: z.boolean().optional().describe("True only after they said yes to removing it"),
+        idle_after_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(600)
+          .optional()
+          .describe("settings: seconds of quiet before the idle screen shows; 0 = never"),
+        dim: z.boolean().optional().describe("settings: dim the idle screen after a minute"),
+        show_weather: z.boolean().optional().describe("settings: weather on the idle screen"),
+        show_meeting: z.boolean().optional().describe("settings: next meeting on the idle screen"),
       }),
       execute: async (input: {
-        do: "pair" | "list" | "rename" | "remove";
+        do: "pair" | "list" | "rename" | "remove" | "settings";
+        idle_after_seconds?: number;
+        dim?: boolean;
+        show_weather?: boolean;
+        show_meeting?: boolean;
         code?: string;
         name?: string;
         new_name?: string;
@@ -294,6 +362,7 @@ export function deviceToolSpecs(
                 name: device.name,
                 model: device.model,
                 lastSeenAt: device.lastSeenAt ?? null,
+                idleScreen: describeSettings(settingsOf(device)),
               })),
               message: list.length
                 ? `They have ${list.length} device${list.length === 1 ? "" : "s"}.`
@@ -323,6 +392,26 @@ export function deviceToolSpecs(
                 ? `Which device? They have: ${list.map((item) => item.name).join(", ")}.`
                 : "They have no devices.",
             };
+          if (input.do === "settings") {
+            const patch: Partial<DeviceSettings> = {
+              ...(input.idle_after_seconds !== undefined
+                ? { idleAfter: input.idle_after_seconds }
+                : {}),
+              ...(input.dim !== undefined ? { dim: input.dim } : {}),
+              ...(input.show_weather !== undefined ? { showWeather: input.show_weather } : {}),
+              ...(input.show_meeting !== undefined ? { showMeeting: input.show_meeting } : {}),
+            };
+            if (!Object.keys(patch).length)
+              return {
+                settings: describeSettings(settingsOf(device)),
+                message: `${device.name}'s idle screen: ${describeSettings(settingsOf(device))}.`,
+              };
+            const next = await devices.setSettings(owner, device.id, patch);
+            return {
+              changed: true,
+              message: `Done. ${device.name}'s idle screen: ${describeSettings(next)}. The device gets it within a few seconds.`,
+            };
+          }
           if (input.do === "rename") {
             if (!input.new_name?.trim()) return { error: "What should it be called?" };
             const taken = list.some(
