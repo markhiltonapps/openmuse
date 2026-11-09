@@ -163,6 +163,22 @@ int main() {
   }
   uiShowDiag = false;
 
+  // A card stays as long as the idle wait (10 s by default), then the face comes back right away; with the face off it lasts a minute.
+  uiIdle.have = true; uiIdle.after = 10; uiIdle.dim = true; uiIdle.baseUtc = 1800000000; uiIdle.baseMs = now; uiIdle.off = 0;
+  uiClearCard(); uiSetMode(UI_READY); uiSetWords(""); uiSetHeard(""); uiActivity(now); pause(300);
+  uiShowFact(now, "Fact", "1", "", "", 0);
+  pause(9000);
+  CHECK(uiCard.on && !uiIdleOn, "the card is still up at 9 s");
+  pause(1500);
+  CHECK(!uiCard.on && uiIdleOn, "at 10 s the card goes and the face is back at once");
+  uiActivity(now); uiIdle.after = 0; uiClearCard();
+  uiShowFact(now, "Fact", "1", "", "", 0);
+  pause(30000);
+  CHECK(uiCard.on, "with the face off a card still lasts a minute");
+  pause(31000);
+  CHECK(!uiCard.on, "and goes after a minute");
+  uiIdle.after = 10;
+
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }

@@ -82,10 +82,11 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     type: "idle",
     t: Math.floor(NOW / 1000),
     off: -360,
-    after: 20,
+    after: 10,
     dim: 1,
     sw: 1,
     sm: 1,
+    sb: 1,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -192,6 +193,25 @@ test('"my watch" finds the device, whatever it is named', async () => {
   await db.close();
 });
 
+test("the home screen defaults to ten seconds and the battery can be hidden by voice", async () => {
+  const db = await createStore();
+  const devices = new Devices(db);
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const [tool] = deviceToolSpecs(devices, "o");
+  assert.ok(tool);
+  const asked = (await tool.execute({ do: "settings", name: "my watch" })) as { message?: string };
+  assert.match(
+    asked.message ?? "",
+    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level/,
+  );
+  const hidden = (await tool.execute({ do: "settings", show_battery: false })) as {
+    message?: string;
+  };
+  assert.doesNotMatch(hidden.message ?? "", /battery/);
+  await db.close();
+});
+
 test("the chat changes a device's idle screen by what's said", async () => {
   const db = await createStore();
   const devices = new Devices(db);
@@ -213,7 +233,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
   assert.equal(set.changed, true);
   assert.match(
     set.message ?? "",
-    /after 60 seconds of quiet it shows the clock, the next meeting, and stays bright/,
+    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright/,
   );
   const [device] = await devices.list("o");
   assert.deepEqual(settingsOf(device as never), {
@@ -221,6 +241,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     dim: false,
     showWeather: false,
     showMeeting: true,
+    showBattery: true,
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
@@ -269,7 +290,7 @@ test("a device is sent its idle facts when it connects and when its settings cha
   });
   await once(ws, "open");
   await until(() => text.some((event) => event.type === "idle"), "the idle facts on connect");
-  assert.deepEqual(sent, ["Desk:20"]);
+  assert.deepEqual(sent, ["Desk:10"]);
 
   const [device] = await devices.list("o");
   await devices.setSettings("o", (device as { id: string }).id, { idleAfter: 90 });
@@ -277,7 +298,7 @@ test("a device is sent its idle facts when it connects and when its settings cha
     () => text.filter((event) => event.type === "idle").length === 2,
     "the idle facts after a change",
   );
-  assert.deepEqual(sent, ["Desk:20", "Desk:90"]);
+  assert.deepEqual(sent, ["Desk:10", "Desk:90"]);
   assert.equal(text.filter((event) => event.type === "idle")[1]?.after, 90);
   ws.close();
   bridge.stop();

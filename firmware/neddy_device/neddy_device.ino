@@ -191,6 +191,29 @@ static String jsonString(const String &body, const char *key) {
 }
 
 // Reads  "key":123  (a whole number, maybe negative) out of a small JSON text; `none` when it isn't there.
+// The power chip (AXP2101, I2C 0x34) knows the battery: status byte 0x00 (bit 3 = a battery is there), status 0x01 (bits 6:5 = 01 while charging)
+// and the percent at 0xA4. Read once every 30 seconds; a failed read leaves the last answer alone.
+static bool pmuByte(uint8_t reg, uint8_t &value) {
+  Wire.beginTransmission(0x34);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((uint8_t)0x34, (uint8_t)1) != 1) return false;
+  value = Wire.read();
+  return true;
+}
+static void batteryLoop() {
+  static uint32_t last = 0;
+  uint32_t now = millis();
+  if (last != 0 && now - last < 30000UL) return;
+  if (last == 0 && now < 3000UL) return;   // the first look comes a moment after start
+  last = now;
+  uint8_t s1 = 0, s2 = 0, pct = 0;
+  if (!pmuByte(0x00, s1) || !pmuByte(0x01, s2)) return;
+  bool present = (s1 & 0x08) != 0;
+  if (present && !pmuByte(0xA4, pct)) return;
+  uiSetBattery(present ? (int)pct : -1, present && ((s2 >> 5) & 0x03) == 0x01, s1, s2);
+}
+
 static int jsonInt(const String &body, const char *key, int none) {
   String find = String("\"") + key + "\":";
   int at = body.indexOf(find);
@@ -766,10 +789,11 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.baseUtc = (uint32_t)jsonInt(text, "t", 0);
         uiIdle.baseMs = millis();
         uiIdle.off = jsonInt(text, "off", 0);
-        uiIdle.after = jsonInt(text, "after", 20);
+        uiIdle.after = jsonInt(text, "after", 10);
         uiIdle.dim = jsonInt(text, "dim", 1) != 0;
         uiIdle.showW = jsonInt(text, "sw", 1) != 0;
         uiIdle.showM = jsonInt(text, "sm", 1) != 0;
+        uiIdle.showB = jsonInt(text, "sb", 1) != 0;
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
         if (uiIdle.haveW) {
           uiIdle.wt = jsonInt(text, "wt", 0);
@@ -998,6 +1022,7 @@ void loop() {
 
   // 4. The touch screen and the button: holding Neddy (or a double tap) counts as holding the button
   touchLoop();
+  batteryLoop();
   bool down = buttonDown() || uiTouchTalk;
   if (down && !held) {
     if (wsUp && mode != M_PROBLEM) {

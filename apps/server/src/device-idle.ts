@@ -57,6 +57,7 @@ export async function idleInfo(deps: IdleDeps, owner: string, device: Device) {
     dim: settings.dim ? 1 : 0,
     sw: settings.showWeather ? 1 : 0,
     sm: settings.showMeeting ? 1 : 0,
+    sb: settings.showBattery ? 1 : 0,
   };
   const [forecast, calendar] = await Promise.all([
     settings.idleAfter && settings.showWeather

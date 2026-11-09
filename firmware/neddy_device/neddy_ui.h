@@ -311,11 +311,20 @@ struct UiIdle {
   bool haveW; int wt, wi, wh, wl; char ws[32];
   bool mc, haveM;                 // the calendar was read / there is a next meeting
   char mt[32]; uint32_t ms, me;   // its title, start and end (UTC seconds)
+  bool showB; int bat; bool chg;  // the small battery level: shown, percent (-1 = no battery / unknown), charging
 };
-static UiIdle uiIdle = { false, 0, 0, 0, 20, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0 };
+static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false };
+static uint8_t uiBatRaw[2] = { 0, 0 };   // the power chip's two status bytes, for the test line
 static bool uiIdleOn = false, uiDimmed = false;
 static uint32_t uiLastActive = 0, uiIdleSince = 0;
 static int uiIdleMinute = -1;
+// How long a card stays: as long as the idle wait (10 s by default, never under 10), so the face comes back right after it; a minute when the idle face is off.
+static uint32_t uiCardMs() { return (uiIdle.have && uiIdle.after > 0) ? (uint32_t)(uiIdle.after < 10 ? 10 : uiIdle.after) * 1000UL : (uint32_t)UI_CARD_MS; }
+// The battery level, read by the sketch every so often; the face redraws when it changes.
+static void uiSetBattery(int pct, bool charging, uint8_t s1, uint8_t s2) {
+  if (pct != uiIdle.bat || charging != uiIdle.chg) uiIdleMinute = -1;
+  uiIdle.bat = pct; uiIdle.chg = charging; uiBatRaw[0] = s1; uiBatRaw[1] = s2;
+}
 #define UI_IDLE_DIM_MS 60000
 #define UI_DIM_LEVEL 40
 
@@ -921,6 +930,27 @@ static void uiRenderIconSmall(int icon, uint16_t bg, int size) {
   }
 }
 
+// A small battery level under the idle face: an outline with its fill, the percent, and "charging" while it charges.
+static void uiDrawBattery(int bottom) {
+  if (!uiIdle.showB || uiIdle.bat < 0) return;
+  int pct = uiIdle.bat > 100 ? 100 : uiIdle.bat;
+  char t[24];
+  if (uiIdle.chg) snprintf(t, sizeof(t), "%d%% charging", pct); else snprintf(t, sizeof(t), "%d%%", pct);
+  uint16_t col = uiIdle.chg ? UI_TEAL : (pct <= 15 ? UI_AMBER : UI_GREY);
+  const int bw = 30, bh = 14;
+  int tw = uiTextWidth(NFONT_SMALL, t);
+  int x = ((UI_W - (bw + 2 + 8 + tw)) / 2) & ~1;
+  int y = (bottom - NFONT_SMALL.h - 2) & ~1;
+  int iy = (y + (NFONT_SMALL.h - bh) / 2) & ~1;
+  uiOut.fill(x, iy, bw, bh, col);
+  uiOut.fill(x + 2, iy + 2, bw - 4, bh - 4, UI_BLACK);
+  uiOut.fill(x + bw, iy + 4, 2, 6, col);
+  int fw = (((bw - 8) * pct) / 100) & ~1;
+  if (fw < 2 && pct > 0) fw = 2;
+  if (fw > 0) uiOut.fill(x + 4, iy + 4, fw, bh - 8, col);
+  uiText(NFONT_SMALL, x + bw + 2 + 8, y, t, col);
+}
+
 // The whole idle face above Neddy. The clock drifts a few pixels now and then so no pixel stays lit (the screen is AMOLED).
 static void uiDrawIdle(uint32_t ms) {
   int top, bottom;
@@ -974,6 +1004,7 @@ static void uiDrawIdle(uint32_t ms) {
       uiTextCentered(NFONT_MID, y + dy + 14, "No more meetings", UI_GREY);
     }
   }
+  uiDrawBattery(bottom);
 }
 
 // Decides when the idle face comes and goes, and dims the screen after a while. Called from uiTick.
@@ -983,7 +1014,7 @@ static void uiIdleTick(uint32_t ms) {
     if (ms - lastDbg >= 1000) {
       lastDbg = ms;
       char b[72];
-      snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000));
+      snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d b%d %02x %02x", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000), uiIdle.bat, uiBatRaw[0], uiBatRaw[1]);
       if (strcmp(b, uiIdleDbg) != 0) { strcpy(uiIdleDbg, b); uiDiagDirty = true; }
     }
   }
@@ -1133,7 +1164,7 @@ static void uiDrawStage(const UiPose &p) {
 
 static void uiTick(uint32_t ms) {
   uiNowMs = ms;
-  if (uiCard.on && ms - uiCard.since >= UI_CARD_MS) uiClearCard();
+  if (uiCard.on && ms - uiCard.since >= uiCardMs()) uiClearCard();
   uiIdleTick(ms);
   bool wantSmall = uiCard.on || uiIdleOn || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
   if (wantSmall != uiSmall) { uiSmall = wantSmall; uiAll = true; }

@@ -82,3 +82,15 @@ Owner asked about a text flicker every second: the diagnostic lines (Wi-Fi stren
 marked the whole text area dirty, so the words were blanked and redrawn once a second. Fix: diagnostics only mark a small band dirty (uiDiagDirty), redrawn
 at most every ~1 s and only when shown; nothing when hidden. New checks in firmware/tools/touch_test.cpp (33 checks): fail (2) on the old code. The idle
 test line is now off (NEDDY_IDLE_DEBUG 0), so the bottom lines are gone unless NEDDY_DIAG is set to 1. Zip rebuilt; committed locally, not pushed.
+
+Watch home screen (owner's answers: most user friendly; 10 seconds; bright while recording; small battery indicator):
+- Server: default idle-after 10 s (was 20; a watch with a saved value keeps it: the owner's is 30 until they say 10), new setting showBattery
+  (voice: show_battery; idle fact `sb`), tool/description call it the "home screen". Tests in tests/device-idle.test.ts (18 pass with devices tests).
+- Firmware: cards now last as long as the idle wait (min 10 s; a minute when the face is off) so the face returns right after an answer or card;
+  battery indicator under the meeting line: outline + fill + percent, teal "charging", amber at 15% or less, hidden with no battery (uiDrawBattery,
+  uiSetBattery); the sketch reads the AXP2101 (I2C 0x34: 0x00 bit3 battery present, 0x01 bits 6:5 = 01 charging, 0xA4 percent) every 30 s.
+  Register meanings are from XPowersLib's constants; NOT verified on the real board: turn NEDDY_IDLE_DEBUG to 1 to see "b<percent> <status1> <status2>".
+  Brightness already returns to full on any touch, press or words, so it is bright while listening and talking; nothing is tied to charging.
+- Tests: touch_test 37 checks (card lifetime), ui_sim 0 odd windows, new sim frames i1b/i1c/i1d (charging, low, no battery).
+- Help and the site don't mention the watch yet (not offered to testers); update both when it is.
+Zips rebuilt; committed locally, not pushed (server changed too: a push restarts the api).

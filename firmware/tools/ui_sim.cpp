@@ -134,9 +134,14 @@ int main(int argc, char **argv) {
   uiIdle.dim = true; uiIdle.showW = true; uiIdle.showM = true;
   uiIdle.haveW = true; uiIdle.wt = 72; uiIdle.wi = UI_ICON_PARTLY; strcpy(uiIdle.ws, "Partly cloudy"); uiIdle.wh = 80; uiIdle.wl = 65;
   uiIdle.mc = true; uiIdle.haveM = true; strcpy(uiIdle.mt, "Team sync"); uiIdle.ms = 1794264000u; uiIdle.me = 1794264000u + 1800;
+  uiSetBattery(85, false, 0x28, 0x01);
   uiLastActive = 200000; uiTick(200100); uiTick(200000 + 20100);
   CHECK_IDLE(uiIdleOn, "the idle face comes after 20 s of quiet");
   save(dir, "i1_idle_meeting_soon");
+  uiSetBattery(100, true, 0x28, 0x21); uiAll = true; uiTick(200000 + 20150); save(dir, "i1b_idle_battery_charging");
+  uiSetBattery(12, false, 0x28, 0x41); uiAll = true; uiTick(200000 + 20160); save(dir, "i1c_idle_battery_low");
+  uiSetBattery(-1, false, 0x00, 0x00); uiAll = true; uiTick(200000 + 20170); save(dir, "i1d_idle_no_battery");
+  uiSetBattery(85, false, 0x28, 0x01); uiAll = true; uiTick(200000 + 20180);
   uiIdle.ms = 1794326400u; uiIdle.me = 1794326400u + 3600; strcpy(uiIdle.mt, "Amazon interview with Dana"); uiIdleMinute = -1; uiAll = true; uiTick(200000 + 20200); save(dir, "i2_idle_meeting_tomorrow");
   uiIdle.haveM = false; uiAll = true; uiTick(200000 + 20300); save(dir, "i3_idle_no_meetings");
   uiIdle.haveW = false; uiIdle.haveM = true; uiAll = true; uiTick(200000 + 20400); save(dir, "i4_idle_no_weather");

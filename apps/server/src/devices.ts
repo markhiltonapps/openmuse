@@ -18,12 +18,15 @@ export interface DeviceSettings {
   dim: boolean;
   showWeather: boolean;
   showMeeting: boolean;
+  /** A small battery level on the idle screen (when the device has a battery). */
+  showBattery: boolean;
 }
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
-  idleAfter: 20,
+  idleAfter: 10,
   dim: true,
   showWeather: true,
   showMeeting: true,
+  showBattery: true,
 };
 export const settingsOf = (device: Pick<Device, "settings">): DeviceSettings => ({
   ...DEFAULT_DEVICE_SETTINGS,
@@ -287,6 +290,7 @@ export function describeSettings(settings: DeviceSettings) {
     "the clock",
     ...(settings.showWeather ? ["the weather"] : []),
     ...(settings.showMeeting ? ["the next meeting"] : []),
+    ...(settings.showBattery ? ["the battery level"] : []),
   ];
   return settings.idleAfter === 0
     ? "the idle screen is off"
@@ -335,7 +339,7 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (the clock, weather and next meeting it shows after a quiet spell): idle_after_seconds (0 turns the idle screen off), dim (dim the screen after a minute of quiet; there is no brightness level to set, so for “turn the screen down” use dim and say so), show_weather, show_meeting, for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen after a minute of quiet; there is no brightness level to set, so for “turn the screen down” use dim and say so), show_weather, show_meeting, show_battery, for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
         do: z.enum(["pair", "list", "rename", "remove", "settings"]),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),
@@ -352,6 +356,10 @@ export function deviceToolSpecs(
         dim: z.boolean().optional().describe("settings: dim the idle screen after a minute"),
         show_weather: z.boolean().optional().describe("settings: weather on the idle screen"),
         show_meeting: z.boolean().optional().describe("settings: next meeting on the idle screen"),
+        show_battery: z
+          .boolean()
+          .optional()
+          .describe("settings: the small battery level on the idle screen"),
       }),
       execute: async (input: {
         do: "pair" | "list" | "rename" | "remove" | "settings";
@@ -359,6 +367,7 @@ export function deviceToolSpecs(
         dim?: boolean;
         show_weather?: boolean;
         show_meeting?: boolean;
+        show_battery?: boolean;
         code?: string;
         name?: string;
         new_name?: string;
@@ -410,6 +419,7 @@ export function deviceToolSpecs(
               ...(input.dim !== undefined ? { dim: input.dim } : {}),
               ...(input.show_weather !== undefined ? { showWeather: input.show_weather } : {}),
               ...(input.show_meeting !== undefined ? { showMeeting: input.show_meeting } : {}),
+              ...(input.show_battery !== undefined ? { showBattery: input.show_battery } : {}),
             };
             if (!Object.keys(patch).length)
               return {

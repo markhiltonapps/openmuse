@@ -715,3 +715,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **Don't redraw more than changed (2026-11-09):** the watch's text blinked once a second because a small changing line (Wi-Fi strength) marked the
   whole text area dirty, so the words were blanked and redrawn. Anything that changes by itself gets its own dirty flag and band (`uiDiagDirty`), and
   nothing at all when it isn't shown. A test counts fills outside the band (`fillsAbove` in touch_test.cpp).
+- **The watch's home screen (owner, 2026-11-09):** the idle face is the default screen: 10 s of quiet after anything (a touch, a press, an answer or a card, which
+  lasts as long as the idle wait) brings it back; it dims after another minute and any activity restores full brightness. A saved device setting beats a new default,
+  so changing a default doesn't change a watch that already has a value: say so. Anything read from a chip's registers (the AXP2101's battery bytes) comes
+  from the library's constants and must be shown raw once on the real board before it is trusted (`NEDDY_IDLE_DEBUG`).
