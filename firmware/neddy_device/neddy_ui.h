@@ -820,8 +820,11 @@ static bool uiTchWas = false, uiTchHold = false, uiTchLatched = false, uiTchIgno
 static uint32_t uiTchDownAt = 0, uiTchLastTap = 0;
 static int uiTchX0 = 0, uiTchY0 = 0, uiTchX = 0, uiTchY = 0, uiTchMove = 0;
 
+// On this screen 1 mm is about 12 pixels, and a fingertip is about 9 mm wide: anything to touch is at least ~100 px
+// across, and Neddy's touch area reaches 32 px past his picture on every side (so small Neddy is ~180 x 210 px).
+#define UI_HIT_MARGIN 32
 static bool uiHitNeddy(int x, int y) {
-  return x >= uiStageX - 16 && x < uiStageX + uiStageW + 16 && y >= uiStageY - 16 && y < uiStageY + uiStageH + 16;
+  return x >= uiStageX - UI_HIT_MARGIN && x < uiStageX + uiStageW + UI_HIT_MARGIN && y >= uiStageY - UI_HIT_MARGIN && y < uiStageY + uiStageH + UI_HIT_MARGIN;
 }
 static bool uiHitCard(int x, int y) { return uiCard.on && x >= 14 && x < 396 && y >= 10 && y < 346; }
 static void uiReact(uint32_t ms) { uiReactUntil = ms + 1000; }

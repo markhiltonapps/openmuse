@@ -699,3 +699,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   settings (`idleAfter`, `dim`, `showWeather`, `showMeeting`) live on the device record and change by voice or chat (`manage_devices`
   settings); the app has no screen for them yet. The idle face must clear what was said, restart the quiet timer on any touch, press,
   words or card, and dim with the display's brightness command (0x51) through the bus, not a library call that may not exist.
+- **Touch targets on the watch (owner, 2026-11-09):** the 2.06" screen is about 12 pixels per millimetre and a fingertip is ~9 mm, so anything
+  to touch is at least ~100 px across with a generous hit area (`UI_HIT_MARGIN`), whole cards are one big target, and swipes need
+  ~60 px. Never put two small buttons side by side; prefer one big target or a gesture. A round board needs its own safe area:
+  corners are cut, so targets and text stay inside the circle.
