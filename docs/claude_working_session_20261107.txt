@@ -820,3 +820,11 @@ reconnecting). The first words of a long sentence are lost during the freeze ("i
 (The api keep-alive fix 408576f went live at 01:20; the earlier rounds ran on the old server.)
 Next build splits S into: snd (the ptt.start send), mode (drawing the Listening screen), trash (the two microphone reads), cb (longest socket callback),
 q (seconds since anything came from Neddy before the press).
+
+ROOT OF THE 2-6 s FREEZE (2026-11-09 ~02:00 UTC): the split timers showed snd2 (send is instant), mode2039 (drawing the Listening screen took 2 s), cb4160 (a socket
+handler that redraws the screen took 4.2 s). Arduino_GFX draws a scaled (size > 1) letter by sending every lit dot as its own rectangle command, so a screen with a few
+hundred letters is thousands of commands (read the library's drawChar). The first press is fast only because that screen has little text. Fix (uncompiled on the board,
+the drawing code tested on this machine): each line of text is built in memory from the library's own 5x7 font (embedded as NEDDY_FONT) and sent with ONE
+draw16bitRGBBitmap call (`drawText` in neddy_device.ino; `centered` and `wrapped` use it). Lesson: on a QSPI AMOLED never use scaled print(); draw lines/bitmaps in one go.
+Also: the "stuck on Thinking" screen is probably the same freeze; the server ends a press with no words after 2 s (EMPTY_AFTER_SECS).
+Owner asked (later) whether the screen graphics can look better: yes (smooth fonts, a drawing canvas, real Neddy art) - after the device is reliable.

@@ -666,4 +666,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   service answered silence with made-up replies. A first answer is not proof the mic works: show the mic's peak on screen.
   Check which chip carries each part (the board's chip list/schematic) before writing firmware. The Arduino IDE opens the file
   in its own sketch folder (Sketch > Show Sketch Folder), not a copy in Downloads or Recent.
+- **Device screen speed (2026-11-09):** Arduino_GFX's `print()` at text size above 1 sends every lit dot of every letter as its own screen command
+  (thousands per screen), so a full screen of text froze the board for 2-6 s and made later button presses wait. Draw a whole line of text into a
+  buffer and send it once (`drawText` in firmware/neddy_device), and measure the draw: the on-screen timers (loop/connection/start/callback) found it.
+  The server's keep-alive (`MISSED_LIMIT`) must tolerate a slow device; log who closed a connection ("ended by this server" vs the device).
 
