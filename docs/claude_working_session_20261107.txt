@@ -874,3 +874,16 @@ robot peeking up from the bottom edge: "how you might save space when text is on
   even (uiText, uiStageRect, text areas, level bar), and tools/ui_sim.cpp counts odd windows (now 0).
   NOT yet proven on the board: this is the most likely cause, not a confirmed one.
 - Not done: continuous motion (NEDDY_MOTION still 0), touch.
+
+--- 2026-11-09 (later still): step 2, Neddy moves all the time ---
+Owner confirmed text is clean after the even-alignment fix, asked about graphic cards (weather, scores): yes, later; order chosen:
+motion first, then the weather card.
+- NEDDY_MOTION now 1: breathing, floating, sway, glances, blinks, in every mode and in both layouts (small one tucked at the bottom).
+- Drawing the body now steps across each row in 16.16 fixed point (no float per pixel); the picture matches the old one (still
+  frames identical, motion frames within rounding).
+- Frames are paced by measured cost (uiMicros; neddy_device sets micros): 60 ms apart at best, never more than ~40% of the time
+  spent drawing (20% while listening, at least 150 ms apart, so no sound is missed).
+- Checked on the PC: nothing of him touches the edge of his drawing box over 20 s in any mode/layout (so no trails).
+- NOT known: how long a frame really takes on the board. The pacing adapts, but if it feels jerky or the mic suffers, tell me;
+  options are a lower frame rate or redrawing only the head.
+- Not done: smooth animated shrink between layouts (it still jumps), touch, weather card.

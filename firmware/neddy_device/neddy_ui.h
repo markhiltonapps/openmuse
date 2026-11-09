@@ -199,30 +199,31 @@ static void uiRenderStage(const UiPose &p, int sx0, int sy0, int sw, int sh) {
       bool eyeRow = eyv >= 0 && eyv < NEDDY_SPR_H;
       int eyi = eyeRow ? (int)eyv : 0;
       float gdy2 = (gdy * gdy) / (gry * gry);
-      for (int i = 0; i < sw; i++) {
-        float sxf = sxf0 + i * dsx;
+      // Across the row in 16.16 fixed point: no floating point per pixel for the body (the board is much slower at it).
+      int32_t u16 = (int32_t)((sxf0 * k - 0.5f) * 65536.0f);
+      const int32_t du16 = (int32_t)(dsx * k * 65536.0f);
+      int32_t e16 = (int32_t)((sxf0 - eyeCx + NEDDY_SPR_W * 0.5f) * 65536.0f);
+      const int32_t de16 = (int32_t)(dsx * 65536.0f);
+      const int32_t uMax = (srcW - 1) << 16;
+      const int fyi = 256 - fy;
+      for (int i = 0; i < sw; i++, u16 += du16, e16 += de16) {
         int r5 = 0, g6 = 0, b5 = 0;
         if (inBody) {
-          float u = sxf * k - 0.5f;
-          if (u < 0) u = 0;
-          int ix = (int)u; int fx = (int)((u - ix) * 256.0f);
-          if (ix > srcW - 1) { ix = srcW - 1; fx = 0; }
+          int32_t u = u16 < 0 ? 0 : (u16 > uMax ? uMax : u16);
+          int ix = u >> 16, fx = (u >> 8) & 255;
           int ix1 = ix + 1 > srcW - 1 ? srcW - 1 : ix + 1;
           uint16_t c00 = row0[ix], c10 = row0[ix1], c01 = row1[ix], c11 = row1[ix1];
-          int w00 = (256 - fx) * (256 - fy), w10 = fx * (256 - fy), w01 = (256 - fx) * fy, w11 = fx * fy;
+          int w00 = (256 - fx) * fyi, w10 = fx * fyi, w01 = (256 - fx) * fy, w11 = fx * fy;
           r5 = (((c00 >> 11) * w00) + ((c10 >> 11) * w10) + ((c01 >> 11) * w01) + ((c11 >> 11) * w11)) >> 16;
           g6 = ((((c00 >> 5) & 63) * w00) + (((c10 >> 5) & 63) * w10) + (((c01 >> 5) & 63) * w01) + (((c11 >> 5) & 63) * w11)) >> 16;
           b5 = (((c00 & 31) * w00) + ((c10 & 31) * w10) + ((c01 & 31) * w01) + ((c11 & 31) * w11)) >> 16;
-          if (eyeRow) {
-            float exv = sxf - eyeCx + NEDDY_SPR_W * 0.5f;
-            if (exv >= 0 && exv < NEDDY_SPR_W) {
-              uint16_t e = eyes[eyi * NEDDY_SPR_W + (int)exv];
-              if (e) {
-                r5 += e >> 11; g6 += (e >> 5) & 63; b5 += e & 31;
-                if (r5 > 31) r5 = 31;
-                if (g6 > 63) g6 = 63;
-                if (b5 > 31) b5 = 31;
-              }
+          if (eyeRow && e16 >= 0 && (e16 >> 16) < NEDDY_SPR_W) {
+            uint16_t e = eyes[eyi * NEDDY_SPR_W + (e16 >> 16)];
+            if (e) {
+              r5 += e >> 11; g6 += (e >> 5) & 63; b5 += e & 31;
+              if (r5 > 31) r5 = 31;
+              if (g6 > 63) g6 = 63;
+              if (b5 > 31) b5 = 31;
             }
           }
         }
@@ -260,6 +261,11 @@ static uint32_t uiRng = 12345;
 static int uiLastEye = -1;
 static int uiStageX = 0, uiStageY = 0, uiStageW = 0, uiStageH = 0;
 static uint32_t uiLastStage = 0, uiLastText = 0;
+// Optional: a clock in microseconds (the watch gives micros). With it, the screen measures how long drawing him takes
+// and spaces the frames so drawing never takes more than a share of each turn of the main loop (the microphone and the
+// link come first).
+static uint32_t (*uiMicros)() = nullptr;
+static float uiRenderMs = 0;         // how long one frame of him takes to draw (smoothed)
 
 static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng >> 8; }
 
@@ -398,6 +404,15 @@ static void uiPoseNow(uint32_t ms, UiPose *p) {
 }
 
 // Call as often as you like (every loop turn). Draws only what has changed; when he moves, about every 60 ms.
+static void uiDrawStage(const UiPose &p) {
+  uint32_t t0 = uiMicros ? uiMicros() : 0;
+  uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);
+  if (uiMicros) {
+    float took = (uiMicros() - t0) / 1000.0f;
+    uiRenderMs = uiRenderMs <= 0 ? took : uiRenderMs * 0.8f + took * 0.2f;
+  }
+}
+
 static void uiTick(uint32_t ms) {
   bool wantSmall = (uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK;
   if (wantSmall != uiSmall) { uiSmall = wantSmall; uiAll = true; }
@@ -409,7 +424,7 @@ static void uiTick(uint32_t ms) {
     uiStageRect(nominal, &uiStageX, &uiStageY, &uiStageW, &uiStageH);
     uiDrawText();
     uiDrawDiag();
-    uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);
+    uiDrawStage(p);
     uiAll = false; uiTextDirty = false; uiLevelDirty = false; uiLastEye = p.eye; uiLastStage = ms;
     return;
   }
@@ -417,9 +432,18 @@ static void uiTick(uint32_t ms) {
   else if (uiLevelDirty) { if (uiMode == UI_LISTEN) uiDrawLevelOnly(); uiLevelDirty = false; }
   bool draw = false;
   if (p.eye != uiLastEye) draw = true;                       // eyes changed (blink, listening level...)
-  if (uiMotion && ms - uiLastStage >= 60) draw = true;       // moving: about 16 frames a second
+  // Moving: about 16 frames a second, but never more often than drawing allows (drawing may take 40% of the time at most;
+  // while he is listening, only 20%, so no sound is missed).
+  uint32_t gap = 60;
+  if (uiMicros) {
+    float share = uiMode == UI_LISTEN ? 5.0f : 2.5f;
+    uint32_t need = (uint32_t)(uiRenderMs * share);
+    if (need > gap) gap = need;
+    if (uiMode == UI_LISTEN && gap < 150) gap = 150;
+  }
+  if (uiMotion && ms - uiLastStage >= gap) draw = true;
   if (draw) {
-    uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);
+    uiDrawStage(p);
     uiLastEye = p.eye; uiLastStage = ms;
   }
 }

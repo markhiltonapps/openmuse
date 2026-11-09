@@ -57,7 +57,7 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 
 // 1 = Neddy moves all the time (breathing, floating, glancing). 0 = still, except his eyes (and blinking).
 #ifndef NEDDY_MOTION
-#define NEDDY_MOTION 0
+#define NEDDY_MOTION 1
 #endif
 
 // 1 = show the small lines of numbers (Wi-Fi, microphone, timings) at the bottom of the screen.
@@ -743,6 +743,7 @@ void setup() {
   if (!gfx->begin()) LOGLN("[screen] gfx->begin() failed");
   uiOut.blit = outBlit;
   uiOut.fill = outFill;
+  uiMicros = []() -> uint32_t { return (uint32_t)micros(); };
   uiMotion = NEDDY_MOTION != 0;
   uiShowDiag = NEDDY_DIAG != 0;
   screenBoot("Starting");
