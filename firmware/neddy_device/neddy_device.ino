@@ -118,6 +118,11 @@ static long lastAnswerMs = -1;
 static long pressBytes = 0, pressPeak = 0, pressMisses = 0;
 static String lastPress;
 static String lastPress2;
+static String lastPress3;
+// Where the time goes between presses: the longest turn of the main loop, of the connection's own work,
+// of the idle microphone read and of starting a press; and how long a press was held without starting.
+static unsigned long maxLoop = 0, maxWs = 0, maxIdle = 0, maxStart = 0, loopPrev = 0, blockedMs = 0, blockedPrev = 0;
+static char blockedWhy = '-';  // L = link down, P = a problem screen was showing
 // Why the board last started (power on, a crash, a watchdog, low power...) and how many starts since power-up.
 static RTC_DATA_ATTR int bootCount = 0;
 static String resetWhy;
@@ -277,7 +282,7 @@ static void screenState() {
         centered("Hold BOOT to talk", 138, 2, cTeal);
         String tail = saying;
         if (tail.length() > 235) tail = String("...") + tail.substring(tail.length() - 232);
-        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 7);
+        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 6);
       } else {
         gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
         centered(deviceName, 240, 4, cWhite);
@@ -293,6 +298,7 @@ static void screenState() {
       centered(micChip + ", Wi-Fi " + String(WiFi.RSSI()) + " dBm", 374, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
+      if (lastPress3.length()) centered(lastPress3, 312, 2, cGrey);
       if (lastAnswerMs >= 0) {
         char buf[48];
         snprintf(buf, sizeof(buf), "last answer %.1f s after release", lastAnswerMs / 1000.0);
@@ -311,6 +317,7 @@ static void screenState() {
       centered("Thinking", 240, 4, cWhite);
       if (lastPress.length()) centered(lastPress, 320, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 344, 2, cGrey);
+      if (lastPress3.length()) centered(lastPress3, 368, 2, cGrey);
       break;
     case M_SPEAK:
       gfx->fillCircle(LCD_WIDTH / 2, 90, 36, cTeal);
@@ -542,7 +549,13 @@ static void stopTalking() {
     char note2[64];
     snprintf(note2, sizeof(note2), "slowest read %lu ms, send %lu ms", slowRead, slowSend);
     lastPress2 = note2;
-    Serial.printf("[talk] %s, %s\n", note, note2);
+    char note3[64];
+    snprintf(note3, sizeof(note3), "L%lu W%lu M%lu S%lu H%lu%c", maxLoop, maxWs, maxIdle, maxStart,
+             blockedMs, blockedWhy);
+    lastPress3 = note3;
+    maxLoop = maxWs = maxIdle = maxStart = blockedMs = blockedPrev = 0;
+    blockedWhy = '-';
+    Serial.printf("[talk] %s, %s, %s\n", note, note2, note3);
   }
   waitingFirstSound = true;
   setMode(M_THINK);
@@ -793,6 +806,9 @@ void setup() {
 }
 
 void loop() {
+  unsigned long turnAt = millis();
+  if (loopPrev && turnAt - loopPrev > maxLoop) maxLoop = turnAt - loopPrev;
+  loopPrev = turnAt;
   // 1. Wi-Fi
   if (WiFi.status() != WL_CONNECTED) {
     wsUp = false;
@@ -820,7 +836,9 @@ void loop() {
     startSocket();
     socketStarted = true;
   }
+  unsigned long wsAt = millis();
   ws.loop();
+  if (millis() - wsAt > maxWs) maxWs = millis() - wsAt;
 
   // A key that doesn't work any more (removed in the app): the connection never opens.
   if (!wsUp && wsFailures >= 12) {
@@ -840,11 +858,27 @@ void loop() {
 
   // 4. The button
   bool down = buttonDown();
-  if (down && !held && wsUp && mode != M_PROBLEM) startTalking();
+  if (down && !held) {
+    if (wsUp && mode != M_PROBLEM) {
+      unsigned long startAt = millis();
+      startTalking();
+      maxStart = millis() - startAt;
+      blockedPrev = 0;
+    } else {
+      blockedWhy = wsUp ? 'P' : 'L';
+      unsigned long t = millis();
+      if (blockedPrev) blockedMs += t - blockedPrev;
+      blockedPrev = t;
+    }
+  } else if (!down) {
+    blockedPrev = 0;
+  }
   if (held) {
     if (!down || millis() - pressStart > (unsigned long)MAX_TALK_SECONDS * 1000UL) stopTalking();
     else sendMicChunk();
   } else if (wsUp) {
+    unsigned long idleAt = millis();
     idleMic();
+    if (millis() - idleAt > maxIdle) maxIdle = millis() - idleAt;
   }
 }

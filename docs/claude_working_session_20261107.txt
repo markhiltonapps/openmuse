@@ -802,3 +802,8 @@ about 40 s after a call started, then "connected" 2 s later (the rest is the boa
 press is slow because the connection dropped and the board is reconnecting. Cause not yet known (poor Wi-Fi? heartbeat too strict? who closed it?).
 Changes (not yet pushed/uploaded): board heartbeat 20 s / 10 s / 3 misses (was 15/4/2), reconnect interval 1 s (was 3), Wi-Fi strength (dBm) on the
 ready screen, JSON \uXXXX decoding (an em dash showed as "u2014"); api logs "ended by this server (code reason)" when it drops a device itself.
+
+GOOD (2026-11-09 ~01:25 UTC, after the 9f3e550 push): "link drops 0", Wi-Fi -37/-39 dBm, answers 2.1 s after release on a first press.
+Still: on the 2nd and 3rd press the sound bar starts 4-5 s after BOOT is pressed. Not the link, not the mic read (28 ms), not sending (2 ms):
+the main loop is busy or the press isn't being accepted (an "error" screen holds off presses for 5 s: mode M_PROBLEM). New on-screen line
+"L W M S H": longest loop turn, longest connection (ws.loop) turn, longest idle mic read, press start time, ms held without starting (L link down / P problem screen).
