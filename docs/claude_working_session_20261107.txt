@@ -862,3 +862,15 @@ Next: owner tries step 1; then NEDDY_MOTION 1 (timing on the board unknown: each
 STEP 1 WORKS ON THE BOARD (2026-11-09 ~02:25 UTC): it compiled and ran; owner: text too small, remove the numbers at the bottom. Fonts enlarged (title 34, words 28 Medium,
 heard 22, small 14), the diagnostic lines are off by default (NEDDY_DIAG 0 in the sketch; uiShowDiag in neddy_ui.h; the code to build them stays), words area uses the freed space.
 The robot looked whiter/pinker in the owner's phone photo than in the mockup (probably camera exposure on the AMOLED): ask if he looks wrong in person.
+
+--- 2026-11-09 (later): words at the top, Neddy tucked at the bottom; sheared text line ---
+Owner's photo showed one answer line sheared ("our mind The capital of y…") and sent a round-watch reference with a tiny
+robot peeking up from the bottom edge: "how you might save space when text is on the screen".
+- Layout: when words are on screen Neddy shrinks to 0.4 and stands at the bottom middle (feet 14 px above the edge);
+  the words use the whole screen above him, starting at the top. Big layout (nothing to read) is unchanged.
+  Full body kept (owner earlier asked for the entire body); if "peeking" (half hidden) is wanted, it is one number (footY).
+- Sheared line: the AMOLED chip (CO5300) wants every window to start on an even column/row and be an even size.
+  The old code sent 656 odd windows in the PC test (centred lines at odd x, odd widths, odd bands). Everything is now
+  even (uiText, uiStageRect, text areas, level bar), and tools/ui_sim.cpp counts odd windows (now 0).
+  NOT yet proven on the board: this is the most likely cause, not a confirmed one.
+- Not done: continuous motion (NEDDY_MOTION still 0), touch.

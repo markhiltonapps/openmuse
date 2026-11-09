@@ -43,18 +43,23 @@ static int uiTextWidth(const NeddyFont &f, const char *s) {
   return w;
 }
 
+// The AMOLED chip wants every window to start on an even column and row and be an even size; an odd one
+// shifts the rows and the text looks sheared. So everything drawn here is lined up on even numbers.
 static void uiText(const NeddyFont &f, int x, int y, const char *s, uint16_t fg) {
   int w = uiTextWidth(f, s);
   if (w <= 0) return;
+  x &= ~1; y &= ~1;
   if (x < 0) x = 0;
-  if (x + w > UI_W) w = UI_W - x;
+  w = (w + 1) & ~1;
+  if (x + w > UI_W) w = (UI_W - x) & ~1;
   if (w <= 0) return;
-  int h = f.h;
-  int chunk = (int)(sizeof(uiLine) / sizeof(uiLine[0])) / w;   // rows that fit the buffer (a tall font is sent in strips)
-  if (chunk > h) chunk = h;
+  int h = f.h, hEven = (h + 1) & ~1;
+  int chunk = ((int)(sizeof(uiLine) / sizeof(uiLine[0])) / w) & ~1;   // rows that fit the buffer (a tall font is sent in strips)
+  if (chunk > hEven) chunk = hEven;
+  if (chunk < 2) chunk = 2;
   int fr = (fg >> 11) & 31, fgc = (fg >> 5) & 63, fb = fg & 31;
-  for (int r0 = 0; r0 < h; r0 += chunk) {
-    int rows = h - r0 < chunk ? h - r0 : chunk;
+  for (int r0 = 0; r0 < hEven; r0 += chunk) {
+    int rows = hEven - r0 < chunk ? hEven - r0 : chunk;
     memset(uiLine, 0, (size_t)w * rows * 2);
     int cx = 0;
     for (const char *p = s; *p && cx < w; p++) {
@@ -62,7 +67,7 @@ static void uiText(const NeddyFont &f, int x, int y, const char *s, uint16_t fg)
       if (c < 32 || c > 126) c = '?';
       int a = f.adv[c - 32];
       const uint8_t *g = f.bits + f.off[c - 32];
-      for (int row = r0; row < r0 + rows; row++) {
+      for (int row = r0; row < r0 + rows && row < h; row++) {
         for (int col = 0; col < a && cx + col < w; col++) {
           int al = g[row * a + col];
           if (!al) continue;
@@ -148,6 +153,9 @@ static void uiStageRect(const UiPose &p, int *x, int *y, int *w, int *h) {
   if (y0 < 0) y0 = 0;
   if (y1 > UI_H) y1 = UI_H;
   if (x1 - x0 > UI_STAGE_MAX_W) x1 = x0 + UI_STAGE_MAX_W;
+  x0 &= ~1; y0 &= ~1; x1 = (x1 + 1) & ~1; y1 = (y1 + 1) & ~1;     // even, see uiText
+  if (x1 > UI_W) x1 = UI_W;
+  if (y1 > UI_H) y1 = UI_H;
   *x = x0; *y = y0; *w = x1 - x0; *h = y1 - y0;
 }
 
@@ -294,18 +302,20 @@ static const char *uiModeLabel() {
 static void uiBasePose(UiPose *p) {
   p->breath = 0; p->sway = 0; p->eyeDx = 0; p->eyeDy = 0; p->eye = EYE_HAPPY;
   p->glow = uiModeColour();
-  if (uiSmall) { p->scale = 0.5f; p->footX = UI_W / 2.0f; p->footY = 8 + NEDDY_BODY_H * 0.5f; }
+  if (uiSmall) { p->scale = 0.4f; p->footX = UI_W / 2.0f; p->footY = UI_H - 14.0f; }   // small, tucked at the bottom middle
   else { p->scale = 1.0f; p->footX = UI_W / 2.0f; p->footY = 14 + NEDDY_BODY_H; }
 }
 
 static void uiTextAreas(int *top, int *bottom) {
-  *top = uiStageY + uiStageH + 2; *bottom = uiShowDiag ? 450 : 496;
+  if (uiSmall) { *top = 12; *bottom = uiStageY - 4; }                      // words fill the top, he waits below
+  else { *top = uiStageY + uiStageH + 2; *bottom = uiShowDiag ? 450 : 496; }
+  *top &= ~1; *bottom &= ~1;
 }
 
 static int uiLevelY() {
   int top, bottom;
   uiTextAreas(&top, &bottom);
-  return top + 2 + NFONT_TITLE.h + 8;
+  return (top + 2 + NFONT_TITLE.h + 8) & ~1;
 }
 
 static void uiDrawText() {
@@ -317,10 +327,10 @@ static void uiDrawText() {
   int y = uiLevelY();
   if (uiMode == UI_LISTEN) {
     // a rounded level bar
-    int bx = 75, bw = 260, by = y + 6;
+    int bx = 76, bw = 258, by = y + 6;
     uiOut.fill(bx, by, bw, 18, uiRgb(70, 74, 80));
     uiOut.fill(bx + 2, by + 2, bw - 4, 14, UI_BLACK);
-    int fw = (int)((bw - 4) * uiLevel);
+    int fw = ((int)((bw - 4) * uiLevel)) & ~1;
     if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 14, col);
     return;
   }
@@ -336,9 +346,9 @@ static void uiDrawText() {
 }
 
 static void uiDrawLevelOnly() {
-  int y = uiLevelY(), bx = 75, bw = 260, by = y + 6;
+  int y = uiLevelY(), bx = 76, bw = 258, by = y + 6;
   uiOut.fill(bx + 2, by + 2, bw - 4, 14, UI_BLACK);
-  int fw = (int)((bw - 4) * uiLevel);
+  int fw = ((int)((bw - 4) * uiLevel)) & ~1;
   if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 14, uiModeColour());
 }
 

@@ -672,3 +672,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   multiple of a timeout means a timeout, not slow work. Firmware logging is now off by default (`DEBUG_SERIAL` in neddy_device.ino). I first blamed
   the screen's per-dot text drawing (a real cost in Arduino_GFX at size > 1, so `drawText` draws a line at a time) and was wrong: measure before fixing.
   The server's keep-alive (`MISSED_LIMIT`) must tolerate a slow device; log who closed a connection ("ended by this server" vs the device).
+- **AMOLED windows must be even (2026-11-09):** the watch's CO5300 screen wants every drawn window (x, y, width, height) to be
+  an even number; odd ones shift rows and text looks sheared. `neddy_ui.h` lines everything up on even numbers and
+  `tools/ui_sim.cpp` counts odd windows (must print 0). Words on screen: Neddy shrinks and stands at the bottom middle,
+  the text uses the space above him (owner's reference, 2026-11-09).

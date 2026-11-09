@@ -8,9 +8,13 @@
 #include "neddy_ui.h"
 
 static uint16_t fb[UI_W * UI_H];
-static long blits = 0, blitPixels = 0;
+static long blits = 0, blitPixels = 0, oddWindows = 0;
+static void checkEven(const char *what, int x, int y, int w, int h) {
+  if ((x | y | w | h) & 1) { oddWindows++; fprintf(stderr, "ODD %s window x=%d y=%d w=%d h=%d\n", what, x, y, w, h); }
+}
 
 static void simBlit(int x, int y, int w, int h, uint16_t *px) {
+  checkEven("blit", x, y, w, h);
   blits++; blitPixels += (long)w * h;
   for (int r = 0; r < h; r++) {
     if (y + r < 0 || y + r >= UI_H) continue;
@@ -18,6 +22,7 @@ static void simBlit(int x, int y, int w, int h, uint16_t *px) {
   }
 }
 static void simFill(int x, int y, int w, int h, uint16_t col) {
+  checkEven("fill", x, y, w, h);
   blits++; blitPixels += (long)w * h;
   for (int r = 0; r < h; r++) for (int c = 0; c < w; c++) {
     int xx = x + c, yy = y + r;
@@ -79,5 +84,6 @@ int main(int argc, char **argv) {
   uiSmall = false; UiPose big; uiBasePose(&big); int bx, by, bw, bh; uiStageRect(big, &bx, &by, &bw, &bh);
   t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(big, bx, by, bw, bh);
   printf("big-layout stage %dx%d: %.2f ms per frame on this computer\n", bw, bh, (now() - t0) / 20);
+  printf("odd-aligned windows: %ld\n", oddWindows);
   return 0;
 }
