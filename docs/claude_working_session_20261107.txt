@@ -759,3 +759,6 @@ ready screen. Waveshare's own 08_ES8311 example uses the same ES8311-only mic se
 chip list, to be proven by the next on-screen "mic peak". Lesson: check a board's schematic/chip list for which
 chip carries the microphone before writing firmware; verify with a number on screen before trusting any "answer".
 Server logging (button released after N ms ... heard N characters) was pushed (ddfa276) with the owner's OK.
+
+CONFIRMED (2026-11-09): after starting the ES7210 the board's mic peak went from 0 to 26656 and Neddy answered.
+Peak 26656 of 32767 is hot: if answers are clipped or noisy, lower the ES7210 gain (the `10` in `0x10 | 10`, 30 dB) to 6-8.

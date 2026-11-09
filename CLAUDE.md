@@ -661,4 +661,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   The api only copies audio between the device's websocket (`ws`, upgrade handled outside Hono, so the sign-in middleware doesn't
   run: the device token is checked in `DeviceBridge.upgrade`) and the voice service (`/v1/live/sessions/<id>/audio`); the call
   starts at the first press so an idle device costs nothing. Real latency can't be known without real Soniox/Inworld and the board.
+- **Device microphone (2026-11-09):** on the Waveshare 2.06 watch board the microphones are read through a separate ES7210
+  chip (I2C 0x40), not the ES8311 speaker chip; with only the ES8311 set up the mic sent zeros ("mic peak 0") and the voice
+  service answered silence with made-up replies. A first answer is not proof the mic works: show the mic's peak on screen.
+  Check which chip carries each part (the board's chip list/schematic) before writing firmware. The Arduino IDE opens the file
+  in its own sketch folder (Sketch > Show Sketch Folder), not a copy in Downloads or Recent.
 
