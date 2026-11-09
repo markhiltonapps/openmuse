@@ -25,6 +25,20 @@
 #include "es8311.h"
 #include "settings.h"
 
+// Messages out of the USB cable are OFF by default. With no computer reading them, every message waits about
+// two seconds before giving up, which froze the board for 2 to 8 seconds around each button press. Set to 1
+// only while the Serial Monitor is open.
+#ifndef DEBUG_SERIAL
+#define DEBUG_SERIAL 0
+#endif
+#if DEBUG_SERIAL
+#define LOGLN(x) Serial.println(x)
+#define LOGF(...) Serial.printf(__VA_ARGS__)
+#else
+#define LOGLN(x) do { } while (0)
+#define LOGF(...) do { } while (0)
+#endif
+
 // 1 = play Neddy's voice through the speaker. 0 = words on screen only (the speaker stays silent and its
 // amplifier off). The prototype's speaker wire is broken, and after an answer was played the microphone
 // stopped delivering sound, so this is off while that is being tracked down.
@@ -473,7 +487,7 @@ static void screenSpeech() {
 static void setMode(int next) {
   if ((int)mode == next) return;
   mode = (Mode)next;
-  Serial.printf("[mode] %d\n", (int)next);
+  LOGF("[mode] %d\n", (int)next);
   screenState();
 }
 
@@ -520,7 +534,7 @@ static bool es7210Init() {
   }
   if (!addr) {
     micChip = "mic chip: NOT FOUND";
-    Serial.println("[mic] no ES7210 answered at 0x40-0x43");
+    LOGLN("[mic] no ES7210 answered at 0x40-0x43");
     return false;
   }
   int bad = 0;
@@ -562,14 +576,14 @@ static bool es7210Init() {
   char note[48];
   snprintf(note, sizeof(note), "mic chip 0x%02X %s", addr, bad ? "setup errors" : "ok");
   micChip = note;
-  Serial.printf("[mic] ES7210 at 0x%02X, %d failed writes\n", addr, bad);
+  LOGF("[mic] ES7210 at 0x%02X, %d failed writes\n", addr, bad);
   return bad == 0;
 }
 
 static bool audioInit() {
   i2s.setPins(41, 45, 40, 42, 16);  // mclk, bclk, ws, data out, data in (Waveshare's example)
   if (!i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) {
-    Serial.println("[audio] I2S failed to start");
+    LOGLN("[audio] I2S failed to start");
     return false;
   }
   i2s.setTimeout(100);  // a read that finds no sound gives up quickly instead of freezing everything
@@ -577,7 +591,7 @@ static bool audioInit() {
   pinMode(46, OUTPUT);
   digitalWrite(46, PLAY_ANSWERS ? HIGH : LOW);  // speaker amplifier
   if (codecInit() != ESP_OK) {
-    Serial.println("[audio] audio chip setup failed");
+    LOGLN("[audio] audio chip setup failed");
     return false;
   }
   es7210Init();  // the microphone chip; a problem is shown on screen, not fatal
@@ -673,7 +687,7 @@ static void startTalking() {
   tSnd = b - a;
   tMode = c - b;
   tTrash = d - c;
-  Serial.println("[talk] start");
+  LOGLN("[talk] start");
 }
 
 static void stopTalking() {
@@ -698,11 +712,11 @@ static void stopTalking() {
     tSnd = tMode = tTrash = maxCb = 0;
     maxLoop = maxWs = maxIdle = maxStart = blockedMs = blockedPrev = 0;
     blockedWhy = '-';
-    Serial.printf("[talk] %s, %s, %s, %s\n", note, note2, note3, note4);
+    LOGF("[talk] %s, %s, %s, %s\n", note, note2, note3, note4);
   }
   waitingFirstSound = true;
   setMode(M_THINK);
-  Serial.println("[talk] end");
+  LOGLN("[talk] end");
 }
 
 // Reads 20 ms of microphone sound, makes it mono (takes the louder of the two channels), sends it.
@@ -768,7 +782,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
   lastRxAt = millis();
   switch (type) {
     case WStype_CONNECTED:
-      Serial.println("[neddy] connected");
+      LOGLN("[neddy] connected");
       if (wsDropAt) wsBackMs = (long)(millis() - wsDropAt);
       wsUp = true;
       wsFailures = 0;
@@ -778,7 +792,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       break;
     case WStype_DISCONNECTED:
       if (wsUp) {
-        Serial.println("[neddy] disconnected");
+        LOGLN("[neddy] disconnected");
         wsDrops++;
         wsDropAt = millis();
       }
@@ -798,7 +812,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         if (mode == M_READY) screenState();
       } else if (kind == "state") {
         String value = jsonString(text, "value");
-        Serial.printf("[state] %s\n", value.c_str());
+        LOGF("[state] %s\n", value.c_str());
         if (value == "speaking" && !held) setMode(M_SPEAK);
         else if (value == "thinking" && !held) setMode(M_THINK);
         else if (value == "idle" && !held && mode != M_LISTEN) setMode(M_READY);
@@ -812,10 +826,10 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
           screenState();
         }
       } else if (kind == "latency") {
-        Serial.printf("[latency] server says %s ms\n", text.c_str());
+        LOGF("[latency] server says %s ms\n", text.c_str());
       } else if (kind == "error") {
         String message = plain(jsonString(text, "message"));
-        Serial.printf("[error] %s\n", message.c_str());
+        LOGF("[error] %s\n", message.c_str());
         problem = message;
         if (!held) {
           screenProblem("Neddy says", message);
@@ -823,7 +837,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
           problemUntil = millis() + 5000;  // the loop puts the normal screen back
         }
       } else if (kind == "session.closed") {
-        Serial.println("[neddy] the call ended");
+        LOGLN("[neddy] the call ended");
         if (!held && mode != M_LISTEN) setMode(M_READY);
       }
       break;
@@ -832,7 +846,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       if (waitingFirstSound) {
         waitingFirstSound = false;
         lastAnswerMs = (long)(millis() - releasedAt);
-        Serial.printf("[latency] first sound %ld ms after release\n", lastAnswerMs);
+        LOGF("[latency] first sound %ld ms after release\n", lastAnswerMs);
       }
       if (length) xStreamBufferSend(playBuffer, payload, length, 0);
       break;
@@ -859,7 +873,7 @@ static bool joinWifi() {
   unsigned long began = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - began < 30000) delay(250);
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[wifi] joined, address %s\n", WiFi.localIP().toString().c_str());
+    LOGF("[wifi] joined, address %s\n", WiFi.localIP().toString().c_str());
     return true;
   }
   return false;
@@ -874,14 +888,14 @@ static bool pairWithNeddy() {
     String code = jsonString(answer, "code");
     String pollToken = jsonString(answer, "pollToken");
     if (status != 201 || code.length() != 6 || pollToken.length() == 0) {
-      Serial.printf("[pair] couldn't get a code (status %d): %s\n", status, answer.c_str());
+      LOGF("[pair] couldn't get a code (status %d): %s\n", status, answer.c_str());
       screenProblem("Can't reach Neddy",
                     String("Checking again in a few seconds. (code ") + status + ")");
       delay(6000);
       if (WiFi.status() != WL_CONNECTED) return false;
       continue;
     }
-    Serial.printf("[pair] show code %s\n", code.c_str());
+    LOGF("[pair] show code %s\n", code.c_str());
     unsigned long until = millis() + 590000UL;
     int shownSeconds = -1;
     unsigned long lastPoll = 0;
@@ -904,7 +918,7 @@ static bool pairWithNeddy() {
             if (name.length()) deviceName = name;
             prefs.putString("token", deviceToken);
             prefs.putString("name", deviceName);
-            Serial.println("[pair] paired!");
+            LOGLN("[pair] paired!");
             screenBoot("Paired!");
             delay(1500);
             return true;
@@ -924,13 +938,13 @@ static bool pairWithNeddy() {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\nNeddy device " FIRMWARE_VERSION);
+  LOGLN("\nNeddy device " FIRMWARE_VERSION);
   bootCount++;
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
-  Serial.println(resetWhy);
+  LOGLN(resetWhy);
   pinMode(BUTTON, INPUT_PULLUP);
 
-  if (!gfx->begin()) Serial.println("[screen] gfx->begin() failed");
+  if (!gfx->begin()) LOGLN("[screen] gfx->begin() failed");
   makeColours();
   screenBoot("Starting");
 
@@ -942,7 +956,7 @@ void setup() {
       prefs.remove("token");
       prefs.remove("name");
       screenBoot("Pairing cleared");
-      Serial.println("[pair] cleared");
+      LOGLN("[pair] cleared");
       delay(2000);
     }
   }

@@ -666,8 +666,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   service answered silence with made-up replies. A first answer is not proof the mic works: show the mic's peak on screen.
   Check which chip carries each part (the board's chip list/schematic) before writing firmware. The Arduino IDE opens the file
   in its own sketch folder (Sketch > Show Sketch Folder), not a copy in Downloads or Recent.
-- **Device screen speed (2026-11-09):** Arduino_GFX's `print()` at text size above 1 sends every lit dot of every letter as its own screen command
-  (thousands per screen), so a full screen of text froze the board for 2-6 s and made later button presses wait. Draw a whole line of text into a
-  buffer and send it once (`drawText` in firmware/neddy_device), and measure the draw: the on-screen timers (loop/connection/start/callback) found it.
+- **Device freezes (2026-11-09):** USB-CDC `Serial.print` on the ESP32-S3 waits about 2 s per message when no computer is reading, once its small
+  buffer is full; every button press printed 2-3 messages, so the board froze for 2-8 s (the first press was fast only because the buffer was still
+  empty). The giveaway was the on-screen timers: every stall was a near-exact multiple of 2000 ms (2021, 4029, 6022, 8027). A time that is a round
+  multiple of a timeout means a timeout, not slow work. Firmware logging is now off by default (`DEBUG_SERIAL` in neddy_device.ino). I first blamed
+  the screen's per-dot text drawing (a real cost in Arduino_GFX at size > 1, so `drawText` draws a line at a time) and was wrong: measure before fixing.
   The server's keep-alive (`MISSED_LIMIT`) must tolerate a slow device; log who closed a connection ("ended by this server" vs the device).
-

@@ -828,3 +828,8 @@ the drawing code tested on this machine): each line of text is built in memory f
 draw16bitRGBBitmap call (`drawText` in neddy_device.ino; `centered` and `wrapped` use it). Lesson: on a QSPI AMOLED never use scaled print(); draw lines/bitmaps in one go.
 Also: the "stuck on Thinking" screen is probably the same freeze; the server ends a press with no words after 2 s (EMPTY_AFTER_SECS).
 Owner asked (later) whether the screen graphics can look better: yes (smooth fonts, a drawing canvas, real Neddy art) - after the device is reliable.
+
+CORRECTION (2026-11-09 ~02:20 UTC): the line-at-a-time text drawing (e83e597) made NO difference. The timers showed mode2021, cb4029, S4022, L8027: round multiples of
+2000 ms. Every Serial.println/printf blocks ~2 s when no computer reads the USB-CDC port once its buffer is full; setMode printed once (2 s), startTalking twice (4 s),
+a message handler 2 (4 s), several together 8 s. The first press was fast because the buffer was still empty. Fix: all firmware logging goes through LOGLN/LOGF,
+compiled out unless DEBUG_SERIAL is 1 (default 0). CLAUDE.md lesson rewritten to say so (I had blamed the screen drawing, which was wrong).
