@@ -913,3 +913,33 @@ server must be deployed (push) BEFORE the card can appear; with the new firmware
 Help/site: the device isn't in the app's Help or the site yet (not offered to testers), so nothing to update there; do it with the
 device's first public wording.
 Next: smooth shrink between layouts, touch, sports score card (check whether scores come back as clean data), speaker repair.
+
+--- 2026-11-09 (night): any place's weather, and cards for anything with a shape ---
+Owner: the weather card showed only for the home city ("what's the weather" works; another city gave no card) and asked that
+"anytime a question is asked, if it can be beautified with a card, that is the approach".
+Why the first push had no card: Railway took ~7 minutes to start the new api; I redeployed once (unneeded, restarted twice).
+Lesson: after a push, check the deployment list shows SUCCESS and the log shows "Starting Container" before testing.
+SERVER:
+- get_weather takes `place` ("Denver", "Paris, France"): geocode, Weather Service where it covers (US), Open-Meteo (free, no key,
+  worldwide) elsewhere (WeatherService.forPlace / shapeOpenMeteo / wmoSky). Open-Meteo is untested live (the sandbox can't reach it):
+  mocked in tests; check Railway's logs on first use ("Weather for X unavailable: ..." lines).
+- show_on_watch (device-card-tools.ts), only on a device's call (forwardedProps.deviceCall; the call-screen tool show_on_screen is
+  not offered there): kinds score / fact / list, validated and cleaned (buildDeviceCard), result {shown, card}. DEVICE_SCREEN
+  tells the agent to use a card by default whenever an answer fits one. deviceWire flattens cards for the device.
+- Tests: device-card (+5), weather (+1), conversation-device (new: tools offered on a watch call vs an app call), devices.
+FIRMWARE (needs the update zip): score, fact and list cards; `temp` and `big` fonts with digits and $ . , : % + ; values like
+"24 min" or "350F" are a big number with a small unit; list rows centre when few; the JSON reader was run on the PC against the
+server's real messages (a 0 score, quotes, the degree sign).
+Known limits: the agent chooses the card, so a question may get words only until its habits settle; each card costs one more model
+call (~1-2 s); scores come from web search text, so a wrong or missing score is the search's, not the card's.
+
+--- 2026-11-09 (night, later): "first meeting tomorrow" answered wrong on the watch ---
+Owner asked the watch what their first meeting was tomorrow: it said 9 AM, an Amazon meeting; really the first is 10 AM and the Amazon
+interview is 2:30 PM. Cause found in the code: look_at_calendar gave the agent each event as a UTC instant plus a `timeZone` name,
+leaving the (quick) model to convert; and on a watch call the result claimed "this is on their screen as a card" (false there).
+FIX (server, commit with the cards): every event now has `when` in the person's own clock ("Tuesday 10:00 AM to 11:00 AM", whenText in
+day-tools.ts), the result has `now` in their clock, the tool says never to convert times itself, and on a device's call it makes no
+card claim and tells the agent to say the first events and use show_on_watch (list) for three or more. Test: day-tools (10 AM and
+2:30 PM in Chicago, the same instants in New York, all-day).
+NOT CONFIRMED: whether the saved time zone (agent-settings/preferences, set by the app; "UTC" when never sent) is right for the owner.
+A 1-hour miss could also be a wrong saved zone. If the times are still off after the deploy, check that first.

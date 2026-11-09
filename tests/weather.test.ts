@@ -405,3 +405,94 @@ test("the forecast where the person is: their shared spot, sunrise and sunset, a
     /isn't available here/,
   );
 });
+
+test("weather for any place by name: the Weather Service in the US, Open-Meteo anywhere else", async () => {
+  const asked: string[] = [];
+  const fetcher = (async (url: string) => {
+    asked.push(url.replace(/\?.*/, "").replace("https://", ""));
+    if (url.includes("api.open-meteo.com"))
+      return Response.json({
+        timezone: "Europe/Paris",
+        current: { temperature_2m: 61.4, apparent_temperature: 58.8, weather_code: 2, is_day: 1 },
+        daily: {
+          time: ["2026-09-30", "2026-10-01", "2026-10-02"],
+          temperature_2m_max: [66.2, 63, 60],
+          temperature_2m_min: [50, 48.5, 47],
+          precipitation_probability_max: [10, 55, 80],
+          weather_code: [2, 61, 65],
+        },
+      });
+    if (url.includes("/points/48.8")) return new Response("{}", { status: 404 });
+    if (url.includes("/points/"))
+      return Response.json({
+        properties: {
+          forecast: "https://api.weather.gov/gridpoints/HGX/65,97/forecast",
+          forecastHourly: "https://api.weather.gov/gridpoints/HGX/65,97/forecast/hourly",
+          timeZone: "America/Chicago",
+        },
+      });
+    if (url.endsWith("/forecast/hourly")) return Response.json({ properties: { periods: HOURLY } });
+    if (url.endsWith("/forecast")) return Response.json({ properties: { periods: DAILY } });
+    if (url.includes("/alerts/active")) return Response.json({ features: [] });
+    return new Response("{}", { status: 404 });
+  }) as unknown as typeof fetch;
+  const places: Record<string, { lat: number; lng: number }> = {
+    "Paris, France": { lat: 48.8566, lng: 2.3522 },
+    Denver: { lat: 39.7392, lng: -104.9903 },
+  };
+  const weather = new WeatherService({
+    areas: new Areas(db),
+    geocode: async (query) => places[query],
+    userAgent: "test",
+    fetcher,
+    now: () => NOW.getTime(),
+  });
+
+  // Outside the US: Open-Meteo, shaped like the rest (no hours or alerts), with the sky in words.
+  const paris = await weather.forPlace("Paris, France");
+  assert.ok("weather" in paris);
+  assert.equal(paris.weather.place, "Paris, France");
+  assert.equal(paris.weather.now.temp, 61);
+  assert.equal(paris.weather.now.feelsLike, 59);
+  assert.equal(paris.weather.now.sky, "Partly cloudy");
+  assert.deepEqual(paris.weather.today, { high: 66, low: 50, rain: 10 });
+  assert.equal(paris.weather.days[1]?.sky, "Light rain");
+  assert.equal(paris.weather.days[2]?.sky, "Heavy rain");
+  assert.deepEqual(paris.weather.hours, []);
+
+  // In the US the Weather Service answers, as for the home city.
+  const denver = await weather.forPlace("Denver");
+  assert.ok("weather" in denver);
+  assert.equal(denver.weather.now.temp, 90);
+  assert.ok(
+    !asked.some((line) => line.includes("open-meteo") && asked.indexOf(line) > asked.length - 3),
+  );
+
+  // A place that can't be found says so; a geocoder that's off says that.
+  assert.deepEqual(await weather.forPlace("Nowhereville"), { unavailable: "not-found" });
+  const off = new WeatherService({ areas: new Areas(db), userAgent: "test", fetcher });
+  assert.deepEqual(await off.forPlace("Paris, France"), { unavailable: "off" });
+
+  // The agent's tool: `place` gives the same facts, a card for the watch, and no hourly claim it can't make.
+  const [tool] = weatherToolSpecs(weather, "nia");
+  const said = (await tool?.execute({ place: "Paris, France" })) as {
+    forWhere: string;
+    now: string;
+    rainSoon?: string;
+    deviceCard: { place: string; temp: number; sky: string; icon: string };
+  };
+  assert.equal(said.forWhere, "for Paris, France");
+  assert.equal(said.now, "61°F, partly cloudy");
+  assert.equal(said.rainSoon, undefined);
+  assert.deepEqual(
+    {
+      place: said.deviceCard.place,
+      temp: said.deviceCard.temp,
+      sky: said.deviceCard.sky,
+      icon: said.deviceCard.icon,
+    },
+    { place: "Paris, France", temp: 61, sky: "Partly cloudy", icon: "partly" },
+  );
+  const missing = (await tool?.execute({ place: "Nowhereville" })) as { unavailable: string };
+  assert.match(missing.unavailable, /Couldn't find a place called "Nowhereville"/);
+});

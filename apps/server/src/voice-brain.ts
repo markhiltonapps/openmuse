@@ -3,7 +3,11 @@ import { type BaseEvent, EventType, type Message, type RunAgentInput } from "@ag
 import type { Observable } from "rxjs";
 import { z } from "zod";
 import type { AgentTask } from "../../../packages/domain/src/agent.ts";
-import { type DeviceCard, weatherDeviceCard } from "../../../packages/domain/src/device-card.ts";
+import {
+  type DeviceCard,
+  deviceCardFromLoose,
+  weatherDeviceCard,
+} from "../../../packages/domain/src/device-card.ts";
 import type { ActionProposal } from "../../../packages/domain/src/index.ts";
 import {
   CALL_DETAIL_TOOLS,
@@ -156,21 +160,22 @@ function shown(tool: CallDetailTool, raw: string) {
  * what the device can really show counts: a result with no card gets no claim of one.
  */
 export function deviceCardFrom(tool: string, raw: string): DeviceCard | undefined {
-  if (tool !== "get_weather") return undefined;
+  if (tool !== "get_weather" && tool !== "show_on_watch") return undefined;
   try {
-    const result = JSON.parse(raw) as { deviceCard?: unknown };
-    return weatherDeviceCard(result?.deviceCard);
+    const result = JSON.parse(raw) as { deviceCard?: unknown; card?: unknown; shown?: unknown };
+    if (tool === "get_weather") return weatherDeviceCard(result?.deviceCard);
+    return result?.shown === true ? deviceCardFromLoose(result.card) : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Where what's put on screen appears on a watch-style device: its small screen draws only the
- * weather, as a card that stays until the next press.
+ * Where what's put on screen appears on a watch-style device: one small card at a time, drawn by the
+ * device itself, that stays until the next press. Showing one is the default whenever an answer fits.
  */
 export const DEVICE_SCREEN =
-  "They're talking through a small watch-style device. Its screen can show only one thing besides words: the weather, as a card (the look-up shows it by itself when you call get_weather for their home city or where they are). When you have looked up the weather, say the key facts in a sentence or two and that the card is on the watch screen. Nothing else (lists, emails, buttons, documents) can show there, so never say anything is on their screen; say what they need.";
+  "They're talking through a small watch-style device with a small screen. Besides your words it shows one card at a time, and showing a card is the default whenever the answer fits one: for the weather call get_weather (their home city, where they are, or any place they name: pass place), which puts its card up by itself; for a game score, a price or other number, a time, a count or distance, or a short list or schedule, find the facts and then call show_on_watch with them. After a card, say the key point in a sentence or two and that it's on the watch screen. Nothing else (long text, emails, buttons, documents, links) can show there, so for those never say it's on their screen: say what they need out loud.";
 
 const titleOf = (item: CallDetail["items"][number]) => {
   // An Approve card has its own title; the answer's heading comes from what was found.
@@ -488,7 +493,7 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
       ],
       state: {},
       // A call's look-ups use their own model (the Models card's "Look-ups during calls").
-      forwardedProps: { voiceLookup: true },
+      forwardedProps: { voiceLookup: true, ...(device ? { deviceCall: true } : {}) },
     };
     return await new Promise<string>((resolve, reject) => {
       let words = "";

@@ -48,6 +48,23 @@ export function withOwnCalendar(
 }
 
 /**
+ * When an event is, in the person's own words and clock ("Tuesday 10:00 AM to 11:00 AM"). The events themselves carry
+ * UTC instants, and a model converting those to a local time gets it wrong (a 10 AM meeting read as 9 AM), so the
+ * server does the conversion and the agent reads this.
+ */
+export function whenText(event: Pick<DayEvent, "start" | "end" | "allDay">, zone: string) {
+  if (event.allDay) return "all day";
+  const start = new Date(event.start);
+  const end = new Date(event.end);
+  if (Number.isNaN(start.getTime())) return "";
+  const at = (date: Date, options: Intl.DateTimeFormatOptions) =>
+    date.toLocaleString("en-US", { timeZone: zone, ...options });
+  const clock = { hour: "numeric", minute: "2-digit" } as const;
+  const until = Number.isNaN(end.getTime()) || end.getTime() === start.getTime();
+  return `${at(start, { weekday: "long" })} ${at(start, clock)}${until ? "" : ` to ${at(end, clock)}`}`;
+}
+
+/**
  * What's on: every connected calendar app's events and the person's reminders for a day or a
  * few, as a card in the chat (the Feed and calls read the calendar the same way).
  */
@@ -60,14 +77,21 @@ export function calendarToolSpec(
   },
   owner: string,
   /** A background job: nothing is on the person's screen, and it asks them with ask_user. */
-  options: { background?: boolean } = {},
+  options: {
+    background?: boolean;
+    /** A call from a watch-style device: there is no call screen to show a card on. */
+    device?: boolean;
+  } = {},
 ) {
   const background = Boolean(options.background);
+  const device = Boolean(options.device) && !background;
   return {
     name: "look_at_calendar",
     description: background
       ? "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week."
-      : "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week. Use it for 'what's on today / tomorrow / this week' and 'what does my day look like'. When the result has `shown`, they can see it as a card: answer in a sentence or two and don't list every event.",
+      : device
+        ? "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week. Use it for 'what's on today / tomorrow / this week' and 'what's my first meeting'. Each event's `when` is its time in their own clock: say that, never convert times yourself."
+        : "What's on the person's calendar (every connected calendar app at once) and their reminders, for one day or up to a week. Use it for 'what's on today / tomorrow / this week' and 'what does my day look like'. When the result has `shown`, they can see it as a card: answer in a sentence or two and don't list every event. Each event's `when` is its time in their own clock: say that, never convert times yourself.",
     parameters: z.object({
       date: z
         .string()
@@ -89,11 +113,22 @@ export function calendarToolSpec(
         .filter((reminder) => reminder.dueAt >= from && reminder.dueAt < to)
         .slice(0, 20)
         .map(({ text, dueAt }) => ({ text, dueAt }));
+      const nowMs = deps.now?.() ?? Date.now();
       return {
         from: first,
         days,
         timeZone: zone,
-        events: calendar.events.slice(0, 60),
+        now: new Date(nowMs).toLocaleString("en-US", {
+          timeZone: zone,
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        events: calendar.events
+          .slice(0, 60)
+          .map((event) => ({ ...event, when: whenText(event, zone) })),
         reminders: due,
         ...(calendar.failed.length
           ? {
@@ -112,10 +147,15 @@ export function calendarToolSpec(
             }),
         // Only when there's something to show (a call shows no card for an empty day); a job
         // shows nothing.
-        ...(!background && (calendar.events.length || due.length)
+        ...(!background && !device && (calendar.events.length || due.length)
           ? {
               shown:
                 "This is on the person's screen as a card; don't list every event in your reply.",
+            }
+          : {}),
+        ...(device && (calendar.events.length || due.length)
+          ? {
+              next: "Nothing is on their watch screen yet. Say the first one or two events with their `when` times, in a sentence. For three or more you can put them on the watch with show_on_watch (kind list: the title as the label and its start time, like 9:00 AM, as the value).",
             }
           : {}),
       };

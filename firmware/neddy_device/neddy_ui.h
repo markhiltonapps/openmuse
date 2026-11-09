@@ -30,6 +30,7 @@ static constexpr uint16_t UI_CYAN = uiRgb(120, 222, 255);
 static constexpr uint16_t UI_GREY = uiRgb(122, 128, 134);
 static constexpr uint16_t UI_DIM = uiRgb(98, 104, 110);
 static constexpr uint16_t UI_WHITE = uiRgb(240, 240, 244);
+static constexpr uint16_t UI_GREEN = uiRgb(110, 226, 160);
 
 // ------------------------------------------------------------------ smooth text
 static uint16_t uiLine[UI_W * 33];  // one line of text, built here and sent to the screen in one go
@@ -280,11 +281,19 @@ enum { UI_ICON_SUN, UI_ICON_MOON, UI_ICON_SUN_CLOUD, UI_ICON_PARTLY, UI_ICON_CLO
        UI_ICON_STORM, UI_ICON_SNOW, UI_ICON_FOG, UI_ICON_WIND };
 #define UI_NONE (-9999)
 #define UI_ICON 112
+enum { UI_CARD_WEATHER, UI_CARD_SCORE, UI_CARD_FACT, UI_CARD_LIST };
 struct UiCard {
   bool on;
+  int kind;
   uint32_t since;
-  char place[28], sky[44], alert[28];
+  char place[28], sky[44], alert[28];      // weather (a fact's label is `place`, its value `sky`, its line `alert`)
   int temp, feels, high, low, rain, icon;
+  char league[20], status[28], away[20], home[20];   // a score
+  int awayScore, homeScore;
+  char value[24], sub[48], note[40];       // a fact
+  int tone;                                // 0 plain, 1 good, 2 bad
+  int rows;                                // a list: up to five rows
+  char rowLabel[5][30], rowValue[5][16];
 };
 static UiCard uiCard;
 static uint16_t uiIconBuf[UI_ICON * UI_ICON];
@@ -497,7 +506,7 @@ static void uiRoundPanel(int x, int y, int w, int h, int R, uint16_t border, uin
 
 static void uiNumDeg(char *out, int v) { snprintf(out, 12, "%d%c", v, (char)127); }
 
-static void uiDrawCard() {
+static void uiDrawWeather() {
   const int PX = 14, PY = 10, PW = 382, PH = 336;
   const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
   uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
@@ -556,6 +565,148 @@ static int uiIconByName(const char *name) {
   for (int i = 0; i < 11; i++) if (strcmp(name, names[i]) == 0) return i;
   return UI_ICON_CLOUD;
 }
+
+// ---- the other cards: a score, one headline fact, a short list
+static void uiUpper(char *dst, size_t cap, const char *src) {
+  size_t n = 0;
+  for (; src[n] && n + 1 < cap; n++) dst[n] = (src[n] >= 'a' && src[n] <= 'z') ? (char)(src[n] - 32) : src[n];
+  dst[n] = 0;
+}
+// Copies text, shortened with a "." until it fits the width.
+static void uiFit(char *dst, size_t cap, const NeddyFont &f, const char *src, int maxw) {
+  size_t n = strlen(src);
+  if (n >= cap) n = cap - 1;
+  memcpy(dst, src, n); dst[n] = 0;
+  while (n > 1 && uiTextWidth(f, dst) > maxw) {
+    n--; dst[n - 1] = '.'; dst[n] = 0;
+    while (n > 2 && dst[n - 2] == ' ') { dst[n - 2] = '.'; dst[n - 1] = 0; n--; }   // no space before the dot
+  }
+}
+// The biggest number font the value fits in (digits and a few symbols only), else a plain font.
+static const NeddyFont *uiValueFont(const char *s, int maxw) {
+  bool digits = true;
+  for (const char *p = s; *p; p++) if (!strchr("0123456789-.,:%$+ \x7f", *p)) { digits = false; break; }
+  if (digits && uiTextWidth(NFONT_TEMP, s) <= maxw) return &NFONT_TEMP;
+  if (digits && uiTextWidth(NFONT_BIG, s) <= maxw) return &NFONT_BIG;
+  if (uiTextWidth(NFONT_TITLE, s) <= maxw) return &NFONT_TITLE;
+  return &NFONT_BODY;
+}
+static void uiCardHeader(const char *text) {
+  if (!text[0]) return;
+  char buf[32];
+  uiUpper(buf, sizeof(buf), text);
+  uiTextCentered(NFONT_MID, 16, buf, UI_TEAL);
+}
+
+static void uiDrawScore() {
+  const int PX = 14, PW = 382;
+  const uint16_t border = uiRgb(52, 74, 88);
+  uiCardHeader(uiCard.league);
+  char buf[24];
+  if (uiCard.awayScore != UI_NONE && uiCard.homeScore != UI_NONE) {
+    // Two rows, the team on the left and its score big on the right; when it isn't level, the leader is the bright one.
+    int leader = uiCard.awayScore > uiCard.homeScore ? 0 : (uiCard.homeScore > uiCard.awayScore ? 1 : -1);
+    for (int r = 0; r < 2; r++) {
+      int y0 = 50 + r * 110;
+      uint16_t col = (leader < 0 || leader == r) ? UI_WHITE : UI_GREY;
+      uiFit(buf, sizeof(buf), NFONT_BODY, r == 0 ? uiCard.away : uiCard.home, 196);
+      uiText(NFONT_BODY, 34, y0 + (NFONT_TEMP.h - NFONT_BODY.h) / 2, buf, col);
+      snprintf(buf, sizeof(buf), "%d", r == 0 ? uiCard.awayScore : uiCard.homeScore);
+      uiText(NFONT_TEMP, 376 - uiTextWidth(NFONT_TEMP, buf), y0, buf, col);
+    }
+    uiOut.fill(PX + 28, 160, PW - 56, 2, border);
+    if (uiCard.status[0]) uiTextCentered(NFONT_BODY, 284, uiCard.status, UI_TEAL);
+  } else {
+    // Not started: the two names, "at", and when.
+    uiFit(buf, sizeof(buf), NFONT_TITLE, uiCard.away, 340);
+    uiTextCentered(NFONT_TITLE, 70, buf, UI_WHITE);
+    uiTextCentered(NFONT_MID, 126, "at", UI_GREY);
+    uiFit(buf, sizeof(buf), NFONT_TITLE, uiCard.home, 340);
+    uiTextCentered(NFONT_TITLE, 160, buf, UI_WHITE);
+    if (uiCard.status[0]) uiTextCentered(NFONT_BODY, 250, uiCard.status, UI_TEAL);
+  }
+}
+
+// A value like "24 min" or "350F": the number big, its unit beside it smaller. Returns the height used.
+static int uiDrawValue(const char *v, int y, uint16_t col) {
+  const char *numSet = "0123456789-.,:%$+ \x7f";
+  int split = 0;
+  while (v[split] && strchr(numSet, v[split])) split++;
+  char num[24], unit[24];
+  // the number part runs up to the unit (and its trailing space)
+  int end = split;
+  while (end > 0 && v[end - 1] == ' ') end--;
+  memcpy(num, v, end); num[end] = 0;
+  strncpy(unit, v + split, sizeof(unit) - 1); unit[sizeof(unit) - 1] = 0;
+  if (end == 0) {                                   // words only: one plain line
+    const NeddyFont &f = uiTextWidth(NFONT_TITLE, v) <= 346 ? NFONT_TITLE : NFONT_BODY;
+    uiTextCentered(f, y + (NFONT_TEMP.h - f.h) / 2, v, col);
+    return NFONT_TEMP.h;
+  }
+  const NeddyFont *nf = &NFONT_TEMP;
+  int gap = unit[0] ? (v[split - 1] == ' ' ? 10 : 3) : 0;   // a space in the text is a space on the screen
+  int uw = unit[0] ? uiTextWidth(NFONT_TITLE, unit) : 0;
+  if (uiTextWidth(*nf, num) + gap + uw > 346) nf = &NFONT_BIG;
+  if (uiTextWidth(*nf, num) + gap + uw > 346) { uiTextCentered(NFONT_TITLE, y + (NFONT_TEMP.h - NFONT_TITLE.h) / 2, v, col); return NFONT_TEMP.h; }
+  int total = uiTextWidth(*nf, num) + gap + uw;
+  int x = (UI_W - total) / 2;
+  int ny = y + (NFONT_TEMP.h - nf->h) / 2;
+  uiText(*nf, x, ny, num, col);
+  if (unit[0]) uiText(NFONT_TITLE, x + uiTextWidth(*nf, num) + gap, ny + nf->h - NFONT_TITLE.h - (nf == &NFONT_TEMP ? 14 : 6), unit, col);
+  return NFONT_TEMP.h;
+}
+
+static void uiDrawFact() {
+  uiCardHeader(uiCard.place);
+  int start[2], len[2];
+  int lines = uiCard.sub[0] ? uiWrap(NFONT_BODY, uiCard.sub, 340, start, len, 2) : 0;
+  int groupH = NFONT_TEMP.h + (lines ? 10 + lines * 32 : 0) + (uiCard.note[0] ? 34 : 0);
+  int y = 50 + (280 - groupH) / 2;
+  uiDrawValue(uiCard.sky, y, UI_WHITE);
+  y += NFONT_TEMP.h + 10;
+  uint16_t tone = uiCard.tone == 1 ? UI_GREEN : (uiCard.tone == 2 ? UI_CORAL : UI_WHITE);
+  char line[56];
+  for (int i = 0; i < lines; i++) {
+    int l = len[i] < 55 ? len[i] : 55;
+    memcpy(line, uiCard.sub + start[i], l); line[l] = 0;
+    uiTextCentered(NFONT_BODY, y, line, tone);
+    y += 32;
+  }
+  if (uiCard.note[0]) uiTextCentered(NFONT_MID, y + 4, uiCard.note, UI_GREY);
+}
+
+static void uiDrawList() {
+  const int PX = 14, PW = 382;
+  const uint16_t border = uiRgb(52, 74, 88);
+  uiCardHeader(uiCard.place);
+  int n = uiCard.rows;
+  if (n < 1) return;
+  int rowH = n <= 4 ? 62 : 52;
+  int top = 54 + (n <= 4 ? (262 - n * rowH) / 2 : 0);   // a short list sits in the middle of the card
+  char buf[32];
+  for (int i = 0; i < n; i++) {
+    int ry = top + i * rowH;
+    if (i) uiOut.fill(PX + 28, ry - 2, PW - 56, 2, border);
+    int vw = uiCard.rowValue[i][0] ? uiTextWidth(NFONT_MID, uiCard.rowValue[i]) : 0;
+    int y = ry + (rowH - NFONT_BODY.h) / 2;
+    uiFit(buf, sizeof(buf), NFONT_BODY, uiCard.rowLabel[i], 342 - vw - (vw ? 12 : 0));
+    uiText(NFONT_BODY, 34, y, buf, UI_WHITE);
+    if (vw) uiText(NFONT_MID, 376 - vw, ry + (rowH - NFONT_MID.h) / 2, uiCard.rowValue[i], UI_AMBER);
+  }
+}
+
+static void uiDrawCard() {
+  const int PX = 14, PY = 10, PW = 382, PH = 336;
+  if (uiCard.kind == UI_CARD_WEATHER) { uiDrawWeather(); return; }
+  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
+  uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
+  uiBg = panel;
+  if (uiCard.kind == UI_CARD_SCORE) uiDrawScore();
+  else if (uiCard.kind == UI_CARD_FACT) uiDrawFact();
+  else uiDrawList();
+  uiBg = UI_BLACK;
+}
+
 static void uiCopyTrim(char *dst, size_t cap, const char *s) {
   size_t n = strlen(s);
   if (n >= cap) n = cap - 1;
@@ -568,7 +719,38 @@ static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, c
   uiCopyTrim(uiCard.alert, sizeof(uiCard.alert), alert);
   uiCard.temp = temp; uiCard.feels = feels; uiCard.high = high; uiCard.low = low; uiCard.rain = rain;
   uiCard.icon = icon < 0 || icon > UI_ICON_WIND ? UI_ICON_CLOUD : icon;
+  uiCard.kind = UI_CARD_WEATHER;
   uiCard.since = ms; uiCard.on = true; uiAll = true;
+}
+
+static void uiStartCard(uint32_t ms, int kind) { memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
+// A game. Scores the server didn't send are UI_NONE (a game still to come).
+static void uiShowScore(uint32_t ms, const char *league, const char *status, const char *away, int awayScore, const char *home, int homeScore) {
+  uiStartCard(ms, UI_CARD_SCORE);
+  uiCopyTrim(uiCard.league, sizeof(uiCard.league), league);
+  uiCopyTrim(uiCard.status, sizeof(uiCard.status), status);
+  uiCopyTrim(uiCard.away, sizeof(uiCard.away), away);
+  uiCopyTrim(uiCard.home, sizeof(uiCard.home), home);
+  uiCard.awayScore = awayScore; uiCard.homeScore = homeScore;
+}
+// One headline value. tone: 0 plain, 1 good (green), 2 bad (red).
+static void uiShowFact(uint32_t ms, const char *label, const char *value, const char *sub, const char *note, int tone) {
+  uiStartCard(ms, UI_CARD_FACT);
+  uiCopyTrim(uiCard.place, sizeof(uiCard.place), label);
+  uiCopyTrim(uiCard.sky, sizeof(uiCard.sky), value);
+  uiCopyTrim(uiCard.sub, sizeof(uiCard.sub), sub);
+  uiCopyTrim(uiCard.note, sizeof(uiCard.note), note);
+  uiCard.tone = tone;
+}
+// Up to five rows.
+static void uiShowList(uint32_t ms, const char *title, int n, const char **labels, const char **values) {
+  uiStartCard(ms, UI_CARD_LIST);
+  uiCopyTrim(uiCard.place, sizeof(uiCard.place), title);
+  uiCard.rows = n < 0 ? 0 : (n > 5 ? 5 : n);
+  for (int i = 0; i < uiCard.rows; i++) {
+    uiCopyTrim(uiCard.rowLabel[i], sizeof(uiCard.rowLabel[i]), labels[i]);
+    uiCopyTrim(uiCard.rowValue[i], sizeof(uiCard.rowValue[i]), values[i]);
+  }
 }
 
 static void uiBasePose(UiPose *p) {

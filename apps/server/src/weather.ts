@@ -249,6 +249,89 @@ export function shapeWeather(input: {
 /** The city can't be found for the forecast. */
 class NotFound extends Error {}
 
+/** The part of Open-Meteo's answer used here. */
+interface OpenMeteo {
+  timezone?: string;
+  current?: {
+    temperature_2m?: number;
+    apparent_temperature?: number;
+    weather_code?: number;
+    is_day?: number;
+  };
+  daily?: {
+    time?: string[];
+    temperature_2m_max?: (number | null)[];
+    temperature_2m_min?: (number | null)[];
+    precipitation_probability_max?: (number | null)[];
+    weather_code?: (number | null)[];
+  };
+}
+
+/** The Weather Service-style words for a WMO weather code. */
+export function wmoSky(code: number, day: boolean) {
+  if (code === 0) return day ? "Sunny" : "Clear";
+  if (code === 1) return day ? "Mostly sunny" : "Mostly clear";
+  if (code === 2) return "Partly cloudy";
+  if (code === 3) return "Cloudy";
+  if (code === 45 || code === 48) return "Fog";
+  if (code >= 51 && code <= 55) return "Drizzle";
+  if (code === 56 || code === 57) return "Freezing drizzle";
+  if (code === 61 || code === 80) return "Light rain";
+  if (code === 63 || code === 81) return "Rain";
+  if (code === 65 || code === 82) return "Heavy rain";
+  if (code === 66 || code === 67) return "Freezing rain";
+  if (code === 71 || code === 85) return "Light snow";
+  if (code === 73 || code === 86) return "Snow";
+  if (code === 75) return "Heavy snow";
+  if (code === 77) return "Snow grains";
+  if (code === 95) return "Thunderstorms";
+  if (code === 96 || code === 99) return "Thunderstorms with hail";
+  return day ? "Partly cloudy" : "Cloudy";
+}
+
+/** Open-Meteo's answer as a `Weather` (today and the next two days; no hours or alerts). */
+export function shapeOpenMeteo(raw: OpenMeteo, place: string, now: Date): WeatherResult {
+  const current = raw.current;
+  if (!current || typeof current.temperature_2m !== "number") return { unavailable: "unreachable" };
+  const day = current.is_day !== 0;
+  const sky = wmoSky(Number(current.weather_code ?? -1), day);
+  const temp = Math.round(current.temperature_2m);
+  const feelsLike = Math.round(current.apparent_temperature ?? current.temperature_2m);
+  const daily = raw.daily ?? {};
+  const days = (daily.time ?? []).slice(0, 3).map((date, i) => {
+    const high = daily.temperature_2m_max?.[i];
+    const low = daily.temperature_2m_min?.[i];
+    const rain = daily.precipitation_probability_max?.[i];
+    const code = daily.weather_code?.[i];
+    const forecastSky = i === 0 ? sky : typeof code === "number" ? wmoSky(code, true) : sky;
+    return {
+      date,
+      ...(typeof high === "number" ? { high: Math.round(high) } : {}),
+      ...(typeof low === "number" ? { low: Math.round(low) } : {}),
+      sky: forecastSky,
+      emoji: skyEmoji(forecastSky, i === 0 ? day : true),
+      ...(typeof rain === "number" && rain > 0 ? { rain: Math.round(rain) } : {}),
+    };
+  });
+  const first = days[0];
+  return {
+    weather: {
+      place,
+      timeZone: raw.timezone ?? "UTC",
+      now: { temp, feelsLike, sky, emoji: skyEmoji(sky, day) },
+      today: {
+        ...(first?.high !== undefined ? { high: first.high } : {}),
+        ...(first?.low !== undefined ? { low: first.low } : {}),
+        ...(first?.rain !== undefined ? { rain: first.rain } : {}),
+      },
+      hours: [],
+      days,
+      alerts: [],
+      updatedAt: now.toISOString(),
+    },
+  };
+}
+
 export class WeatherService {
   private readonly cache = new Map<string, { at: number; value: unknown }>();
   private readonly loading = new Map<string, Promise<{ at: number; value: unknown }>>();
@@ -302,6 +385,57 @@ export class WeatherService {
       return { unavailable: "unreachable" };
     }
     return this.forPoint(where.lat, where.lng, area.label);
+  }
+  /**
+   * The weather for any place by name, worldwide: the Weather Service where it covers (the US), Open-Meteo
+   * (free, no key) everywhere else. A place that can't be found is "not-found".
+   */
+  async forPlace(name: string): Promise<WeatherResult> {
+    const geocode = this.options.geocode;
+    if (!geocode) return { unavailable: "off" };
+    const label = name.trim().replace(/\s+/g, " ").slice(0, 80);
+    let where: { lat: number; lng: number } | undefined;
+    try {
+      where = await geocode(label, { strict: true });
+    } catch (error) {
+      console.warn(
+        `[OpenMuse] Weather for ${label} unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { unavailable: "unreachable" };
+    }
+    if (!where) return { unavailable: "not-found" };
+    const us = await this.forSpot(where.lat, where.lng, label);
+    if (!("unavailable" in us) || us.unavailable !== "not-found") return us;
+    return this.worldwide(where.lat, where.lng, label);
+  }
+  /** Open-Meteo's current conditions and today, shaped like the Weather Service's (no hourly or alerts). */
+  private async worldwide(lat: number, lng: number, label: string): Promise<WeatherResult> {
+    try {
+      const url =
+        "https://api.open-meteo.com/v1/forecast" +
+        `?latitude=${lat.toFixed(3)}&longitude=${lng.toFixed(3)}` +
+        "&current=temperature_2m,apparent_temperature,weather_code,is_day" +
+        "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code" +
+        "&temperature_unit=fahrenheit&timezone=auto&forecast_days=3";
+      const { value } = await this.cached(
+        `world:${lat.toFixed(2)},${lng.toFixed(2)}`,
+        30 * MINUTE,
+        async () => {
+          const response = await (this.options.fetcher ?? fetch)(url, {
+            headers: { "User-Agent": this.options.userAgent },
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!response.ok) throw new Error(`Open-Meteo answered ${response.status}`);
+          return (await response.json()) as OpenMeteo;
+        },
+      );
+      return shapeOpenMeteo(value, label, new Date(this.now));
+    } catch (error) {
+      console.warn(
+        `[OpenMuse] Weather for ${label} unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { unavailable: "unreachable" };
+    }
   }
   /**
    * The forecast where the person is right now (their shared spot). The spot is rounded to about
@@ -514,6 +648,85 @@ export function sunToday(lat: number, lng: number, timeZone: string, now: Date) 
 export const weatherInstructions =
   " For the weather in the person's home city, or anything that depends on it (what to wear, rain at school pickup, outdoor plans, the morning brief, the family rundown), call get_weather: it has conditions now, the next 12 hours, 7 days and any severe-weather alerts, from the US National Weather Service, in the city's own clock. For the weather right where they are now (“will it rain on my walk”, “when's sunset here”, they're travelling or out), call get_weather with here true: it uses their shared location and also gives sunrise and sunset. It covers the home city or where they are, and the next 7 days, in the US only; for anywhere else or further out, search the web. Temperatures are °F. When it returns unavailable, do what that says.";
 
+/** A forecast as the agent reads it, in words and numbers (and the card a watch-style device draws). */
+function weatherFacts(
+  w: Weather,
+  where: {
+    spot?: { lat: number; lng: number; minutesAgo: number };
+    /** A named place ("for Denver") instead of the home city or where they are. */
+    named?: string;
+  } = {},
+) {
+  const { spot } = where;
+  const feels =
+    Math.abs(w.now.feelsLike - w.now.temp) >= 3 ? `, feels like ${w.now.feelsLike}°F` : "";
+  const todaySky = w.days[0]?.sky ?? w.now.sky;
+  return {
+    place: w.place,
+    timeZone: w.timeZone,
+    localTime: clock(Date.now(), w.timeZone),
+    now: `${w.now.temp}°F, ${w.now.sky.toLowerCase()}${feels}`,
+    // What the watch-style device draws as a card (the numbers it needs; other screens ignore it).
+    deviceCard: {
+      place: w.place,
+      temp: w.now.temp,
+      feels: w.now.feelsLike,
+      sky: w.now.sky,
+      icon: weatherIconFor(w.now.emoji),
+      high: w.today.high,
+      low: w.today.low,
+      rain: w.today.rain,
+      alert: w.alerts[0]?.event,
+    },
+    today: [
+      w.today.high !== undefined ? `High ${w.today.high}°F` : "",
+      w.today.low !== undefined ? `low ${w.today.low}°F` : "",
+      chanceOf(w.today.rain, todaySky) ?? "",
+    ]
+      .filter(Boolean)
+      .join(", ")
+      .replace(/^./, (c) => c.toUpperCase()),
+    rainSoon: w.hours.length ? rainOutlook(w.hours) : undefined,
+    ...(spot
+      ? {
+          forWhere: "where they are now (from their phone's shared location)",
+          ...(spot.minutesAgo > 10
+            ? {
+                spotAge: `their phone last shared where they are ${spot.minutesAgo} minutes ago: say so`,
+              }
+            : {}),
+          ...sunToday(spot.lat, spot.lng, w.timeZone, new Date()),
+        }
+      : {}),
+    ...(where.named ? { forWhere: where.named } : {}),
+    nextHours: w.hours.map(
+      (h) =>
+        `${hourOf(h.time)}: ${h.temp}°F, ${h.sky.toLowerCase()}${h.rain ? `, ${chanceOf(h.rain, h.sky)}` : ""}`,
+    ),
+    days: w.days.map((d) => ({
+      day: WEEKDAY[new Date(`${d.date}T12:00:00Z`).getUTCDay()],
+      date: d.date,
+      ...(d.high !== undefined ? { high: `${d.high}°F` } : {}),
+      ...(d.low !== undefined ? { low: `${d.low}°F` } : {}),
+      sky: d.sky,
+      ...(d.rain ? { chance: chanceOf(d.rain, d.sky) } : {}),
+      ...(d.detail ? { detail: d.detail } : {}),
+    })),
+    alerts: w.alerts.map((a) => ({
+      event: a.event,
+      severity: a.severity,
+      ...(a.headline ? { headline: a.headline } : {}),
+      ...(a.ends ? { until: clock(a.ends, w.timeZone) } : {}),
+      ...(a.instruction ? { whatToDo: a.instruction } : {}),
+    })),
+    asOf: clock(w.updatedAt, w.timeZone),
+    source:
+      w.alerts.length || w.hours.length
+        ? "US National Weather Service"
+        : "Open-Meteo or the US National Weather Service",
+  };
+}
+
 export function weatherToolSpecs(
   weather: WeatherService,
   owner: string,
@@ -528,14 +741,34 @@ export function weatherToolSpecs(
     {
       name: "get_weather",
       description:
-        "The forecast (US only) from the US National Weather Service: now, the next 12 hours, 7 days and any severe-weather alerts. By default for the person's home city. With here true, for where they are right now, from their shared location (it also gives sunrise and sunset there). Not for other places.",
+        "The forecast: now, today's high and low and rain chance, and more. By default for the person's home city. With here true, for where they are right now, from their shared location (it also gives sunrise and sunset there). With place, for any city or place in the world ('Denver', 'Paris, France'): use that whenever they name somewhere else. On a call from their watch the weather card appears on its screen by itself.",
       parameters: z.object({
         here: z
           .boolean()
           .optional()
           .describe("True for the weather where they are right now, instead of their home city"),
+        place: z
+          .string()
+          .trim()
+          .max(80)
+          .optional()
+          .describe(
+            "A city or place to get the weather for instead of their home city, anywhere in the world: 'Denver', 'Paris, France'",
+          ),
       }),
-      execute: async (args?: { here?: boolean }) => {
+      execute: async (args?: { here?: boolean; place?: string }) => {
+        const named = args?.place?.trim();
+        if (named) {
+          const found = await weather.forPlace(named);
+          if ("unavailable" in found)
+            return {
+              unavailable:
+                found.unavailable === "not-found"
+                  ? `Couldn't find a place called "${named}". Ask them which place they mean (the city and state or country), or search the web.`
+                  : "Couldn't get the forecast for that place just now. If you can search the web, search for it; otherwise say it isn't available right now.",
+            };
+          return weatherFacts(found.weather, { named: `for ${named}` });
+        }
         const here = args?.here === true && !options.background;
         let spot: Awaited<ReturnType<WhereNow["current"]>>;
         if (here) {
@@ -573,70 +806,7 @@ export function weatherToolSpecs(
             unavailable: unavailable(result.unavailable, place, Boolean(options.background)),
           };
         }
-        const w = result.weather;
-        const feels =
-          Math.abs(w.now.feelsLike - w.now.temp) >= 3 ? `, feels like ${w.now.feelsLike}°F` : "";
-        const todaySky = w.days[0]?.sky ?? w.now.sky;
-        return {
-          place: w.place,
-          timeZone: w.timeZone,
-          localTime: clock(Date.now(), w.timeZone),
-          now: `${w.now.temp}°F, ${w.now.sky.toLowerCase()}${feels}`,
-          // What the watch-style device draws as a card (the numbers it needs; other screens ignore it).
-          deviceCard: {
-            place: w.place,
-            temp: w.now.temp,
-            feels: w.now.feelsLike,
-            sky: w.now.sky,
-            icon: weatherIconFor(w.now.emoji),
-            high: w.today.high,
-            low: w.today.low,
-            rain: w.today.rain,
-            alert: w.alerts[0]?.event,
-          },
-          today: [
-            w.today.high !== undefined ? `High ${w.today.high}°F` : "",
-            w.today.low !== undefined ? `low ${w.today.low}°F` : "",
-            chanceOf(w.today.rain, todaySky) ?? "",
-          ]
-            .filter(Boolean)
-            .join(", ")
-            .replace(/^./, (c) => c.toUpperCase()),
-          rainSoon: rainOutlook(w.hours),
-          ...(spot
-            ? {
-                forWhere: "where they are now (from their phone's shared location)",
-                ...(spot.minutesAgo > 10
-                  ? {
-                      spotAge: `their phone last shared where they are ${spot.minutesAgo} minutes ago: say so`,
-                    }
-                  : {}),
-                ...sunToday(spot.lat, spot.lng, w.timeZone, new Date()),
-              }
-            : {}),
-          nextHours: w.hours.map(
-            (h) =>
-              `${hourOf(h.time)}: ${h.temp}°F, ${h.sky.toLowerCase()}${h.rain ? `, ${chanceOf(h.rain, h.sky)}` : ""}`,
-          ),
-          days: w.days.map((d) => ({
-            day: WEEKDAY[new Date(`${d.date}T12:00:00Z`).getUTCDay()],
-            date: d.date,
-            ...(d.high !== undefined ? { high: `${d.high}°F` } : {}),
-            ...(d.low !== undefined ? { low: `${d.low}°F` } : {}),
-            sky: d.sky,
-            ...(d.rain ? { chance: chanceOf(d.rain, d.sky) } : {}),
-            ...(d.detail ? { detail: d.detail } : {}),
-          })),
-          alerts: w.alerts.map((a) => ({
-            event: a.event,
-            severity: a.severity,
-            ...(a.headline ? { headline: a.headline } : {}),
-            ...(a.ends ? { until: clock(a.ends, w.timeZone) } : {}),
-            ...(a.instruction ? { whatToDo: a.instruction } : {}),
-          })),
-          asOf: clock(w.updatedAt, w.timeZone),
-          source: "US National Weather Service",
-        };
+        return weatherFacts(result.weather, { spot });
       },
     },
   ];

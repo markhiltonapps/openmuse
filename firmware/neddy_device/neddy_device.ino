@@ -637,13 +637,37 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         heard += plain(jsonString(text, "delta"));
         uiSetHeard(heard.c_str());
       } else if (kind == "card") {
-        // The weather (so far): drawn as a card until the next press. Ignored while the button is held.
-        if (jsonString(text, "kind") == "weather" && !held && jsonInt(text, "temp", UI_NONE) != UI_NONE) {
+        // A card (the weather, a score, one fact, a short list): drawn until the next press. Ignored while the button is held.
+        String cardKind = jsonString(text, "kind");
+        if (held) {
+          // They're talking again: no card for the last question.
+        } else if (cardKind == "weather" && jsonInt(text, "temp", UI_NONE) != UI_NONE) {
           uiShowWeather(millis(), plain(jsonString(text, "place")).c_str(), jsonInt(text, "temp", UI_NONE),
                         jsonInt(text, "feels", UI_NONE), plain(jsonString(text, "sky")).c_str(),
                         uiIconByName(jsonString(text, "icon").c_str()), jsonInt(text, "high", UI_NONE),
                         jsonInt(text, "low", UI_NONE), jsonInt(text, "rain", UI_NONE),
                         plain(jsonString(text, "alert")).c_str());
+        } else if (cardKind == "score") {
+          uiShowScore(millis(), plain(jsonString(text, "league")).c_str(), plain(jsonString(text, "status")).c_str(),
+                      plain(jsonString(text, "an")).c_str(), jsonInt(text, "as", UI_NONE),
+                      plain(jsonString(text, "hn")).c_str(), jsonInt(text, "hs", UI_NONE));
+        } else if (cardKind == "fact") {
+          String tone = jsonString(text, "tone");
+          uiShowFact(millis(), plain(jsonString(text, "label")).c_str(), plain(jsonString(text, "value")).c_str(),
+                     plain(jsonString(text, "sub")).c_str(), plain(jsonString(text, "note")).c_str(),
+                     tone == "good" ? 1 : (tone == "bad" ? 2 : 0));
+        } else if (cardKind == "list") {
+          int n = jsonInt(text, "n", 0);
+          if (n > 5) n = 5;
+          String labels[5], values[5];
+          const char *labelPtr[5], *valuePtr[5];
+          for (int i = 0; i < n; i++) {
+            labels[i] = plain(jsonString(text, (String("l") + i).c_str()));
+            values[i] = plain(jsonString(text, (String("v") + i).c_str()));
+            labelPtr[i] = labels[i].c_str();
+            valuePtr[i] = values[i].c_str();
+          }
+          if (n > 0) uiShowList(millis(), plain(jsonString(text, "title")).c_str(), n, labelPtr, valuePtr);
         }
       } else if (kind == "latency") {
         LOGF("[latency] server says %s ms\n", text.c_str());

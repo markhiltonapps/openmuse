@@ -32,6 +32,7 @@ import { computerInstructions, computerTools } from "../computer-tools.ts";
 import type { Config } from "../config.ts";
 import { hiddenMessages, withoutHidden } from "../data-controls.ts";
 import { calendarToolSpec } from "../day-tools.ts";
+import { showOnWatchToolSpec } from "../device-card-tools.ts";
 import { deviceToolSpecs } from "../devices.ts";
 import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
@@ -948,6 +949,11 @@ export class ConversationAgent extends AbstractAgent {
           reminders: async (owner) => (await this.service.reminders?.list(owner))?.upcoming ?? [],
         },
         this.owner,
+        {
+          device:
+            input.threadId.startsWith("voice-") &&
+            (input.forwardedProps as { deviceCall?: boolean } | undefined)?.deviceCall === true,
+        },
       );
       tools.push(
         defineTool({
@@ -1282,8 +1288,20 @@ export class ConversationAgent extends AbstractAgent {
           }),
         ),
       );
+    const fromDevice = (input.forwardedProps as { deviceCall?: boolean } | undefined)?.deviceCall;
+    // A call from a watch-style device: it has no call screen, only small cards it draws itself.
+    if (input.threadId.startsWith("voice-") && fromDevice) {
+      const onWatch = showOnWatchToolSpec();
+      tools.push(
+        defineTool({
+          ...onWatch,
+          parameters: onWatch.parameters as z.ZodObject,
+          execute: async (args: unknown) => onWatch.execute(args),
+        }),
+      );
+    }
     // A live call's hand-over (its own thread): long answers go on the person's screen.
-    if (input.threadId.startsWith("voice-")) {
+    if (input.threadId.startsWith("voice-") && !fromDevice) {
       const onScreen = showOnScreenToolSpec();
       tools.push(
         defineTool({

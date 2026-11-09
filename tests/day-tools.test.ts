@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TodayCalendar } from "../apps/server/src/calendar-today.ts";
-import { calendarToolSpec, withOwnCalendar } from "../apps/server/src/day-tools.ts";
+import { calendarToolSpec, whenText, withOwnCalendar } from "../apps/server/src/day-tools.ts";
 import type { CalendarEvent } from "../packages/domain/src/index.ts";
 
 // 11 pm on 1 October in Chicago (already 2 October in UTC).
@@ -130,4 +130,73 @@ test("the app's own calendar joins the calendar apps, each meeting once, all-day
   assert.deepEqual(merged.checked, ["outlook", "calendar"]);
   assert.deepEqual(withOwnCalendar(apps, "failed").failed, ["calendar"]);
   assert.equal(withOwnCalendar(apps, undefined), apps);
+});
+
+test("each event says its own time in the person's clock, so the agent never converts UTC itself", async () => {
+  // 10 AM and 2:30 PM on 10 November in Chicago (CST, UTC-6), written as UTC instants like the calendar apps give.
+  assert.equal(
+    whenText(
+      { start: "2026-11-10T16:00:00Z", end: "2026-11-10T17:00:00Z", allDay: false },
+      "America/Chicago",
+    ),
+    "Tuesday 10:00 AM to 11:00 AM",
+  );
+  assert.equal(
+    whenText(
+      { start: "2026-11-10T20:30:00Z", end: "2026-11-10T21:30:00Z", allDay: false },
+      "America/Chicago",
+    ),
+    "Tuesday 2:30 PM to 3:30 PM",
+  );
+  // The same instants in another zone read differently, and an all-day event just says so.
+  assert.equal(
+    whenText(
+      { start: "2026-11-10T16:00:00Z", end: "2026-11-10T16:00:00Z", allDay: false },
+      "America/New_York",
+    ),
+    "Tuesday 11:00 AM",
+  );
+  assert.equal(
+    whenText({ start: "2026-11-10", end: "2026-11-11", allDay: true }, "America/Chicago"),
+    "all day",
+  );
+
+  const event = (id: string, title: string, start: string, end: string) => ({
+    id,
+    title,
+    start,
+    end,
+    allDay: false,
+    app: "outlook",
+  });
+  const deps = {
+    between: async () => ({
+      events: [
+        event("a", "Team sync", "2026-11-10T16:00:00Z", "2026-11-10T17:00:00Z"),
+        event("b", "Amazon interview", "2026-11-10T20:30:00Z", "2026-11-10T21:30:00Z"),
+      ],
+      checked: ["outlook"],
+      failed: [],
+    }),
+    timeZone: async () => "America/Chicago",
+    now: () => Date.parse("2026-11-09T22:15:00Z"),
+  };
+  const app = await calendarToolSpec(deps, "owner").execute({ date: "2026-11-10" });
+  assert.deepEqual(
+    app.events.map((e) => [e.title, e.when]),
+    [
+      ["Team sync", "Tuesday 10:00 AM to 11:00 AM"],
+      ["Amazon interview", "Tuesday 2:30 PM to 3:30 PM"],
+    ],
+  );
+  assert.equal(app.now, "Monday, November 9 at 4:15 PM");
+  assert.match(app.shown ?? "", /on the person's screen as a card/);
+
+  // From a watch there is no call screen: no claim of a card, and the agent is told what to do instead.
+  const watch = await calendarToolSpec(deps, "owner", { device: true }).execute({
+    date: "2026-11-10",
+  });
+  assert.equal(watch.shown, undefined);
+  assert.match(watch.next ?? "", /show_on_watch/);
+  assert.doesNotMatch(calendarToolSpec(deps, "owner", { device: true }).description, /card/);
 });

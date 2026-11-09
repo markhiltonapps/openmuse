@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { type BaseEvent, EventType } from "@ag-ui/core";
 import { createStore } from "../apps/server/src/db.ts";
+import { showOnWatchToolSpec } from "../apps/server/src/device-card-tools.ts";
 import {
   DEVICE_SCREEN,
   deviceCardFrom,
@@ -11,7 +12,9 @@ import {
   whereShown,
 } from "../apps/server/src/voice-brain.ts";
 import {
+  buildDeviceCard,
   type DeviceCard,
+  deviceWire,
   plainForDevice,
   weatherDeviceCard,
   weatherIconFor,
@@ -162,8 +165,11 @@ test("on a device call the weather look-up sends its card; on other calls nothin
   const said = await voiceAnswer(brain)({ ...base, device: true, card: (c) => cards.push(c) });
   assert.equal(said, "It's 72 and partly cloudy.");
   assert.equal(cards.length, 1);
-  assert.equal(cards[0]?.temp, 72);
-  assert.equal(cards[0]?.place, "Houston");
+  assert.equal(cards[0]?.kind, "weather");
+  const first = cards[0];
+  if (first?.kind !== "weather") throw new Error("not a weather card");
+  assert.equal(first.temp, 72);
+  assert.equal(first.place, "Houston");
 
   // Not a device call: no card goes anywhere (the app's call screen has no weather card yet).
   const other: DeviceCard[] = [];
@@ -171,7 +177,168 @@ test("on a device call the weather look-up sends its card; on other calls nothin
   assert.deepEqual(other, []);
 
   // The device is described as it is: weather only, never "on their screen" for anything else.
-  assert.match(DEVICE_SCREEN, /only one thing besides words: the weather/);
+  assert.match(DEVICE_SCREEN, /one card at a time/);
+  assert.match(DEVICE_SCREEN, /show_on_watch/);
+  assert.match(DEVICE_SCREEN, /pass place/);
   assert.notEqual(DEVICE_SCREEN, whereShown(false));
+  await db.close();
+});
+
+test("cards the agent makes: a score, one headline fact, a short list; anything else is turned back", () => {
+  const score = buildDeviceCard({
+    kind: "score",
+    league: "NBA",
+    status: "Q3 4:21",
+    away: { name: "Lakers", score: 78 },
+    home: { name: "Golden State Warriors and more", score: 81 },
+  });
+  assert.deepEqual(score, {
+    card: {
+      kind: "score",
+      league: "NBA",
+      status: "Q3 4:21",
+      away: { name: "Lakers", score: 78 },
+      home: { name: "Golden State Wa.", score: 81 },
+    },
+  });
+  // A game still to come has no scores.
+  assert.deepEqual(
+    buildDeviceCard({
+      kind: "score",
+      status: "7:30 PM tonight",
+      away: { name: "Celtics" },
+      home: { name: "Knicks" },
+    }),
+    {
+      card: {
+        kind: "score",
+        status: "7:30 PM tonight",
+        away: { name: "Celtics" },
+        home: { name: "Knicks" },
+      },
+    },
+  );
+  assert.ok("error" in buildDeviceCard({ kind: "score", away: { name: "Celtics" } }));
+
+  assert.deepEqual(
+    buildDeviceCard({
+      kind: "fact",
+      label: "AAPL",
+      value: "$187.42",
+      sub: "+1.2% today",
+      tone: "good",
+      note: "As of 3:58 PM",
+    }),
+    {
+      card: {
+        kind: "fact",
+        label: "AAPL",
+        value: "$187.42",
+        sub: "+1.2% today",
+        note: "As of 3:58 PM",
+        tone: "good",
+      },
+    },
+  );
+  // The degree sign survives (the device's fonts have it at code 127); other symbols are dropped.
+  const hot = buildDeviceCard({ kind: "fact", label: "Oven", value: "350°F ✓" });
+  assert.deepEqual(hot, { card: { kind: "fact", label: "Oven", value: "350\x7fF" } });
+  assert.ok("error" in buildDeviceCard({ kind: "fact", label: "Only a label" }));
+
+  const list = buildDeviceCard({
+    kind: "list",
+    title: "Today",
+    rows: [
+      { label: "Standup", value: "9:00 AM" },
+      { label: "Lunch with Sam", value: "12:30 PM" },
+      { label: "" },
+      { label: "Dentist" },
+      { label: "a" },
+      { label: "b" },
+      { label: "too many" },
+    ],
+  });
+  assert.deepEqual(list, {
+    card: {
+      kind: "list",
+      title: "Today",
+      rows: [
+        { label: "Standup", value: "9:00 AM" },
+        { label: "Lunch with Sam", value: "12:30 PM" },
+        { label: "Dentist" },
+        { label: "a" },
+      ],
+    },
+  });
+  assert.ok("error" in buildDeviceCard({ kind: "list", title: "Empty", rows: [] }));
+  assert.ok("error" in buildDeviceCard({ kind: "poem" }));
+  assert.ok("error" in buildDeviceCard(undefined));
+});
+
+test("the device is sent flat keys only, so its tiny reader can take them", () => {
+  assert.deepEqual(
+    deviceWire({
+      kind: "score",
+      league: "NBA",
+      status: "Final",
+      away: { name: "Lakers", score: 98 },
+      home: { name: "Suns" },
+    }),
+    { kind: "score", league: "NBA", status: "Final", an: "Lakers", as: 98, hn: "Suns" },
+  );
+  assert.deepEqual(
+    deviceWire({
+      kind: "list",
+      title: "Today",
+      rows: [{ label: "Standup", value: "9:00 AM" }, { label: "Dentist" }],
+    }),
+    { kind: "list", title: "Today", n: 2, l0: "Standup", v0: "9:00 AM", l1: "Dentist" },
+  );
+  const fact = { kind: "fact" as const, label: "AAPL", value: "$1", tone: "bad" as const };
+  assert.deepEqual(deviceWire(fact), fact);
+});
+
+test("show_on_watch makes the card only for good facts, and the call sends it to the device", async () => {
+  const spec = showOnWatchToolSpec();
+  const good = (await spec.execute({
+    kind: "fact",
+    label: "Drive home",
+    value: "24 min",
+    tone: "neutral",
+  })) as {
+    shown: boolean;
+    card: { kind: string };
+  };
+  assert.equal(good.shown, true);
+  assert.equal(good.card.kind, "fact");
+  const bad = (await spec.execute({ kind: "fact", label: "No value" })) as {
+    error: string;
+    shown?: boolean;
+  };
+  assert.match(bad.error, /value/);
+  assert.equal(bad.shown, undefined);
+  // Only a shown card is a card; an error result, or another tool's, is not.
+  assert.equal(deviceCardFrom("show_on_watch", JSON.stringify(bad)), undefined);
+  assert.equal(deviceCardFrom("show_on_watch", JSON.stringify(good))?.kind, "fact");
+  assert.equal(deviceCardFrom("search_web", JSON.stringify(good)), undefined);
+
+  const { brain, db } = await answerFixture([
+    ...toolEvents("s1", "show_on_watch", good),
+    ...toolEvents("s2", "show_on_watch", bad),
+    { type: EventType.TEXT_MESSAGE_CHUNK, messageId: "r", delta: "24 minutes." } as BaseEvent,
+  ]);
+  const cards: DeviceCard[] = [];
+  await voiceAnswer(brain)({
+    owner: "owner",
+    sessionId: "s1",
+    delegationId: "d1",
+    turns: [{ role: "user", text: "How long to get home?" }],
+    progress: () => {},
+    device: true,
+    card: (c) => cards.push(c),
+    signal: new AbortController().signal,
+  });
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0]?.kind, "fact");
   await db.close();
 });

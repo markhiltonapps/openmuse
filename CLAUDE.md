@@ -681,3 +681,12 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   device's call and only for what the device can draw (`DEVICE_SCREEN`); everywhere else a card is not claimed. Text for the
   device is plain ASCII (`plainForDevice`); code 127 in the baked fonts is the degree sign. A card is drawn once, never redrawn
   as words stream in behind it. The firmware's JSON reader is tested on the PC against the server's real message.
+- **Watch cards are the agent's choice (2026-11-09, owner):** "anytime a question is asked, if it can be beautified with a card, do it".
+  On a device's call the agent gets `show_on_watch` (score / fact / list) next to get_weather (which takes `place`, worldwide), and
+  DEVICE_SCREEN says a card is the default whenever an answer fits one. New card shapes need all of: the domain builder + wire
+  (`device-card.ts`), the tool's wording, a layout in `neddy_ui.h`, the .ino reader, a PC render and the JSON-reader check against the
+  server's real message. After a push, wait for the deployment's SUCCESS and its "Starting Container" log before testing.
+- **Never make the model convert times (2026-11-09):** a tool that returns UTC instants and a zone name gets read wrongly by the quick
+  model (a 10 AM meeting said as 9 AM, an interview at 2:30 PM as "9 AM"). Give it the person's own clock in words (`when`, `now`
+  from `whenText` in day-tools.ts) and tell it not to convert. A tool result must also never claim a card is on screen on a call
+  from the watch (`device` option): it has no call screen.

@@ -118,7 +118,8 @@ EYES = [('happy', 0), ('speak', 0), ('blink', 0), ('wide0', 0), ('wide1', 1 / 3)
 # ------------------------------------------------------------------ fonts
 FONTS = [('title', 'SemiBold', 34, None), ('body', 'Medium', 28, None), ('mid', 'Medium', 22, None), ('small', 'Medium', 14, None),
          ('huge', 'SemiBold', 64, '0123456789 '),   # huge: only the pairing code's digits
-         ('temp', 'SemiBold', 88, '0123456789-\x7f')]   # temp: the weather card's big temperature (code 127 is the degree sign)
+         ('temp', 'SemiBold', 88, '0123456789-.,:%$+ \x7f'),   # temp: the cards' big numbers (code 127 is the degree sign)
+         ('big', 'SemiBold', 56, '0123456789-.,:%$+ \x7f')]    # big: the same, smaller, for longer values
 
 def bake_font(style, size, chars=None):
     f = ImageFont.truetype(os.path.join(FONT_DIR, f'Inter-{style}.otf'), size)

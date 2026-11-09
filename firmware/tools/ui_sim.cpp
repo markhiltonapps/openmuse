@@ -101,6 +101,22 @@ int main(int argc, char **argv) {
   uiSetMode(UI_LISTEN); uiTick(tc + 400); save(dir, "c8_cleared_by_press");
   uiSetMode(UI_READY); uiShowWeather(tc + 500, "Houston", 72, UI_NONE, "Sunny", UI_ICON_SUN, 80, 65, 0, ""); uiTick(tc + 500);
   uiTick(tc + 500 + UI_CARD_MS + 10); save(dir, "c9_timed_out");
+  // 9. the other cards
+  uiMotion = false; uiSetMode(UI_READY);
+  uint32_t tg = 40000;
+  uiShowScore(tg, "NBA", "Q3 4:21", "Lakers", 78, "Warriors", 81); uiTick(tg); save(dir, "g1_score_live");
+  uiShowScore(tg, "NFL", "Final", "Chiefs", 27, "Golden State Wa.", 24); uiTick(tg); save(dir, "g2_score_final_leader_away");
+  uiShowScore(tg, "MLB", "7:05 PM tonight", "Astros", UI_NONE, "Texas Rangers", UI_NONE); uiTick(tg); save(dir, "g3_score_not_started");
+  uiShowFact(tg, "AAPL", "$187.42", "+1.2% today", "As of 3:58 PM", 1); uiTick(tg); save(dir, "g4_fact_price_up");
+  uiShowFact(tg, "Drive home", "24 min", "Heavy traffic on I-10", "", 2); uiTick(tg); save(dir, "g5_fact_words");
+  uiShowFact(tg, "Bitcoin", "$101,234.50", "-0.8% in 24 hours", "", 2); uiTick(tg); save(dir, "g6_fact_long_number");
+  uiShowFact(tg, "Oven", "350\x7f" "F", "Preheat for 15 minutes", "", 0); uiTick(tg); save(dir, "g7_fact_degrees");
+  {
+    const char *labels[5] = { "Standup", "Lunch with Sam", "Design review with the team", "Dentist", "Pick up kids" };
+    const char *values[5] = { "9:00 AM", "12:30 PM", "2:00 PM", "4:15 PM", "5:30 PM" };
+    uiShowList(tg, "Today", 5, labels, values); uiTick(tg); save(dir, "g8_list_five");
+    uiShowList(tg, "Next up", 3, labels, values); uiTick(tg); save(dir, "g9_list_three");
+  }
   // timing of one frame (host speed, not the watch's)
   UiPose p; uiPoseNow(7000, &p);
   double t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(p, uiStageX, uiStageY, uiStageW, uiStageH);

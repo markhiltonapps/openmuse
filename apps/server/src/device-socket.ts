@@ -1,7 +1,7 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
-import type { DeviceCard } from "../../../packages/domain/src/device-card.ts";
+import { type DeviceCard, deviceWire } from "../../../packages/domain/src/device-card.ts";
 import type { Device, Devices } from "./devices.ts";
 import { AppError } from "./errors.ts";
 import type { SocketLike } from "./voice-live.ts";
@@ -255,7 +255,7 @@ export class DeviceBridge {
       connection.call = call;
       // The weather (and any other card) the agent looks up while they talk: drawn on the device's screen.
       call.unwatch = voice.watchCards?.(connection.owner, sessionId, (card) =>
-        this.sendText(connection, { type: "card", ...card }),
+        this.sendText(connection, { type: "card", ...deviceWire(card) }),
       );
       const opened = () => {
         if (call.open) return;
