@@ -21,6 +21,7 @@
 #include "Arduino_GFX_Library.h"
 #include "pin_config.h"
 #include "esp_check.h"
+#include "esp_system.h"
 #include "es8311.h"
 #include "settings.h"
 
@@ -117,6 +118,23 @@ static long lastAnswerMs = -1;
 static long pressBytes = 0, pressPeak = 0, pressMisses = 0;
 static String lastPress;
 static String lastPress2;
+// Why the board last started (power on, a crash, a watchdog, low power...) and how many starts since power-up.
+static RTC_DATA_ATTR int bootCount = 0;
+static String resetWhy;
+static const char *resetName(int r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power on";
+    case ESP_RST_SW: return "software restart";
+    case ESP_RST_PANIC: return "CRASH";
+    case ESP_RST_INT_WDT: return "watchdog (interrupt)";
+    case ESP_RST_TASK_WDT: return "watchdog (task)";
+    case ESP_RST_WDT: return "watchdog";
+    case ESP_RST_BROWNOUT: return "LOW POWER";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_EXT: return "reset pin";
+    default: return "other";
+  }
+}
 static unsigned long slowRead = 0, slowSend = 0;
 static String micChip = "mic chip: not checked";
 static bool waitingFirstSound = false;
@@ -245,12 +263,13 @@ static void screenState() {
         centered("Hold BOOT to talk", 138, 2, cTeal);
         String tail = saying;
         if (tail.length() > 235) tail = String("...") + tail.substring(tail.length() - 232);
-        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 8);
+        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 7);
       } else {
         gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
         centered(deviceName, 240, 4, cWhite);
         centered("Hold BOOT to talk", 310, 3, cTeal);
       }
+      centered(resetWhy, 340, 2, cGrey);
       centered(micChip, 372, 2, cGrey);
       if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
       if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
@@ -715,6 +734,9 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println("\nNeddy device " FIRMWARE_VERSION);
+  bootCount++;
+  resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
+  Serial.println(resetWhy);
   pinMode(BUTTON, INPUT_PULLUP);
 
   if (!gfx->begin()) Serial.println("[screen] gfx->begin() failed");

@@ -781,3 +781,10 @@ the shared I2S clocks, the amplifier). If it still stops: look at the receive si
 More server evidence (00:23-00:26): a press held 9363 ms delivered only 1800 ms of audio, so sound stops mid-press (not only
 at the start). Sound-off build did not cure it. Next build adds "slowest read / send ms" on screen to tell a stalled
 microphone read from a stalled WebSocket send. If sends stall: decouple capture from the network (a mic task feeding a buffer).
+
+Owner (2026-11-09): after the first question the screen says "Connecting to Neddy" ("almost reboots"); on the next try holding BOOT for
+a few seconds eventually shows the sound bar; an answer ("Hey Mark, I hear you just fine, the capital of Kansas") stopped mid-sentence.
+Theory: the board restarts (crash, watchdog, or low power from the long USB cable / bright screen + Wi-Fi) or drops its connection while the
+answer streams in, then needs seconds to reconnect; presses meanwhile do nothing. Server shows a 10 s hold delivering only 2.6 s of audio.
+Next build (uncompiled): ready screen shows "start N: <why>" from esp_reset_reason() and a counter kept across soft restarts
+(RTC memory): a count that goes up = restarting after answers (CRASH/watchdog/LOW POWER); "start 1: power on" every time = the board loses power.
