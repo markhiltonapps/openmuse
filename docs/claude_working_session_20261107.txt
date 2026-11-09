@@ -762,3 +762,9 @@ Server logging (button released after N ms ... heard N characters) was pushed (d
 
 CONFIRMED (2026-11-09): after starting the ES7210 the board's mic peak went from 0 to 26656 and Neddy answered.
 Peak 26656 of 32767 is hot: if answers are clipped or noisy, lower the ES7210 gain (the `10` in `0x10 | 10`, 30 dB) to 6-8.
+
+Quiet after the first press (2026-11-09): first press loud (peak 26656) and answered; later presses peak ~90, no answer.
+Cause unknown. Firmware 0.1 build now (uncompiled): (a) live green mic bar at the bottom of the ready screen
+(the mic is read and thrown away between presses, so its buffer can't overflow; sqrt scale so a quiet room still shows),
+(b) i2s.setTimeout(100) so a read with no sound can't freeze the loop for a second, (c) experiment: ES7210 is
+started again after every press. Reading the bar tells whether the mic dies after a press, after an answer, or never.

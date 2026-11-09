@@ -209,6 +209,15 @@ static void drawLevel(int level /* 0..100 */) {
   if (fill > 0) gfx->fillRect(x + 2, y + 2, fill, h - 4, cTeal);
 }
 
+// A small live microphone bar at the bottom of the ready screen (so a dead or quiet microphone is easy to see).
+static void drawIdleLevel(int level /* 0..100 */) {
+  const int x = 55, y = 474, w = LCD_WIDTH - 110, h = 14;
+  gfx->fillRect(x, y, w, h, cBlack);
+  gfx->drawRect(x, y, w, h, cGrey);
+  int fill = (w - 4) * level / 100;
+  if (fill > 0) gfx->fillRect(x + 2, y + 2, fill, h - 4, cGreen);
+}
+
 static void screenState() {
   clearScreen();
   switch (mode) {
@@ -365,6 +374,7 @@ static bool audioInit() {
     Serial.println("[audio] I2S failed to start");
     return false;
   }
+  i2s.setTimeout(100);  // a read that finds no sound gives up quickly instead of freezing everything
   Wire.begin(IIC_SDA, IIC_SCL);
   pinMode(46, OUTPUT);
   digitalWrite(46, HIGH);  // speaker amplifier on
@@ -468,6 +478,7 @@ static void stopTalking() {
     lastPress = note;
     Serial.printf("[talk] %s, %ld empty reads\n", note, pressMisses);
   }
+  es7210Init();  // start the microphone chip afresh for the next press (it went quiet after the first)
   waitingFirstSound = true;
   setMode(M_THINK);
   Serial.println("[talk] end");
@@ -496,6 +507,25 @@ static void sendMicChunk() {
   if (millis() - lastLevelDraw > 100) {
     lastLevelDraw = millis();
     drawLevel(constrain((int)(peak * 100 / 12000), 0, 100));
+  }
+}
+
+// Between presses the microphone is still read (and thrown away), so its buffer never overflows, and
+// the ready screen shows a live bar. Nothing is sent to Neddy.
+static unsigned long lastIdleDraw = 0;
+static void idleMic() {
+  static int16_t stereo[640];
+  size_t got = i2s.readBytes((char *)stereo, sizeof(stereo));
+  size_t frames = got / 4;
+  if (frames == 0) return;
+  long peak = 0;
+  for (size_t i = 0; i < frames * 2; i++) {
+    long v = abs((int)stereo[i]);
+    if (v > peak) peak = v;
+  }
+  if (mode == M_READY && millis() - lastIdleDraw > 150) {
+    lastIdleDraw = millis();
+    drawIdleLevel(constrain((int)(100.0f * sqrtf((float)peak / 20000.0f)), 0, 100));
   }
 }
 
@@ -733,5 +763,7 @@ void loop() {
   if (held) {
     if (!down || millis() - pressStart > (unsigned long)MAX_TALK_SECONDS * 1000UL) stopTalking();
     else sendMicChunk();
+  } else if (wsUp) {
+    idleMic();
   }
 }
