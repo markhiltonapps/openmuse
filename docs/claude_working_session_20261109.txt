@@ -54,3 +54,9 @@ Checked on the PC: idle renders (5 variants), timing, dimming and waking, even w
 real idle message. NOT verified on the board: the brightness command (CO5300 0x51), and the clock needs the server's message first
 (without it the watch shows no idle face).
 Tests: device-idle (new, 5), devices, device-card, weather, day-tools, voice-brain, conversation-device: 44 pass; tsc, biome clean.
+
+--- touch confirmed on the real watch ---
+Owner: "The dot is right under my finger": the FT3168 reading and orientation are correct (no TOUCH_SWAP/FLIP needed). TOUCH_TRAIL is now 0
+(the dots are off) in the next build. Pushed: server idle facts + settings (deploy d0abe74b SUCCESS 12:33 UTC, commit b04a111) and the
+combined touch + idle firmware zip was delivered. Still to hear: tap/hold/double-tap results, the idle face on the watch, dimming, and
+the voice settings.

@@ -483,7 +483,7 @@ static bool buttonDown() {
 // 1 = draw a dot under the finger while it touches (to check the touch lines up with the picture; the screen
 // is drawn again when the finger lifts). 0 = no dots.
 #ifndef TOUCH_TRAIL
-#define TOUCH_TRAIL 1
+#define TOUCH_TRAIL 0
 #endif
 // If the dot is NOT under the finger, these three turn the touch around (try one at a time).
 #ifndef TOUCH_SWAP_XY
