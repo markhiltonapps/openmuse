@@ -52,185 +52,18 @@ Arduino_DataBus *bus = new Arduino_ESP32QSPI(
 Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDTH, LCD_HEIGHT,
                                       22 /* col_offset1 */, 0, 0, 0);
 
-static uint16_t cBlack, cWhite, cGrey, cTeal, cRed, cAmber, cGreen;
-static void makeColours() {
-  cBlack = gfx->color565(0, 0, 0);
-  cWhite = gfx->color565(255, 255, 255);
-  cGrey = gfx->color565(150, 160, 165);
-  cTeal = gfx->color565(43, 200, 180);
-  cRed = gfx->color565(240, 80, 70);
-  cAmber = gfx->color565(255, 180, 60);
-  cGreen = gfx->color565(80, 220, 120);
-}
+// ---------------------------------------------------------------- the screen (the drawing is in neddy_ui.h)
+#include "neddy_ui.h"
 
-// Text with the built-in font, scaled. One character is 6 x 8 pixels at size 1.
-// ---------------------------------------------------------------- text
-// The 5x7 letters of Arduino_GFX's own classic font (ASCII 32 to 126), kept here so a whole line of text can be
-// drawn into memory and sent to the screen in ONE go. The library draws every lit dot of a scaled letter as its
-// own screen command, which took seconds for a screen full of text and froze the board.
-static const uint8_t NEDDY_FONT[95][5] = {
-  {0x00, 0x00, 0x00, 0x00, 0x00},  // ' '
-  {0x00, 0x00, 0x5F, 0x00, 0x00},  // '!'
-  {0x00, 0x07, 0x00, 0x07, 0x00},  // '"'
-  {0x14, 0x7F, 0x14, 0x7F, 0x14},  // '#'
-  {0x24, 0x2A, 0x7F, 0x2A, 0x12},  // '$'
-  {0x23, 0x13, 0x08, 0x64, 0x62},  // '%'
-  {0x36, 0x49, 0x56, 0x20, 0x50},  // '&'
-  {0x00, 0x08, 0x07, 0x03, 0x00},  // '''
-  {0x00, 0x1C, 0x22, 0x41, 0x00},  // '('
-  {0x00, 0x41, 0x22, 0x1C, 0x00},  // ')'
-  {0x2A, 0x1C, 0x7F, 0x1C, 0x2A},  // '*'
-  {0x08, 0x08, 0x3E, 0x08, 0x08},  // '+'
-  {0x00, 0x80, 0x70, 0x30, 0x00},  // ','
-  {0x08, 0x08, 0x08, 0x08, 0x08},  // '-'
-  {0x00, 0x00, 0x60, 0x60, 0x00},  // '.'
-  {0x20, 0x10, 0x08, 0x04, 0x02},  // '/'
-  {0x3E, 0x51, 0x49, 0x45, 0x3E},  // '0'
-  {0x00, 0x42, 0x7F, 0x40, 0x00},  // '1'
-  {0x72, 0x49, 0x49, 0x49, 0x46},  // '2'
-  {0x21, 0x41, 0x49, 0x4D, 0x33},  // '3'
-  {0x18, 0x14, 0x12, 0x7F, 0x10},  // '4'
-  {0x27, 0x45, 0x45, 0x45, 0x39},  // '5'
-  {0x3C, 0x4A, 0x49, 0x49, 0x31},  // '6'
-  {0x41, 0x21, 0x11, 0x09, 0x07},  // '7'
-  {0x36, 0x49, 0x49, 0x49, 0x36},  // '8'
-  {0x46, 0x49, 0x49, 0x29, 0x1E},  // '9'
-  {0x00, 0x00, 0x14, 0x00, 0x00},  // ':'
-  {0x00, 0x40, 0x34, 0x00, 0x00},  // ';'
-  {0x00, 0x08, 0x14, 0x22, 0x41},  // '<'
-  {0x14, 0x14, 0x14, 0x14, 0x14},  // '='
-  {0x00, 0x41, 0x22, 0x14, 0x08},  // '>'
-  {0x02, 0x01, 0x59, 0x09, 0x06},  // '?'
-  {0x3E, 0x41, 0x5D, 0x59, 0x4E},  // '@'
-  {0x7C, 0x12, 0x11, 0x12, 0x7C},  // 'A'
-  {0x7F, 0x49, 0x49, 0x49, 0x36},  // 'B'
-  {0x3E, 0x41, 0x41, 0x41, 0x22},  // 'C'
-  {0x7F, 0x41, 0x41, 0x41, 0x3E},  // 'D'
-  {0x7F, 0x49, 0x49, 0x49, 0x41},  // 'E'
-  {0x7F, 0x09, 0x09, 0x09, 0x01},  // 'F'
-  {0x3E, 0x41, 0x41, 0x51, 0x73},  // 'G'
-  {0x7F, 0x08, 0x08, 0x08, 0x7F},  // 'H'
-  {0x00, 0x41, 0x7F, 0x41, 0x00},  // 'I'
-  {0x20, 0x40, 0x41, 0x3F, 0x01},  // 'J'
-  {0x7F, 0x08, 0x14, 0x22, 0x41},  // 'K'
-  {0x7F, 0x40, 0x40, 0x40, 0x40},  // 'L'
-  {0x7F, 0x02, 0x1C, 0x02, 0x7F},  // 'M'
-  {0x7F, 0x04, 0x08, 0x10, 0x7F},  // 'N'
-  {0x3E, 0x41, 0x41, 0x41, 0x3E},  // 'O'
-  {0x7F, 0x09, 0x09, 0x09, 0x06},  // 'P'
-  {0x3E, 0x41, 0x51, 0x21, 0x5E},  // 'Q'
-  {0x7F, 0x09, 0x19, 0x29, 0x46},  // 'R'
-  {0x26, 0x49, 0x49, 0x49, 0x32},  // 'S'
-  {0x03, 0x01, 0x7F, 0x01, 0x03},  // 'T'
-  {0x3F, 0x40, 0x40, 0x40, 0x3F},  // 'U'
-  {0x1F, 0x20, 0x40, 0x20, 0x1F},  // 'V'
-  {0x3F, 0x40, 0x38, 0x40, 0x3F},  // 'W'
-  {0x63, 0x14, 0x08, 0x14, 0x63},  // 'X'
-  {0x03, 0x04, 0x78, 0x04, 0x03},  // 'Y'
-  {0x61, 0x59, 0x49, 0x4D, 0x43},  // 'Z'
-  {0x00, 0x7F, 0x41, 0x41, 0x41},  // '['
-  {0x02, 0x04, 0x08, 0x10, 0x20},  // 'backslash'
-  {0x00, 0x41, 0x41, 0x41, 0x7F},  // ']'
-  {0x04, 0x02, 0x01, 0x02, 0x04},  // '^'
-  {0x40, 0x40, 0x40, 0x40, 0x40},  // '_'
-  {0x00, 0x03, 0x07, 0x08, 0x00},  // '`'
-  {0x20, 0x54, 0x54, 0x78, 0x40},  // 'a'
-  {0x7F, 0x28, 0x44, 0x44, 0x38},  // 'b'
-  {0x38, 0x44, 0x44, 0x44, 0x28},  // 'c'
-  {0x38, 0x44, 0x44, 0x28, 0x7F},  // 'd'
-  {0x38, 0x54, 0x54, 0x54, 0x18},  // 'e'
-  {0x00, 0x08, 0x7E, 0x09, 0x02},  // 'f'
-  {0x18, 0xA4, 0xA4, 0x9C, 0x78},  // 'g'
-  {0x7F, 0x08, 0x04, 0x04, 0x78},  // 'h'
-  {0x00, 0x44, 0x7D, 0x40, 0x00},  // 'i'
-  {0x20, 0x40, 0x40, 0x3D, 0x00},  // 'j'
-  {0x7F, 0x10, 0x28, 0x44, 0x00},  // 'k'
-  {0x00, 0x41, 0x7F, 0x40, 0x00},  // 'l'
-  {0x7C, 0x04, 0x78, 0x04, 0x78},  // 'm'
-  {0x7C, 0x08, 0x04, 0x04, 0x78},  // 'n'
-  {0x38, 0x44, 0x44, 0x44, 0x38},  // 'o'
-  {0xFC, 0x18, 0x24, 0x24, 0x18},  // 'p'
-  {0x18, 0x24, 0x24, 0x18, 0xFC},  // 'q'
-  {0x7C, 0x08, 0x04, 0x04, 0x08},  // 'r'
-  {0x48, 0x54, 0x54, 0x54, 0x24},  // 's'
-  {0x04, 0x04, 0x3F, 0x44, 0x24},  // 't'
-  {0x3C, 0x40, 0x40, 0x20, 0x7C},  // 'u'
-  {0x1C, 0x20, 0x40, 0x20, 0x1C},  // 'v'
-  {0x3C, 0x40, 0x30, 0x40, 0x3C},  // 'w'
-  {0x44, 0x28, 0x10, 0x28, 0x44},  // 'x'
-  {0x4C, 0x90, 0x90, 0x90, 0x7C},  // 'y'
-  {0x44, 0x64, 0x54, 0x4C, 0x44},  // 'z'
-  {0x00, 0x08, 0x36, 0x41, 0x00},  // '{'
-  {0x00, 0x00, 0x77, 0x00, 0x00},  // '|'
-  {0x00, 0x41, 0x36, 0x08, 0x00},  // '}'
-  {0x02, 0x01, 0x02, 0x04, 0x02},  // '~'
-};
+// 1 = Neddy moves all the time (breathing, floating, glancing). 0 = still, except his eyes (and blinking).
+#ifndef NEDDY_MOTION
+#define NEDDY_MOTION 0
+#endif
 
-static uint16_t lineBuf[LCD_WIDTH * 32];  // one line of text, up to 4x size
+static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
+static void outFill(int x, int y, int w, int h, uint16_t colour) { gfx->fillRect(x, y, w, h, colour); }
+static void clearScreen() { gfx->fillScreen(0); }
 
-static void drawText(const String &text, int x, int y, int size, uint16_t fg) {
-  if (size < 1) size = 1;
-  if (size > 4) size = 4;
-  int cw = 6 * size, ch = 8 * size;
-  int n = text.length();
-  int fit = (LCD_WIDTH - x) / cw;
-  if (n > fit) n = fit;
-  if (n <= 0 || x < 0) return;
-  int w = n * cw;
-  const uint16_t bg = cBlack;
-  for (int i = 0; i < w * ch; i++) lineBuf[i] = bg;
-  for (int k = 0; k < n; k++) {
-    int c = (uint8_t)text[k];
-    if (c < 32 || c > 126) c = '?';
-    const uint8_t *glyph = NEDDY_FONT[c - 32];
-    for (int col = 0; col < 5; col++) {
-      uint8_t bits = glyph[col];
-      for (int row = 0; row < 8; row++) {
-        if (!((bits >> row) & 1)) continue;
-        for (int dy = 0; dy < size; dy++) {
-          uint16_t *at = &lineBuf[(row * size + dy) * w + k * cw + col * size];
-          for (int dx = 0; dx < size; dx++) at[dx] = fg;
-        }
-      }
-    }
-  }
-  gfx->draw16bitRGBBitmap(x, y, lineBuf, w, ch);
-}
-
-static void centered(const String &text, int y, int size, uint16_t colour) {
-  int w = text.length() * 6 * size;
-  int x = (LCD_WIDTH - w) / 2;
-  if (x < 4) x = 4;
-  drawText(text, x, y, size, colour);
-}
-
-// Wrapped text inside a box (left, top, width), broken at spaces.
-static void wrapped(const String &text, int left, int top, int width, int size, uint16_t colour,
-                    int maxLines) {
-  int perLine = width / (6 * size);
-  if (perLine < 4) perLine = 4;
-  int y = top, start = 0, lines = 0;
-  while (start < (int)text.length() && lines < maxLines) {
-    int end = start + perLine;
-    if (end >= (int)text.length()) {
-      end = text.length();
-    } else {
-      int space = text.lastIndexOf(' ', end);
-      if (space > start) end = space;
-    }
-    String line = text.substring(start, end);
-    line.trim();
-    drawText(line, left, y, size, colour);
-    y += 9 * size + 4;
-    start = end;
-    while (start < (int)text.length() && text[start] == ' ') start++;
-    lines++;
-  }
-}
-
-static void clearScreen() { gfx->fillScreen(cBlack); }
-
-// ---------------------------------------------------------------- state
 enum Mode { M_BOOT, M_WIFI, M_PAIR, M_LINK, M_READY, M_LISTEN, M_THINK, M_SPEAK, M_PROBLEM };
 static Mode mode = M_BOOT;
 
@@ -364,122 +197,83 @@ static String httpPost(const String &path, const String &body, int &status) {
 }
 
 // ---------------------------------------------------------------- screens
+static bool uiActive = false;   // true while Neddy's own screen (neddy_ui.h) owns the display
+static String heard;            // what Neddy understood you said (small, grey)
+static unsigned long dLoop = 0, dWs = 0, dIdle = 0, dStart = 0, lastDiag = 0;
+static long dSentMs = 0, dPeak = 0;
+
 static void screenBoot(const String &line) {
+  uiActive = false;
   clearScreen();
-  centered("Neddy", 150, 8, cTeal);
-  centered(line, 300, 3, cGrey);
-  centered(String("version ") + FIRMWARE_VERSION, 450, 2, cGrey);
+  uiTextCentered(NFONT_TITLE, 160, "Neddy", UI_TEAL);
+  uiTextCentered(NFONT_BODY, 300, line.c_str(), UI_GREY);
+  uiTextCentered(NFONT_MID, 450, (String("version ") + FIRMWARE_VERSION).c_str(), UI_GREY);
 }
 
 static void screenProblem(const String &title, const String &detail) {
+  uiActive = false;
   clearScreen();
-  centered(title, 110, 4, cAmber);
-  wrapped(detail, 30, 200, LCD_WIDTH - 60, 3, cWhite, 12);
+  uiTextCentered(NFONT_TITLE, 100, title.c_str(), UI_AMBER);
+  uiParagraph(NFONT_BODY, 170, detail.c_str(), UI_WHITE, 340, 11, 26);
 }
 
 static void screenPair(const String &code, int secondsLeft) {
+  uiActive = false;
   clearScreen();
-  centered("Pair me with Neddy", 50, 3, cWhite);
+  uiTextCentered(NFONT_TITLE, 50, "Pair me with Neddy", UI_WHITE);
   String shown = code.substring(0, 3) + " " + code.substring(3);
-  centered(shown, 130, 9, cTeal);
-  wrapped(String("On your phone open Neddy, then You > Account > Your devices, and type this code. ")
-          + "Or say to Neddy: pair my device.",
-          30, 250, LCD_WIDTH - 60, 2, cWhite, 8);
+  uiTextCentered(NFONT_HUGE, 110, shown.c_str(), UI_TEAL);
+  uiParagraph(NFONT_BODY, 220, "On your phone open Neddy, then You > Account > Your devices, and type this code. Or say to Neddy: pair my device.",
+              UI_WHITE, 340, 8, 26);
   char buf[32];
   snprintf(buf, sizeof(buf), "Works for %d:%02d", secondsLeft / 60, secondsLeft % 60);
-  centered(String(buf), 440, 2, cGrey);
+  uiTextCentered(NFONT_MID, 440, buf, UI_GREY);
 }
 
-static void drawLevel(int level /* 0..100 */) {
-  const int x = 55, y = 430, w = LCD_WIDTH - 110, h = 20;
-  gfx->fillRect(x, y, w, h, cBlack);
-  gfx->drawRect(x, y, w, h, cGrey);
-  int fill = (w - 4) * level / 100;
-  if (fill > 0) gfx->fillRect(x + 2, y + 2, fill, h - 4, cTeal);
+// The two small lines at the bottom: link, microphone, and how the last press went.
+static void buildDiag() {
+  char a[96], b[110];
+  snprintf(a, sizeof(a), "Wi-Fi %d dBm  %s  drops %d  %s", (int)WiFi.RSSI(), micChip.c_str(), wsDrops, resetWhy.c_str());
+  if (lastAnswerMs >= 0)
+    snprintf(b, sizeof(b), "answer %.1f s  sent %ld ms  peak %ld  L%lu W%lu M%lu S%lu", lastAnswerMs / 1000.0, dSentMs, dPeak, dLoop, dWs, dIdle, dStart);
+  else
+    snprintf(b, sizeof(b), "sent %ld ms  peak %ld  L%lu W%lu M%lu S%lu", dSentMs, dPeak, dLoop, dWs, dIdle, dStart);
+  uiSetDiag(a, b);
 }
 
-// A small live microphone bar at the bottom of the ready screen (so a dead or quiet microphone is easy to see).
-static void drawIdleLevel(int level /* 0..100 */) {
-  const int x = 55, y = 474, w = LCD_WIDTH - 110, h = 14;
-  gfx->fillRect(x, y, w, h, cBlack);
-  gfx->drawRect(x, y, w, h, cGrey);
-  int fill = (w - 4) * level / 100;
-  if (fill > 0) gfx->fillRect(x + 2, y + 2, fill, h - 4, cGreen);
+static void uiSync() {
+  buildDiag();
+  uiSetName(deviceName.c_str());
+  uiSetWords(saying.c_str());
+  uiSetHeard(heard.c_str());
 }
 
 static void screenState() {
-  clearScreen();
   switch (mode) {
     case M_WIFI:
-      centered("Joining Wi-Fi", 150, 4, cWhite);
-      centered(WIFI_NAME, 230, 3, cGrey);
+      uiActive = false;
+      clearScreen();
+      uiTextCentered(NFONT_TITLE, 150, "Joining Wi-Fi", UI_WHITE);
+      uiTextCentered(NFONT_BODY, 230, WIFI_NAME, UI_GREY);
       break;
     case M_LINK:
-      centered("Connecting to Neddy", 180, 3, cWhite);
-      break;
-    case M_READY: {
-      if (saying.length()) {
-        // What Neddy last said stays on screen (the speaker may be off or broken).
-        gfx->fillCircle(LCD_WIDTH / 2, 60, 28, cGreen);
-        centered(deviceName, 104, 3, cWhite);
-        centered("Hold BOOT to talk", 138, 2, cTeal);
-        String tail = saying;
-        if (tail.length() > 235) tail = String("...") + tail.substring(tail.length() - 232);
-        wrapped(tail, 24, 172, LCD_WIDTH - 48, 2, cWhite, 5);
-      } else {
-        gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cGreen);
-        centered(deviceName, 240, 4, cWhite);
-        centered("Hold BOOT to talk", 310, 3, cTeal);
+    case M_READY:
+    case M_LISTEN:
+    case M_THINK:
+    case M_SPEAK: {
+      if (!uiActive) {
+        uiActive = true;
+        uiAll = true;
       }
-      centered(resetWhy, 332, 2, cGrey);
-      {
-        char drops[48];
-        if (wsDrops && wsBackMs >= 0) snprintf(drops, sizeof(drops), "link drops %d, back in %.1f s", wsDrops, wsBackMs / 1000.0);
-        else snprintf(drops, sizeof(drops), "link drops %d", wsDrops);
-        centered(String(drops), 352, 2, cGrey);
-      }
-      centered(micChip + ", Wi-Fi " + String(WiFi.RSSI()) + " dBm", 374, 2, cGrey);
-      if (lastPress.length()) centered(lastPress, 400, 2, cGrey);
-      if (lastPress2.length()) centered(lastPress2, 424, 2, cGrey);
-      if (lastPress3.length()) centered(lastPress3, 288, 2, cGrey);
-      if (lastPress4.length()) centered(lastPress4, 310, 2, cGrey);
-      if (lastAnswerMs >= 0) {
-        char buf[48];
-        snprintf(buf, sizeof(buf), "last answer %.1f s after release", lastAnswerMs / 1000.0);
-        centered(String(buf), 450, 2, cGrey);
-      }
+      uiSetMode(mode == M_LINK ? UI_LINK : mode == M_LISTEN ? UI_LISTEN : mode == M_THINK ? UI_THINK : mode == M_SPEAK ? UI_SPEAK : UI_READY);
+      uiSync();
       break;
     }
-    case M_LISTEN:
-      gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cRed);
-      centered("Listening", 240, 4, cWhite);
-      centered("Let go when you're done", 310, 2, cGrey);
-      drawLevel(0);
-      break;
-    case M_THINK:
-      gfx->fillCircle(LCD_WIDTH / 2, 150, 48, cAmber);
-      centered("Thinking", 240, 4, cWhite);
-      if (lastPress.length()) centered(lastPress, 320, 2, cGrey);
-      if (lastPress2.length()) centered(lastPress2, 344, 2, cGrey);
-      if (lastPress3.length()) centered(lastPress3, 368, 2, cGrey);
-      if (lastPress4.length()) centered(lastPress4, 392, 2, cGrey);
-      break;
-    case M_SPEAK:
-      gfx->fillCircle(LCD_WIDTH / 2, 90, 36, cTeal);
-      centered("Neddy", 150, 3, cWhite);
-      break;
     default:
+      uiActive = false;
+      clearScreen();
       break;
   }
-}
-
-static void screenSpeech() {
-  if (millis() - lastSpeechDraw < 250) return;
-  lastSpeechDraw = millis();
-  gfx->fillRect(0, 200, LCD_WIDTH, 290, cBlack);
-  String tail = saying;
-  if (tail.length() > 220) tail = String("...") + tail.substring(tail.length() - 217);
-  wrapped(tail, 24, 205, LCD_WIDTH - 48, 3, cWhite, 11);
 }
 
 // (An int, not Mode: the Arduino IDE writes a list of function names above the file's first line, before
@@ -666,6 +460,7 @@ static void startTalking() {
   held = true;
   pressStart = millis();
   saying = "";
+  heard = "";
   waitingFirstSound = false;
   pressBytes = 0;
   pressPeak = 0;
@@ -710,6 +505,7 @@ static void stopTalking() {
     snprintf(note4, sizeof(note4), "snd%lu mode%lu trash%lu cb%lu q%lu", tSnd, tMode, tTrash, maxCb, quietAtPress / 1000);
     lastPress4 = note4;
     tSnd = tMode = tTrash = maxCb = 0;
+    dLoop = maxLoop; dWs = maxWs; dIdle = maxIdle; dStart = maxStart; dSentMs = pressBytes / 32; dPeak = pressPeak;
     maxLoop = maxWs = maxIdle = maxStart = blockedMs = blockedPrev = 0;
     blockedWhy = '-';
     LOGF("[talk] %s, %s, %s, %s\n", note, note2, note3, note4);
@@ -745,7 +541,7 @@ static void sendMicChunk() {
   if (peak > pressPeak) pressPeak = peak;
   if (millis() - lastLevelDraw > 100) {
     lastLevelDraw = millis();
-    drawLevel(constrain((int)(peak * 100 / 12000), 0, 100));
+    uiSetLevel(sqrtf((float)peak / 20000.0f));
   }
 }
 
@@ -761,10 +557,6 @@ static void idleMic() {
   for (size_t i = 0; i < frames * 2; i++) {
     long v = abs((int)stereo[i]);
     if (v > peak) peak = v;
-  }
-  if (mode == M_READY && millis() - lastIdleDraw > 150) {
-    lastIdleDraw = millis();
-    drawIdleLevel(constrain((int)(100.0f * sqrtf((float)peak / 20000.0f)), 0, 100));
   }
 }
 
@@ -820,11 +612,10 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         flushPlayback = true;
       } else if (kind == "session.output_transcript.delta") {
         saying += plain(jsonString(text, "delta"));
-        if (mode == M_SPEAK) screenSpeech();
-        else if (mode == M_READY && millis() - lastSpeechDraw > 500) {
-          lastSpeechDraw = millis();
-          screenState();
-        }
+        uiSetWords(saying.c_str());
+      } else if (kind == "session.input_transcript.delta") {
+        heard += plain(jsonString(text, "delta"));
+        uiSetHeard(heard.c_str());
       } else if (kind == "latency") {
         LOGF("[latency] server says %s ms\n", text.c_str());
       } else if (kind == "error") {
@@ -945,7 +736,9 @@ void setup() {
   pinMode(BUTTON, INPUT_PULLUP);
 
   if (!gfx->begin()) LOGLN("[screen] gfx->begin() failed");
-  makeColours();
+  uiOut.blit = outBlit;
+  uiOut.fill = outFill;
+  uiMotion = NEDDY_MOTION != 0;
   screenBoot("Starting");
 
   prefs.begin("neddy", false);
@@ -1047,5 +840,14 @@ void loop() {
     unsigned long idleAt = millis();
     idleMic();
     if (millis() - idleAt > maxIdle) maxIdle = millis() - idleAt;
+  }
+
+  // Neddy's screen: draws only what changed (and the moving parts if motion is on).
+  if (uiActive) {
+    if (mode == M_READY && millis() - lastDiag > 5000) {   // Wi-Fi strength and the like
+      lastDiag = millis();
+      buildDiag();
+    }
+    uiTick(millis());
   }
 }
