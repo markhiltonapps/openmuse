@@ -843,3 +843,8 @@ Open items: (1) sound is OFF (PLAY_ANSWERS 0; the speaker wire is broken) - rete
 USB-print stall too; (2) the diagnostic grey lines on the ready screen should be hidden for normal use (keep behind a setting); (3) TLS certificate isn't verified yet
 (setInsecure) - fix before other testers; (4) nicer graphics (smooth fonts, canvas, Neddy art); (5) Wi-Fi setup from the phone and updates over Wi-Fi; (6) Help topic/site wording
 for devices once it's ready for testers; (7) 3 commits not yet pushed (firmware + notes only).
+
+NEXT (owner choices 2026-11-09): "Better graphics and tidying the screen": the real Neddy picture with eyes animated by the board (happy / wide while listening
+(size follows the mic level) / looking while thinking / bouncing arcs while speaking / blink / dim while connecting), diagnostic numbers kept on screen but small and quiet.
+Work in scratchpad/gfx (eyeless.py paints the baked-in eyes out of neddy-full.webp; mock.py renders the screens with Inter). Mockups go to the owner before any firmware.
+Later idea (owner): touch. The board has a capacitive touch controller (FT3168 over I2C, Waveshare's Arduino_DriveBus): Neddy reacts to a touch (eyes follow the finger, giggle on a tap).
