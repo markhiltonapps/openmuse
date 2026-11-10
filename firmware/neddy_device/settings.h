@@ -1,12 +1,13 @@
 // ===========================================================================
-//  Settings for the person building the watch. The Wi-Fi is NOT set here any more:
-//  a new watch shows a QR code on its screen; scan it with your phone and pick your Wi-Fi.
-//  (To forget the Wi-Fi later: plug the watch in while holding BOOT, and keep holding.)
+//  Settings for the person building the watch.
+//  Wi-Fi: a new watch (with the two lines below left as they are) shows a QR code on its screen and you pick your
+//  Wi-Fi from your phone. While building, you can instead type your Wi-Fi in the two lines below: the watch then
+//  uses it directly and never shows the QR code. (Plug the watch in while holding BOOT, and keep holding, to forget a saved Wi-Fi.)
+//  To test the QR setup on a watch whose Wi-Fi is typed below, add this line at the top of this file:
+//      #define NEDDY_FORCE_QR_SETUP 1
 // ===========================================================================
 #pragma once
 
-// Only used if you add the line   #define NEDDY_USE_SETTINGS_WIFI 1   at the top of this file (handy while building: the watch
-// then uses these two when it has no Wi-Fi saved).
 #define WIFI_NAME "your Wi-Fi name"
 #define WIFI_PASSWORD "your Wi-Fi password"
 

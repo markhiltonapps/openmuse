@@ -67,10 +67,14 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #define NEDDY_MOTION 1
 #endif
 
-// Where the Wi-Fi comes from. 0 = from the setup on the watch itself (it shows a QR code on first start; this is how it ships).
-// 1 = also use WIFI_NAME and WIFI_PASSWORD from settings.h when nothing is saved on the watch (handy while building it).
+// Where the Wi-Fi comes from. Saved on the watch (from the QR setup) comes first. When nothing is saved, the watch uses WIFI_NAME and WIFI_PASSWORD from
+// settings.h IF they have been edited (they aren't the placeholder text), which is handy while building it. Left as the placeholders, a new watch shows
+// the QR code setup instead (this is how it ships). Add   #define NEDDY_FORCE_QR_SETUP 1   to settings.h to test the QR setup on a watch whose settings.h has a real Wi-Fi.
 #ifndef NEDDY_USE_SETTINGS_WIFI
-#define NEDDY_USE_SETTINGS_WIFI 0
+#define NEDDY_USE_SETTINGS_WIFI 1
+#endif
+#ifndef NEDDY_FORCE_QR_SETUP
+#define NEDDY_FORCE_QR_SETUP 0
 #endif
 
 // 1 = show the small lines of numbers (Wi-Fi, microphone, timings) at the bottom of the screen.
@@ -1147,8 +1151,8 @@ static void startSocket() {
 static void wifiLoadSaved() {
   wifiSsid = prefs.getString("wssid", "");
   wifiPass = prefs.getString("wpass", "");
-#if NEDDY_USE_SETTINGS_WIFI
-  if (wifiSsid.length() == 0) {
+#if NEDDY_USE_SETTINGS_WIFI && !NEDDY_FORCE_QR_SETUP
+  if (wifiSsid.length() == 0 && strlen(WIFI_NAME) > 0 && strcmp(WIFI_NAME, "your Wi-Fi name") != 0) {   // edited in settings.h (not the placeholder)
     wifiSsid = WIFI_NAME;
     wifiPass = WIFI_PASSWORD;
   }

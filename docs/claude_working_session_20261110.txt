@@ -102,3 +102,10 @@ Owner scanned the QR, the phone joined Neddy-5AFE, and the watch moved on to the
 Change: the second screen now says "Finish on your phone / Tap 'Sign in' on your phone / or scan this, or go to 192.168.4.1", and a small bottom line counts what the phone has asked the watch for
 ("reached watch: page N  checks N  other N") so a photo shows whether the phone reaches the watch: all zeros = the phone's traffic isn't going to the watch (mobile data / private routing); checks>0, page 0 = Android saw
 the portal but the page wasn't opened (tap the Sign in notification); page>0 = the page opened. If Android still fails, next options: answer the probes differently, DHCP captive-portal option, or Bluetooth setup from the phone's browser (Android Chrome only).
+
+=== QR setup on Android: watch stayed on the first QR ("Set up Wi-Fi") ===
+Owner (Android): the phone joined Neddy-xxxx "with no internet" but the watch never left the first QR screen (so it did not see the phone staying connected; Android likely dropped it as a no-internet network
+and/or never offered the sign-in page). The setup can't be exited from the watch. For now (owner's choice: "get my watch working again"): settings.h Wi-Fi is used automatically when it has been edited (not the
+placeholder text), so a developer's watch connects straight away; a new watch with placeholders still shows the QR setup; `#define NEDDY_FORCE_QR_SETUP 1` in settings.h forces the QR setup for testing.
+Open: make the Android setup work (options: answer Android's connectivity checks differently; DHCP captive-portal option; Bluetooth setup from Chrome on Android). The "reached watch" counter from the previous build
+shows whether the phone reaches the watch; the owner's watch was on the first screen, so the count of connected phones read 0 when last looked at.
