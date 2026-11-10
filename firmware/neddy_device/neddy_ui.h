@@ -1543,8 +1543,10 @@ static void uiTick(uint32_t ms) {
     if (uiRec.full || uiRec.dirty) uiRecDraw();
     return;
   }
-  // The look-up ends when the answer starts, when he is spoken to again, or after 45 s whatever happens.
-  if (uiLookupOn && (uiMode == UI_SPEAK || uiMode == UI_LISTEN || uiMode == UI_LINK || ms - uiLookupSince > 45000)) uiLookupOn = false;
+  // The look-up ends when the server says so (it does before the answer is read), when he is spoken to again, or after 45 s whatever happens.
+  // Speaking does NOT end it: he usually says "let me check" first, and the look-up only starts after that.
+  if (uiLookupOn && (uiMode == UI_LISTEN || uiMode == UI_LINK || ms - uiLookupSince > 45000)) uiLookupOn = false;
+  if (uiLookupOn) uiActivity(ms);                   // a look-up in progress is activity: the idle face doesn't take over meanwhile
   if (uiCard.on && ms - uiCard.since >= uiCardMs()) uiClearCard();
   uiIdleTick(ms);
   bool wantSmall = uiCard.on || uiIdleOn || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);

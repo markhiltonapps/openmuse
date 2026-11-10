@@ -71,3 +71,9 @@ Battery with no battery: now plain text, "Plugged in, no battery" (or "No batter
 === Owner confirmed on the real watch: "It works" (after the build with the upload fix) ===
 Recording on the watch is now confirmed working end to end (record, stop, upload, Muse app), per the owner. Still unconfirmed in detail: battery with a real battery connected, fps after the microphone change,
 look-up animation, analog/neon faces' look on the board, 2-hour-class recordings, silence threshold in a noisy room.
+
+=== Look-up animation never appeared (owner: weather, temperature, time zone questions) ===
+Cause: the watch ended the look-up animation as soon as Neddy started speaking, but on a call he usually says "let me check" first, and the server only signals the look-up once the tool starts, so it was
+already switched off and never came back. Now speaking does not end it; it ends when the server says the look-up is over (sent before the answer is read), when he is spoken to again, or after 45 s,
+and a look-up in progress keeps the idle face from taking over. Note: questions answered without any tool (a time zone he knows) never signal a look-up; weather is a fast tool, so the book shows only a second or two.
+Best test: something that needs a web search ("who won the Astros game last night", "what's the latest news on ...").

@@ -236,13 +236,19 @@ int main() {
   }
   uiFpsLevel = 1;
 
-  // Looking something up: the book and flames show while a look-up runs, and stop when the answer starts or after 45 s.
+  // Looking something up: the book and flames show while a look-up runs, and stop when the server says so, when he is spoken to, or after 45 s.
   uiClearCard(); uiIdle.have = false; uiSetMode(UI_THINK); uiMotion = false; uiActivity(now); pause(300);
   uiLookup(now, true);
   long fillsBefore = fillsAbove; pause(1000);
   CHECK(uiLookupOn && fillsBefore >= 0, "the look-up starts");
   uiSetMode(UI_SPEAK); pause(100);
-  CHECK(!uiLookupOn, "it stops when the answer starts");
+  CHECK(uiLookupOn, "it carries on while he says 'let me check' (speaking doesn't end it)");
+  uiSetMode(UI_THINK); pause(500);
+  CHECK(uiLookupOn, "and when he goes back to thinking");
+  uiLookup(now, false); pause(100);
+  CHECK(!uiLookupOn, "it stops when the server says the look-up is over");
+  uiLookup(now, true); uiSetMode(UI_LISTEN); pause(100);
+  CHECK(!uiLookupOn, "or when he is spoken to again");
   uiSetMode(UI_THINK); uiLookup(now, true); pause(46000);
   CHECK(!uiLookupOn, "and after 45 s whatever happens");
   uiSetMode(UI_READY); uiMotion = true;
