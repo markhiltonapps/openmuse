@@ -283,7 +283,7 @@ test("the routes: a watch signs in with its own token, nothing else is let in", 
     });
     assert.equal(put.status, 401);
   } finally {
-    await server.close?.();
+    server.deviceBridge.stop();
     await db.close();
   }
 });
