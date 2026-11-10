@@ -1,0 +1,28 @@
+Session notes 2026-11-10 (watch: menu, animation speed; plan for look-up animation, faces and recording)
+
+Owner's asks (from concept pictures of a round watch): (1) animate Neddy when he looks things up (book, jetpack flames), (2) record on the watch
+and send to the phone afterwards, (3) watch faces, (4) control Neddy's frame rate; plus a small menu that fans out from a button. Owner's answers:
+order OK (fps + menu first, then look-up animation, faces, recording); the animation must not cost battery or recording; recording up to 2 hours in
+the watch's OWN storage (no microSD required; a card may extend it); a menu rather than new taps; the round board arrives in 1-2 weeks, so either order.
+
+Board facts (Waveshare docs): ESP32-S3R8, 8 MB OPI PSRAM, 32 MB flash, TF (microSD) slot, 2 microphones (ES7210), QMI8658 IMU, PCF85063 RTC on battery,
+AXP2101 PMU. PWR button = GPIO10 (high while pressed); holding it ~6 s powers off in hardware.
+
+Built today (step 1, committed locally, not pushed):
+- Menu: the PWR side button (short press, toggles) or a swipe up from the bottom edge opens two big tiles in the card area: Animation (saver / normal /
+  smooth, cycles on tap) and Screen off (dark and not drawing until any touch, press or words). Closes on a tap beside the tiles, the button again, or 15 s.
+  Swiping sideways does nothing while it is open. No Power off tile yet: the AXP2101's software shutdown bit was not confirmed from documentation.
+- Animation speed: saver ~8, normal ~16 (as before), smooth up to ~30 frames a second (the listening rate stays low so the microphone is never starved).
+  Server setting `animation` (saver|normal|smooth, voice via manage_devices, idle fact `fps` 0/1/2); a change made on the watch is sent as
+  {"type":"device.setting","key":"animation","value":N} and kept, so voice and menu agree.
+- Test line (NEDDY_IDLE_DEBUG 1 in this build): "... b<pct> <s1> <s2> f<frames last second> r<ms to draw one>": real frames a second and draw cost on the chip.
+- Tests: touch_test 52 checks (menu, swipe up, tiles, timeout, screen off, frame rate per level), ui_sim 0 odd windows (frames m1/m2), server device tests 18 pass.
+
+Plan for the rest (decisions to confirm with owner as each starts):
+- Look-up animation: server marks a tool running ("looking up"); watch shows a book + flame flicker; drawn in code or real art (owner OK with the animation
+  but not at the expense of battery/recording: only while a look-up runs, never while recording).
+- Watch faces: current info face + analog + big digital/neon; swipe or voice or menu tile; always-on mode (dim, redraw once a minute); IMU wrist-raise wake.
+- Recording: 2 h = 7,200 s into ~22-24 MB of flash means about 24 kbps (about 3 KB/s): a speech codec (Opus ~24 kbps or 3-bit ADPCM at 8 kHz), a custom
+  partition table (partitions.csv in the sketch folder; Arduino "Flash Size 32MB" must be selected), written to flash AS IT GOES (never only in memory),
+  Wi-Fi off while recording, upload after Stop to the api as pieces of a meeting (existing meetings pipeline: transcript, notes, shows in the app), deleted from
+  the watch only when the server has everything. REC indicator always on screen. A microSD card, if present, extends length/quality.

@@ -19,6 +19,7 @@ struct UiOut {
   void (*blit)(int x, int y, int w, int h, uint16_t *px);
   void (*fill)(int x, int y, int w, int h, uint16_t colour);
   void (*brightness)(int level);   // optional: 0..255
+  void (*setting)(int which, int value);   // optional: the person changed a setting on the watch (1 = animation speed)
 };
 static UiOut uiOut;
 
@@ -269,6 +270,8 @@ static uint32_t uiRng = 12345;
 static int uiLastEye = -1;
 static int uiStageX = 0, uiStageY = 0, uiStageW = 0, uiStageH = 0;
 static uint32_t uiLastStage = 0, uiLastText = 0, uiLastDiag = 0;
+static int uiFrames = 0, uiFpsNow = 0;   // frames of Neddy drawn in the last second (for the test line)
+static uint32_t uiFpsAt = 0;
 // Optional: a clock in microseconds (the watch gives micros). With it, the screen measures how long drawing him takes
 // and spaces the frames so drawing never takes more than a share of each turn of the main loop (the microphone and the
 // link come first).
@@ -282,7 +285,7 @@ enum { UI_ICON_SUN, UI_ICON_MOON, UI_ICON_SUN_CLOUD, UI_ICON_PARTLY, UI_ICON_CLO
        UI_ICON_STORM, UI_ICON_SNOW, UI_ICON_FOG, UI_ICON_WIND };
 #define UI_NONE (-9999)
 #define UI_ICON 112
-enum { UI_CARD_WEATHER, UI_CARD_SCORE, UI_CARD_FACT, UI_CARD_LIST };
+enum { UI_CARD_WEATHER, UI_CARD_SCORE, UI_CARD_FACT, UI_CARD_LIST, UI_CARD_MENU };
 struct UiCard {
   bool on;
   int kind;
@@ -319,7 +322,7 @@ static bool uiIdleOn = false, uiDimmed = false;
 static uint32_t uiLastActive = 0, uiIdleSince = 0;
 static int uiIdleMinute = -1;
 // How long a card stays: as long as the idle wait (10 s by default, never under 10), so the face comes back right after it; a minute when the idle face is off.
-static uint32_t uiCardMs() { return (uiIdle.have && uiIdle.after > 0) ? (uint32_t)(uiIdle.after < 10 ? 10 : uiIdle.after) * 1000UL : (uint32_t)UI_CARD_MS; }
+static uint32_t uiCardMs() { if (uiCard.on && uiCard.kind == UI_CARD_MENU) return 15000UL; return (uiIdle.have && uiIdle.after > 0) ? (uint32_t)(uiIdle.after < 10 ? 10 : uiIdle.after) * 1000UL : (uint32_t)UI_CARD_MS; }
 // The battery level, read by the sketch every so often; the face redraws when it changes.
 static void uiSetBattery(int pct, bool charging, uint8_t s1, uint8_t s2) {
   if (pct != uiIdle.bat || charging != uiIdle.chg) uiIdleMinute = -1;
@@ -341,8 +344,10 @@ static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng 
 
 static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
 // Anything happening (a touch, a press, words, a card) wakes the idle face and restarts the wait for it.
+static bool uiScreenOff = false;                 // the menu's Screen off: dark and not drawing until any touch, press or words
 static void uiActivity(uint32_t ms) {
   uiLastActive = ms;
+  if (uiScreenOff) { uiScreenOff = false; uiAll = true; if (uiOut.brightness) uiOut.brightness(255); }
   if (uiIdleOn) {
     uiIdleOn = false; uiAll = true;
     if (uiDimmed) { uiDimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
@@ -739,8 +744,69 @@ static void uiDrawList() {
   }
 }
 
+// ---- the menu: the PWR side button (or a swipe up from the bottom edge) opens big tiles; tap one. Tiles are 176 x 148 px.
+enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2 };
+enum { UI_SET_ANIM = 1 };
+static int uiFpsLevel = 1;                       // animation speed: 0 saver, 1 normal, 2 smooth
+static const int uiMenuIds[] = { UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
+static const int uiMenuN = 2;
+static void uiMenuTileRect(int i, int *x, int *y) {
+  const int W = 176, H = 148, GAP = 14, X0 = 22;
+  int row = i / 2, col = i % 2;
+  int rows = (uiMenuN + 1) / 2;
+  int Y0 = rows == 1 ? 104 : 20;                 // a single row sits in the middle
+  *x = X0 + col * (W + GAP); *y = Y0 + row * (H + GAP);
+}
+// Which tile a point is on, or -1.
+static int uiMenuHit(int px, int py) {
+  for (int i = 0; i < uiMenuN; i++) {
+    int x, y; uiMenuTileRect(i, &x, &y);
+    if (px >= x && px < x + 176 && py >= y && py < y + 148) return i;
+  }
+  return -1;
+}
+static const char *uiFpsName() { return uiFpsLevel == 0 ? "Saver" : uiFpsLevel == 2 ? "Smooth" : "Normal"; }
+// A ring made of even-aligned spans (the screen wants even windows).
+static void uiRing(int cx, int cy, int r, int t, uint16_t col) {
+  for (int dy = -r; dy < r; dy += 2) {
+    float o = sqrtf((float)(r * r - dy * dy)), in = (r - t) > 0 && dy > -(r - t) && dy < (r - t) ? sqrtf((float)((r - t) * (r - t) - dy * dy)) : 0.0f;
+    int xo = (int)o, xi = (int)in;
+    int xl = (cx - xo) & ~1;
+    if (xi <= 0) { uiOut.fill(xl, (cy + dy) & ~1, (2 * xo) & ~1, 2, col); }
+    else {
+      uiOut.fill(xl, (cy + dy) & ~1, (xo - xi) & ~1, 2, col);
+      uiOut.fill((cx + xi) & ~1, (cy + dy) & ~1, (xo - xi) & ~1, 2, col);
+    }
+  }
+}
+static void uiDrawMenu() {
+  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88), lit = UI_TEAL;
+  for (int i = 0; i < uiMenuN; i++) {
+    int x, y; uiMenuTileRect(i, &x, &y);
+    uiRoundPanel(x, y, 176, 148, 22, border, panel);
+    uiBg = panel;
+    const char *label = "", *sub = "";
+    int cx = x + 88;
+    if (uiMenuIds[i] == UI_MENU_ANIM) {
+      label = "Animation"; sub = uiFpsName();
+      for (int b = 0; b < 3; b++) {                // three bars; the more are lit, the smoother
+        int bh = 16 + b * 14, bx = (cx - 30 + b * 22) & ~1;
+        uiOut.fill(bx, (y + 66 - bh) & ~1, 16, bh & ~1, b <= uiFpsLevel ? lit : UI_DIM);
+      }
+    } else {
+      label = "Screen off"; sub = "Tap to wake";
+      uiRing(cx, y + 44, 22, 4, lit);              // a power ring with a notch and a stroke
+      uiOut.fill(cx - 8, y + 20, 16, 14, panel);
+      uiOut.fill(cx - 2, y + 18, 4, 26, lit);
+    }
+    uiText(NFONT_BODY, (cx - uiTextWidth(NFONT_BODY, label) / 2) & ~1, y + 76, label, UI_WHITE);
+    uiText(NFONT_SMALL, (cx - uiTextWidth(NFONT_SMALL, sub) / 2) & ~1, y + 76 + NFONT_BODY.h + 2, sub, UI_GREY);
+    uiBg = UI_BLACK;
+  }
+}
 static void uiDrawCard() {
   const int PX = 14, PY = 10, PW = 382, PH = 336;
+  if (uiCard.kind == UI_CARD_MENU) { uiDrawMenu(); return; }
   if (uiCard.kind == UI_CARD_WEATHER) { uiDrawWeather(); return; }
   const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
   uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
@@ -792,6 +858,25 @@ static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, c
 }
 
 static void uiStartCard(uint32_t ms, int kind) { uiActivity(ms); memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
+static void uiMenuOpen(uint32_t ms) {
+  if (uiCard.on && uiCard.kind == UI_CARD_MENU) { uiClearCard(); return; }   // the button again closes it
+  uiStartCard(ms, UI_CARD_MENU);
+}
+static void uiMenuTap(uint32_t ms, int px, int py) {
+  uiCard.since = ms;
+  int i = uiMenuHit(px, py);
+  if (i < 0) { uiClearCard(); return; }
+  if (uiMenuIds[i] == UI_MENU_ANIM) {
+    uiFpsLevel = (uiFpsLevel + 1) % 3;
+    if (uiOut.setting) uiOut.setting(UI_SET_ANIM, uiFpsLevel);
+    uiAll = true;
+  } else if (uiMenuIds[i] == UI_MENU_SCREEN_OFF) {
+    uiClearCard();
+    uiScreenOff = true;                          // dark, and nothing is drawn (saves battery); any touch, press or words wake it
+    if (uiOut.brightness) uiOut.brightness(0);
+  }
+}
+
 // A game. Scores the server didn't send are UI_NONE (a game still to come).
 static void uiShowScore(uint32_t ms, const char *league, const char *status, const char *away, int awayScore, const char *home, int homeScore) {
   uiStartCard(ms, UI_CARD_SCORE);
@@ -849,7 +934,7 @@ static void uiLook(uint32_t ms, int x, int y) { uiLookX = x; uiLookY = y; uiLook
 static void uiTouchTalkEnded() { uiTouchTalk = false; uiTchLatched = false; }
 
 static void uiTouch(uint32_t ms, bool down, int x, int y) {
-  if (down) uiActivity(ms);
+  if (down) { uiActivity(ms); if (uiCard.on && uiCard.kind == UI_CARD_MENU) uiCard.since = ms; }
   if (down && !uiTchWas) {                           // a finger just touched
     uiTchDownAt = ms; uiTchX0 = uiTchX = x; uiTchY0 = uiTchY = y; uiTchMove = 0;
     uiTchHold = false; uiTchIgnore = false;
@@ -873,9 +958,13 @@ static void uiTouch(uint32_t ms, bool down, int x, int y) {
       int dx = uiTchX - uiTchX0, dy = uiTchY - uiTchY0;
       int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
       if (adx >= UI_SWIPE && adx * 2 > ady * 3 && held < 800) {
-        if (dx > 0) uiCardBack(ms); else uiCardForward(ms);
+        if (uiCard.on && uiCard.kind == UI_CARD_MENU) { /* the menu isn't a card to flip through */ }
+        else if (dx > 0) uiCardBack(ms); else uiCardForward(ms);
+      } else if (dy < 0 && ady >= 90 && ady * 2 > adx * 3 && uiTchY0 >= 420 && held < 900) {
+        uiMenuOpen(ms);                            // a swipe up from the bottom edge opens the menu
       } else if (uiTchMove < UI_SLOP && held < UI_TAP_MS) {
-        if (uiHitCard(uiTchX0, uiTchY0)) { uiClearCard(); uiTchLastTap = 0; }
+        if (uiCard.on && uiCard.kind == UI_CARD_MENU) { uiMenuTap(ms, uiTchX0, uiTchY0); uiTchLastTap = 0; }
+        else if (uiHitCard(uiTchX0, uiTchY0)) { uiClearCard(); uiTchLastTap = 0; }
         else if (uiTchOnNeddy) {
           if (uiTchLastTap && ms - uiTchLastTap < UI_DOUBLE_MS) { uiTchLatched = true; uiTouchTalk = true; uiTchLastTap = 0; }
           else { uiReact(ms); uiTchLastTap = ms; }
@@ -1014,7 +1103,7 @@ static void uiIdleTick(uint32_t ms) {
     if (ms - lastDbg >= 1000) {
       lastDbg = ms;
       char b[72];
-      snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d b%d %02x %02x", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000), uiIdle.bat, uiBatRaw[0], uiBatRaw[1]);
+      snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d b%d %02x %02x f%d r%d", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000), uiIdle.bat, uiBatRaw[0], uiBatRaw[1], uiFpsNow, (int)uiRenderMs);
       if (strcmp(b, uiIdleDbg) != 0) { strcpy(uiIdleDbg, b); uiDiagDirty = true; }
     }
   }
@@ -1164,6 +1253,7 @@ static void uiDrawStage(const UiPose &p) {
 
 static void uiTick(uint32_t ms) {
   uiNowMs = ms;
+  if (uiScreenOff) return;
   if (uiCard.on && ms - uiCard.since >= uiCardMs()) uiClearCard();
   uiIdleTick(ms);
   bool wantSmall = uiCard.on || uiIdleOn || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
@@ -1192,7 +1282,7 @@ static void uiTick(uint32_t ms) {
   if (p.eye != uiLastEye) draw = true;                       // eyes changed (blink, listening level...)
   // Moving: about 16 frames a second, but never more often than drawing allows (drawing may take 40% of the time at most;
   // while he is listening, only 20%, so no sound is missed).
-  uint32_t gap = 60;
+  uint32_t gap = uiFpsLevel == 0 ? 125 : uiFpsLevel == 2 ? 33 : 60;   // saver ~8, normal ~16, smooth ~30 frames a second at most
   if (uiMicros) {
     float share = uiMode == UI_LISTEN ? 5.0f : 2.5f;
     uint32_t need = (uint32_t)(uiRenderMs * share);
@@ -1202,6 +1292,7 @@ static void uiTick(uint32_t ms) {
   if ((uiMotion || ms < uiReactUntil || ms < uiLookUntil) && ms - uiLastStage >= gap) draw = true;
   if (draw) {
     uiDrawStage(p);
-    uiLastEye = p.eye; uiLastStage = ms;
+    uiLastEye = p.eye; uiLastStage = ms; uiFrames++;
   }
+  if (ms - uiFpsAt >= 1000) { uiFpsNow = uiFrames; uiFrames = 0; uiFpsAt = ms; }
 }

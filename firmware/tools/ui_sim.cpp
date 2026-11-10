@@ -160,6 +160,11 @@ int main(int argc, char **argv) {
   uiSmall = false; UiPose big; uiBasePose(&big); int bx, by, bw, bh; uiStageRect(big, &bx, &by, &bw, &bh);
   t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(big, bx, by, bw, bh);
   printf("big-layout stage %dx%d: %.2f ms per frame on this computer\n", bw, bh, (now() - t0) / 20);
+  // 12. the menu (the PWR button): Animation and Screen off
+  uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiFpsLevel = 1;
+  uiMenuOpen(500000); uiTick(500100); save(dir, "m1_menu");
+  uiFpsLevel = 2; uiAll = true; uiTick(500200); save(dir, "m2_menu_smooth");
+  uiClearCard();
   printf("odd-aligned windows: %ld\n", oddWindows);
   return 0;
 }

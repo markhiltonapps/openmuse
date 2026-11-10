@@ -65,9 +65,9 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #define NEDDY_DIAG 0
 #endif
 
-// 1 = show a line of idle-face numbers at the bottom (test builds only; the idle face works, so it is off).
+// 1 = show a line of idle-face numbers at the bottom (test builds only; on in this build to read the frames a second: f = frames drawn last second, r = ms to draw one).
 #ifndef NEDDY_IDLE_DEBUG
-#define NEDDY_IDLE_DEBUG 0
+#define NEDDY_IDLE_DEBUG 1
 #endif
 
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
@@ -201,6 +201,19 @@ static bool pmuByte(uint8_t reg, uint8_t &value) {
   value = Wire.read();
   return true;
 }
+// The PWR side button (GPIO10, high while pressed): a short press opens or closes the menu. Holding it about 6 seconds still powers the board off.
+static void pwrLoop() {
+  static bool was = false;
+  static unsigned long downAt = 0, changed = 0;
+  bool raw = digitalRead(10) == HIGH;
+  if (raw != was && millis() - changed > 30) {
+    changed = millis();
+    if (raw) downAt = millis();
+    else if (millis() - downAt < 1200) uiMenuOpen(millis());
+    was = raw;
+  }
+}
+
 static void batteryLoop() {
   static uint32_t last = 0;
   uint32_t now = millis();
@@ -794,6 +807,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showW = jsonInt(text, "sw", 1) != 0;
         uiIdle.showM = jsonInt(text, "sm", 1) != 0;
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
+        { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
         if (uiIdle.haveW) {
           uiIdle.wt = jsonInt(text, "wt", 0);
@@ -929,6 +943,7 @@ void setup() {
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
   LOGLN(resetWhy);
   pinMode(BUTTON, INPUT_PULLUP);
+  pinMode(10, INPUT);   // PWR button: high while pressed
 
   if (!gfx->begin()) LOGLN("[screen] gfx->begin() failed");
   uiOut.blit = outBlit;
@@ -939,6 +954,13 @@ void setup() {
     bus->beginWrite();
     bus->writeC8D8(0x51, (uint8_t)level);
     bus->endWrite();
+  };
+  // A setting changed on the watch itself (the menu): tell the server so it keeps it and says it back after a restart.
+  uiOut.setting = [](int which, int value) {
+    if (which == UI_SET_ANIM && wsUp) {
+      String m = String("{\"type\":\"device.setting\",\"key\":\"animation\",\"value\":") + value + "}";
+      ws.sendTXT(m.c_str());
+    }
   };
   uiMotion = NEDDY_MOTION != 0;
   uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0;
@@ -1023,6 +1045,7 @@ void loop() {
   // 4. The touch screen and the button: holding Neddy (or a double tap) counts as holding the button
   touchLoop();
   batteryLoop();
+  pwrLoop();
   bool down = buttonDown() || uiTouchTalk;
   if (down && !held) {
     if (wsUp && mode != M_PROBLEM) {

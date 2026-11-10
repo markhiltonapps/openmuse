@@ -719,3 +719,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   lasts as long as the idle wait) brings it back; it dims after another minute and any activity restores full brightness. A saved device setting beats a new default,
   so changing a default doesn't change a watch that already has a value: say so. Anything read from a chip's registers (the AXP2101's battery bytes) comes
   from the library's constants and must be shown raw once on the real board before it is trusted (`NEDDY_IDLE_DEBUG`).
+- **The watch's menu (owner, 2026-11-10):** a button the person already has (PWR, GPIO10) opens a menu of big tiles, so no new tap pattern is added to the ones in use
+  (tap = giggle, hold = talk, double-tap = hands-free, sideways swipe = cards). The menu is a card kind (`UI_CARD_MENU`), so the idle face, timeouts and redraws already
+  work with it. A setting changed on the watch is sent to the server (`device.setting`) or the next idle push overwrites it. Anything not confirmed on the real board
+  (here: the PMU's software power-off bit) is left out rather than guessed.

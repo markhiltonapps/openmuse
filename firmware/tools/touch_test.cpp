@@ -179,6 +179,53 @@ int main() {
   CHECK(!uiCard.on, "and goes after a minute");
   uiIdle.after = 10;
 
+  // The menu: the PWR button (uiMenuOpen) or a swipe up from the bottom edge opens big tiles; tap one.
+  static int setKey = -1, setVal = -1;
+  uiOut.setting = [](int k, int v) { setKey = k; setVal = v; };
+  uiOut.brightness = [](int l) { level = l; };
+  uiIdle.have = false; uiIdleOn = false; uiDimmed = false; uiClearCard(); uiSetMode(UI_READY); uiSetWords(""); uiSetHeard(""); uiMotion = true; uiActivity(now); pause(300);
+  uiMenuOpen(now);
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "the PWR button opens the menu");
+  uiMenuOpen(now);
+  CHECK(!uiCard.on, "the PWR button again closes it");
+  uiClearCard(); uiHistN = 0;
+  finger(200, 460, 200, 200, 330);                                   // a swipe up from the bottom edge
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "a swipe up from the bottom edge opens the menu");
+  int tx, ty; uiMenuTileRect(0, &tx, &ty);
+  finger(tx + 88, ty + 74, 60);
+  CHECK(uiFpsLevel == 2 && setKey == UI_SET_ANIM && setVal == 2 && uiCard.on, "tapping Animation goes normal -> smooth and tells the server");
+  finger(tx + 88, ty + 74, 60); finger(tx + 88, ty + 74, 60);
+  CHECK(uiFpsLevel == 1 && setVal == 1, "and round again to normal");
+  uiShowFact(now, "Fact", "1", "", "", 0); uiMenuOpen(now);       // a card behind: swiping must not flip it away
+  uiMenuOpen(now);
+  CHECK(uiCard.kind == UI_CARD_FACT || uiCard.kind == UI_CARD_MENU, "a card and the menu don't mix up");
+  uiClearCard(); uiMenuOpen(now);
+  finger(300, 200, 200, 80, 330);
+  finger(100, 200, 330, 200, 330);
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "swiping sideways doesn't flip through cards while the menu is open");
+  finger(200, 60, 60);
+  CHECK(!uiCard.on, "tapping beside the tiles closes the menu");
+  uiMenuOpen(now);
+  pause(14000);
+  CHECK(uiCard.on, "the menu is still there at 14 s");
+  pause(1500);
+  CHECK(!uiCard.on, "and goes after 15 s of quiet");
+  uiMenuOpen(now); uiMenuTileRect(1, &tx, &ty);
+  finger(tx + 88, ty + 74, 60);
+  CHECK(!uiCard.on && uiScreenOff && level == 0, "Screen off darkens the screen");
+  finger(200, 200, 60);
+  CHECK(!uiScreenOff && level == 255, "a touch wakes it at full brightness");
+  // The animation level sets how often Neddy is drawn (the test loop runs about 60 times a second).
+  uiClearCard(); uiIdle.have = false; uiMotion = true; uiNextBlink = 999999; uiNextGlance = 999999;
+  for (int lv = 0; lv < 3; lv++) {
+    uiFpsLevel = lv; pause(2200);
+    int f = uiFpsNow;
+    if (lv == 0) CHECK(f >= 5 && f <= 9, "saver draws about 8 frames a second");
+    if (lv == 1) CHECK(f >= 13 && f <= 17, "normal draws about 16 frames a second");
+    if (lv == 2) CHECK(f >= 19, "smooth draws more");
+  }
+  uiFpsLevel = 1;
+
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }

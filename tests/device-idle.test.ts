@@ -87,6 +87,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     sw: 1,
     sm: 1,
     sb: 1,
+    fps: 1,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -203,7 +204,7 @@ test("the home screen defaults to ten seconds and the battery can be hidden by v
   const asked = (await tool.execute({ do: "settings", name: "my watch" })) as { message?: string };
   assert.match(
     asked.message ?? "",
-    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level/,
+    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level.*animation is normal/,
   );
   const hidden = (await tool.execute({ do: "settings", show_battery: false })) as {
     message?: string;
@@ -233,7 +234,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
   assert.equal(set.changed, true);
   assert.match(
     set.message ?? "",
-    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright/,
+    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright; Neddy's animation is normal/,
   );
   const [device] = await devices.list("o");
   assert.deepEqual(settingsOf(device as never), {
@@ -242,6 +243,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     showWeather: false,
     showMeeting: true,
     showBattery: true,
+    animation: "normal",
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
@@ -268,7 +270,13 @@ test("a device is sent its idle facts when it connects and when its settings cha
     Date.now,
     async (_owner, device) => {
       sent.push(`${device.name}:${settingsOf(device).idleAfter}`);
-      return { type: "idle", after: settingsOf(device).idleAfter, t: 1 };
+      const animation = settingsOf(device).animation;
+      return {
+        type: "idle",
+        after: settingsOf(device).idleAfter,
+        fps: animation === "saver" ? 0 : animation === "smooth" ? 2 : 1,
+        t: 1,
+      };
     },
   );
   bridge.attach(server);
@@ -300,6 +308,18 @@ test("a device is sent its idle facts when it connects and when its settings cha
   );
   assert.deepEqual(sent, ["Desk:10", "Desk:90"]);
   assert.equal(text.filter((event) => event.type === "idle")[1]?.after, 90);
+  // A setting changed on the watch itself (its menu) is kept and said back.
+  ws.send(JSON.stringify({ type: "device.setting", key: "animation", value: 2 }));
+  await until(
+    () => text.filter((event) => event.type === "idle").some((event) => event.fps === 2),
+    "the animation setting kept and sent back",
+  );
+  assert.equal(settingsOf((await devices.list("o"))[0] as never).animation, "smooth");
+  ws.send(JSON.stringify({ type: "device.setting", key: "animation", value: -5 }));
+  await until(
+    () => text.filter((event) => event.type === "idle").some((event) => event.fps === 0),
+    "an out-of-range level is held to the limits (saver)",
+  );
   ws.close();
   bridge.stop();
   server.close();

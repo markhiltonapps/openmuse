@@ -24,7 +24,15 @@ export interface DeviceVoice {
 /** Where a device connects: one websocket, kept open, with its own token in a header. */
 export const DEVICE_AUDIO_PATH = "/api/device/audio";
 /** Control messages a device may send; anything else is ignored. */
-const FROM_DEVICE = new Set(["ptt.start", "ptt.end", "session.close", "ping", "device.info"]);
+const FROM_DEVICE = new Set([
+  "ptt.start",
+  "ptt.end",
+  "session.close",
+  "ping",
+  "device.info",
+  "device.setting",
+]);
+const ANIMATION_LEVELS = ["saver", "normal", "smooth"] as const;
 /** The most audio held while a conversation is being set up (10 s of 16 kHz 16-bit mono). */
 const MAX_WAITING_BYTES = 320_000;
 /** One chunk of audio is at most this much (a few hundred milliseconds). */
@@ -211,7 +219,7 @@ export class DeviceBridge {
   }
 
   private fromText(connection: Connection, bytes: Uint8Array) {
-    let event: { type?: unknown; firmware?: unknown };
+    let event: { type?: unknown; firmware?: unknown; key?: unknown; value?: unknown };
     try {
       event = JSON.parse(Buffer.from(bytes).toString("utf8"));
     } catch {
@@ -225,6 +233,17 @@ export class DeviceBridge {
         void this.devices
           .touch(connection.owner, connection.device, event.firmware)
           .catch(() => undefined);
+      return;
+    }
+    if (type === "device.setting") {
+      // The person changed something on the watch itself (its menu): keep it, so voice and the watch agree.
+      if (event.key === "animation" && typeof event.value === "number") {
+        const level = ANIMATION_LEVELS[Math.max(0, Math.min(2, Math.round(event.value)))];
+        if (level)
+          void this.devices
+            .setSettings(connection.owner, connection.device.id, { animation: level })
+            .catch(() => undefined);
+      }
       return;
     }
     if (type === "ptt.start" && !connection.call && !connection.starting)
