@@ -88,6 +88,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     sm: 1,
     sb: 1,
     fps: 1,
+    face: 0,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -204,7 +205,7 @@ test("the home screen defaults to ten seconds and the battery can be hidden by v
   const asked = (await tool.execute({ do: "settings", name: "my watch" })) as { message?: string };
   assert.match(
     asked.message ?? "",
-    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level.*animation is normal/,
+    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level.*animation is normal; the watch face is info/,
   );
   const hidden = (await tool.execute({ do: "settings", show_battery: false })) as {
     message?: string;
@@ -234,7 +235,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
   assert.equal(set.changed, true);
   assert.match(
     set.message ?? "",
-    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright; Neddy's animation is normal/,
+    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright; Neddy's animation is normal; the watch face is info/,
   );
   const [device] = await devices.list("o");
   assert.deepEqual(settingsOf(device as never), {
@@ -244,6 +245,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     showMeeting: true,
     showBattery: true,
     animation: "normal",
+    face: "info",
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
@@ -275,6 +277,7 @@ test("a device is sent its idle facts when it connects and when its settings cha
         type: "idle",
         after: settingsOf(device).idleAfter,
         fps: animation === "saver" ? 0 : animation === "smooth" ? 2 : 1,
+        face: settingsOf(device).face === "analog" ? 1 : settingsOf(device).face === "neon" ? 2 : 0,
         t: 1,
       };
     },
@@ -320,6 +323,13 @@ test("a device is sent its idle facts when it connects and when its settings cha
     () => text.filter((event) => event.type === "idle").some((event) => event.fps === 0),
     "an out-of-range level is held to the limits (saver)",
   );
+  // The watch face changed from the watch's menu is kept and said back too.
+  ws.send(JSON.stringify({ type: "device.setting", key: "face", value: 1 }));
+  await until(
+    () => text.filter((event) => event.type === "idle").some((event) => event.face === 1),
+    "the watch face kept and sent back",
+  );
+  assert.equal(settingsOf((await devices.list("o"))[0] as never).face, "analog");
   ws.close();
   bridge.stop();
   server.close();

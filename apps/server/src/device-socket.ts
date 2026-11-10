@@ -33,6 +33,7 @@ const FROM_DEVICE = new Set([
   "device.setting",
 ]);
 const ANIMATION_LEVELS = ["saver", "normal", "smooth"] as const;
+const FACES = ["info", "analog", "neon"] as const;
 /** The most audio held while a conversation is being set up (10 s of 16 kHz 16-bit mono). */
 const MAX_WAITING_BYTES = 320_000;
 /** One chunk of audio is at most this much (a few hundred milliseconds). */
@@ -242,6 +243,13 @@ export class DeviceBridge {
         if (level)
           void this.devices
             .setSettings(connection.owner, connection.device.id, { animation: level })
+            .catch(() => undefined);
+      }
+      if (event.key === "face" && typeof event.value === "number") {
+        const face = FACES[Math.max(0, Math.min(2, Math.round(event.value)))];
+        if (face)
+          void this.devices
+            .setSettings(connection.owner, connection.device.id, { face })
             .catch(() => undefined);
       }
       return;

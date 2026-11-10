@@ -191,7 +191,8 @@ int main() {
   uiClearCard(); uiHistN = 0;
   finger(200, 460, 200, 200, 330);                                   // a swipe up from the bottom edge
   CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "a swipe up from the bottom edge opens the menu");
-  int tx, ty; uiMenuTileRect(0, &tx, &ty);
+  auto tileOf = [](int id) { for (int i = 0; i < uiMenuN; i++) if (uiMenuIds[i] == id) return i; return -1; };
+  int tx, ty; uiMenuTileRect(tileOf(UI_MENU_ANIM), &tx, &ty);
   finger(tx + 88, ty + 74, 60);
   CHECK(uiFpsLevel == 2 && setKey == UI_SET_ANIM && setVal == 2 && uiCard.on, "tapping Animation goes normal -> smooth and tells the server");
   finger(tx + 88, ty + 74, 60); finger(tx + 88, ty + 74, 60);
@@ -210,7 +211,14 @@ int main() {
   CHECK(uiCard.on, "the menu is still there at 14 s");
   pause(1500);
   CHECK(!uiCard.on, "and goes after 15 s of quiet");
-  uiMenuOpen(now); uiMenuTileRect(1, &tx, &ty);
+  // The Watch face tile goes info -> analog -> neon -> info and tells the server each time.
+  uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_FACE), &tx, &ty);
+  finger(tx + 88, ty + 74, 60);
+  CHECK(uiFace == 1 && setKey == UI_SET_FACE && setVal == 1, "tapping Watch face goes info -> analog");
+  finger(tx + 88, ty + 74, 60); finger(tx + 88, ty + 74, 60);
+  CHECK(uiFace == 0 && setVal == 0, "and round again to info");
+  uiClearCard();
+  uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_SCREEN_OFF), &tx, &ty);
   finger(tx + 88, ty + 74, 60);
   CHECK(!uiCard.on && uiScreenOff && level == 0, "Screen off darkens the screen");
   finger(200, 200, 60);
@@ -225,6 +233,17 @@ int main() {
     if (lv == 2) CHECK(f >= 19, "smooth draws more");
   }
   uiFpsLevel = 1;
+
+  // Looking something up: the book and flames show while a look-up runs, and stop when the answer starts or after 45 s.
+  uiClearCard(); uiIdle.have = false; uiSetMode(UI_THINK); uiMotion = false; uiActivity(now); pause(300);
+  uiLookup(now, true);
+  long fillsBefore = fillsAbove; pause(1000);
+  CHECK(uiLookupOn && fillsBefore >= 0, "the look-up starts");
+  uiSetMode(UI_SPEAK); pause(100);
+  CHECK(!uiLookupOn, "it stops when the answer starts");
+  uiSetMode(UI_THINK); uiLookup(now, true); pause(46000);
+  CHECK(!uiLookupOn, "and after 45 s whatever happens");
+  uiSetMode(UI_READY); uiMotion = true;
 
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;

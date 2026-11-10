@@ -766,7 +766,9 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       } else if (kind == "card") {
         // A card (the weather, a score, one fact, a short list): drawn until the next press. Ignored while the button is held.
         String cardKind = jsonString(text, "kind");
-        if (held) {
+        if (cardKind == "lookup") {
+          uiLookup(millis(), jsonInt(text, "on", 0) != 0 && !held);   // Neddy reads his book while a look-up runs
+        } else if (held) {
           // They're talking again: no card for the last question.
         } else if (cardKind == "weather" && jsonInt(text, "temp", UI_NONE) != UI_NONE) {
           uiShowWeather(millis(), plain(jsonString(text, "place")).c_str(), jsonInt(text, "temp", UI_NONE),
@@ -808,6 +810,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showM = jsonInt(text, "sm", 1) != 0;
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
+        { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
         if (uiIdle.haveW) {
           uiIdle.wt = jsonInt(text, "wt", 0);
@@ -957,8 +960,8 @@ void setup() {
   };
   // A setting changed on the watch itself (the menu): tell the server so it keeps it and says it back after a restart.
   uiOut.setting = [](int which, int value) {
-    if (which == UI_SET_ANIM && wsUp) {
-      String m = String("{\"type\":\"device.setting\",\"key\":\"animation\",\"value\":") + value + "}";
+    if (wsUp && (which == UI_SET_ANIM || which == UI_SET_FACE)) {
+      String m = String("{\"type\":\"device.setting\",\"key\":\"") + (which == UI_SET_ANIM ? "animation" : "face") + "\",\"value\":" + value + "}";
       ws.sendTXT(m.c_str());
     }
   };

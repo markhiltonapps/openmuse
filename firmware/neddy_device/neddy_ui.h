@@ -154,7 +154,7 @@ static uint16_t uiBand[UI_STAGE_MAX_W * UI_BAND];
 static void uiStageRect(const UiPose &p, int *x, int *y, int *w, int *h) {
   float halfW = NEDDY_BODY_W * 0.5f * p.scale * 1.08f + 10;
   float top = p.footY - NEDDY_BODY_H * p.scale * 1.06f - 8;
-  float bottom = p.footY + 12 * p.scale + 6;
+  float bottom = p.footY + 26 * p.scale + 6;       // room under the feet for the look-up flames
   int x0 = (int)(p.footX - halfW), x1 = (int)(p.footX + halfW);
   int y0 = (int)top, y1 = (int)bottom;
   if (x0 < 0) x0 = 0;
@@ -171,6 +171,75 @@ static void uiStageRect(const UiPose &p, int *x, int *y, int *w, int *h) {
 static inline int uiClampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 // Draws the robot into the rectangle, a band of rows at a time (little memory, one screen write per band).
+// ---- looking something up: Neddy reads a blue book and two small flames flicker under his feet. Drawn into each band as it is made,
+// only while a look-up runs (the server says when), so it costs nothing the rest of the time.
+static bool uiLookupOn = false;
+static uint32_t uiLookupSince = 0, uiLookupNow = 0;
+static inline void uiMix(uint16_t *px, int r8, int g8, int b8, int a256) {   // blends a colour over a pixel
+  int r = (*px >> 11) & 31, g = (*px >> 5) & 63, b = *px & 31;
+  r = (r * (256 - a256) + (r8 >> 3) * a256) >> 8; g = (g * (256 - a256) + (g8 >> 2) * a256) >> 8; b = (b * (256 - a256) + (b8 >> 3) * a256) >> 8;
+  *px = (uint16_t)((r << 11) | (g << 5) | b);
+}
+static void uiOverlayLookup(const UiPose &p, uint16_t *band, int sx0, int oy0, int sw, int rows) {
+  const float s = p.scale;
+  const float t = uiLookupNow * 0.001f;
+  // flames: a teardrop under each foot, white-yellow at the top to red at the tip, never the same length twice
+  for (int foot = 0; foot < 2; foot++) {
+    const float fx = p.footX + (foot ? 26.0f : -26.0f) * s;
+    const float len = (21.0f + 7.0f * sinf(t * 31.0f + foot * 2.1f) + 3.0f * sinf(t * 53.0f + foot)) * s;
+    const float top = p.footY - 1.0f * s;
+    const float halfW = 8.0f * s;
+    for (int r = 0; r < rows; r++) {
+      float y = oy0 + r + 0.5f, dy = y - top;
+      if (dy < 0 || dy > len) continue;
+      float k = dy / len;
+      float hw = halfW * (1.0f - k * k) + 0.5f;
+      int xa = (int)(fx - hw) - sx0, xb = (int)(fx + hw) - sx0;
+      for (int x = xa < 0 ? 0 : xa; x <= xb && x < sw; x++) {
+        float edge = 1.0f - fabsf((sx0 + x + 0.5f) - fx) / (hw + 0.01f);
+        int a = (int)(256.0f * (1.0f - k * 0.55f) * (edge < 0.25f ? edge * 4.0f : 1.0f));
+        if (k < 0.3f) uiMix(&band[r * sw + x], 255, 240, 170, a);
+        else if (k < 0.65f) uiMix(&band[r * sw + x], 255, 150, 40, a);
+        else uiMix(&band[r * sw + x], 210, 50, 14, a);
+      }
+    }
+  }
+  // the book: two pages tilted like an open book held in front of his chest, with lines of text and a page that flips now and then
+  const float cx = p.footX, bw = 60.0f * s, bh = 46.0f * s;
+  const float cy = p.footY - 0.47f * NEDDY_BODY_H * s;
+  const float top0 = cy - bh * 0.5f, tilt = 0.30f;
+  float flip = fmodf(t, 1.6f) / 0.4f;                       // 0..1 while a page turns, then still
+  for (int r = 0; r < rows; r++) {
+    float y = oy0 + r + 0.5f;
+    if (y < top0 - bw * tilt - 1 || y > cy + bh * 0.5f + 1) continue;
+    int xa = (int)(cx - bw) - sx0, xb = (int)(cx + bw) - sx0;
+    for (int x = xa < 0 ? 0 : xa; x <= xb && x < sw; x++) {
+      float u = (sx0 + x + 0.5f) - cx, au = fabsf(u);
+      if (au < 0.5f) { band[r * sw + x] = uiRgb(10, 36, 110); continue; }   // the spine
+      float rise = au * tilt;                                  // the pages rise toward the outer edge
+      float yTop = top0 - rise, yBot = cy + bh * 0.5f - rise * 0.2f;
+      if (y < yTop || y > yBot) continue;
+      bool edge = y < yTop + 1.6f * s + 1 || y > yBot - 1.6f * s - 1 || au > bw - 1.6f * s - 1;
+      uint16_t *px = &band[r * sw + x];
+      if (edge) { *px = uiRgb(120, 175, 255); continue; }
+      *px = uiRgb(34, 100, 232);
+      float row = (y - yTop) / (4.5f * s + 1);                 // lines of text, every ~4.5 px
+      if (fabsf(row - floorf(row) - 0.5f) < 0.22f && au > 5 * s && au < bw - 5 * s && (y - yTop) > 5 * s) uiMix(px, 170, 210, 255, 190);
+    }
+  }
+  if (flip < 1.0f) {                                          // the turning page: a light strip that sweeps from right to left
+    float fxp = cx + bw * cosf(3.14159f * flip);
+    float wdt = 5.0f * s + 1;
+    for (int r = 0; r < rows; r++) {
+      float y = oy0 + r + 0.5f;
+      float au = fabsf(fxp - cx), rise = au * tilt;
+      if (y < top0 - rise || y > cy + bh * 0.5f - rise * 0.2f) continue;
+      int xa = (int)(fxp - wdt) - sx0, xb = (int)(fxp + wdt) - sx0;
+      for (int x = xa < 0 ? 0 : xa; x <= xb && x < sw; x++) uiMix(&band[r * sw + x], 205, 228, 255, 210);
+    }
+  }
+}
+
 static void uiRenderStage(const UiPose &p, int sx0, int sy0, int sw, int sh) {
   const bool half = p.scale <= 0.72f;
   const uint16_t *src = half ? NEDDY_HALF : NEDDY_BODY;
@@ -250,6 +319,7 @@ static void uiRenderStage(const UiPose &p, int sx0, int sy0, int sw, int sh) {
         dst[i] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
       }
     }
+    if (uiLookupOn) uiOverlayLookup(p, uiBand, sx0, sy0 + by, sw, rows);
     uiOut.blit(sx0, sy0 + by, sw, rows, uiBand);
   }
 }
@@ -342,6 +412,7 @@ static int uiHistN = 0, uiHistAt = -1;
 
 static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng >> 8; }
 
+static void uiLookup(uint32_t ms, bool on) { if (on != uiLookupOn) { uiLookupOn = on; uiLookupSince = ms; } }
 static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
 // Anything happening (a touch, a press, words, a card) wakes the idle face and restarts the wait for it.
 static bool uiScreenOff = false;                 // the menu's Screen off: dark and not drawing until any touch, press or words
@@ -745,11 +816,12 @@ static void uiDrawList() {
 }
 
 // ---- the menu: the PWR side button (or a swipe up from the bottom edge) opens big tiles; tap one. Tiles are 176 x 148 px.
-enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2 };
-enum { UI_SET_ANIM = 1 };
+enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2, UI_MENU_FACE = 3 };
+enum { UI_SET_ANIM = 1, UI_SET_FACE = 2 };
 static int uiFpsLevel = 1;                       // animation speed: 0 saver, 1 normal, 2 smooth
-static const int uiMenuIds[] = { UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
-static const int uiMenuN = 2;
+static int uiFace = 0;                           // the watch face: 0 info (clock, weather, meeting), 1 analog, 2 neon digital
+static const int uiMenuIds[] = { UI_MENU_FACE, UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
+static const int uiMenuN = 3;
 static void uiMenuTileRect(int i, int *x, int *y) {
   const int W = 176, H = 148, GAP = 14, X0 = 22;
   int row = i / 2, col = i % 2;
@@ -765,6 +837,7 @@ static int uiMenuHit(int px, int py) {
   }
   return -1;
 }
+static const char *uiFaceName() { return uiFace == 1 ? "Analog" : uiFace == 2 ? "Neon" : "Info"; }
 static const char *uiFpsName() { return uiFpsLevel == 0 ? "Saver" : uiFpsLevel == 2 ? "Smooth" : "Normal"; }
 // A ring made of even-aligned spans (the screen wants even windows).
 static void uiRing(int cx, int cy, int r, int t, uint16_t col) {
@@ -787,7 +860,12 @@ static void uiDrawMenu() {
     uiBg = panel;
     const char *label = "", *sub = "";
     int cx = x + 88;
-    if (uiMenuIds[i] == UI_MENU_ANIM) {
+    if (uiMenuIds[i] == UI_MENU_FACE) {
+      label = "Watch face"; sub = uiFaceName();
+      uiRing(cx, y + 44, 22, 4, lit);                // a little clock: a ring and two hands
+      uiOut.fill(cx - 2, y + 28, 4, 18, lit);
+      uiOut.fill(cx - 2, y + 42, 14, 4, lit);
+    } else if (uiMenuIds[i] == UI_MENU_ANIM) {
       label = "Animation"; sub = uiFpsName();
       for (int b = 0; b < 3; b++) {                // three bars; the more are lit, the smoother
         int bh = 16 + b * 14, bx = (cx - 30 + b * 22) & ~1;
@@ -866,7 +944,11 @@ static void uiMenuTap(uint32_t ms, int px, int py) {
   uiCard.since = ms;
   int i = uiMenuHit(px, py);
   if (i < 0) { uiClearCard(); return; }
-  if (uiMenuIds[i] == UI_MENU_ANIM) {
+  if (uiMenuIds[i] == UI_MENU_FACE) {
+    uiFace = (uiFace + 1) % 3;
+    if (uiOut.setting) uiOut.setting(UI_SET_FACE, uiFace);
+    uiAll = true;
+  } else if (uiMenuIds[i] == UI_MENU_ANIM) {
     uiFpsLevel = (uiFpsLevel + 1) % 3;
     if (uiOut.setting) uiOut.setting(UI_SET_ANIM, uiFpsLevel);
     uiAll = true;
@@ -1020,7 +1102,7 @@ static void uiRenderIconSmall(int icon, uint16_t bg, int size) {
 }
 
 // A small battery level under the idle face: an outline with its fill, the percent, and "charging" while it charges.
-static void uiDrawBattery(int bottom) {
+static void uiDrawBatteryAt(int y) {
   if (!uiIdle.showB || uiIdle.bat < 0) return;
   int pct = uiIdle.bat > 100 ? 100 : uiIdle.bat;
   char t[24];
@@ -1029,7 +1111,7 @@ static void uiDrawBattery(int bottom) {
   const int bw = 30, bh = 14;
   int tw = uiTextWidth(NFONT_SMALL, t);
   int x = ((UI_W - (bw + 2 + 8 + tw)) / 2) & ~1;
-  int y = (bottom - NFONT_SMALL.h - 2) & ~1;
+  y &= ~1;
   int iy = (y + (NFONT_SMALL.h - bh) / 2) & ~1;
   uiOut.fill(x, iy, bw, bh, col);
   uiOut.fill(x + 2, iy + 2, bw - 4, bh - 4, UI_BLACK);
@@ -1038,6 +1120,71 @@ static void uiDrawBattery(int bottom) {
   if (fw < 2 && pct > 0) fw = 2;
   if (fw > 0) uiOut.fill(x + 4, iy + 4, fw, bh - 8, col);
   uiText(NFONT_SMALL, x + bw + 2 + 8, y, t, col);
+}
+
+static void uiDrawBattery(int bottom) { uiDrawBatteryAt(bottom - NFONT_SMALL.h - 2); }
+
+// A thick line made of even-aligned squares (the screen wants even windows).
+static void uiThickLine(float x0, float y0, float x1, float y1, int th, uint16_t col) {
+  float dx = x1 - x0, dy = y1 - y0, len = sqrtf(dx * dx + dy * dy);
+  int n = (int)(len / 2.0f) + 1;
+  for (int i = 0; i <= n; i++) {
+    float t = (float)i / n;
+    int x = (int)(x0 + dx * t - th * 0.5f) & ~1, y = (int)(y0 + dy * t - th * 0.5f) & ~1;
+    uiOut.fill(x, y, th, th, col);
+  }
+}
+
+// Face 1: an analog dial. Hands and ticks only: it is redrawn once a minute.
+static void uiDrawAnalog(int top, int bottom, int h, int mi, int wd, int Mo, int D, int dx, int dy) {
+  float R = (bottom - top) * 0.5f - 6.0f;
+  if (R > 190.0f) R = 190.0f;
+  float cx = UI_W * 0.5f + dx, cy = top + (bottom - top) * 0.5f + dy;
+  for (int i = 0; i < 60; i++) {
+    float a = (i * 6 - 90) * 0.0174533f, ca = cosf(a), sa = sinf(a);
+    bool big = i % 5 == 0;
+    float r1 = R - (big ? 20.0f : 8.0f), r2 = R - 2.0f;
+    uiThickLine(cx + r1 * ca, cy + r1 * sa, cx + r2 * ca, cy + r2 * sa, big ? 6 : 2, big ? UI_WHITE : uiRgb(86, 92, 98));
+  }
+  uiText(NFONT_SMALL, ((int)cx - uiTextWidth(NFONT_SMALL, "NEDDY") / 2) & ~1, (int)(cy - R * 0.42f) & ~1, "NEDDY", UI_GREY);
+  char dl[16]; snprintf(dl, sizeof(dl), "%.3s %d", uiDays[wd], D);          // the date window, under the middle
+  int dw = uiTextWidth(NFONT_SMALL, dl);
+  int wx = ((int)cx - dw / 2) & ~1, wy = ((int)(cy + R * 0.30f)) & ~1;
+  uiRoundPanel(wx - 10, wy - 4, (dw + 20) & ~1, 30, 6, uiRgb(70, 76, 82), UI_BLACK);
+  uiText(NFONT_SMALL, wx, wy, dl, UI_WHITE);
+  float ah = ((h % 12) + mi / 60.0f) * 30.0f - 90.0f, am = mi * 6.0f - 90.0f;
+  uiThickLine(cx, cy, cx + R * 0.52f * cosf(ah * 0.0174533f), cy + R * 0.52f * sinf(ah * 0.0174533f), 10, UI_WHITE);
+  uiThickLine(cx, cy, cx + R * 0.80f * cosf(am * 0.0174533f), cy + R * 0.80f * sinf(am * 0.0174533f), 6, UI_WHITE);
+  uiOut.fill(((int)cx - 8) & ~1, ((int)cy - 8) & ~1, 16, 16, uiRgb(255, 120, 40));
+  uiDrawBatteryAt((int)(cy + R * 0.62f));
+}
+
+// Face 2: neon digits, seven glowing segments each; the unlit ones stay faintly visible.
+static void uiNeonDigit(int x, int y, int d, uint16_t on, uint16_t off) {
+  static const uint8_t seg[10] = { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F };   // a b c d e f g in bits 0..6
+  const int w = 64, hgt = 128, t = 12;
+  const int r[7][4] = { { t, 0, w - 2 * t, t }, { w - t, t, t, hgt / 2 - t - t / 2 }, { w - t, hgt / 2 + t / 2, t, hgt / 2 - t - t / 2 }, { t, hgt - t, w - 2 * t, t },
+                        { 0, hgt / 2 + t / 2, t, hgt / 2 - t - t / 2 }, { 0, t, t, hgt / 2 - t - t / 2 }, { t, hgt / 2 - t / 2, w - 2 * t, t } };
+  for (int i = 0; i < 7; i++) uiOut.fill((x + r[i][0]) & ~1, (y + r[i][1]) & ~1, r[i][2] & ~1, r[i][3] & ~1, (d >= 0 && (seg[d] >> i) & 1) ? on : off);
+}
+static void uiDrawNeon(int top, int h, int mi, int wd, int Mo, int D, int dx, int dy) {
+  const uint16_t on = uiRgb(255, 150, 40), off = uiRgb(44, 26, 12);
+  int h12 = h % 12 == 0 ? 12 : h % 12;
+  int x0 = (46 + dx) & ~1, y0 = (top + 56 + dy) & ~1;
+  uiNeonDigit(x0, y0, h12 >= 10 ? h12 / 10 : -1, on, off);
+  uiNeonDigit(x0 + 76, y0, h12 % 10, on, off);
+  uiOut.fill(x0 + 76 + 64 + 6, y0 + 36, 14, 14, on); uiOut.fill(x0 + 76 + 64 + 6, y0 + 78, 14, 14, on);
+  uiNeonDigit(x0 + 178, y0, mi / 10, on, off);
+  uiNeonDigit(x0 + 254, y0, mi % 10, on, off);
+  char ap[4]; snprintf(ap, sizeof(ap), "%s", h >= 12 ? "PM" : "AM");
+  uiText(NFONT_TITLE, (x0 + 254 + 64 - uiTextWidth(NFONT_TITLE, ap)) & ~1, y0 + 128 + 10, ap, UI_GREY);
+  char line[40]; snprintf(line, sizeof(line), "%s, %s %d", uiDays[wd], uiMonths[Mo - 1], D);
+  uiTextCentered(NFONT_BODY, y0 + 128 + 14, line, UI_GREY);
+  if (uiIdle.showW && uiIdle.haveW) {
+    char tp[40]; snprintf(tp, sizeof(tp), "%d%c  %s", uiIdle.wt, (char)127, uiIdle.ws);
+    char fit[40]; uiFit(fit, sizeof(fit), NFONT_SMALL, tp, 340);
+    uiTextCentered(NFONT_SMALL, y0 + 128 + 14 + NFONT_BODY.h + 12, fit, UI_DIM);
+  }
 }
 
 // The whole idle face above Neddy. The clock drifts a few pixels now and then so no pixel stays lit (the screen is AMOLED).
@@ -1050,6 +1197,8 @@ static void uiDrawIdle(uint32_t ms) {
   uiCivil(local, &Y, &Mo, &D, &h, &mi, &wd);
   uiIdleMinute = (int)(local / 60);
   int dx = (((int)(local / 300)) % 5 - 2) * 2, dy = (((int)(local / 420)) % 3 - 1) * 2;
+  if (uiFace == 1) { uiDrawAnalog(top, bottom, h, mi, wd, Mo, D, dx, dy); return; }
+  if (uiFace == 2) { uiDrawNeon(top, h, mi, wd, Mo, D, dx, dy); uiDrawBattery(bottom); return; }
   char tm[10], ap[4], line[48];
   uiClockText(tm, ap, h, mi);
   int tw = uiTextWidth(NFONT_TEMP, tm), aw = uiTextWidth(NFONT_TITLE, ap);
@@ -1213,6 +1362,7 @@ static void uiEyes(uint32_t ms, UiPose *p) {
     if (uiMode == UI_READY && ms >= uiNextGlance) { uiGlanceUntil = ms + 800; uiNextGlance = ms + 4000 + (uiRand() % 5000); uiGlanceDx = (uiRand() & 1) ? 4.0f : -4.0f; }
     if (ms < uiGlanceUntil) p->eyeDx = uiGlanceDx;
     if (uiMode == UI_THINK) p->eyeDx = 4.0f * sinf(ms * 0.0028f);
+    if (uiLookupOn && uiMode == UI_THINK) { p->eyeDx = 5.0f * sinf(ms * 0.0075f); p->eyeDy = 3.0f; }   // reading: eyes sweep along the page
   }
   p->eye = eye;
 }
@@ -1252,8 +1402,10 @@ static void uiDrawStage(const UiPose &p) {
 }
 
 static void uiTick(uint32_t ms) {
-  uiNowMs = ms;
+  uiNowMs = ms; uiLookupNow = ms;
   if (uiScreenOff) return;
+  // The look-up ends when the answer starts, when he is spoken to again, or after 45 s whatever happens.
+  if (uiLookupOn && (uiMode == UI_SPEAK || uiMode == UI_LISTEN || uiMode == UI_LINK || ms - uiLookupSince > 45000)) uiLookupOn = false;
   if (uiCard.on && ms - uiCard.since >= uiCardMs()) uiClearCard();
   uiIdleTick(ms);
   bool wantSmall = uiCard.on || uiIdleOn || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
@@ -1289,7 +1441,7 @@ static void uiTick(uint32_t ms) {
     if (need > gap) gap = need;
     if (uiMode == UI_LISTEN && gap < 150) gap = 150;
   }
-  if ((uiMotion || ms < uiReactUntil || ms < uiLookUntil) && ms - uiLastStage >= gap) draw = true;
+  if ((uiMotion || uiLookupOn || ms < uiReactUntil || ms < uiLookUntil) && ms - uiLastStage >= gap) draw = true;
   if (draw) {
     uiDrawStage(p);
     uiLastEye = p.eye; uiLastStage = ms; uiFrames++;

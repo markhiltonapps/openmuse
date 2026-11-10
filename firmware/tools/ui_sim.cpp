@@ -165,6 +165,21 @@ int main(int argc, char **argv) {
   uiMenuOpen(500000); uiTick(500100); save(dir, "m1_menu");
   uiFpsLevel = 2; uiAll = true; uiTick(500200); save(dir, "m2_menu_smooth");
   uiClearCard();
+  // 13. looking something up: Neddy reads his book, flames flicker (thinking, no words yet)
+  uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetWords(""); uiSetHeard(""); uiSetMode(UI_THINK); uiMotion = true; uiNextBlink = 999999; uiNextGlance = 999999; uiAll = true;
+  uiLookup(600000, true); uiTick(600050); save(dir, "l1_lookup");
+  uiTick(600350); save(dir, "l2_lookup_flip");
+  uiLookup(600400, false); uiSetMode(UI_READY); uiAll = true; uiTick(600450);
+  // 14. the watch faces: 4:15 PM on Monday 9 Nov 2026 (analog, neon digital), with a battery and the weather
+  uiClearCard(); uiSetMode(UI_READY); uiMotion = true; uiNextBlink = 999999; uiNextGlance = 999999;
+  uiIdle.have = true; uiIdle.baseUtc = 1794262500u; uiIdle.baseMs = 700000; uiIdle.off = -360; uiIdle.after = 20; uiIdle.showW = true; uiIdle.showM = true;
+  uiIdle.haveW = true; uiIdle.wt = 56; uiIdle.wi = UI_ICON_PARTLY; strcpy(uiIdle.ws, "Slight chance rain showers"); uiSetBattery(85, false, 0x28, 0x01);
+  uiLastActive = 700000;
+  for (int face = 1; face <= 2; face++) {
+    uiFace = face; uiIdleOn = false; uiAll = true; uiTick(700100); uiTick(700000 + 20100); uiIdleMinute = -1; uiAll = true; uiTick(700000 + 20200);
+    save(dir, face == 1 ? "f1_face_analog" : "f2_face_neon");
+  }
+  uiFace = 0; uiIdleOn = false; uiIdle.have = false;
   printf("odd-aligned windows: %ld\n", oddWindows);
   return 0;
 }
