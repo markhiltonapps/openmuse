@@ -784,13 +784,14 @@ static bool recStatusKnown = false;
 static int recFailures = 0, recLastPct = -1;
 static unsigned long recNextTry = 0, recAutoAt = 0, recWorstOp = 0, recGaps = 0;
 static uint32_t recLastSecond = 0xFFFFFFFFu;
+static bool recSendShown = false;           // the "Please wait" sending screen has been drawn since the send began
 
 static bool rpErase(uint32_t off, uint32_t len) { return recPart && esp_partition_erase_range(recPart, off, len) == ESP_OK; }
 static bool rpWrite(uint32_t off, const uint8_t *d, uint32_t len) { return recPart && esp_partition_write(recPart, off, d, len) == ESP_OK; }
 static bool rpRead(uint32_t off, uint8_t *d, uint32_t len) { return recPart && esp_partition_read(recPart, off, d, len) == ESP_OK; }
 
 static bool recPending() { return recPart && recFound.present && !recFound.sent && recFound.slots > 0; }
-static void recMinutesText(char *dst, size_t cap, uint32_t ms) { snprintf(dst, cap, "%u", (unsigned)((ms + 59999UL) / 60000UL)); }
+static void recMinutesText(char *dst, size_t cap, uint32_t ms) { unsigned m = (unsigned)((ms + 59999UL) / 60000UL); snprintf(dst, cap, "%u %s", m, m == 1 ? "minute" : "minutes"); }
 static void recRefreshSub() {
   if (recPending()) { snprintf(uiRecSub, sizeof(uiRecSub), "Waiting to send"); return; }
   uint32_t s = recPart ? recCapacitySeconds(recIO) : 0;
@@ -807,14 +808,23 @@ static void recInit() {
   if (recPending()) recAutoAt = millis() + 20000UL;   // a recording was left behind: it is sent once the watch is up and idle
 }
 
+// The "sending" screen. It is drawn at once (uiTick), because what comes next (joining Wi-Fi, a piece going up, the server finishing the last one) can take
+// seconds to a minute or more with the screen unable to redraw: without this it sat on the old screen and looked frozen.
 static void recShowSending(const char *small) {
   char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
-  uiRecInfo(millis(), "Saved on the watch", big, small, recLastPct < 0 ? 0 : recLastPct, "");
+  uiRecInfo(millis(), "Sending to your phone", big, small, recLastPct < 0 ? 0 : recLastPct, "");
+  uiTick(millis());
+}
+static void recShowSendingPct() {
+  char t[32];
+  if (recLastPct > 0) snprintf(t, sizeof(t), "Please wait... %d%%", recLastPct); else snprintf(t, sizeof(t), "Please wait...");
+  recShowSending(t);
 }
 static void recBeginSend() {
   ws.disconnect(); wsUp = false; socketStarted = false;   // one secure connection at a time: the one to Neddy would use up the memory the upload needs
   recState = RS_SEND; recSent = 0; recStatusKnown = false; recFailures = 0; recNextTry = 0; recLastPct = 0;
-  recShowSending("Sending to your phone...");
+  recSendShown = false;
+  recShowSendingPct();
 }
 static void recShowWaiting() {
   char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
@@ -854,8 +864,10 @@ static void recFinish(const char *why) {
   recLastPct = 0; recSent = 0; recStatusKnown = false; recFailures = 0; recNextTry = 0;
   recState = RS_SEND;
   char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
-  const char *title = rec.full ? "Storage is full" : rec.failed ? "Saved (with a fault)" : "Saved on the watch";
-  uiRecInfo(millis(), title, big, "Sending to your phone...", 0, "");
+  const char *title = rec.full ? "Storage is full: sending" : rec.failed ? "Saved with a fault: sending" : "Sending to your phone";
+  recSendShown = false;
+  uiRecInfo(millis(), title, big, "Joining Wi-Fi, please wait", 0, "");
+  uiTick(millis());                                    // show it NOW: joining Wi-Fi next takes several seconds
 }
 
 // One turn of the recorder (replaces the rest of the main loop while it records).
@@ -903,6 +915,7 @@ static void recSendFail(const char *why, int code = 0) {
 }
 static void recSendStep() {
   if (WiFi.status() != WL_CONNECTED || millis() < recNextTry) return;
+  if (!recSendShown) { recSendShown = true; recShowSendingPct(); }      // Wi-Fi is up: from here the screen says "Please wait" and the percent
   char rid[12]; snprintf(rid, sizeof(rid), "%08x", (unsigned)recFound.id);
   recClient.setInsecure();
   HTTPClient http;
@@ -931,7 +944,7 @@ static void recSendStep() {
     if (!buf) { recSendFail("memory"); return; }
     if (!rpRead(REC_SECTOR + recSent, buf, len)) { free(buf); recSendFail("flash read"); return; }
     bool last = recSent + len >= recFound.bytes;
-    if (last) recShowSending("Finishing up...");
+    if (last) recShowSending("Finishing up... please wait");
     http.setTimeout(last ? 180000 : 25000);          // the last piece makes the whole recording ready, which takes the server a while
     String url = serverUrl + "/api/device/recording/" + rid + "?offset=" + recSent + "&final=" + (last ? 1 : 0) + "&started=" + recFound.startedUtc;
     if (!http.begin(recClient, url)) { free(buf); recSendFail("begin"); return; }
@@ -962,7 +975,7 @@ static void recSendStep() {
     return;
   }
   int pct = (int)((uint64_t)recSent * 100 / (recFound.bytes ? recFound.bytes : 1));
-  if (pct != recLastPct) { recLastPct = pct; recShowSending("Sending to your phone..."); }
+  if (pct != recLastPct) { recLastPct = pct; recShowSendingPct(); }
 }
 
 // What the recording screens ask for: Stop, OK, Try again / Send now.
@@ -1324,6 +1337,7 @@ static bool wifiSetupRun() {
 }
 
 static bool joinWifi() {
+  if (recState == RS_SEND) { recShowSending("Joining Wi-Fi, please wait"); }   // (the recording's screen stays; the usual "Joining Wi-Fi" screen would cover it)
   setMode(M_WIFI);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);  // faster answers

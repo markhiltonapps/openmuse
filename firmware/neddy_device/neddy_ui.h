@@ -1081,7 +1081,13 @@ static void uiRecDraw() {
   } else if (uiRec.state == UI_RECS_INFO) {
     uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
     uiTextCentered(NFONT_MID, 70, uiRec.title, UI_WHITE);
-    if (uiRec.big[0]) uiTextCentered(NFONT_BIG, 140, uiRec.big, teal);
+    if (uiRec.big[0]) {                                       // "42 minutes": the number in the big digits, the rest (the unit) small under it
+      char num[24], *unit = nullptr;
+      strncpy(num, uiRec.big, sizeof(num)); num[sizeof(num) - 1] = 0;
+      for (char *c = num; *c; c++) if (*c == ' ') { *c = 0; unit = c + 1; break; }
+      uiTextCentered(NFONT_BIG, 130, num, teal);
+      if (unit && *unit) uiTextCentered(NFONT_MID, 206, unit, UI_GREY);
+    }
     char fit[48]; uiFit(fit, sizeof(fit), NFONT_BODY, uiRec.small, 360);
     uiTextCentered(NFONT_BODY, 250, fit, UI_GREY);
     if (uiRec.pct >= 0) uiRecBar(318, uiRec.pct, teal);

@@ -109,3 +109,10 @@ and/or never offered the sign-in page). The setup can't be exited from the watch
 placeholder text), so a developer's watch connects straight away; a new watch with placeholders still shows the QR setup; `#define NEDDY_FORCE_QR_SETUP 1` in settings.h forces the QR setup for testing.
 Open: make the Android setup work (options: answer Android's connectivity checks differently; DHCP captive-portal option; Bluetooth setup from Chrome on Android). The "reached watch" counter from the previous build
 shows whether the phone reaches the watch; the owner's watch was on the first screen, so the count of connected phones read 0 when last looked at.
+
+=== Owner: Stop looked frozen while uploading; hotspot question ===
+Cause of "stuck after Stop": recFinish only set the info state; nothing redrew the screen before the blocking Wi-Fi join (several seconds) and, later, the blocking last-piece upload (up to 3 min while the
+server writes it up), so the old Stop screen stayed up and the owner kept tapping. Now every step draws at once (uiTick inside recShowSending): "Sending to your phone / N minutes / Joining Wi-Fi, please wait",
+then "Please wait... NN%" with the bar, then "Finishing up... please wait", then "Sent". The big number now has its unit under it ("42 minutes"): the big font has digits only, so "min" was silently dropped before.
+QR setup did not appear because settings.h now has the owner's real Wi-Fi (by design since the last build; NEDDY_FORCE_QR_SETUP 1 forces it).
+Owner asked why a hotspot: the watch has no keyboard and no internet yet, so something must carry the password from the phone to the watch (hotspot, or Bluetooth). Owner prefers no hotspot: Bluetooth setup from Chrome is the proposal.

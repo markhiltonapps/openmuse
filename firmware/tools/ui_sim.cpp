@@ -186,8 +186,10 @@ int main(int argc, char **argv) {
   uiClearCard(); uiFace = 0; uiAll = true;
   uiRecRun(800200, 2530, 4680, 35); uiTick(800300); save(dir, "r1_recording");
   uiRecRun(800400, 2531, 4679, 35); uiTick(800500); save(dir, "r1b_recording_next_second");
-  uiRecInfo(800600, "Saved on the watch", "42 min", "Sending to your phone...", 60, ""); uiTick(800700); save(dir, "r2_sending");
-  uiRecInfo(800800, "Sent", "42 min", "It's in the Muse app now", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
+  uiRecInfo(800500, "Sending to your phone", "42 minutes", "Joining Wi-Fi, please wait", 0, ""); uiTick(800550); save(dir, "r2a_joining_wifi");
+  uiRecInfo(800600, "Sending to your phone", "42 minutes", "Please wait... 60%", 60, ""); uiTick(800700); save(dir, "r2_sending");
+  uiRecInfo(800650, "Sending to your phone", "42 minutes", "Finishing up... please wait", 100, ""); uiTick(800700); save(dir, "r2b_finishing");
+  uiRecInfo(800800, "Sent", "42 minutes", "It's in the Muse app now", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
   uiRecEnd(); uiRecAvailable = false;
   // Wi-Fi setup screens
   uiSetupScreen(UI_SETUP_JOIN, "Neddy-1A2B", "WIFI:T:WPA;S:Neddy-1A2B;P:k7m2q9xd;;", "192.168.4.1"); save(dir, "w1_setup_join");
