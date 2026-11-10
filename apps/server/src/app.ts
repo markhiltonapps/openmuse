@@ -46,6 +46,7 @@ import { withOwnCalendar } from "./day-tools.ts";
 import type { Store } from "./db.ts";
 import { Depth, depthModelPath } from "./depth.ts";
 import { idleInfo } from "./device-idle.ts";
+import { DeviceRecordings } from "./device-recordings.ts";
 import { DeviceBridge } from "./device-socket.ts";
 import { Devices, pairClaimSchema } from "./devices.ts";
 import { EmailViews } from "./email-views.ts";
@@ -1372,6 +1373,33 @@ export async function createApp(
         ...(contentRange ? { "content-range": contentRange } : {}),
         ...(status === 416 ? { "content-range": `bytes */${file.size}` } : {}),
       },
+    );
+  });
+  // A recording the watch made on itself, sent afterwards in pieces. The device's own token signs these in (not a person's sign-in).
+  const deviceRecordings = new DeviceRecordings(db, blobs, meetings);
+  const recordingDevice = async (header: string | undefined) => {
+    const found = await devices.authenticate(/^Bearer (\S+)$/.exec(header ?? "")?.[1]);
+    if (!found) throw new AppError("This device isn’t signed in.", 401);
+    return found;
+  };
+  app.get("/api/device/recording/:rid", async (c) => {
+    const { owner, device } = await recordingDevice(c.req.header("authorization"));
+    return c.json(await deviceRecordings.status(owner, device, c.req.param("rid")));
+  });
+  app.put("/api/device/recording/:rid", async (c) => {
+    const { owner, device } = await recordingDevice(c.req.header("authorization"));
+    return c.json(
+      await deviceRecordings.receive(
+        owner,
+        device,
+        c.req.param("rid"),
+        Number(c.req.query("offset") ?? "0"),
+        new Uint8Array(await c.req.arrayBuffer()),
+        {
+          final: c.req.query("final") === "1",
+          startedAt: Number(c.req.query("started") ?? "0") || 0,
+        },
+      ),
     );
   });
   // A device with no keyboard pairs itself: it shows a code and collects its token once the

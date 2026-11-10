@@ -697,6 +697,61 @@ export class Meetings {
     this.kick(owner, id);
     return this.view(finished);
   }
+  /**
+   * A recording made away from the app (the watch records on itself and sends it afterwards): its audio comes whole, as MP3 pieces,
+   * and it goes straight to being written up, with the time it was really made.
+   */
+  async importRecording(
+    owner: string,
+    input: { startedAt: number; seconds: number; chunks: Uint8Array[] },
+  ) {
+    if (!this.options.soniox)
+      throw new AppError("Recording meetings isn’t set up on this server yet.", 503);
+    if (!input.chunks.length || input.seconds < 1)
+      throw new AppError("There is no audio in it.", 422);
+    if (input.chunks.length > MAX_CHUNKS || input.chunks.some((chunk) => chunk.length > MAX_CHUNK))
+      throw new AppError("This recording is too large.", 413);
+    const { leftSeconds, limitHours } = await this.allowance(owner);
+    if (leftSeconds !== undefined && leftSeconds < 60)
+      throw new AppError(
+        this.options.plans
+          ? await this.options.plans.limitMessage(owner, "meetingHours")
+          : `You’ve used this month’s ${limitHours} ${limitHours === 1 ? "hour" : "hours"} of recording. It starts again on the 1st.`,
+        429,
+      );
+    if ((await this.db.count(owner, "meetings")) >= MAX_MEETINGS)
+      throw new AppError("Delete some old recordings before sending another.", 409);
+    await this.checkStorage();
+    const seconds = Math.min(Math.round(input.seconds), MAX_MEETING_SECONDS);
+    const id = randomUUID();
+    for (const [n, chunk] of input.chunks.entries()) {
+      try {
+        await this.blobs.put(chunkKey(id, 0, n), chunk, "audio/mpeg");
+      } catch (error) {
+        console.warn(
+          `[OpenMuse] A watch recording couldn't be saved: ${error instanceof Error ? error.message : error}`,
+        );
+        for (const key of await this.blobs.list(`meetings/${id}/`).catch(() => [] as string[]))
+          await this.blobs.remove(key).catch(() => undefined);
+        throw new AppError(STORAGE_DOWN_PIECE, 503);
+      }
+    }
+    const meeting: Meeting = {
+      id,
+      title: await this.defaultTitle(owner, input.startedAt),
+      status: "transcribing",
+      mime: "audio/mpeg",
+      startedAt: this.iso(input.startedAt),
+      endedAt: this.iso(input.startedAt + seconds * 1000),
+      seconds,
+      allowedSeconds: Math.max(seconds, leftSeconds ?? 0),
+      partSeconds: { "0": seconds },
+      updatedAt: this.iso(),
+    };
+    await this.db.put(owner, "meetings", meeting);
+    this.kick(owner, id);
+    return this.view(meeting);
+  }
   /** Stopped by mistake, or not wanted: nothing is kept. */
   async discard(owner: string, id: string) {
     const meeting = await this.get(owner, id);
