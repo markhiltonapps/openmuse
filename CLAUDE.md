@@ -735,4 +735,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **One secure connection at a time on the watch (2026-11-10):** the recording upload failed silently (the server saw no request at all) while the watch's websocket to Neddy was still open: two TLS
   connections didn't fit in the chip's memory. The upload now closes the Neddy connection first and reopens it after. When something on a device fails before reaching the server, check Railway's request
   log first (no request = the device never got through), and show the failure's reason on the device's own screen.
+- **Wi-Fi setup on the watch (owner, 2026-11-10):** no Wi-Fi name or password lives in the program: a new watch makes its own temporary Wi-Fi (random WPA2 password inside the QR), the phone joins by scanning it
+  and picks the home Wi-Fi on a page the watch serves (neddy_setup_page.h), and the watch saves it in its own memory. Prove a QR code with a real reader (OpenCV's `QRCodeDetector` in firmware/tools/qr_check.py), not by
+  eye, and test the page in a real browser against a pretend watch (setup_page_test.mjs). Scan for networks BEFORE starting the temporary Wi-Fi (scanning while it is up drops phones off it). A phone's page can lose its
+  connection when the watch switches channels to join: the watch's own screen is the source of truth and the page says so. Hotel and airport Wi-Fi with a sign-in page, and 5 GHz-only networks, can't work.
 

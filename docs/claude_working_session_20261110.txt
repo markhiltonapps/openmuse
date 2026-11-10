@@ -77,3 +77,21 @@ Cause: the watch ended the look-up animation as soon as Neddy started speaking, 
 already switched off and never came back. Now speaking does not end it; it ends when the server says the look-up is over (sent before the answer is read), when he is spoken to again, or after 45 s,
 and a look-up in progress keeps the idle face from taking over. Note: questions answered without any tool (a time zone he knows) never signal a look-up; weather is a fast tool, so the book shows only a second or two.
 Best test: something that needs a web search ("who won the Astros game last night", "what's the latest news on ...").
+
+=== QR Wi-Fi setup (owner approved; production work begins) ===
+Decisions (owner): QR Wi-Fi setup first; updates over Wi-Fi later with the owner choosing automatic or ask-first on the watch, 2-3 MB of recording space may be given up for the update slots;
+  recording clarity in a restaurant matters most (ideas given: average the two mics, gain/noise filtering, 16 kHz or Opus instead of 8 kHz ADPCM, compare Soniox/Deepgram/others on the same audio).
+  Wi-Fi power: the build keeps Wi-Fi at full power for speed; production needs power-save, idle disconnect and an "Always ready / Battery saver" setting (task 43). Bluetooth to a phone needs a native app.
+Built (all tested on the computer, NOT yet on the real board):
+  - neddy_qr.h: QR maker (byte mode, level M, versions 1-6, 106 bytes). firmware/tools/qr_test.cpp + qr_check.py: 32 codes read back correctly by OpenCV's QR reader, and the QR drawn on the
+    simulated watch screen (w1/w2 frames) reads too.
+  - neddy_setup_page.h: the page the phone opens (plain HTML, big targets, network names shown as text only). firmware/tools/setup_page_test.mjs: 11 checks in a real browser against a pretend watch (includes a
+    network named with <img onerror> that stays text).
+  - neddy_ui.h: uiSetupScreen stages (QR to join, QR/URL for the page, connecting, set up, couldn't connect) + uiDrawQr; ui_sim frames w1-w5, 0 odd windows.
+  - neddy_device.ino: wifiSetupRun(): scans first, then the watch makes Neddy-XXXX (WPA2, random password in the QR), DNS sends every name to the watch (captive portal) and every "is there internet" probe
+    redirects to the page; /scan, /connect, /status; joins, saves ssid+password in the watch's own memory (prefs wssid/wpass), then carries on. No Wi-Fi saved = setup runs at start. Can't join for 30 s:
+    problem screen; holding BOOT 3 s forgets that Wi-Fi. Holding BOOT while plugging in: 1.5 s clears pairing (as before), keep holding 3.5 s more clears the Wi-Fi too.
+    settings.h's WIFI_NAME/WIFI_PASSWORD are used only if `#define NEDDY_USE_SETTINGS_WIFI 1` (default 0), so the owner's existing watch will show the QR code on first start after this update.
+Unverified on the board: the temporary Wi-Fi + captive page on real iPhone and Android (the page may not pop up by itself: the watch shows the address and a second QR as the fallback), SoftAP + station
+  switching channels when joining (the phone's page may lose the connection at the end; the watch screen and the page's wording cover it), stack size of the loop task with the web server inside, scanning only 2.4 GHz.
+Not done yet: pairing QR that opens the Muse app with the code (needs app work + Help), a menu entry to redo Wi-Fi setup, voice "set up my watch's Wi-Fi again", Help guide and website update (watch not offered to testers yet).

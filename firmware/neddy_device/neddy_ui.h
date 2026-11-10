@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include "neddy_art.h"
 #include "neddy_font.h"
+#include "neddy_qr.h"
 
 #define UI_W 410
 #define UI_H 502
@@ -1091,6 +1092,60 @@ static void uiRecDraw() {
   }
   uiRec.full = false; uiRec.dirty = false;
 }
+// ---- Wi-Fi setup screens. The sketch decides the stage (nothing here touches the radio). The first shows a QR code that makes a phone join
+// the watch's own temporary Wi-Fi; the second shows a QR code for the page where the person picks their home Wi-Fi.
+enum { UI_SETUP_JOIN = 1, UI_SETUP_PAGE, UI_SETUP_TRYING, UI_SETUP_DONE, UI_SETUP_FAIL };
+static QrCode uiQr;
+// A QR code on a white card (readers need the white border all round), `scale` screen dots to a code dot, centred, top edge at y.
+// Returns the bottom edge of the card.
+static int uiDrawQr(const char *text, int y, int scale) {
+  if (!qrEncode(uiQr, text)) return y;
+  const int quiet = 4, side = (uiQr.size + 2 * quiet) * scale, x0 = ((UI_W - side) / 2) & ~1;
+  y &= ~1;
+  uiOut.fill(x0, y, side, side, 0xFFFF);
+  for (int my = 0; my < uiQr.size; my++) {
+    int mx = 0;
+    while (mx < uiQr.size) {
+      if (!qrGet(uiQr, mx, my)) { mx++; continue; }
+      int run = mx;
+      while (run < uiQr.size && qrGet(uiQr, run, my)) run++;
+      uiOut.fill(x0 + (quiet + mx) * scale, y + (quiet + my) * scale, (run - mx) * scale, scale, 0);
+      mx = run;
+    }
+  }
+  return y + side;
+}
+static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const char *url) {
+  uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
+  uiBg = UI_BLACK;
+  char fit[48];
+  uiFit(fit, sizeof(fit), NFONT_BODY, ssid ? ssid : "", 360);
+  if (stage == UI_SETUP_JOIN) {
+    uiTextCentered(NFONT_TITLE, 16, "Set up Wi-Fi", UI_WHITE);
+    int b = uiDrawQr(qrText, 74, 8);
+    uiTextCentered(NFONT_BODY, b + 12, "Scan with your camera", UI_TEAL);
+    uiFit(fit, sizeof(fit), NFONT_SMALL, ssid ? ssid : "", 340);
+    uiTextCentered(NFONT_SMALL, b + 56, fit, UI_GREY);
+  } else if (stage == UI_SETUP_PAGE) {
+    uiTextCentered(NFONT_TITLE, 16, "Choose your Wi-Fi", UI_WHITE);
+    int b = uiDrawQr(qrText, 74, 8);
+    uiTextCentered(NFONT_MID, b + 10, "Page didn't open by itself?", UI_GREY);
+    uiTextCentered(NFONT_MID, b + 40, "Scan this, or go to", UI_GREY);
+    uiTextCentered(NFONT_BODY, b + 72, url ? url : "", UI_TEAL);
+  } else if (stage == UI_SETUP_TRYING) {
+    uiTextCentered(NFONT_TITLE, 150, "Connecting...", UI_WHITE);
+    uiTextCentered(NFONT_BODY, 220, fit, UI_TEAL);
+    uiTextCentered(NFONT_MID, 280, "This takes a few seconds", UI_GREY);
+  } else if (stage == UI_SETUP_DONE) {
+    uiTextCentered(NFONT_TITLE, 150, "Wi-Fi is set up", UI_TEAL);
+    uiTextCentered(NFONT_BODY, 220, fit, UI_WHITE);
+  } else {
+    uiTextCentered(NFONT_TITLE, 130, "Couldn't connect", UI_AMBER);
+    uiTextCentered(NFONT_BODY, 200, "Check the password", UI_WHITE);
+    uiTextCentered(NFONT_MID, 250, "and try again on your phone", UI_GREY);
+  }
+}
+
 // A finger on a recording screen: any touch wakes it; a tap on the big button does what it says.
 static void uiRecTouch(uint32_t ms, bool down, int x, int y) {
   static bool was = false; static int x0 = 0, y0 = 0, lx = 0, ly = 0; static uint32_t at = 0;

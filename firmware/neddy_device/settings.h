@@ -1,13 +1,13 @@
 // ===========================================================================
-//  The only file you need to edit. Change the two lines marked  <<< EDIT
-//  (keep the quotation marks "like this"), then press Upload.
+//  Settings for the person building the watch. The Wi-Fi is NOT set here any more:
+//  a new watch shows a QR code on its screen; scan it with your phone and pick your Wi-Fi.
+//  (To forget the Wi-Fi later: plug the watch in while holding BOOT, and keep holding.)
 // ===========================================================================
 #pragma once
 
-// <<< EDIT: the name of your Wi-Fi network, exactly as it appears on your phone.
+// Only used if you add the line   #define NEDDY_USE_SETTINGS_WIFI 1   at the top of this file (handy while building: the watch
+// then uses these two when it has no Wi-Fi saved).
 #define WIFI_NAME "your Wi-Fi name"
-
-// <<< EDIT: your Wi-Fi password (the board needs a normal home Wi-Fi: 2.4 GHz, no sign-in page).
 #define WIFI_PASSWORD "your Wi-Fi password"
 
 // Where Neddy lives. Leave this alone unless you were told to change it.

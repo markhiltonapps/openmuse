@@ -20,6 +20,8 @@
 #include <Wire.h>
 #include <ESP_I2S.h>
 #include <WebSocketsClient.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/stream_buffer.h"
 #include "Arduino_GFX_Library.h"
@@ -58,10 +60,17 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 
 // ---------------------------------------------------------------- the screen (the drawing is in neddy_ui.h)
 #include "neddy_ui.h"
+#include "neddy_setup_page.h"
 
 // 1 = Neddy moves all the time (breathing, floating, glancing). 0 = still, except his eyes (and blinking).
 #ifndef NEDDY_MOTION
 #define NEDDY_MOTION 1
+#endif
+
+// Where the Wi-Fi comes from. 0 = from the setup on the watch itself (it shows a QR code on first start; this is how it ships).
+// 1 = also use WIFI_NAME and WIFI_PASSWORD from settings.h when nothing is saved on the watch (handy while building it).
+#ifndef NEDDY_USE_SETTINGS_WIFI
+#define NEDDY_USE_SETTINGS_WIFI 0
 #endif
 
 // 1 = show the small lines of numbers (Wi-Fi, microphone, timings) at the bottom of the screen.
@@ -85,6 +94,7 @@ static Preferences prefs;
 static String deviceToken;
 static String deviceName = "Neddy";
 static String serverUrl;  // https://host
+static String wifiSsid, wifiPass;   // the saved Wi-Fi (set up with the QR code)
 
 static WebSocketsClient ws;
 static bool wsUp = false;
@@ -354,7 +364,7 @@ static void screenState() {
       uiClearCard();
       clearScreen();
       uiTextCentered(NFONT_TITLE, 150, "Joining Wi-Fi", UI_WHITE);
-      uiTextCentered(NFONT_BODY, 230, WIFI_NAME, UI_GREY);
+      { char nm[48]; uiFit(nm, sizeof(nm), NFONT_BODY, wifiSsid.c_str(), 360); uiTextCentered(NFONT_BODY, 230, nm, UI_GREY); }
       break;
     case M_LINK:
     case M_READY:
@@ -1130,11 +1140,179 @@ static void startSocket() {
 }
 
 // ---------------------------------------------------------------- Wi-Fi and pairing
+// ---------------------------------------------------------------- Wi-Fi setup (the QR code)
+// First start, or after "forget Wi-Fi": the watch makes its own temporary Wi-Fi (Neddy-XXXX, with a random password) and shows a QR code that makes a
+// phone join it. The phone then opens a page served by the watch (any address works: every name is sent to it) where the person picks their home Wi-Fi and types
+// its password. The watch tries it, saves it in its own memory, and carries on. Nothing about the person's Wi-Fi is in the program itself.
+static void wifiLoadSaved() {
+  wifiSsid = prefs.getString("wssid", "");
+  wifiPass = prefs.getString("wpass", "");
+#if NEDDY_USE_SETTINGS_WIFI
+  if (wifiSsid.length() == 0) {
+    wifiSsid = WIFI_NAME;
+    wifiPass = WIFI_PASSWORD;
+  }
+#endif
+}
+static void wifiForget() {
+  prefs.remove("wssid");
+  prefs.remove("wpass");
+  wifiSsid = "";
+  wifiPass = "";
+}
+static String jsonEsc(const String &s) {
+  String o;
+  for (size_t i = 0; i < s.length(); i++) {
+    unsigned char c = (unsigned char)s[i];
+    if (c == '"' || c == '\\') { o += '\\'; o += (char)c; }
+    else if (c < 0x20) { char b[8]; snprintf(b, sizeof(b), "\\u%04x", c); o += b; }
+    else o += (char)c;
+  }
+  return o;
+}
+
+// Runs the setup until the watch has joined a Wi-Fi (returns true) . The watch's own screen shows each stage.
+static bool wifiSetupRun() {
+  struct Net { String ssid; int rssi; bool open; };
+  static Net nets[16];
+  static int netN = 0;
+  uiActive = false;
+  uiClearCard();
+  // Look around for networks first: scanning while the temporary Wi-Fi is up makes phones drop off it.
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  auto collect = [&]() {
+    int n = WiFi.scanComplete();
+    netN = 0;
+    for (int i = 0; i < n && i < 40; i++) {
+      String s = WiFi.SSID(i);
+      if (s.length() == 0) continue;
+      int r = WiFi.RSSI(i);
+      bool open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
+      int at = -1;
+      for (int k = 0; k < netN; k++) if (nets[k].ssid == s) { at = k; break; }
+      if (at >= 0) { if (r > nets[at].rssi) { nets[at].rssi = r; nets[at].open = open; } continue; }
+      if (netN < 16) { nets[netN].ssid = s; nets[netN].rssi = r; nets[netN].open = open; netN++; }
+    }
+    for (int i = 1; i < netN; i++) {                       // strongest first
+      Net t = nets[i];
+      int j = i - 1;
+      while (j >= 0 && nets[j].rssi < t.rssi) { nets[j + 1] = nets[j]; j--; }
+      nets[j + 1] = t;
+    }
+    WiFi.scanDelete();
+  };
+  WiFi.scanNetworks();
+  collect();
+
+  char name[16];
+  snprintf(name, sizeof(name), "Neddy-%04X", (unsigned)(esp_random() & 0xFFFF));
+  static const char alphabet[] = "abcdefghjkmnpqrstuvwxyz23456789";
+  char pw[9];
+  for (int i = 0; i < 8; i++) pw[i] = alphabet[esp_random() % 31];
+  pw[8] = 0;
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(name, pw);
+  delay(200);
+  IPAddress ip = WiFi.softAPIP();
+  String portal = String("http://") + ip.toString() + "/";
+  String joinQr = String("WIFI:T:WPA;S:") + name + ";P:" + pw + ";;";
+  DNSServer dns;
+  dns.setErrorReplyCode(DNSReplyCode::NoError);
+  dns.start(53, "*", ip);                                   // every name goes to the watch, so the page opens whatever the phone asks for
+  WebServer web(80);
+  String pendSsid, pendPass;
+  bool pending = false;
+  int state = 0;                                            // 0 waiting, 1 trying, 2 joined, 3 failed
+  auto redirect = [&]() { web.sendHeader("Location", portal, true); web.send(302, "text/plain", ""); };
+  web.on("/", HTTP_GET, [&]() { web.sendHeader("Cache-Control", "no-store"); web.send(200, "text/html", NEDDY_SETUP_PAGE); });
+  web.on("/scan", HTTP_GET, [&]() {
+    if (web.hasArg("again") && WiFi.scanComplete() != WIFI_SCAN_RUNNING) WiFi.scanNetworks(true);
+    if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) { web.send(200, "application/json", "{\"scanning\":true}"); return; }
+    if (WiFi.scanComplete() >= 0) collect();
+    String j = "{\"networks\":[";
+    for (int i = 0; i < netN; i++) {
+      if (i) j += ",";
+      j += "{\"ssid\":\"" + jsonEsc(nets[i].ssid) + "\",\"rssi\":" + String(nets[i].rssi) + ",\"open\":" + (nets[i].open ? "true" : "false") + "}";
+    }
+    j += "]}";
+    web.send(200, "application/json", j);
+  });
+  web.on("/connect", HTTP_POST, [&]() {
+    String s = web.arg("ssid"), p = web.arg("pass");
+    if (s.length() == 0 || s.length() > 32 || p.length() > 63 || (p.length() > 0 && p.length() < 8)) {
+      web.send(200, "application/json", "{\"ok\":false,\"message\":\"That name or password does not look right. Passwords are 8 to 63 characters.\"}");
+      return;
+    }
+    pendSsid = s;
+    pendPass = p;
+    pending = true;
+    state = 1;
+    web.send(200, "application/json", "{\"ok\":true}");
+  });
+  web.on("/status", HTTP_GET, [&]() {
+    const char *names[4] = { "idle", "trying", "ok", "fail" };
+    web.send(200, "application/json", String("{\"state\":\"") + names[state] + "\"}");
+  });
+  const char *probes[] = { "/generate_204", "/gen_204", "/hotspot-detect.html", "/library/test/success.html", "/connecttest.txt", "/ncsi.txt", "/fwlink", "/redirect" };
+  for (const char *path : probes) web.on(path, HTTP_GET, redirect);   // the little web addresses phones try to find out whether there is internet
+  web.onNotFound(redirect);
+  web.begin();
+  LOGF("[setup] %s %s\n", name, pw);
+
+  int stage = 0;
+  auto serve = [&](unsigned long ms) { unsigned long t = millis(); while (millis() - t < ms) { dns.processNextRequest(); web.handleClient(); delay(10); } };
+  unsigned long lastPhone = millis();
+  bool done = false;
+  while (!done) {
+    dns.processNextRequest();
+    web.handleClient();
+    int stations = WiFi.softAPgetStationNum();
+    if (stations > 0) lastPhone = millis();
+    int want = stations > 0 ? UI_SETUP_PAGE : UI_SETUP_JOIN;
+    if (!pending && stage != want) {
+      stage = want;
+      uiSetupScreen(stage, name, stage == UI_SETUP_JOIN ? joinQr.c_str() : portal.c_str(), ip.toString().c_str());
+    }
+    if (pending) {
+      pending = false;
+      stage = UI_SETUP_TRYING;
+      uiSetupScreen(stage, pendSsid.c_str(), "", "");
+      WiFi.begin(pendSsid.c_str(), pendPass.c_str());
+      unsigned long t0 = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) { dns.processNextRequest(); web.handleClient(); delay(20); }
+      if (WiFi.status() == WL_CONNECTED) {
+        wifiSsid = pendSsid;
+        wifiPass = pendPass;
+        prefs.putString("wssid", wifiSsid);
+        prefs.putString("wpass", wifiPass);
+        state = 2;
+        uiSetupScreen(UI_SETUP_DONE, wifiSsid.c_str(), "", "");
+        serve(4000);                                        // long enough for the phone's page to read "ok"
+        done = true;
+      } else {
+        WiFi.disconnect(false);
+        state = 3;
+        uiSetupScreen(UI_SETUP_FAIL, pendSsid.c_str(), "", "");
+        serve(3500);
+        stage = 0;                                          // draws the page screen again
+      }
+    }
+    if (millis() - lastPhone > 15UL * 60UL * 1000UL) ESP.restart();   // nobody came: start over (and stop using the battery)
+    delay(5);
+  }
+  web.stop();
+  dns.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  return true;
+}
+
 static bool joinWifi() {
   setMode(M_WIFI);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);  // faster answers
-  WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
+  WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   unsigned long began = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - began < 30000) delay(250);
   if (WiFi.status() == WL_CONNECTED) {
@@ -1241,9 +1419,19 @@ void setup() {
       prefs.remove("name");
       screenBoot("Pairing cleared");
       LOGLN("[pair] cleared");
-      delay(2000);
+      delay(1200);
+      screenBoot("Keep holding: Wi-Fi too");
+      unsigned long h = millis();
+      while (digitalRead(BUTTON) == LOW && millis() - h < 3500) delay(50);
+      if (digitalRead(BUTTON) == LOW) {          // still held: forget the Wi-Fi as well, and the QR code setup starts
+        wifiForget();
+        screenBoot("Wi-Fi cleared");
+        LOGLN("[wifi] cleared");
+        delay(1500);
+      }
     }
   }
+  wifiLoadSaved();
   deviceToken = prefs.getString("token", "");
   String savedName = prefs.getString("name", "");
   if (savedName.length()) deviceName = savedName;
@@ -1267,11 +1455,25 @@ void loop() {
   // 1. Wi-Fi
   if (WiFi.status() != WL_CONNECTED) {
     wsUp = false;
+    if (wifiSsid.length() == 0) {              // none saved yet (a new watch, or it was forgotten): the QR code setup
+      wifiSetupRun();
+      mode = M_BOOT;
+      return;
+    }
     if (!joinWifi()) {
       screenProblem("Can't join Wi-Fi",
-                    String("Check the name and password in settings.h, and that it's a 2.4 GHz network. Trying again soon. Name used: ") + WIFI_NAME);
+                    String("I'll keep trying. Network: ") + wifiSsid + ". To pick a different Wi-Fi, hold the BOOT button for 3 seconds.");
       mode = M_PROBLEM;
-      delay(10000);
+      unsigned long until = millis() + 10000, heldAt = 0;
+      while (millis() < until) {               // a long press on BOOT forgets this Wi-Fi, and the setup starts next turn
+        if (digitalRead(BUTTON) == LOW) {
+          if (!heldAt) heldAt = millis();
+          if (millis() - heldAt > 3000) { wifiForget(); break; }
+        } else {
+          heldAt = 0;
+        }
+        delay(50);
+      }
       mode = M_BOOT;
       return;
     }

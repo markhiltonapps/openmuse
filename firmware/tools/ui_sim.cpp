@@ -189,6 +189,12 @@ int main(int argc, char **argv) {
   uiRecInfo(800600, "Saved on the watch", "42 min", "Sending to your phone...", 60, ""); uiTick(800700); save(dir, "r2_sending");
   uiRecInfo(800800, "Sent", "42 min", "It's in the Muse app now", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
   uiRecEnd(); uiRecAvailable = false;
+  // Wi-Fi setup screens
+  uiSetupScreen(UI_SETUP_JOIN, "Neddy-1A2B", "WIFI:T:WPA;S:Neddy-1A2B;P:k7m2q9xd;;", "192.168.4.1"); save(dir, "w1_setup_join");
+  uiSetupScreen(UI_SETUP_PAGE, "Neddy-1A2B", "http://192.168.4.1/", "192.168.4.1"); save(dir, "w2_setup_page");
+  uiSetupScreen(UI_SETUP_TRYING, "Home Wi-Fi", "", ""); save(dir, "w3_setup_trying");
+  uiSetupScreen(UI_SETUP_DONE, "Home Wi-Fi", "", ""); save(dir, "w4_setup_done");
+  uiSetupScreen(UI_SETUP_FAIL, "Home Wi-Fi", "", ""); save(dir, "w5_setup_fail");
   printf("odd-aligned windows: %ld\n", oddWindows);
   return 0;
 }
