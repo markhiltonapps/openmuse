@@ -116,3 +116,19 @@ server writes it up), so the old Stop screen stayed up and the owner kept tappin
 then "Please wait... NN%" with the bar, then "Finishing up... please wait", then "Sent". The big number now has its unit under it ("42 minutes"): the big font has digits only, so "min" was silently dropped before.
 QR setup did not appear because settings.h now has the owner's real Wi-Fi (by design since the last build; NEDDY_FORCE_QR_SETUP 1 forces it).
 Owner asked why a hotspot: the watch has no keyboard and no internet yet, so something must carry the password from the phone to the watch (hotspot, or Bluetooth). Owner prefers no hotspot: Bluetooth setup from Chrome is the proposal.
+
+=== Bluetooth Wi-Fi setup (owner: "give it my home Wi-Fi, not a hotspot") ===
+Why: the watch has no keyboard and no internet, so the phone must carry the Wi-Fi name and password to it. The temporary-hotspot way failed on the owner's Android (the phone dropped the no-internet network and the
+sign-in page never opened). Bluetooth avoids switching the phone's Wi-Fi at all.
+Built (tested on the computer only):
+  - apps/mobile/public/watch-setup.html (served at https://neddy.neatoventures.com/watch-setup.html by the web service, needs the push to be live): Web Bluetooth page. The QR carries #n=<4 hex>&k=<6 digits>
+    (a fragment, never sent to a server); the page asks Chrome for the watch named Neddy-<n>, reads the Wi-Fi list, sends "code\nname\npassword\n" in pieces of up to 100 bytes, then reads the status
+    (ready / trying / ok / fail / badkey) every 0.8 s (no notifications: fewer things to go wrong). Names are shown as text only. iPhone/Firefox: a plain explanation pointing at the watch's other setup.
+    firmware/tools/ble_page_test.mjs: 17 checks in a real browser against a pretend watch (filters, chunking incl. accents, wrong password, wrong code, no Bluetooth, closed chooser).
+  - neddy_device.ino: wifiSetupBluetooth() (core's built-in BLE library: service 111f83b7-..., characteristics networks/credentials/status), wifiSetupHotspot() (the earlier one), wifiSetupRun() starts with Bluetooth;
+    a TAP on the first screen of either switches to the other. The code in the QR must match or the watch answers "badkey". After a finished setup the Bluetooth memory is given back (deinit(true)), so the watch
+    restarts to run setup again (the BOOT-hold "forget Wi-Fi" now restarts). Networks are scanned BEFORE Bluetooth starts (shared radio).
+  - neddy_ui.h: UI_SETUP_BLE (QR for the page, 360 px, "iPhone? Tap this screen") and UI_SETUP_BLE_PHONE ("Connected / Now pick your Wi-Fi / on your phone"); hotspot screen says "Tap the screen to use Bluetooth".
+NOT verified: any of the Bluetooth code against the real Arduino core (the sandbox may not download it: the toolchain fetch was blocked), so the first Arduino compile is the real test (BLE callback signatures and
+  getValue()'s type differ between core versions; I used only forms that exist in both); Chrome's Bluetooth chooser on the owner's phone (Bluetooth and Location must be on); Bluetooth and Wi-Fi sharing the radio while joining.
+Not done: Help/site (watch not offered to testers), a menu entry to redo setup, pairing QR that opens the Muse app.

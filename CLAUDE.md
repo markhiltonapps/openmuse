@@ -739,4 +739,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   and picks the home Wi-Fi on a page the watch serves (neddy_setup_page.h), and the watch saves it in its own memory. Prove a QR code with a real reader (OpenCV's `QRCodeDetector` in firmware/tools/qr_check.py), not by
   eye, and test the page in a real browser against a pretend watch (setup_page_test.mjs). Scan for networks BEFORE starting the temporary Wi-Fi (scanning while it is up drops phones off it). A phone's page can lose its
   connection when the watch switches channels to join: the watch's own screen is the source of truth and the page says so. Hotel and airport Wi-Fi with a sign-in page, and 5 GHz-only networks, can't work.
+- **Bluetooth Wi-Fi setup on the watch (owner, 2026-11-10):** the phone's Chrome page (apps/mobile/public/watch-setup.html: Web Bluetooth needs https, so it lives on the web app) writes the Wi-Fi to the watch's Bluetooth
+  service; the QR carries a one-time code in the URL fragment (never sent to a server). Chrome can't send Bluetooth from iPhones (Safari has no Web Bluetooth), so tapping the watch's setup screen swaps to the
+  temporary-Wi-Fi setup. The page polls a status value instead of using notifications. `BLEDevice::deinit(true)` gives memory back for good until a restart, so only use it when setup is finished. Read BLE
+  values with `auto v = c->getValue(); v.c_str(); v.length()` (a String or std::string by core version). The sandbox couldn't download the Arduino core (blocked), so BLE code is only syntax-checked against
+  stand-ins: say so, and expect the owner's first compile to find call-shape differences.
 

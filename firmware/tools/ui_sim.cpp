@@ -194,6 +194,8 @@ int main(int argc, char **argv) {
   // Wi-Fi setup screens
   uiSetupScreen(UI_SETUP_JOIN, "Neddy-1A2B", "WIFI:T:WPA;S:Neddy-1A2B;P:k7m2q9xd;;", "192.168.4.1"); save(dir, "w1_setup_join");
   uiSetupScreen(UI_SETUP_PAGE, "Neddy-1A2B", "http://192.168.4.1/", "192.168.4.1"); uiSetupDiag("reached watch: page 1  checks 3  other 2"); save(dir, "w2_setup_page");
+  uiSetupScreen(UI_SETUP_BLE, "Neddy-5AFE", "https://neddy.neatoventures.com/watch-setup.html#n=5AFE&k=482913", ""); save(dir, "w0_setup_bluetooth");
+  uiSetupScreen(UI_SETUP_BLE_PHONE, "Neddy-5AFE", "", ""); save(dir, "w0b_setup_bluetooth_phone");
   uiSetupScreen(UI_SETUP_TRYING, "Home Wi-Fi", "", ""); save(dir, "w3_setup_trying");
   uiSetupScreen(UI_SETUP_DONE, "Home Wi-Fi", "", ""); save(dir, "w4_setup_done");
   uiSetupScreen(UI_SETUP_FAIL, "Home Wi-Fi", "", ""); save(dir, "w5_setup_fail");

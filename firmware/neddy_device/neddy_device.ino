@@ -22,6 +22,9 @@
 #include <WebSocketsClient.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/stream_buffer.h"
 #include "Arduino_GFX_Library.h"
@@ -76,6 +79,19 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #ifndef NEDDY_FORCE_QR_SETUP
 #define NEDDY_FORCE_QR_SETUP 0
 #endif
+
+// Wi-Fi setup by Bluetooth: the QR code opens this page in the phone's browser (Chrome on Android), which sends the Wi-Fi to the watch over Bluetooth.
+// (The page is apps/mobile/public/watch-setup.html on the web app. Tapping the setup screen switches to the temporary-Wi-Fi setup, which also works on iPhones.)
+#ifndef NEDDY_SETUP_URL
+#define NEDDY_SETUP_URL "https://neddy.neatoventures.com/watch-setup.html"
+#endif
+#ifndef NEDDY_BLE_FIRST
+#define NEDDY_BLE_FIRST 1
+#endif
+#define NEDDY_BLE_SERVICE "111f83b7-253c-4cfd-b6b6-fd7bbea9386e"
+#define NEDDY_BLE_NETWORKS "050b61c0-03c6-4c9f-b99e-36ed8f21a8bf"
+#define NEDDY_BLE_CREDENTIALS "0a64e3d3-8962-4e04-b0d4-fb91697267a0"
+#define NEDDY_BLE_STATUS "8a419340-a280-4e28-b58d-509c475bbcfa"
 
 // 1 = show the small lines of numbers (Wi-Fi, microphone, timings) at the bottom of the screen.
 #ifndef NEDDY_DIAG
@@ -1188,39 +1204,62 @@ static String jsonEsc(const String &s) {
   return o;
 }
 
-// Runs the setup until the watch has joined a Wi-Fi (returns true) . The watch's own screen shows each stage.
-static bool wifiSetupRun() {
-  struct Net { String ssid; int rssi; bool open; };
-  static Net nets[16];
-  static int netN = 0;
-  uiActive = false;
-  uiClearCard();
-  // Look around for networks first: scanning while the temporary Wi-Fi is up makes phones drop off it.
+// What the two setups share: the networks the watch can see, and a tap on the screen (which switches between them).
+enum { SETUP_DONE = 1, SETUP_SWITCH = 2 };
+struct WNet { String ssid; int rssi; bool open; };
+static WNet wnets[16];
+static int wnetN = 0;
+static void wnetCollect() {
+  int n = WiFi.scanComplete();
+  wnetN = 0;
+  for (int i = 0; i < n && i < 40; i++) {
+    String s = WiFi.SSID(i);
+    if (s.length() == 0) continue;
+    int r = WiFi.RSSI(i);
+    bool open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
+    int at = -1;
+    for (int k = 0; k < wnetN; k++) if (wnets[k].ssid == s) { at = k; break; }
+    if (at >= 0) { if (r > wnets[at].rssi) { wnets[at].rssi = r; wnets[at].open = open; } continue; }
+    if (wnetN < 16) { wnets[wnetN].ssid = s; wnets[wnetN].rssi = r; wnets[wnetN].open = open; wnetN++; }
+  }
+  for (int i = 1; i < wnetN; i++) {                         // strongest first
+    WNet t = wnets[i];
+    int j = i - 1;
+    while (j >= 0 && wnets[j].rssi < t.rssi) { wnets[j + 1] = wnets[j]; j--; }
+    wnets[j + 1] = t;
+  }
+  WiFi.scanDelete();
+}
+static void wnetScanBlocking() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
-  auto collect = [&]() {
-    int n = WiFi.scanComplete();
-    netN = 0;
-    for (int i = 0; i < n && i < 40; i++) {
-      String s = WiFi.SSID(i);
-      if (s.length() == 0) continue;
-      int r = WiFi.RSSI(i);
-      bool open = WiFi.encryptionType(i) == WIFI_AUTH_OPEN;
-      int at = -1;
-      for (int k = 0; k < netN; k++) if (nets[k].ssid == s) { at = k; break; }
-      if (at >= 0) { if (r > nets[at].rssi) { nets[at].rssi = r; nets[at].open = open; } continue; }
-      if (netN < 16) { nets[netN].ssid = s; nets[netN].rssi = r; nets[netN].open = open; netN++; }
-    }
-    for (int i = 1; i < netN; i++) {                       // strongest first
-      Net t = nets[i];
-      int j = i - 1;
-      while (j >= 0 && nets[j].rssi < t.rssi) { nets[j + 1] = nets[j]; j--; }
-      nets[j + 1] = t;
-    }
-    WiFi.scanDelete();
-  };
   WiFi.scanNetworks();
-  collect();
+  wnetCollect();
+}
+static bool setupTapped() {                                // true once, when a finger has touched the screen and lifted (a short tap, not a swipe)
+  static bool down = false;
+  static unsigned long at = 0, polled = 0;
+  static int x0 = 0, y0 = 0, lx = 0, ly = 0;
+  if (!touchOk || millis() - polled < 16) return false;
+  polled = millis();
+  int x = 0, y = 0;
+  int r = touchRead(&x, &y);
+  if (r < 0) return false;
+  if (r == 1) {
+    if (!down) { down = true; at = millis(); x0 = x; y0 = y; }
+    lx = x; ly = y;
+    return false;
+  }
+  if (!down) return false;
+  down = false;
+  return millis() - at < 700 && abs(lx - x0) < 40 && abs(ly - y0) < 40;
+}
+
+// The temporary-Wi-Fi setup. Returns SETUP_DONE once the watch has joined a Wi-Fi, or SETUP_SWITCH when the person taps the screen to use Bluetooth instead.
+static int wifiSetupHotspot() {
+  uiActive = false;
+  uiClearCard();
+  wnetScanBlocking();                                      // look around first: scanning while the temporary Wi-Fi is up makes phones drop off it
 
   char name[16];
   snprintf(name, sizeof(name), "Neddy-%04X", (unsigned)(esp_random() & 0xFFFF));
@@ -1248,11 +1287,11 @@ static bool wifiSetupRun() {
   web.on("/scan", HTTP_GET, [&]() {
     if (web.hasArg("again") && WiFi.scanComplete() != WIFI_SCAN_RUNNING) WiFi.scanNetworks(true);
     if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) { web.send(200, "application/json", "{\"scanning\":true}"); return; }
-    if (WiFi.scanComplete() >= 0) collect();
+    if (WiFi.scanComplete() >= 0) wnetCollect();
     String j = "{\"networks\":[";
-    for (int i = 0; i < netN; i++) {
+    for (int i = 0; i < wnetN; i++) {
       if (i) j += ",";
-      j += "{\"ssid\":\"" + jsonEsc(nets[i].ssid) + "\",\"rssi\":" + String(nets[i].rssi) + ",\"open\":" + (nets[i].open ? "true" : "false") + "}";
+      j += "{\"ssid\":\"" + jsonEsc(wnets[i].ssid) + "\",\"rssi\":" + String(wnets[i].rssi) + ",\"open\":" + (wnets[i].open ? "true" : "false") + "}";
     }
     j += "]}";
     web.send(200, "application/json", j);
@@ -1282,13 +1321,14 @@ static bool wifiSetupRun() {
   int stage = 0, shownHits = -1;
   auto serve = [&](unsigned long ms) { unsigned long t = millis(); while (millis() - t < ms) { dns.processNextRequest(); web.handleClient(); delay(10); } };
   unsigned long lastPhone = millis();
-  bool done = false;
+  bool done = false, switchMode = false;
   while (!done) {
     dns.processNextRequest();
     web.handleClient();
     int stations = WiFi.softAPgetStationNum();
     if (stations > 0) lastPhone = millis();
     int want = stations > 0 ? UI_SETUP_PAGE : UI_SETUP_JOIN;
+    if (!pending && stage == UI_SETUP_JOIN && stations == 0 && setupTapped()) { switchMode = true; break; }   // a tap on the first screen: Bluetooth instead
     if (!pending && stage != want) {
       stage = want;
       shownHits = -1;
@@ -1333,7 +1373,132 @@ static bool wifiSetupRun() {
   dns.stop();
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
-  return true;
+  return switchMode ? SETUP_SWITCH : SETUP_DONE;
+}
+
+// ---------------------------------------------------------------- Wi-Fi setup by Bluetooth
+// The watch advertises a small Bluetooth service (Neddy-XXXX). The phone's browser (Chrome, from the QR code) connects, reads the list of Wi-Fi networks the watch
+// sees, and writes back the code from the QR, the Wi-Fi name and its password (three lines of text, in pieces of up to 100 bytes). The watch checks the code,
+// tries the Wi-Fi, says "trying", then "ok" or "fail" (the page reads that), saves the Wi-Fi and carries on. The same three numbers are in watch-setup.html.
+static volatile bool bleConnected = false, bleFresh = false;
+static String bleIn;
+static BLECharacteristic *bleStatusChar = nullptr;
+static bool bleMemoryReleased = false;                     // after a finished setup the Bluetooth memory is given back (it can't start again until a restart)
+static void bleStatus(const char *text) { if (bleStatusChar) bleStatusChar->setValue((uint8_t *)text, strlen(text)); }
+class NeddyBleServerCb : public BLEServerCallbacks {
+  void onConnect(BLEServer *) override { bleConnected = true; }
+  void onDisconnect(BLEServer *) override { bleConnected = false; BLEDevice::startAdvertising(); }
+};
+class NeddyBleWriteCb : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *c) override {
+    auto v = c->getValue();                                // (a String or a std::string, depending on the core's version: both have these two)
+    const char *p = v.c_str();
+    size_t n = v.length();
+    for (size_t i = 0; i < n && bleIn.length() < 400; i++) bleIn += p[i];
+    int lines = 0;
+    for (size_t i = 0; i < bleIn.length(); i++) if (bleIn[i] == '\n') lines++;
+    if (lines >= 3) bleFresh = true;                       // code, name, password: all there
+  }
+};
+
+static int wifiSetupBluetooth() {
+  if (bleMemoryReleased) return SETUP_SWITCH;
+  uiActive = false;
+  uiClearCard();
+  wnetScanBlocking();                                      // the networks, before Bluetooth shares the radio
+  char suffix[8], name[16], key[8];
+  snprintf(suffix, sizeof(suffix), "%04X", (unsigned)(esp_random() & 0xFFFF));
+  snprintf(name, sizeof(name), "Neddy-%s", suffix);
+  snprintf(key, sizeof(key), "%06u", (unsigned)(esp_random() % 1000000UL));
+  String url = String(NEDDY_SETUP_URL) + "#n=" + suffix + "&k=" + key;      // after the # nothing is sent to any server
+  bleIn = "";
+  bleFresh = false;
+  bleConnected = false;
+  BLEDevice::init(name);
+  BLEServer *server = BLEDevice::createServer();
+  server->setCallbacks(new NeddyBleServerCb());
+  BLEService *svc = server->createService(NEDDY_BLE_SERVICE);
+  BLECharacteristic *netsChar = svc->createCharacteristic(NEDDY_BLE_NETWORKS, BLECharacteristic::PROPERTY_READ);
+  BLECharacteristic *credChar = svc->createCharacteristic(NEDDY_BLE_CREDENTIALS, BLECharacteristic::PROPERTY_WRITE);
+  bleStatusChar = svc->createCharacteristic(NEDDY_BLE_STATUS, BLECharacteristic::PROPERTY_READ);
+  credChar->setCallbacks(new NeddyBleWriteCb());
+  String list = String("{\"n\":\"") + suffix + "\",\"w\":[";
+  bool first = true;
+  for (int i = 0; i < wnetN; i++) {
+    String item = String(first ? "" : ",") + "[\"" + jsonEsc(wnets[i].ssid) + "\"," + String(wnets[i].rssi) + "," + (wnets[i].open ? "1" : "0") + "]";
+    if (list.length() + item.length() + 3 > 480) break;      // a read gives at most about 500 bytes
+    list += item;
+    first = false;
+  }
+  list += "]}";
+  netsChar->setValue((uint8_t *)list.c_str(), list.length());
+  bleStatus("ready");
+  svc->start();
+  BLEAdvertising *adv = BLEDevice::getAdvertising();
+  adv->addServiceUUID(NEDDY_BLE_SERVICE);
+  adv->setScanResponse(true);
+  BLEDevice::startAdvertising();
+  LOGF("[setup] bluetooth %s key %s\n", name, key);
+
+  int shown = 0, result = 0;
+  unsigned long lastPhone = millis();
+  while (!result) {
+    int want = bleConnected ? UI_SETUP_BLE_PHONE : UI_SETUP_BLE;
+    if (want != shown) { shown = want; uiSetupScreen(want, name, url.c_str(), ""); }
+    if (bleConnected) lastPhone = millis();
+    if (!bleConnected && setupTapped()) { result = SETUP_SWITCH; break; }   // a tap: the temporary Wi-Fi setup instead (for iPhones)
+    if (bleFresh) {
+      bleFresh = false;
+      String in = bleIn;
+      bleIn = "";
+      int a = in.indexOf('\n'), b = a < 0 ? -1 : in.indexOf('\n', a + 1), c = b < 0 ? -1 : in.indexOf('\n', b + 1);
+      String k = a < 0 ? "" : in.substring(0, a), s = b < 0 ? "" : in.substring(a + 1, b), p = c < 0 ? "" : in.substring(b + 1, c);
+      if (c < 0 || k != key || s.length() == 0 || s.length() > 32 || p.length() > 63 || (p.length() > 0 && p.length() < 8)) {
+        bleStatus("badkey");
+        shown = 0;
+        continue;
+      }
+      bleStatus("trying");
+      uiSetupScreen(UI_SETUP_TRYING, s.c_str(), "", "");
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(s.c_str(), p.c_str());
+      unsigned long t0 = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) delay(50);
+      if (WiFi.status() == WL_CONNECTED) {
+        wifiSsid = s;
+        wifiPass = p;
+        prefs.putString("wssid", wifiSsid);
+        prefs.putString("wpass", wifiPass);
+        bleStatus("ok");
+        uiSetupScreen(UI_SETUP_DONE, wifiSsid.c_str(), "", "");
+        delay(2500);                                       // long enough for the phone's page to read "ok"
+        result = SETUP_DONE;
+      } else {
+        WiFi.disconnect();
+        bleStatus("fail");
+        uiSetupScreen(UI_SETUP_FAIL, s.c_str(), "", "");
+        delay(3000);
+        shown = 0;
+      }
+    }
+    if (millis() - lastPhone > 15UL * 60UL * 1000UL) ESP.restart();   // nobody came: start over (and stop using the battery)
+    delay(20);
+  }
+  bleStatusChar = nullptr;
+  BLEDevice::deinit(result == SETUP_DONE);                 // done: the memory goes back to the program (TLS needs it); a tap: keep it so Bluetooth can start again
+  if (result == SETUP_DONE) bleMemoryReleased = true;
+  return result;
+}
+
+// Wi-Fi setup: Bluetooth first (the QR opens a page in the phone's browser); a tap on the screen swaps to the temporary Wi-Fi, and back.
+static void wifiSetupRun() {
+  int m = NEDDY_BLE_FIRST ? 0 : 1;
+  for (;;) {
+    if (m == 0 && bleMemoryReleased) m = 1;
+    int r = (m == 0) ? wifiSetupBluetooth() : wifiSetupHotspot();
+    if (r == SETUP_DONE) return;
+    m ^= 1;
+  }
 }
 
 static bool joinWifi() {
@@ -1497,7 +1662,7 @@ void loop() {
       while (millis() < until) {               // a long press on BOOT forgets this Wi-Fi, and the setup starts next turn
         if (digitalRead(BUTTON) == LOW) {
           if (!heldAt) heldAt = millis();
-          if (millis() - heldAt > 3000) { wifiForget(); break; }
+          if (millis() - heldAt > 3000) { wifiForget(); ESP.restart(); }
         } else {
           heldAt = 0;
         }

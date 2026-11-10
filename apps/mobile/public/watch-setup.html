@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Set up your Neddy watch</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#0b0f14;color:#eef3f8;font:18px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:480px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:26px;margin:8px 0 4px}
+.hint{color:#9db0c3;margin:0 0 16px}
+.card{border:1px solid #2c3a49;border-radius:16px;background:#141c25;padding:14px 16px;margin:0 0 16px}
+button{font:inherit}
+.big{display:block;width:100%;min-height:58px;border:0;border-radius:14px;background:#4fd1c5;color:#06201d;font-weight:600;font-size:19px}
+.big:disabled{opacity:.5}
+.net{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:56px;margin:0 0 8px;padding:10px 14px;border:1px solid #2c3a49;border-radius:14px;background:#141c25;color:inherit;text-align:left}
+.net[aria-pressed=true]{border-color:#4fd1c5;background:#173037}
+.net small{color:#9db0c3;margin-left:12px;white-space:nowrap}
+.link{background:none;border:0;color:#4fd1c5;padding:10px 0;min-height:44px}
+label{display:block;margin:14px 0 0;color:#9db0c3}
+input[type=text],input[type=password]{display:block;width:100%;min-height:52px;margin-top:6px;padding:10px 14px;border:1px solid #2c3a49;border-radius:12px;background:#0f151c;color:#eef3f8;font:inherit}
+.check{display:flex;align-items:center;gap:10px;min-height:44px}
+.check input{width:22px;height:22px}
+#msg{min-height:3em;margin-top:16px;color:#cfe3f3}
+#msg.bad{color:#ffb454}
+#msg.good{color:#7ee0a1}
+.steps{margin:0;padding-left:1.2em;color:#cfe3f3}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>Set up your watch</h1>
+<p class="hint" id="who">Your phone talks to the watch over Bluetooth, so your phone stays on its own Wi-Fi.</p>
+
+<div id="unsupported" class="card" hidden>
+  <strong>This browser can't use Bluetooth.</strong>
+  <p>On an Android phone, open this page in <strong>Chrome</strong>. On an iPhone, use the watch's other setup instead: tap the watch's screen and scan the new code.</p>
+</div>
+
+<div id="step1" class="card">
+  <ol class="steps">
+    <li>Keep the watch on its QR screen and turn Bluetooth on.</li>
+    <li>Tap the button, then pick your watch from the list (it is called <span id="devname">Neddy</span>).</li>
+  </ol>
+  <button class="big" id="find" type="button" style="margin-top:14px">Find my watch</button>
+</div>
+
+<div id="step2" hidden>
+  <p class="hint">Pick your home Wi-Fi. The watch works on 2.4 GHz Wi-Fi.</p>
+  <div id="list" role="list"></div>
+  <form id="f" autocomplete="off">
+    <label for="ssid">Network name</label>
+    <input id="ssid" type="text" required autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label for="pass">Password</label>
+    <input id="pass" type="password" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="check"><input id="show" type="checkbox"> Show password</label>
+    <button class="big" id="go" type="submit" style="margin-top:20px">Connect the watch</button>
+  </form>
+</div>
+<p id="msg" role="status" aria-live="polite"></p>
+</main>
+<script>
+// The watch's Bluetooth service (the same three numbers are in neddy_device.ino).
+var SERVICE='111f83b7-253c-4cfd-b6b6-fd7bbea9386e',
+    NETWORKS='050b61c0-03c6-4c9f-b99e-36ed8f21a8bf',
+    CREDENTIALS='0a64e3d3-8962-4e04-b0d4-fb91697267a0',
+    STATUS='8a419340-a280-4e28-b58d-509c475bbcfa';
+var $=function(i){return document.getElementById(i)};
+var params=new URLSearchParams((location.hash||'').replace(/^#/,''));
+var suffix=(params.get('n')||'').replace(/[^0-9A-Za-z]/g,'').slice(0,8), key=(params.get('k')||'').replace(/[^0-9]/g,'').slice(0,12);
+var server=null, credChar=null, statusChar=null, netChar=null, polling=null, finished=false;
+function say(t,c){var m=$('msg');m.textContent=t;m.className=c||''}
+if(suffix)$('devname').textContent='Neddy-'+suffix;
+if(!navigator.bluetooth){$('unsupported').hidden=false;$('step1').hidden=true}
+function text(dv){return new TextDecoder().decode(dv)}
+function bars(r){return r>-55?'strong':r>-70?'good':'weak'}
+function pick(n,b){
+  var all=$('list').children;for(var i=0;i<all.length;i++)all[i].setAttribute('aria-pressed','false');
+  b.setAttribute('aria-pressed','true');$('ssid').value=n.s;$('pass').focus();
+}
+function showNetworks(raw){
+  var l=$('list');l.textContent='';
+  var d={w:[]};try{d=JSON.parse(raw)}catch(e){}
+  (d.w||[]).forEach(function(w){
+    var n={s:w[0],r:w[1],o:w[2]};
+    var b=document.createElement('button');b.type='button';b.className='net';b.setAttribute('role','listitem');b.setAttribute('aria-pressed','false');
+    var a=document.createElement('span');a.textContent=n.s;
+    var s=document.createElement('small');s.textContent=(n.o?'open, ':'')+bars(n.r);
+    b.appendChild(a);b.appendChild(s);b.onclick=function(){pick(n,b)};l.appendChild(b);
+  });
+  if(!l.children.length)l.textContent='No networks found. Type the name below.';
+}
+function onDisconnected(){
+  if(finished)return;
+  clearInterval(polling);
+  say('The Bluetooth link to the watch ended. If your watch says Wi-Fi is set up, you are done. If not, scan its QR code again.','bad');
+  $('go').disabled=false;
+}
+$('find').onclick=function(){
+  say('Looking for your watch...');
+  var filter=suffix?{name:'Neddy-'+suffix}:{namePrefix:'Neddy-'};
+  navigator.bluetooth.requestDevice({filters:[filter],optionalServices:[SERVICE]}).then(function(dev){
+    dev.addEventListener('gattserverdisconnected',onDisconnected);
+    say('Connecting to '+(dev.name||'the watch')+'...');
+    return dev.gatt.connect();
+  }).then(function(s){server=s;return s.getPrimaryService(SERVICE)}).then(function(svc){
+    return Promise.all([svc.getCharacteristic(NETWORKS),svc.getCharacteristic(CREDENTIALS),svc.getCharacteristic(STATUS)]);
+  }).then(function(c){
+    netChar=c[0];credChar=c[1];statusChar=c[2];
+    return netChar.readValue();
+  }).then(function(v){
+    showNetworks(text(v));
+    $('step1').hidden=true;$('step2').hidden=false;say('');
+  }).catch(function(e){
+    var m=String(e&&e.message||e);
+    if(/cancel|chosen|NotFound/i.test(m))say('No watch was picked. Tap Find my watch and choose it from the list. Bluetooth and Location must be on.','bad');
+    else say('Could not reach the watch ('+m+'). Move closer, keep it on its QR screen and try again.','bad');
+  });
+};
+function writeChunks(bytes){
+  var i=0;
+  function next(){
+    if(i>=bytes.length)return Promise.resolve();
+    var part=bytes.slice(i,i+100);i+=100;
+    var w=credChar.writeValueWithResponse?credChar.writeValueWithResponse(part):credChar.writeValue(part);
+    return w.then(next);
+  }
+  return next();
+}
+function poll(){
+  statusChar.readValue().then(function(v){
+    var s=text(v);
+    if(s==='ok'){finished=true;clearInterval(polling);say('Done! Your watch is connected to '+$('ssid').value+'. You can close this page.','good');try{server.disconnect()}catch(e){}return}
+    if(s==='fail'){clearInterval(polling);$('go').disabled=false;say('The watch could not join that Wi-Fi. Check the password and try again.','bad');return}
+    if(s==='badkey'){clearInterval(polling);$('go').disabled=false;say('The watch did not accept this. Scan the QR code on the watch again and start over.','bad');return}
+    if(s==='trying')say('The watch is connecting to your Wi-Fi...');
+  }).catch(function(){});
+}
+$('f').onsubmit=function(e){
+  e.preventDefault();
+  var ssid=$('ssid').value,pass=$('pass').value;
+  if(/[\r\n]/.test(ssid)||/[\r\n]/.test(pass)){say('The name and password cannot contain a new line.','bad');return}
+  if(pass.length&&(pass.length<8||pass.length>63)){say('Wi-Fi passwords are 8 to 63 characters.','bad');return}
+  $('go').disabled=true;say('Sending to the watch...');
+  var bytes=new TextEncoder().encode(key+'\n'+ssid+'\n'+pass+'\n');
+  writeChunks(bytes).then(function(){
+    say('The watch is connecting to your Wi-Fi...');
+    clearInterval(polling);polling=setInterval(poll,800);poll();
+  }).catch(function(err){say('Could not send to the watch ('+String(err&&err.message||err)+'). Try again.','bad');$('go').disabled=false});
+};
+$('show').onchange=function(){$('pass').type=this.checked?'text':'password'};
+</script>
+</body>
+</html>

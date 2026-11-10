@@ -1100,7 +1100,7 @@ static void uiRecDraw() {
 }
 // ---- Wi-Fi setup screens. The sketch decides the stage (nothing here touches the radio). The first shows a QR code that makes a phone join
 // the watch's own temporary Wi-Fi; the second shows a QR code for the page where the person picks their home Wi-Fi.
-enum { UI_SETUP_JOIN = 1, UI_SETUP_PAGE, UI_SETUP_TRYING, UI_SETUP_DONE, UI_SETUP_FAIL };
+enum { UI_SETUP_JOIN = 1, UI_SETUP_PAGE, UI_SETUP_TRYING, UI_SETUP_DONE, UI_SETUP_FAIL, UI_SETUP_BLE, UI_SETUP_BLE_PHONE };
 static QrCode uiQr;
 // A QR code on a white card (readers need the white border all round), `scale` screen dots to a code dot, centred, top edge at y.
 // Returns the bottom edge of the card.
@@ -1132,6 +1132,16 @@ static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const
     uiTextCentered(NFONT_BODY, b + 12, "Scan with your camera", UI_TEAL);
     uiFit(fit, sizeof(fit), NFONT_SMALL, ssid ? ssid : "", 340);
     uiTextCentered(NFONT_SMALL, b + 56, fit, UI_GREY);
+    uiTextCentered(NFONT_SMALL, b + 80, "Tap the screen to use Bluetooth", UI_DIM);
+  } else if (stage == UI_SETUP_BLE) {                       // Bluetooth setup: the code opens a page in the phone's browser (Chrome on Android)
+    uiTextCentered(NFONT_TITLE, 8, "Set up Wi-Fi", UI_WHITE);
+    int b = uiDrawQr(qrText, 56, 8);
+    uiTextCentered(NFONT_SMALL, b + 6, "Scan with your phone's camera", UI_TEAL);
+    uiTextCentered(NFONT_SMALL, b + 28, "iPhone? Tap this screen", UI_DIM);
+  } else if (stage == UI_SETUP_BLE_PHONE) {
+    uiTextCentered(NFONT_TITLE, 140, "Connected", UI_TEAL);
+    uiTextCentered(NFONT_BODY, 210, "Now pick your Wi-Fi", UI_WHITE);
+    uiTextCentered(NFONT_MID, 256, "on your phone", UI_GREY);
   } else if (stage == UI_SETUP_PAGE) {
     uiTextCentered(NFONT_TITLE, 16, "Finish on your phone", UI_WHITE);
     int b = uiDrawQr(qrText, 74, 8);
