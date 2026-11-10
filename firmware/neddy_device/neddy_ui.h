@@ -330,7 +330,7 @@ static void uiRenderStage(const UiPose &p, int sx0, int sy0, int sw, int sh) {
 enum { UI_READY, UI_LISTEN, UI_THINK, UI_SPEAK, UI_LINK };
 
 static int uiMode = UI_LINK;
-static char uiWords[300], uiHeard[120], uiName[24] = "Neddy", uiDiag1[72], uiDiag2[72], uiIdleDbg[72];
+static char uiWords[300], uiHeard[120], uiName[24] = "Neddy", uiDiag1[72], uiDiag2[72], uiIdleDbg[72], uiImuDbg[48];
 static float uiLevel = 0;            // 0..1, how loud the person is (while listening)
 static bool uiShowDiag = false;      // the two small lines of numbers at the bottom
 static bool uiMotion = false;        // true: he moves all the time. false: still, except blinking.
@@ -388,6 +388,7 @@ struct UiIdle {
   char mt[32]; uint32_t ms, me;   // its title, start and end (UTC seconds)
   bool showB; int bat; bool chg;  // the battery level: shown, percent (-1 = no battery / unknown), charging
   int mv; bool vbus;              // battery millivolts (0 = not read) and whether USB power is present
+  bool raise;                     // raise-to-wake is on (the person's setting; the sketch reads the accelerometer only when it is)
 };
 static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false, 0, false };
 static uint8_t uiBatRaw[2] = { 0, 0 };   // the power chip's two status bytes, for the test line
@@ -1048,6 +1049,18 @@ static void uiRecEnd() {
   if (uiRec.dimmed && uiOut.brightness) uiOut.brightness(255);
   memset(&uiRec, 0, sizeof(uiRec)); uiAll = true;
 }
+// ---- raise-to-wake (the sketch reads the accelerometer and calls uiRaise when a wrist has been lifted; see neddy_raise.h).
+// It only brightens a screen that has dimmed (the idle face after a quiet minute, a recording screen after 20 s). It never turns on a
+// screen that was switched off from the menu (that was a choice), and it doesn't change what is on the screen: the clock stays the clock.
+static int uiRaises = 0;                                   // how many times it has fired (shown on the test line)
+static bool uiWantsRaise() { return !uiScreenOff && (uiDimmed || (uiRec.state == UI_RECS_RUN && uiRec.dimmed)); }
+static void uiRaise(uint32_t ms) {
+  if (uiScreenOff) return;
+  bool did = false;
+  if (uiDimmed) { uiDimmed = false; uiIdleSince = ms; did = true; }            // the idle face stays, bright, and its dimming wait starts again
+  if (uiRec.state == UI_RECS_RUN && uiRec.dimmed) { uiRec.dimmed = false; uiRec.lastTouch = ms; did = true; }
+  if (did) { uiRaises++; if (uiOut.brightness) uiOut.brightness(255); }
+}
 static void uiRecBar(int y, int pct, uint16_t col) {
   uiRoundPanel(60, y, 290, 22, 10, uiRgb(52, 74, 88), UI_BLACK);
   int w = ((286 * (pct < 0 ? 0 : pct > 100 ? 100 : pct)) / 100) & ~1;
@@ -1541,7 +1554,8 @@ static void uiDrawLevelOnly() {
 static void uiDrawDiag() {
   if (!uiShowDiag) return;
   uiOut.fill(0, 452, UI_W, 50, UI_BLACK);
-  if (uiDiag1[0]) uiTextCentered(NFONT_SMALL, 456, uiDiag1, UI_DIM);
+  const char *line1 = uiImuDbg[0] ? uiImuDbg : uiDiag1;      // the motion chip's reading (raise-to-wake test builds) takes the first line
+  if (line1[0]) uiTextCentered(NFONT_SMALL, 456, line1, UI_DIM);
   if (uiIdleDbg[0]) uiTextCentered(NFONT_SMALL, 474, uiIdleDbg, UI_DIM);
   else if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, 474, uiDiag2, UI_DIM);
 }

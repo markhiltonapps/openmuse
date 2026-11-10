@@ -89,6 +89,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     sb: 1,
     fps: 1,
     face: 0,
+    rw: 0,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -214,6 +215,51 @@ test("the home screen defaults to ten seconds and the battery can be hidden by v
   await db.close();
 });
 
+test("raise to wake is off until asked, and by voice it goes on and off and reaches the watch", async () => {
+  const db = await createStore();
+  const devices = new Devices(db);
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const [tool] = deviceToolSpecs(devices, "o");
+  assert.ok(tool);
+  const deps = {
+    timeZone: async () => "UTC",
+    weather: () => undefined,
+    calendar: async () => undefined,
+    now: () => 1_800_000_000_000,
+  };
+  const first = (await devices.list("o"))[0];
+  assert.ok(first);
+  assert.equal((await idleInfo(deps, "o", first)).rw, 0, "a watch that never asked has it off");
+  const asked = (await tool.execute({ do: "settings" })) as { message?: string };
+  assert.match(asked.message ?? "", /raise to wake is off/);
+  const on = (await tool.execute({ do: "settings", raise_to_wake: true })) as {
+    changed?: boolean;
+    message?: string;
+  };
+  assert.equal(on.changed, true);
+  assert.match(on.message ?? "", /raise to wake is on \(raising the wrist brightens the screen/);
+  const second = (await devices.list("o"))[0];
+  assert.ok(second);
+  assert.equal((await idleInfo(deps, "o", second)).rw, 1, "the watch is told it is on");
+  // With dimming off there is nothing to brighten, and the agent says so rather than promising a wake.
+  const noDim = (await tool.execute({ do: "settings", dim: false })) as { message?: string };
+  assert.match(noDim.message ?? "", /raise to wake is on, but the screen never dims/);
+  const off = (await tool.execute({ do: "settings", raise_to_wake: false })) as {
+    message?: string;
+  };
+  assert.match(off.message ?? "", /raise to wake is off/);
+  const third = (await devices.list("o"))[0];
+  assert.ok(third);
+  assert.equal((await idleInfo(deps, "o", third)).rw, 0);
+  // Turning the idle screen off still reports it.
+  const idleOff = (await tool.execute({ do: "settings", idle_after_seconds: 0 })) as {
+    message?: string;
+  };
+  assert.match(idleOff.message ?? "", /the idle screen is off; raise to wake is off/);
+  await db.close();
+});
+
 test("the chat changes a device's idle screen by what's said", async () => {
   const db = await createStore();
   const devices = new Devices(db);
@@ -246,6 +292,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     showBattery: true,
     animation: "normal",
     face: "info",
+    raiseToWake: false,
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.

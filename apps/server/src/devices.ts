@@ -24,6 +24,8 @@ export interface DeviceSettings {
   animation: "saver" | "normal" | "smooth";
   /** What the home screen looks like: info (clock, weather, next meeting), analog (a dial with hands) or neon (big glowing digits). */
   face: "info" | "analog" | "neon";
+  /** Raising the wrist brightens a screen that has dimmed (the watch reads its motion chip only while this is on). Off until the person asks for it. */
+  raiseToWake: boolean;
 }
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   idleAfter: 10,
@@ -33,6 +35,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   showBattery: true,
   animation: "normal",
   face: "info",
+  raiseToWake: false,
 };
 export const settingsOf = (device: Pick<Device, "settings">): DeviceSettings => ({
   ...DEFAULT_DEVICE_SETTINGS,
@@ -298,9 +301,14 @@ export function describeSettings(settings: DeviceSettings) {
     ...(settings.showMeeting ? ["the next meeting"] : []),
     ...(settings.showBattery ? ["the battery level"] : []),
   ];
+  const raise = settings.raiseToWake
+    ? settings.dim
+      ? "raise to wake is on (raising the wrist brightens the screen once it has dimmed)"
+      : "raise to wake is on, but the screen never dims, so there's nothing for it to brighten until dimming is on"
+    : "raise to wake is off";
   return settings.idleAfter === 0
-    ? "the idle screen is off"
-    : `after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? "dims after a minute" : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}`;
+    ? `the idle screen is off; ${raise}`
+    : `after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? "dims after a minute" : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}`;
 }
 
 /** The chat's one tool for devices: pair one with the code on its screen, list, rename or remove. */
@@ -345,7 +353,7 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen after a minute of quiet; there is no brightness level to set, so for “turn the screen down” use dim and say so), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen after a minute of quiet; there is no brightness level to set, so for “turn the screen down” use dim and say so), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
         do: z.enum(["pair", "list", "rename", "remove", "settings"]),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),
@@ -372,6 +380,12 @@ export function deviceToolSpecs(
           .describe(
             "settings: the watch face: info (clock, weather, next meeting), analog (a dial with hands) or neon (big glowing digits)",
           ),
+        raise_to_wake: z
+          .boolean()
+          .optional()
+          .describe(
+            "settings: raising the wrist brightens the screen once it has dimmed (needs dim on; off until they ask)",
+          ),
         animation: z
           .enum(["saver", "normal", "smooth"])
           .optional()
@@ -386,6 +400,7 @@ export function deviceToolSpecs(
         show_weather?: boolean;
         show_meeting?: boolean;
         show_battery?: boolean;
+        raise_to_wake?: boolean;
         animation?: "saver" | "normal" | "smooth";
         face?: "info" | "analog" | "neon";
         code?: string;
@@ -442,6 +457,7 @@ export function deviceToolSpecs(
               ...(input.show_battery !== undefined ? { showBattery: input.show_battery } : {}),
               ...(input.animation !== undefined ? { animation: input.animation } : {}),
               ...(input.face !== undefined ? { face: input.face } : {}),
+              ...(input.raise_to_wake !== undefined ? { raiseToWake: input.raise_to_wake } : {}),
             };
             if (!Object.keys(patch).length)
               return {

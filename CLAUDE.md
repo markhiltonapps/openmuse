@@ -744,4 +744,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   temporary-Wi-Fi setup. The page polls a status value instead of using notifications. `BLEDevice::deinit(true)` gives memory back for good until a restart, so only use it when setup is finished. Read BLE
   values with `auto v = c->getValue(); v.c_str(); v.length()` (a String or std::string by core version). The sandbox couldn't download the Arduino core (blocked), so BLE code is only syntax-checked against
   stand-ins: say so, and expect the owner's first compile to find call-shape differences.
-
+- **Everything on the watch is a toggle (owner, 2026-11-10):** a new watch feature gets a device setting (`DeviceSettings`, `manage_devices`, an idle fact the watch reads), is off or
+  on by an explicit choice, and says in the agent's reply when it can't do anything (raise-to-wake with dimming off). A feature that reads a sensor starts the sensor only while it is on.
+  Raise-to-wake (`neddy_raise.h`) works from a "turned away, then facing and still" rule so a watch lying face up never fires; its chip address, registers and axis are from the
+  datasheet and unverified until the owner's first run (`NEDDY_IDLE_DEBUG 1` shows the readings). The phone apps (iPhone and Android) will be needed before this goes public.

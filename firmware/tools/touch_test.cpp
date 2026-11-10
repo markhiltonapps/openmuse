@@ -148,6 +148,27 @@ int main() {
   uiTouch(now, true, 100, 100); frame(); now += 16; uiTouch(now, false, 100, 100); frame();
   CHECK(!uiIdleOn && !uiDimmed && level == 255, "a touch wakes it and restores the brightness");
 
+  // Raise-to-wake: a raised wrist brightens a dimmed idle face and keeps it (the clock stays), starts the dimming wait again,
+  // does nothing to a screen that is already bright, and never turns on a screen that was switched off from the menu.
+  for (int sec = 0; sec < 95; sec++) pause(1000);
+  CHECK(uiIdleOn && uiDimmed && level == UI_DIM_LEVEL, "(raise) the idle face is up and dimmed again");
+  CHECK(uiWantsRaise(), "a dimmed idle face wants a raise");
+  int raisesBefore = uiRaises;
+  uiRaise(now);
+  CHECK(!uiDimmed && uiIdleOn && level == 255 && uiRaises == raisesBefore + 1, "a raise brightens the dimmed idle face and the clock stays");
+  CHECK(!uiWantsRaise(), "a bright screen wants nothing");
+  level = 99; uiRaise(now);
+  CHECK(level == 99 && uiRaises == raisesBefore + 1, "a raise on a bright screen changes nothing");
+  for (int sec = 0; sec < 55; sec++) pause(1000);
+  CHECK(!uiDimmed, "still bright 55 s after a raise");
+  for (int sec = 0; sec < 10; sec++) pause(1000);
+  CHECK(uiDimmed && level == UI_DIM_LEVEL, "it dims again a minute after the raise");
+  uiScreenOff = true; level = 7;
+  CHECK(!uiWantsRaise(), "a screen switched off wants no raise");
+  uiRaise(now);
+  CHECK(uiScreenOff && level == 7, "a raise never turns on a screen that was switched off");
+  uiActivity(now); uiDimmed = false; uiIdleOn = false; pause(100);
+
   // The diagnostic lines change every second. They must never make the words blink (the whole text area redrawn), shown or not.
   uiOut.brightness = nullptr;
   uiIdle.have = false; uiIdleOn = false; uiClearCard(); uiSetMode(UI_READY); uiSetWords("Hold BOOT to talk"); pause(500);
@@ -273,6 +294,10 @@ int main() {
   recAsked = 0;
   finger(200, 390, 60);
   CHECK(!uiRec.dimmed && level == 255 && recAsked == 0, "the touch that wakes the screen only wakes it (it doesn't stop the recording)");
+  pause(21000);
+  CHECK(uiRec.dimmed && level == 40 && uiWantsRaise(), "(raise) the recording screen dims again and wants a raise");
+  recAsked = 0; uiRaise(now);
+  CHECK(!uiRec.dimmed && level == 255 && uiRec.state == UI_RECS_RUN && recAsked == 0, "a raise brightens the recording screen and the recording carries on");
   finger(200, 390, 60);
   CHECK(recAsked == UI_REC_STOP, "a tap on Stop asks to stop");
   recAsked = 0; finger(200, 150, 60);

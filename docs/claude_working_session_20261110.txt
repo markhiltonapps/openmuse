@@ -132,3 +132,32 @@ Built (tested on the computer only):
 NOT verified: any of the Bluetooth code against the real Arduino core (the sandbox may not download it: the toolchain fetch was blocked), so the first Arduino compile is the real test (BLE callback signatures and
   getValue()'s type differ between core versions; I used only forms that exist in both); Chrome's Bluetooth chooser on the owner's phone (Bluetooth and Location must be on); Bluetooth and Wi-Fi sharing the radio while joining.
 Not done: Help/site (watch not offered to testers), a menu entry to redo setup, pairing QR that opens the Muse app.
+
+=== Owner: "any of the things we build need to be toggleable"; phone apps will be needed; "do an easy one" ===
+Questions answered first (no changes): text notifications, raise-to-wake and step counting are all possible in principle. Notifications are the hard one (an Android phone needs a real
+phone app to pass its notifications on; today only Neddy's own email/calendar alerts could go to the watch); raise-to-wake and steps need the board's motion chip.
+Owner then asked for toggles on everything built, said the iPhone and Android apps will be needed later, and asked for an easy one first. Built RAISE-TO-WAKE (the easiest; needs no phone app). The phone apps are not started.
+Backup: nothing to back up beyond GitHub (the work was committed and pushed at 1a776af before this started; "git checkout 1a776af" restores it).
+
+What it does: when the watch's screen has DIMMED (the idle face after a quiet minute, or the recording screen after 20 s), raising the wrist brightens it again. It keeps what is on screen (the clock stays the clock),
+starts the one-minute dimming wait again, never turns on a screen that was switched off from the menu (that was a choice), and does nothing to a screen that is already bright.
+Toggle: setting `raiseToWake` on the device record, OFF by default (unverified on the real board, and a watch that never asked has it off). By voice or chat: "turn on / turn off raise to wake on my watch"
+(manage_devices settings raise_to_wake; also listed by "what are my watch's settings"). If dimming is off the agent says there is nothing for it to brighten. There is no tile on the watch's menu yet
+(new watch UI goes through the Design division first, and a toggle by voice is the owner's first choice); the app has no settings screen for devices yet, as before.
+Parts:
+  - firmware/neddy_device/neddy_raise.h: pure detector. "Turned away" (screen's share of gravity under 0.45 g for 300 ms: hanging, on its edge, face down) then "facing and still" (over 0.65 g, overall size
+    0.8-1.25 g, for 200 ms) = one raise; a watch lying face up on a desk never fires by itself; walking, shaking and a quick bump don't; one raise fires once, lower and lift fires again.
+    firmware/tools/raise_test.cpp: 14 checks on scripted movements.
+  - neddy_ui.h: uiWantsRaise()/uiRaise(); touch_test.cpp has 11 new checks (83 total) for them. ui_sim still prints "odd-aligned windows: 0"; rec_test 17 pass.
+  - neddy_device.ino: motion chip QMI8658 (I2C 0x6B, 0x6A as a fallback; ID 0x05 checked), accelerometer only (+-2 g, 125 Hz), started only while the setting is on and read ~30 times a second only while something is
+    dimmed; stopped again when the setting goes off. Byte order is settled by which reading adds up to ~1 g. The idle facts carry `rw` (1/0).
+  - Server: DeviceSettings.raiseToWake, tool parameter, describeSettings wording, idle fact `rw`; tests/device-idle.test.ts (a new test, 8 pass). Help topic "Pair a Neddy device" got a Raise to wake paragraph, an example
+    phrase (a draft, not sent) and keywords; the voice rules (apps/voice pipeline.py DEVICE_RULES) and voice-brain's watch text now name it so the agent hands it off rather than saying it can't.
+  - Fixed two lint errors from the earlier Bluetooth page commit (an a11y role and a var inside a function) in apps/mobile/public/watch-setup.html; ble_page_test still 17/17.
+Help picture: none taken. The change is a setting changed by voice and a screen that brightens, and the sandbox can't show the watch's screen. The site (neddy.html, pricing, compare) says nothing about the watch, so nothing to change there.
+NOT verified on the real board (a first run is the real test): the QMI8658's address and registers (from the datasheet, not tried), which axis points out of the screen and its sign (default z, +), and how it feels on a wrist.
+  How to check: set NEDDY_IDLE_DEBUG 1 in the sketch, turn it on by voice, and read the first line at the bottom: "imu 6B x y z r5/2" = the three axes in tenths of a g, raises seen, times the screen was brightened.
+  Lying face up on a table the axis out of the screen must read +10 (if -10: NEDDY_IMU_UP_SIGN -1; if another axis: NEDDY_IMU_UP_AXIS). "r" goes up each time a raise is seen (even on a bright screen).
+  To test the real thing: let the screen dim (idle face, a minute), let the arm hang or hold the watch on its edge for a second, then lift it as if checking the time.
+  The sketch was only syntax-checked against stand-in headers (the real Arduino core can't be downloaded here), so the first compile may find a call-shape difference.
+Pending: owner's first run; maybe default ON once it works; a menu tile; steps (same chip, needs the sleep/battery work in #43 to be worth it); notifications; the iPhone/Android apps (not started).

@@ -51,7 +51,7 @@ input[type=text],input[type=password]{display:block;width:100%;min-height:52px;m
 
 <div id="step2" hidden>
   <p class="hint">Pick your home Wi-Fi. The watch works on 2.4 GHz Wi-Fi.</p>
-  <div id="list" role="list"></div>
+  <div id="list"></div>
   <form id="f" autocomplete="off">
     <label for="ssid">Network name</label>
     <input id="ssid" type="text" required autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -79,7 +79,8 @@ if(!navigator.bluetooth){$('unsupported').hidden=false;$('step1').hidden=true}
 function text(dv){return new TextDecoder().decode(dv)}
 function bars(r){return r>-55?'strong':r>-70?'good':'weak'}
 function pick(n,b){
-  var all=$('list').children;for(var i=0;i<all.length;i++)all[i].setAttribute('aria-pressed','false');
+  var all=$('list').children,i;
+  for(i=0;i<all.length;i++)all[i].setAttribute('aria-pressed','false');
   b.setAttribute('aria-pressed','true');$('ssid').value=n.s;$('pass').focus();
 }
 function showNetworks(raw){
@@ -87,7 +88,7 @@ function showNetworks(raw){
   var d={w:[]};try{d=JSON.parse(raw)}catch(e){}
   (d.w||[]).forEach(function(w){
     var n={s:w[0],r:w[1],o:w[2]};
-    var b=document.createElement('button');b.type='button';b.className='net';b.setAttribute('role','listitem');b.setAttribute('aria-pressed','false');
+    var b=document.createElement('button');b.type='button';b.className='net';b.setAttribute('aria-pressed','false');
     var a=document.createElement('span');a.textContent=n.s;
     var s=document.createElement('small');s.textContent=(n.o?'open, ':'')+bars(n.r);
     b.appendChild(a);b.appendChild(s);b.onclick=function(){pick(n,b)};l.appendChild(b);

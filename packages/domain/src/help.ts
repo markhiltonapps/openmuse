@@ -357,6 +357,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "Right now this is early testing. The device software isn’t out yet, so you can only pair one if you’ve been given a test device.",
       "A device talks on {agent}’s own voice and uses your call minutes, like a call from your phone. It does what a call does: looks things up, sets reminders, reads things back. Anything that needs your OK shows its Approve card on your phone or in the app.",
+      "**Raise to wake** is optional and off until you ask for it. Say “turn on raise to wake on my watch” and, once the watch’s screen has dimmed, raising your wrist brightens it again, the way a normal watch does. It only brightens a screen that has already dimmed (so it needs dimming on, which it is by default), it leaves a screen you switched off from the menu alone, and it uses a little battery while it’s on. Say “turn off raise to wake” to turn it off again.",
       "Honest limits: it needs Wi-Fi. If you start a call on your phone, the device’s conversation ends (one at a time). After a quiet spell the next press takes a moment longer to start. You can pair up to five devices. The **Your devices** card shows only for the admin and for anyone who has already paired one; everyone else can say “pair my device” and read out the code.",
     ],
     say: [
@@ -364,8 +365,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       { text: "What devices do I have?", send: true },
       "Rename my device to Kitchen.",
       "Remove my desk device.",
+      "Turn on raise to wake on my watch.",
     ],
     keywords: [
+      "raise to wake",
+      "wrist",
+      "brighten",
       "device",
       "devices",
       "pair",

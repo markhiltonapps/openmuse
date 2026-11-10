@@ -64,6 +64,7 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 // ---------------------------------------------------------------- the screen (the drawing is in neddy_ui.h)
 #include "neddy_ui.h"
 #include "neddy_setup_page.h"
+#include "neddy_raise.h"
 
 // 1 = Neddy moves all the time (breathing, floating, glancing). 0 = still, except his eyes (and blinking).
 #ifndef NEDDY_MOTION
@@ -293,6 +294,108 @@ static void batteryLoop() {
   int cs = s2 & 0x07;
   bool charging = present && ((((s2 >> 5) & 0x03) == 0x01) || (cs >= 1 && cs <= 4));
   uiSetBattery(pct, charging, s1, s2, mv, vbus);
+}
+
+// ---------------------------------------------------------------- the motion chip, for raise-to-wake
+// The board has a QMI8658 (accelerometer + gyroscope) on the same I2C bus, normally at 0x6B. Only the accelerometer is used, and only while the
+// person has raise-to-wake turned on (the setting arrives with the idle facts; off, the chip is stopped). The registers below come from the chip's
+// datasheet and were NOT yet checked on the real board when this was written, so: the chip's ID is checked first, the byte order is checked against
+// gravity, and a test build (NEDDY_IDLE_DEBUG 1) shows what the chip reads on the first line at the bottom ("imu 6B x y z r5/2": the three axes
+// in tenths of a g, raises seen, times the screen was brightened). With the watch lying face up on a table the axis that points out of the screen must read +10;
+// if it reads -10 instead, set NEDDY_IMU_UP_SIGN to -1; if another axis reads 10, set NEDDY_IMU_UP_AXIS (0 = x, 1 = y, 2 = z). See neddy_raise.h for the rule.
+#ifndef NEDDY_IMU_UP_AXIS
+#define NEDDY_IMU_UP_AXIS 2
+#endif
+#ifndef NEDDY_IMU_UP_SIGN
+#define NEDDY_IMU_UP_SIGN 1
+#endif
+static uint8_t imuAddr = 0;
+static bool imuOn = false, imuBig = false;       // the chip is measuring; its bytes come high byte first
+static RaiseDetector raiseDet;
+
+static bool imuReadAt(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t n) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(addr, n) != n) return false;
+  for (uint8_t i = 0; i < n; i++) buf[i] = Wire.read();
+  return true;
+}
+static bool imuWrite(uint8_t reg, uint8_t val) {
+  Wire.beginTransmission(imuAddr);
+  Wire.write(reg);
+  Wire.write(val);
+  return Wire.endTransmission() == 0;
+}
+// Three axes in milli-g (1000 = 1 g). The chip counts 16384 per g in its +-2 g range. All zeros means it has no reading yet.
+static bool imuSample(int g[3], bool big) {
+  uint8_t b[6];
+  if (!imuReadAt(imuAddr, 0x35, b, 6)) return false;
+  if ((b[0] | b[1] | b[2] | b[3] | b[4] | b[5]) == 0) return false;
+  for (int i = 0; i < 3; i++) {
+    uint16_t raw = big ? (uint16_t)((b[2 * i] << 8) | b[2 * i + 1]) : (uint16_t)(b[2 * i] | (b[2 * i + 1] << 8));
+    g[i] = (int)((int16_t)raw) * 1000L / 16384;
+  }
+  return true;
+}
+// Finds the chip, sets the accelerometer going (+-2 g, 125 readings a second) and settles the byte order by which reading adds up to about 1 g.
+static bool imuStart() {
+  static const uint8_t addrs[2] = { 0x6B, 0x6A };
+  imuAddr = 0;
+  for (int i = 0; i < 2 && !imuAddr; i++) {
+    uint8_t id = 0;
+    if (imuReadAt(addrs[i], 0x00, &id, 1) && id == 0x05) imuAddr = addrs[i];   // WHO_AM_I
+  }
+  if (!imuAddr) return false;
+  imuWrite(0x60, 0xB0);   // reset
+  delay(30);
+  imuWrite(0x02, 0x40);   // CTRL1: step through the registers on a block read, low byte first
+  imuWrite(0x03, 0x06);   // CTRL2: accelerometer +-2 g, 125 readings a second
+  imuWrite(0x08, 0x01);   // CTRL7: accelerometer on, gyroscope off
+  long little = 0, bigger = 0; int got = 0;
+  for (int tries = 0; tries < 12 && got < 5; tries++) {
+    delay(12);
+    int a[3], b[3];
+    if (!imuSample(a, false) || !imuSample(b, true)) continue;
+    little += labs(raiseMag(a[0], a[1], a[2]) - 1000);
+    bigger += labs(raiseMag(b[0], b[1], b[2]) - 1000);
+    got++;
+  }
+  imuBig = got > 0 && bigger < little;
+  imuOn = true;
+  LOGF("[imu] QMI8658 at 0x%02X, %s byte order (off from 1 g: %ld vs %ld over %d looks)\n", imuAddr, imuBig ? "high-first" : "low-first", little, bigger, got);
+  return true;
+}
+// Called every turn of the loop. Reads the chip about 30 times a second, and only while something is dimmed (a bright screen has nothing to wake).
+static void raiseLoop() {
+  static uint32_t lastPoll = 0, retryAt = 0, lastNote = 0;
+  static bool wasNeeded = false;
+  static int seen = 0, g[3] = { 0, 0, 0 };
+  uint32_t now = millis();
+  if (!uiIdle.raise) {                                            // switched off: the chip stops measuring
+    if (imuOn) { imuWrite(0x08, 0x00); imuOn = false; wasNeeded = false; }
+    if (NEDDY_IDLE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "raise to wake: off");
+    return;
+  }
+  if (!imuOn) {
+    if (now < retryAt) return;
+    if (!imuStart()) {
+      retryAt = now + 30000UL;
+      if (NEDDY_IDLE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "motion chip: not found");
+      return;
+    }
+  }
+  if (!(uiWantsRaise() || NEDDY_IDLE_DEBUG != 0)) { wasNeeded = false; return; }
+  if (!wasNeeded) { raiseReset(raiseDet); wasNeeded = true; }
+  if (now - lastPoll < 33) return;
+  lastPoll = now;
+  if (!imuSample(g, imuBig)) return;
+  if (raiseFeed(raiseDet, now, g[NEDDY_IMU_UP_AXIS] * NEDDY_IMU_UP_SIGN, raiseMag(g[0], g[1], g[2]))) { seen++; uiRaise(now); }
+  if (NEDDY_IDLE_DEBUG && now - lastNote >= 400) {
+    lastNote = now;
+    snprintf(uiImuDbg, sizeof(uiImuDbg), "imu %02X %+d %+d %+d r%d/%d", imuAddr, g[0] / 100, g[1] / 100, g[2] / 100, seen, uiRaises);
+    uiDiagDirty = true;
+  }
 }
 
 static int jsonInt(const String &body, const char *key, int none) {
@@ -890,6 +993,7 @@ static void recFinish(const char *why) {
 static void recLoop() {
   touchLoop();
   pwrLoop();                                         // the PWR button stops the recording too (a second way, besides the Stop button)
+  raiseLoop();                                       // a dimmed recording screen brightens when the wrist is raised (if the person turned that on)
   if (recState != RS_REC) return;                    // Stop was just tapped
   static int16_t stereo[640];
   static int16_t mono[320];
@@ -1114,6 +1218,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showW = jsonInt(text, "sw", 1) != 0;
         uiIdle.showM = jsonInt(text, "sm", 1) != 0;
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
+        uiIdle.raise = jsonInt(text, "rw", 0) != 0;
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
@@ -1712,6 +1817,7 @@ void loop() {
   touchLoop();
   batteryLoop();
   pwrLoop();
+  raiseLoop();
   recTick();
   bool down = (buttonDown() || uiTouchTalk) && uiRec.state == UI_RECS_OFF;
   if (down && !held) {
