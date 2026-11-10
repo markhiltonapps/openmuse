@@ -1226,6 +1226,11 @@ static void uiDrawBatteryAt(int y) {
   const bool known = uiIdle.bat >= 0;
   const int pct = uiIdle.bat > 100 ? 100 : (uiIdle.bat < 0 ? 0 : uiIdle.bat);
   char t[40];
+  if (!known) {                                                  // no battery reading: say so plainly, with no empty battery drawn
+    snprintf(t, sizeof(t), uiIdle.vbus ? "Plugged in, no battery" : "No battery");
+    uiText(NFONT_MID, ((UI_W - uiTextWidth(NFONT_MID, t)) / 2) & ~1, y + (bh - NFONT_MID.h) / 2, t, UI_GREY);
+    return;
+  }
   if (known) {
     if (uiIdle.chg) snprintf(t, sizeof(t), "%d%% charging", pct);
     else if (uiIdle.vbus) snprintf(t, sizeof(t), "%d%% plugged in", pct);

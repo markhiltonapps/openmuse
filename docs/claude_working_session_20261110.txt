@@ -60,3 +60,10 @@ Owner on the real watch: Stop button did nothing, Watch face tile showed no chan
    so the reading was failing). The sketch now switches on the chip's battery/USB measuring and battery detection (regs 0x30, 0x68), reads volts (0x34/0x35), falls back to volts for percent,
    and detects charging from either charger bits. Unverified: tell me what the screen says (percent, charging, or "No battery xx xx").
  - Frame rate: Smooth measured 17 fps (draw 11 ms): the idle microphone read waits 20 ms every turn. It is now read every 120 ms (IDLE_MIC_EVERY_MS; 0 = old behaviour). Test line is off (NEDDY_IDLE_DEBUG 0).
+
+=== Second board test: no battery connected, upload fails ===
+Owner's photos: watch has NO battery (screen showed "No battery 20 15": USB power present, no battery, so the reading was right); a 1-minute recording waited on the watch and "Couldn't send it yet".
+Railway's request log shows NO request from the watch to /api/device/recording, so the upload failed on the watch before reaching the network. Likely cause: the leftover recording was sent
+while the watch's normal secure connection to Neddy (websocket) was still open; two TLS connections at once can run the chip out of memory. Fix: the connection to Neddy is closed before an
+upload and not restarted until it is done (recBeginSend, loop's `uploading`); the failure screen now shows the reason ("status -1, mem 41k" = what failed and the largest free memory block).
+Battery with no battery: now plain text, "Plugged in, no battery" (or "No battery"), no empty icon, no raw numbers. Real-board result still needed: does the upload now go through? Tell me what the failure screen says if not.

@@ -798,6 +798,7 @@ static void recShowSending(const char *small) {
   uiRecInfo(millis(), "Saved on the watch", big, small, recLastPct < 0 ? 0 : recLastPct, "");
 }
 static void recBeginSend() {
+  ws.disconnect(); wsUp = false; socketStarted = false;   // one secure connection at a time: the one to Neddy would use up the memory the upload needs
   recState = RS_SEND; recSent = 0; recStatusKnown = false; recFailures = 0; recNextTry = 0; recLastPct = 0;
   recShowSending("Sending to your phone...");
 }
@@ -875,13 +876,15 @@ static void recLoop() {
 
 // Sends the next piece. Called from the main loop while a recording is being sent; a piece takes under a few seconds.
 static WiFiClientSecure recClient;
-static void recSendFail(const char *why) {
+static void recSendFail(const char *why, int code = 0) {
   recFailures++;
-  LOGF("[rec] send problem: %s (%d)\n", why, recFailures);
+  LOGF("[rec] send problem: %s %d (%d)\n", why, code, recFailures);
   recNextTry = millis() + 2000UL * recFailures;
   if (recFailures >= 3) {
     recState = RS_FAIL; recAutoAt = millis() + 600000UL;
-    uiRecInfo(millis(), "Couldn't send it yet", "", "It's safe on the watch.", -1, "Try again");
+    char reason[48];
+    snprintf(reason, sizeof(reason), "%s %d, mem %uk", why, code, (unsigned)(ESP.getMaxAllocHeap() / 1024));   // what went wrong, readable in a photo
+    uiRecInfo(millis(), "Couldn't send (it's safe)", "", reason, -1, "Try again");
   }
 }
 static void recSendStep() {
@@ -898,7 +901,7 @@ static void recSendStep() {
     int code = http.GET();
     String body = code > 0 ? http.getString() : String("");
     http.end();
-    if (code != 200) { recSendFail("status"); return; }
+    if (code != 200) { recSendFail("status", code); return; }
     if (body.indexOf("\"done\":true") >= 0) { recSent = recFound.bytes; }
     else { int r = jsonInt(body, "received", 0); recSent = (uint32_t)r > recFound.bytes ? 0 : (uint32_t)r; }
     recStatusKnown = true;
@@ -927,7 +930,7 @@ static void recSendStep() {
     if (code != 200) {
       LOGF("[rec] PUT answered %d: %s\n", code, body.c_str());
       if (code >= 400 && code < 500 && code != 408 && code != 429) recFailures = 2;   // the server refused it: one more turn and it stops trying
-      recSendFail(code < 0 ? "no answer" : "refused");
+      recSendFail(code < 0 ? "no answer" : "refused", code);
       return;
     }
     if (body.indexOf("needFrom") >= 0) { recSent = (uint32_t)jsonInt(body, "needFrom", 0); recFailures = 0; return; }
@@ -1283,13 +1286,14 @@ void loop() {
   }
 
   // 3. The connection to Neddy
-  if (!socketStarted) {
+  const bool uploading = recState == RS_SEND;                    // the upload gets the memory to itself: no connection to Neddy until it is done
+  if (!socketStarted && !uploading) {
     setMode(M_LINK);
     startSocket();
     socketStarted = true;
   }
   unsigned long wsAt = millis();
-  ws.loop();
+  if (socketStarted) ws.loop();
   if (millis() - wsAt > maxWs) maxWs = millis() - wsAt;
 
   // A key that doesn't work any more (removed in the app): the connection never opens.
