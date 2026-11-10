@@ -69,9 +69,9 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #define NEDDY_DIAG 0
 #endif
 
-// 1 = show a line of idle-face numbers at the bottom (test builds only; on in this build to read the frames a second: f = frames drawn last second, r = ms to draw one).
+// 1 = show a line of idle-face numbers at the bottom (test builds only: f = frames drawn last second, r = ms to draw one; it is small and hard to read, so it is off now).
 #ifndef NEDDY_IDLE_DEBUG
-#define NEDDY_IDLE_DEBUG 1
+#define NEDDY_IDLE_DEBUG 0
 #endif
 
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
@@ -206,6 +206,8 @@ static bool pmuByte(uint8_t reg, uint8_t &value) {
   return true;
 }
 // The PWR side button (GPIO10, high while pressed): a short press opens or closes the menu. Holding it about 6 seconds still powers the board off.
+// Between presses the microphone is read only this often (ms); 0 = every turn of the loop, as before.
+#define IDLE_MIC_EVERY_MS 120
 static void recPwr();   // (in the recorder section below)
 static void pwrLoop() {
   static bool was = false;
@@ -222,17 +224,45 @@ static void pwrLoop() {
   }
 }
 
+static void pmuWrite(uint8_t reg, uint8_t value) {
+  Wire.beginTransmission(0x34);
+  Wire.write(reg);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+// Reads the power chip (AXP2101) every 30 s (the first two looks come sooner): percent, charging, USB, battery volts. Without a battery
+// reading the watch says so on screen, with the two raw status bytes, so a wrong register shows up at once.
 static void batteryLoop() {
   static uint32_t last = 0;
+  static int looks = 0;
+  static bool adcOn = false;
   uint32_t now = millis();
-  if (last != 0 && now - last < 30000UL) return;
-  if (last == 0 && now < 3000UL) return;   // the first look comes a moment after start
+  if (now < 3000UL) return;
+  if (last != 0 && now - last < (looks < 3 ? 5000UL : 30000UL)) return;
   last = now;
-  uint8_t s1 = 0, s2 = 0, pct = 0;
+  uint8_t v = 0;
+  if (!adcOn) {                                          // switch on the chip's battery and USB voltage measuring, and battery detection
+    if (pmuByte(0x30, v)) pmuWrite(0x30, v | 0x05);
+    if (pmuByte(0x68, v)) pmuWrite(0x68, v | 0x01);
+    adcOn = true;
+    return;
+  }
+  uint8_t s1 = 0, s2 = 0, hi = 0, lo = 0, gauge = 0;
   if (!pmuByte(0x00, s1) || !pmuByte(0x01, s2)) return;
-  bool present = (s1 & 0x08) != 0;
-  if (present && !pmuByte(0xA4, pct)) return;
-  uiSetBattery(present ? (int)pct : -1, present && ((s2 >> 5) & 0x03) == 0x01, s1, s2);
+  looks++;
+  bool vbus = (s1 & 0x20) != 0;
+  int mv = 0;
+  if (pmuByte(0x34, hi) && pmuByte(0x35, lo)) mv = ((hi & 0x3F) << 8) | lo;
+  bool present = (s1 & 0x08) != 0 || (mv >= 2800 && mv <= 4600);
+  int pct = -1;
+  if (present) {
+    if (pmuByte(0xA4, gauge) && gauge > 0 && gauge <= 100) pct = gauge;
+    else if (mv >= 2800) pct = (mv - 3300) * 100 / 900 < 0 ? 0 : ((mv - 3300) * 100 / 900 > 100 ? 100 : (mv - 3300) * 100 / 900);
+    else pct = 0;
+  }
+  int cs = s2 & 0x07;
+  bool charging = present && ((((s2 >> 5) & 0x03) == 0x01) || (cs >= 1 && cs <= 4));
+  uiSetBattery(pct, charging, s1, s2, mv, vbus);
 }
 
 static int jsonInt(const String &body, const char *key, int none) {
@@ -596,6 +626,8 @@ static void touchLoop() {
   int x = 0, y = 0;
   int r = touchRead(&x, &y);
   if (r < 0) return;  // a read that failed changes nothing
+  static int lastX = 0, lastY = 0;
+  if (r == 1) { lastX = x; lastY = y; } else { x = lastX; y = lastY; }   // a lifted finger has no position: hand over where it last was
   uiTouch(millis(), r == 1, x, y);
   if (TOUCH_TRAIL) {
     if (r == 1) {
@@ -814,6 +846,7 @@ static void recFinish(const char *why) {
 // One turn of the recorder (replaces the rest of the main loop while it records).
 static void recLoop() {
   touchLoop();
+  pwrLoop();                                         // the PWR button stops the recording too (a second way, besides the Stop button)
   if (recState != RS_REC) return;                    // Stop was just tapped
   static int16_t stereo[640];
   static int16_t mono[320];
@@ -922,7 +955,7 @@ static void recAction(int what) {
   else if (what == UI_REC_OK) { uiRecEnd(); if (recState != RS_SEND) recState = RS_IDLE; }
   else if (what == UI_REC_RETRY) { if (recPending()) recBeginSend(); }
 }
-static void recPwr() { if (recState != RS_REC && recState != RS_SEND) recAction(UI_REC_OK); }
+static void recPwr() { if (recState == RS_REC) recAction(UI_REC_STOP); else if (recState != RS_SEND) recAction(UI_REC_OK); }   // while recording the PWR button stops it
 // Called each turn of the main loop (not while recording): carries on with a send, and starts one for a recording left behind.
 static void recTick() {
   if (!recPart) return;
@@ -1300,9 +1333,14 @@ void loop() {
     if (!down || millis() - pressStart > (unsigned long)MAX_TALK_SECONDS * 1000UL) stopTalking();
     else sendMicChunk();
   } else if (wsUp) {
-    unsigned long idleAt = millis();
-    idleMic();
-    if (millis() - idleAt > maxIdle) maxIdle = millis() - idleAt;
+    // The microphone only needs emptying now and then between presses (each read waits 20 ms, which held the animation at about 17 frames a second).
+    static unsigned long lastIdleRead = 0;
+    if (IDLE_MIC_EVERY_MS == 0 || millis() - lastIdleRead >= IDLE_MIC_EVERY_MS) {
+      lastIdleRead = millis();
+      unsigned long idleAt = millis();
+      idleMic();
+      if (millis() - idleAt > maxIdle) maxIdle = millis() - idleAt;
+    }
   }
 
   // Neddy's screen: draws only what changed (and the moving parts if motion is on).

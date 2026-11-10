@@ -49,3 +49,14 @@ NOT verified on the real board (do these first): PWR short press opens the menu;
 Honest limits: nonstop speech tops out at about 1 h 50 on the watch's own storage (meetings with pauses go longer); microSD extension not built; 2 h nonstop would need a smaller codec.
 Help/site: the watch isn't offered to testers yet, so Help and the website are not changed (per the standing rule this is the one deliberate exception; say so when testers get it).
 Round board (1.75C, 466x466, 16 MB flash probably): needs its own partitions.csv (smaller rec), CST9217 touch, other I2S pins: not started.
+
+=== First real-board test (owner's report) and fixes ===
+Owner on the real watch: Stop button did nothing, Watch face tile showed no change, battery unreadable/no charging sign, test line too small to read. Fixes (not yet re-tested on the board):
+ - Stop/OK didn't work: the touch chip reports NO position once the finger is up and the sketch passed (0,0); the recorder screen compared that with the press position, so no tap
+   was ever a tap. Now the screen remembers the last position and the sketch hands over the last position too. The PC test now lifts fingers at (0,0) like the board (it failed 2 checks, then passed).
+   Second way to stop: the PWR button (the screen says so).
+ - Watch face tile: it did change the face, but the menu stayed open and the idle face only returns after 10 quiet seconds, so nothing seemed to happen. Now the menu closes and the new face shows at once.
+ - Battery: big (64x32 outline, 28 px text), colour by level, bolt + "charging" / "plugged in", red at 15%, and "No battery 00 01" with the raw status bytes when the chip can't be read (it showed nothing before,
+   so the reading was failing). The sketch now switches on the chip's battery/USB measuring and battery detection (regs 0x30, 0x68), reads volts (0x34/0x35), falls back to volts for percent,
+   and detects charging from either charger bits. Unverified: tell me what the screen says (percent, charging, or "No battery xx xx").
+ - Frame rate: Smooth measured 17 fps (draw 11 ms): the idle microphone read waits 20 ms every turn. It is now read every 120 ms (IDLE_MIC_EVERY_MS; 0 = old behaviour). Test line is off (NEDDY_IDLE_DEBUG 0).

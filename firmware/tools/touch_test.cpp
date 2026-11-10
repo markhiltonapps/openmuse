@@ -27,7 +27,7 @@ static void finger(int x, int y, uint32_t ms, int x2 = -1, int y2 = -1) {
     int cx = x + (x2 - x) * (int)i / (int)steps, cy = y + (y2 - y) * (int)i / (int)steps;
     uiTouch(now, true, cx, cy); frame(); now += 16;
   }
-  uiTouch(now, false, x2, y2); frame(); now += 16;
+  uiTouch(now, false, 0, 0); frame(); now += 16;   // the touch chip gives no position once the finger is up (the sketch passes 0,0)
 }
 static void pause(uint32_t ms) { for (uint32_t i = 0; i < ms / 16; i++) { uiTouch(now, false, 0, 0); frame(); now += 16; } }
 
@@ -211,11 +211,13 @@ int main() {
   CHECK(uiCard.on, "the menu is still there at 14 s");
   pause(1500);
   CHECK(!uiCard.on, "and goes after 15 s of quiet");
-  // The Watch face tile goes info -> analog -> neon -> info and tells the server each time.
+  // The Watch face tile goes info -> analog -> neon -> info and tells the server each time; the menu closes and the new face is on screen at once.
+  uiIdle.have = true; uiIdle.after = 10; uiIdle.baseUtc = 1800000000; uiIdle.baseMs = now; uiSetMode(UI_READY);
   uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_FACE), &tx, &ty);
   finger(tx + 88, ty + 74, 60);
   CHECK(uiFace == 1 && setKey == UI_SET_FACE && setVal == 1, "tapping Watch face goes info -> analog");
-  finger(tx + 88, ty + 74, 60); finger(tx + 88, ty + 74, 60);
+  CHECK(!uiCard.on && uiIdleOn, "the menu closes and the new face shows straight away");
+  for (int i = 0; i < 2; i++) { uiMenuOpen(now); finger(tx + 88, ty + 74, 60); }
   CHECK(uiFace == 0 && setVal == 0, "and round again to info");
   uiClearCard();
   uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_SCREEN_OFF), &tx, &ty);

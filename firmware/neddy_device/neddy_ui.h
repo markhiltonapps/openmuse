@@ -385,9 +385,10 @@ struct UiIdle {
   bool haveW; int wt, wi, wh, wl; char ws[32];
   bool mc, haveM;                 // the calendar was read / there is a next meeting
   char mt[32]; uint32_t ms, me;   // its title, start and end (UTC seconds)
-  bool showB; int bat; bool chg;  // the small battery level: shown, percent (-1 = no battery / unknown), charging
+  bool showB; int bat; bool chg;  // the battery level: shown, percent (-1 = no battery / unknown), charging
+  int mv; bool vbus;              // battery millivolts (0 = not read) and whether USB power is present
 };
-static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false };
+static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false, 0, false };
 static uint8_t uiBatRaw[2] = { 0, 0 };   // the power chip's two status bytes, for the test line
 static bool uiIdleOn = false, uiDimmed = false;
 static uint32_t uiLastActive = 0, uiIdleSince = 0;
@@ -395,9 +396,9 @@ static int uiIdleMinute = -1;
 // How long a card stays: as long as the idle wait (10 s by default, never under 10), so the face comes back right after it; a minute when the idle face is off.
 static uint32_t uiCardMs() { if (uiCard.on && uiCard.kind == UI_CARD_MENU) return 15000UL; return (uiIdle.have && uiIdle.after > 0) ? (uint32_t)(uiIdle.after < 10 ? 10 : uiIdle.after) * 1000UL : (uint32_t)UI_CARD_MS; }
 // The battery level, read by the sketch every so often; the face redraws when it changes.
-static void uiSetBattery(int pct, bool charging, uint8_t s1, uint8_t s2) {
-  if (pct != uiIdle.bat || charging != uiIdle.chg) uiIdleMinute = -1;
-  uiIdle.bat = pct; uiIdle.chg = charging; uiBatRaw[0] = s1; uiBatRaw[1] = s2;
+static void uiSetBattery(int pct, bool charging, uint8_t s1, uint8_t s2, int mv = 0, bool vbus = false) {
+  if (pct != uiIdle.bat || charging != uiIdle.chg || vbus != uiIdle.vbus) uiIdleMinute = -1;
+  uiIdle.bat = pct; uiIdle.chg = charging; uiBatRaw[0] = s1; uiBatRaw[1] = s2; uiIdle.mv = mv; uiIdle.vbus = vbus;
 }
 #define UI_IDLE_DIM_MS 60000
 #define UI_DIM_LEVEL 40
@@ -960,6 +961,10 @@ static void uiMenuTap(uint32_t ms, int px, int py) {
   } else if (uiMenuIds[i] == UI_MENU_FACE) {
     uiFace = (uiFace + 1) % 3;
     if (uiOut.setting) uiOut.setting(UI_SET_FACE, uiFace);
+    uiClearCard();                                                  // close the menu and show the new face at once (not after ten quiet seconds)
+    if (uiIdle.have && uiIdle.after > 0 && uiMode == UI_READY) {
+      uiIdleOn = true; uiIdleSince = ms; uiDimmed = false; uiIdleMinute = -1; uiWords[0] = 0; uiHeard[0] = 0;
+    }
     uiAll = true;
   } else if (uiMenuIds[i] == UI_MENU_ANIM) {
     uiFpsLevel = (uiFpsLevel + 1) % 3;
@@ -1058,7 +1063,7 @@ static void uiRecDraw() {
       uiText(NFONT_MID, 70, 22, "REC", red);
       uiRoundPanel(96, 340, 218, 100, 26, red, dark);
       uiBg = dark; uiTextCentered(NFONT_TITLE, 340 + (100 - NFONT_TITLE.h) / 2, "Stop", UI_WHITE); uiBg = UI_BLACK;
-      uiTextCentered(NFONT_SMALL, 462, "The screen dims to save battery", UI_DIM);
+      uiTextCentered(NFONT_SMALL, 462, "Tap Stop, or press the PWR button", UI_DIM);
     }
     uiRing(42, 36, 14, 14, (uiRec.elapsed & 1) ? uiRgb(120, 40, 36) : red);          // the mark blinks each second
     char t[16]; uiRecTime(t, sizeof(t), uiRec.elapsed);
@@ -1088,13 +1093,14 @@ static void uiRecDraw() {
 }
 // A finger on a recording screen: any touch wakes it; a tap on the big button does what it says.
 static void uiRecTouch(uint32_t ms, bool down, int x, int y) {
-  static bool was = false; static int x0 = 0, y0 = 0; static uint32_t at = 0;
+  static bool was = false; static int x0 = 0, y0 = 0, lx = 0, ly = 0; static uint32_t at = 0;
+  if (down) { lx = x; ly = y; }                                     // a lifted finger has no position: use where it last was
   if (down && !was) {
     x0 = x; y0 = y; at = ms; uiRec.lastTouch = ms;
     uiRec.ignoreTouch = uiRec.dimmed;                               // the touch that wakes the screen only wakes it
     if (uiRec.dimmed) { uiRec.dimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
   } else if (!down && was) {
-    int dx = x - x0, dy = y - y0; if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
+    int dx = lx - x0, dy = ly - y0; if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
     if (!uiRec.ignoreTouch && dx < UI_SLOP && dy < UI_SLOP && ms - at < UI_TAP_MS && uiOut.record) {
       if (uiRec.state == UI_RECS_RUN && x0 >= 72 && x0 < 338 && y0 >= 324 && y0 < 456) uiOut.record(UI_REC_STOP);
       else if (uiRec.state == UI_RECS_INFO && uiRec.button[0] && x0 >= 72 && x0 < 338 && y0 >= 364 && y0 < 486) uiOut.record(UI_REC_OK);
@@ -1206,28 +1212,45 @@ static void uiRenderIconSmall(int icon, uint16_t bg, int size) {
   }
 }
 
-// A small battery level under the idle face: an outline with its fill, the percent, and "charging" while it charges.
+// The battery, big enough to read at a glance: an outline with its fill, the percent in a readable size, a bolt and the word "charging"
+// while it charges. When the chip can't be read it says so (with the two raw status bytes), never nothing.
+static void uiDrawBolt(int cx, int cy, uint16_t col) {          // a lightning bolt, 20 high, from rows two dots tall
+  static const int8_t bx[10] = { 4, 2, 0, -2, -6, 2, 0, -2, -4, -6 };
+  static const int8_t bw[10] = { 8, 8, 8, 8, 16, 8, 8, 6, 4, 2 };
+  for (int i = 0; i < 10; i++) uiOut.fill((cx + bx[i]) & ~1, (cy - 10 + i * 2) & ~1, bw[i], 2, col);
+}
 static void uiDrawBatteryAt(int y) {
-  if (!uiIdle.showB || uiIdle.bat < 0) return;
-  int pct = uiIdle.bat > 100 ? 100 : uiIdle.bat;
-  char t[24];
-  if (uiIdle.chg) snprintf(t, sizeof(t), "%d%% charging", pct); else snprintf(t, sizeof(t), "%d%%", pct);
-  uint16_t col = uiIdle.chg ? UI_TEAL : (pct <= 15 ? UI_AMBER : UI_GREY);
-  const int bw = 30, bh = 14;
-  int tw = uiTextWidth(NFONT_SMALL, t);
-  int x = ((UI_W - (bw + 2 + 8 + tw)) / 2) & ~1;
+  if (!uiIdle.showB) return;
   y &= ~1;
-  int iy = (y + (NFONT_SMALL.h - bh) / 2) & ~1;
-  uiOut.fill(x, iy, bw, bh, col);
-  uiOut.fill(x + 2, iy + 2, bw - 4, bh - 4, UI_BLACK);
-  uiOut.fill(x + bw, iy + 4, 2, 6, col);
-  int fw = (((bw - 8) * pct) / 100) & ~1;
-  if (fw < 2 && pct > 0) fw = 2;
-  if (fw > 0) uiOut.fill(x + 4, iy + 4, fw, bh - 8, col);
-  uiText(NFONT_SMALL, x + bw + 2 + 8, y, t, col);
+  const int bw = 64, bh = 32;
+  const bool known = uiIdle.bat >= 0;
+  const int pct = uiIdle.bat > 100 ? 100 : (uiIdle.bat < 0 ? 0 : uiIdle.bat);
+  char t[40];
+  if (known) {
+    if (uiIdle.chg) snprintf(t, sizeof(t), "%d%% charging", pct);
+    else if (uiIdle.vbus) snprintf(t, sizeof(t), "%d%% plugged in", pct);
+    else snprintf(t, sizeof(t), "%d%%", pct);
+    if (uiTextWidth(NFONT_MID, t) + bw + 22 > 370) snprintf(t, sizeof(t), "%d%%", pct);
+  } else {
+    snprintf(t, sizeof(t), "No battery %02x %02x", uiBatRaw[0], uiBatRaw[1]);
+  }
+  const uint16_t green = uiRgb(96, 214, 140), red = uiRgb(255, 84, 72);
+  uint16_t col = uiIdle.chg ? UI_TEAL : (pct <= 15 ? red : (pct <= 30 ? UI_AMBER : green));
+  if (!known) col = UI_DIM;
+  int tw = uiTextWidth(NFONT_MID, t);
+  int x = ((UI_W - (bw + 4 + 14 + tw)) / 2) & ~1;
+  uiOut.fill(x, y, bw, bh, known ? UI_WHITE : UI_DIM);                       // the outline
+  uiOut.fill(x + 4, y + 4, bw - 8, bh - 8, UI_BLACK);
+  uiOut.fill(x + bw, y + 10, 4, 12, known ? UI_WHITE : UI_DIM);              // the little knob on the end
+  int fw = (((bw - 12) * pct) / 100) & ~1;
+  if (known && fw < 2 && pct > 0) fw = 2;
+  if (known && fw > 0) uiOut.fill(x + 6, y + 6, fw, bh - 12, col);
+  if (known && uiIdle.chg) uiDrawBolt(x + bw / 2, y + bh / 2, pct >= 50 ? UI_BLACK : UI_WHITE);
+  if (!known) uiText(NFONT_MID, x + bw / 2 - 6, y + 2, "?", UI_DIM);
+  uiText(NFONT_MID, x + bw + 4 + 14, y + (bh - NFONT_MID.h) / 2, t, (uiIdle.chg || pct <= 30 || !known) ? col : UI_WHITE);
 }
 
-static void uiDrawBattery(int bottom) { uiDrawBatteryAt(bottom - NFONT_SMALL.h - 2); }
+static void uiDrawBattery(int bottom) { uiDrawBatteryAt(bottom - 34); }
 
 // A thick line made of even-aligned squares (the screen wants even windows).
 static void uiThickLine(float x0, float y0, float x1, float y1, int th, uint16_t col) {
@@ -1261,7 +1284,7 @@ static void uiDrawAnalog(int top, int bottom, int h, int mi, int wd, int Mo, int
   uiThickLine(cx, cy, cx + R * 0.52f * cosf(ah * 0.0174533f), cy + R * 0.52f * sinf(ah * 0.0174533f), 10, UI_WHITE);
   uiThickLine(cx, cy, cx + R * 0.80f * cosf(am * 0.0174533f), cy + R * 0.80f * sinf(am * 0.0174533f), 6, UI_WHITE);
   uiOut.fill(((int)cx - 8) & ~1, ((int)cy - 8) & ~1, 16, 16, uiRgb(255, 120, 40));
-  uiDrawBatteryAt((int)(cy + R * 0.62f));
+  uiDrawBatteryAt((int)(cy + R * 0.50f));
 }
 
 // Face 2: neon digits, seven glowing segments each; the unlit ones stay faintly visible.
