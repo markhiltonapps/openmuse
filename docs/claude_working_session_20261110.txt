@@ -67,3 +67,7 @@ Railway's request log shows NO request from the watch to /api/device/recording, 
 while the watch's normal secure connection to Neddy (websocket) was still open; two TLS connections at once can run the chip out of memory. Fix: the connection to Neddy is closed before an
 upload and not restarted until it is done (recBeginSend, loop's `uploading`); the failure screen now shows the reason ("status -1, mem 41k" = what failed and the largest free memory block).
 Battery with no battery: now plain text, "Plugged in, no battery" (or "No battery"), no empty icon, no raw numbers. Real-board result still needed: does the upload now go through? Tell me what the failure screen says if not.
+
+=== Owner confirmed on the real watch: "It works" (after the build with the upload fix) ===
+Recording on the watch is now confirmed working end to end (record, stop, upload, Muse app), per the owner. Still unconfirmed in detail: battery with a real battery connected, fps after the microphone change,
+look-up animation, analog/neon faces' look on the board, 2-hour-class recordings, silence threshold in a noisy room.

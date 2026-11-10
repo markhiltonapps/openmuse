@@ -732,4 +732,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   press never saw a tap; the PC test had lifted fingers at the last position, so it passed. Make test helpers mimic what the board really sends, and give anything essential a second way (PWR stops
   a recording). A setting changed from a menu must show its result at once (the face tile now closes the menu and shows the face), or it looks broken. Never draw a status (battery) as nothing when it can't be
   read: say so on screen with the raw numbers.
+- **One secure connection at a time on the watch (2026-11-10):** the recording upload failed silently (the server saw no request at all) while the watch's websocket to Neddy was still open: two TLS
+  connections didn't fit in the chip's memory. The upload now closes the Neddy connection first and reopens it after. When something on a device fails before reaching the server, check Railway's request
+  log first (no request = the device never got through), and show the failure's reason on the device's own screen.
 
