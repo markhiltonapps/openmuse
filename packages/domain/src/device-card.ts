@@ -63,7 +63,17 @@ export interface ListDeviceCard {
   title: string;
   rows: { label: string; value?: string }[];
 }
-export type DeviceCard = WeatherDeviceCard | ScoreDeviceCard | FactDeviceCard | ListDeviceCard;
+/** Not a card: while a look-up is running the watch shows Neddy reading his book (on), and stops when it is done (off). */
+export interface LookupDeviceCard {
+  kind: "lookup";
+  on: boolean;
+}
+export type DeviceCard =
+  | WeatherDeviceCard
+  | ScoreDeviceCard
+  | FactDeviceCard
+  | ListDeviceCard
+  | LookupDeviceCard;
 
 /** The weather picture for an emoji (the server picks emoji by day or night). */
 export function weatherIconFor(emoji: string): WeatherIcon {
@@ -220,6 +230,7 @@ export function buildDeviceCard(args: unknown): { card: DeviceCard } | { error: 
  * JSON library), so a list's rows are l0/v0 … l4/v4 and a score's sides are an/as and hn/hs.
  */
 export function deviceWire(card: DeviceCard): Record<string, unknown> {
+  if (card.kind === "lookup") return { kind: "lookup", on: card.on ? 1 : 0 };
   if (card.kind === "score")
     return {
       kind: "score",

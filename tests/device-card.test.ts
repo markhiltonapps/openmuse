@@ -164,9 +164,12 @@ test("on a device call the weather look-up sends its card; on other calls nothin
   const cards: DeviceCard[] = [];
   const said = await voiceAnswer(brain)({ ...base, device: true, card: (c) => cards.push(c) });
   assert.equal(said, "It's 72 and partly cloudy.");
-  assert.equal(cards.length, 1);
-  assert.equal(cards[0]?.kind, "weather");
-  const first = cards[0];
+  // The watch is told a look-up started (Neddy reads his book), gets the weather card, and is told it ended.
+  assert.deepEqual(
+    cards.map((c) => (c.kind === "lookup" ? `lookup ${c.on ? "on" : "off"}` : c.kind)),
+    ["lookup on", "weather", "lookup off"],
+  );
+  const first = cards.find((c) => c.kind === "weather");
   if (first?.kind !== "weather") throw new Error("not a weather card");
   assert.equal(first.temp, 72);
   assert.equal(first.place, "Houston");
@@ -341,4 +344,9 @@ test("show_on_watch makes the card only for good facts, and the call sends it to
   assert.equal(cards.length, 1);
   assert.equal(cards[0]?.kind, "fact");
   await db.close();
+});
+
+test("the look-up signal goes to the watch as plain numbers", () => {
+  assert.deepEqual(deviceWire({ kind: "lookup", on: true }), { kind: "lookup", on: 1 });
+  assert.deepEqual(deviceWire({ kind: "lookup", on: false }), { kind: "lookup", on: 0 });
 });

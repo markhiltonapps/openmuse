@@ -174,6 +174,9 @@ export function deviceCardFrom(tool: string, raw: string): DeviceCard | undefine
  * Where what's put on screen appears on a watch-style device: one small card at a time, drawn by the
  * device itself, that stays until the next press. Showing one is the default whenever an answer fits.
  */
+/** Tools that only put a card on the watch, so there is nothing to \"look up\" while they run. */
+const QUICK_WATCH_TOOLS = new Set(["show_on_watch"]);
+
 export const DEVICE_SCREEN =
   'They\'re talking through a small watch-style device with a small screen. Besides your words it shows one card at a time, and showing a card is the default whenever the answer fits one: for the weather call get_weather (their home city, where they are, or any place they name: pass place), which puts its card up by itself; for a game score, a price or other number, a time, a count or distance, or a short list or schedule, find the facts and then call show_on_watch with them. After a card, say the key point in a sentence or two and that it\'s on the watch screen. Nothing else (long text, emails, buttons, documents, links) can show there, so for those never say it\'s on their screen: say what they need out loud. This small device is their "watch": when they say "my watch", "the watch screen" or "the idle screen", they mean it, and manage_devices (do: settings) changes how long it waits before its idle screen (clock, weather, next meeting) comes on, whether it dims, and what it shows; use it instead of saying you can\'t.';
 
@@ -498,6 +501,7 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
     return await new Promise<string>((resolve, reject) => {
       let words = "";
       let afterTool = false;
+      let lookingUp = false;
       let failure = "";
       const calls = new Map<string, { name: string; args: string }>();
       const reviews: string[] = [];
@@ -522,6 +526,11 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
             words += e.delta;
           }
           if (e.type === EventType.TOOL_CALL_START && e.toolCallId) {
+            // The watch shows Neddy reading his book while a look-up runs (not for the tools that only put a card up).
+            if (device && card && !lookingUp && !QUICK_WATCH_TOOLS.has(e.toolCallName ?? "")) {
+              lookingUp = true;
+              card({ kind: "lookup", on: true });
+            }
             afterTool = true;
             calls.set(e.toolCallId, { name: e.toolCallName ?? "", args: "" });
           }
@@ -599,7 +608,10 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
           }
           if (e.type === EventType.RUN_ERROR) failure = String(e.message ?? "The agent stopped.");
         },
-        error: reject,
+        error: (error) => {
+          if (lookingUp && card) card({ kind: "lookup", on: false });
+          reject(error);
+        },
         complete: () => {
           void (async () => {
             // Things saved for approval on a call wait until tonight, and their Approve buttons
@@ -631,6 +643,7 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
           })()
             .catch(() => undefined)
             .finally(() => {
+              if (lookingUp && card) card({ kind: "lookup", on: false });
               if (failure && !words.trim()) reject(new Error(failure));
               else resolve(words.trim());
             });
@@ -640,6 +653,7 @@ export function voiceAnswer(brain: VoiceBrain): LiveAnswer {
         "abort",
         () => {
           subscription.unsubscribe();
+          if (lookingUp && card) card({ kind: "lookup", on: false });
           reject(new Error("stopped"));
         },
         { once: true },
