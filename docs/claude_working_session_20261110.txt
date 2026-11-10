@@ -26,3 +26,26 @@ Plan for the rest (decisions to confirm with owner as each starts):
   partition table (partitions.csv in the sketch folder; Arduino "Flash Size 32MB" must be selected), written to flash AS IT GOES (never only in memory),
   Wi-Fi off while recording, upload after Stop to the api as pieces of a meeting (existing meetings pipeline: transcript, notes, shows in the app), deleted from
   the watch only when the server has everything. REC indicator always on screen. A microSD card, if present, extends length/quality.
+
+=== Look-up animation, watch faces, recording (owner: "push it... build the record, watch face and look up animation") ===
+Look-up animation: server sends card {kind:"lookup", on} when the first real tool starts on a watch call (voice-brain.ts, QUICK_WATCH_TOOLS excluded) and off when it
+  finishes/errors/aborts; the watch draws Neddy with a book + flickering flames (code-drawn, no art files), eyes sweeping, stops by itself after 45 s, only while looking up.
+Watch faces: info (default), analog, neon digital. Menu tile cycles them; voice/chat setting `face`; the idle fact carries it. Neon colour is orange (not yet confirmed with owner).
+Recording (menu > Record), on the watch's own flash (no SD needed):
+  - neddy_rec.h: IMA ADPCM 4-bit at 8 kHz, 512-byte slots (8-byte header + 504-byte block = 125 ms), quiet slots left out (positions kept so the server puts the silence back),
+    written to partition "rec" as it goes; END mark at stop; power-loss recovery by slot ids. Tested on a PC with flash that behaves like real NOR (firmware/tools/rec_test.cpp,
+    17 checks, 0 bits set back to 1, 29 dB SNR on speech-like sound).
+  - partitions.csv (sketch folder; Arduino Flash Size 32MB): nvs, app0 6 MB, rec 0x19F0000 (about 26.4 MB) = 53,112 slots = 1 h 51 of nonstop speech (more with pauses).
+    The first test on the real board must read "[rec] partition ... bytes" in the Serial log (set DEBUG_SERIAL 1) or look at the Record tile: "Up to 1 h 50".
+  - Sketch: Record tile -> recBegin (Wi-Fi OFF while recording, BOOT/touch-talk blocked, REC screen with time, time left, storage bar, big Stop; dims after 20 s, any touch wakes it
+    without pressing anything); Stop -> Wi-Fi back -> sends in 64 KB pieces (PUT /api/device/recording/<id>?offset&final&started, resumes via GET), "Sent" screen with OK.
+    A copy is marked SENT on the watch only when the server answers done:true. A recording left behind (power lost, no Wi-Fi) is sent 20 s after the watch is up and idle.
+    After 3 failed turns: "Couldn't send it yet" + Try again; the PWR button leaves that screen (never while recording or sending).
+  - Server: device-recordings.ts (decode with silence restored, ffmpeg MP3, Meetings.importRecording -> normal write-up), tests/device-recordings.test.ts (5 pass, decoder equals ffmpeg's).
+Checks this session: ui_sim 0 odd windows; touch_test 68 checks; rec_test 17 checks; sketch syntax-checked against stub headers (not compiled for the real board).
+NOT verified on the real board (do these first): PWR short press opens the menu; battery bytes; flash erase stalls vs the 20 ms microphone reads (the log prints "worst op ms, gaps"
+  after each recording: gaps should be 0 and worst op well under 100 ms); real Wi-Fi rejoin after recording; upload over TLS; silence threshold (REC_SILENCE_PEAK 140) on a real room;
+  fps on the test line (f<n> r<ms>).
+Honest limits: nonstop speech tops out at about 1 h 50 on the watch's own storage (meetings with pauses go longer); microSD extension not built; 2 h nonstop would need a smaller codec.
+Help/site: the watch isn't offered to testers yet, so Help and the website are not changed (per the standing rule this is the one deliberate exception; say so when testers get it).
+Round board (1.75C, 466x466, 16 MB flash probably): needs its own partitions.csv (smaller rec), CST9217 touch, other I2S pins: not started.

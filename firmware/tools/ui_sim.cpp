@@ -180,6 +180,15 @@ int main(int argc, char **argv) {
     save(dir, face == 1 ? "f1_face_analog" : "f2_face_neon");
   }
   uiFace = 0; uiIdleOn = false; uiIdle.have = false;
+  // 15. the recording screens and the 4-tile menu
+  uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiRecAvailable = true; uiFace = 1;
+  uiMenuOpen(800000); uiTick(800100); save(dir, "m3_menu_four");
+  uiClearCard(); uiFace = 0; uiAll = true;
+  uiRecRun(800200, 2530, 4680, 35); uiTick(800300); save(dir, "r1_recording");
+  uiRecRun(800400, 2531, 4679, 35); uiTick(800500); save(dir, "r1b_recording_next_second");
+  uiRecInfo(800600, "Saved on the watch", "42 min", "Sending to your phone...", 60, ""); uiTick(800700); save(dir, "r2_sending");
+  uiRecInfo(800800, "Sent", "42 min", "It's in the Muse app now", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
+  uiRecEnd(); uiRecAvailable = false;
   printf("odd-aligned windows: %ld\n", oddWindows);
   return 0;
 }

@@ -245,6 +245,40 @@ int main() {
   CHECK(!uiLookupOn, "and after 45 s whatever happens");
   uiSetMode(UI_READY); uiMotion = true;
 
+  // Recording: the Record tile asks to start; the recording screen shows the time and a Stop; it dims, wakes, and the info screen has a button.
+  static int recAsked = 0;
+  uiOut.record = [](int a) { recAsked = a; };
+  uiOut.brightness = [](int l) { level = l; };
+  uiIdle.have = true; uiIdle.after = 10; uiClearCard(); uiSetMode(UI_READY); uiActivity(now); pause(300);
+  uiRecAvailable = true;
+  uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_REC), &tx, &ty);
+  finger(tx + 88, ty + 74, 60);
+  CHECK(recAsked == UI_REC_START && !uiCard.on, "the Record tile asks the sketch to start recording");
+  uiRecRun(now, 1, 6000, 3); pause(100);
+  CHECK(uiRec.state == UI_RECS_RUN, "the recording screen is up");
+  pause(12000);
+  CHECK(!uiIdleOn && !uiCard.on, "while recording the idle face never comes");
+  CHECK(!uiRec.dimmed, "it is not dimmed yet at 12 s");
+  uiRecRun(now, 14, 5990, 3);
+  pause(9000);
+  CHECK(uiRec.dimmed && level == 40, "the screen dims after 20 s without a touch");
+  recAsked = 0;
+  finger(200, 390, 60);
+  CHECK(!uiRec.dimmed && level == 255 && recAsked == 0, "the touch that wakes the screen only wakes it (it doesn't stop the recording)");
+  finger(200, 390, 60);
+  CHECK(recAsked == UI_REC_STOP, "a tap on Stop asks to stop");
+  recAsked = 0; finger(200, 150, 60);
+  CHECK(recAsked == 0, "a tap anywhere else does nothing");
+  uiRecInfo(now, "Saved on the watch", "42 min", "Sending to your phone...", 60, "");
+  pause(100);
+  CHECK(uiRec.state == UI_RECS_INFO && uiRec.pct == 60, "the sending screen shows its progress");
+  uiRecInfo(now, "Not sent", "", "No Wi-Fi. It will send later.", -1, "OK");
+  pause(100); recAsked = 0; finger(200, 420, 60);
+  CHECK(recAsked == UI_REC_OK, "its button answers OK");
+  uiRecEnd(); pause(100);
+  CHECK(uiRec.state == UI_RECS_OFF && !uiScreenOff, "ending the recorder gives the screen back");
+  uiRecAvailable = false; uiIdle.have = false;
+
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }

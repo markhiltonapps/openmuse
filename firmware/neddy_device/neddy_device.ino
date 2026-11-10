@@ -7,6 +7,10 @@
 // libraries (Arduino_GFX etc.), and the library "WebSockets" by Markus Sattler (Library Manager).
 //
 // Audio setup, pins and the display come from Waveshare's own examples (01_HelloWorld, 08_ES8311).
+//
+// Recording (menu > Record): the sound is kept in the watch's own flash, in a partition called "rec" (neddy_rec.h). That partition comes
+// from partitions.csv in this sketch folder, which needs Arduino's Tools > Flash Size > 32MB (and Tools > Partition Scheme is then ignored).
+// Without it the Record tile says "Not available" and everything else works as before.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -202,6 +206,7 @@ static bool pmuByte(uint8_t reg, uint8_t &value) {
   return true;
 }
 // The PWR side button (GPIO10, high while pressed): a short press opens or closes the menu. Holding it about 6 seconds still powers the board off.
+static void recPwr();   // (in the recorder section below)
 static void pwrLoop() {
   static bool was = false;
   static unsigned long downAt = 0, changed = 0;
@@ -209,7 +214,10 @@ static void pwrLoop() {
   if (raw != was && millis() - changed > 30) {
     changed = millis();
     if (raw) downAt = millis();
-    else if (millis() - downAt < 1200) uiMenuOpen(millis());
+    else if (millis() - downAt < 1200) {
+      if (uiRec.state != UI_RECS_OFF) recPwr();   // on a recording screen the button leaves it (never while recording or sending)
+      else uiMenuOpen(millis());
+    }
     was = raw;
   }
 }
@@ -274,6 +282,7 @@ static void screenProblem(const String &title, const String &detail) {
   clearScreen();
   uiTextCentered(NFONT_TITLE, 100, title.c_str(), UI_AMBER);
   uiParagraph(NFONT_BODY, 170, detail.c_str(), UI_WHITE, 340, 11, 26);
+  if (uiRec.state != UI_RECS_OFF) uiRec.full = true;   // a recording screen was under this: draw it again afterwards
 }
 
 static void screenPair(const String &code, int secondsLeft) {
@@ -310,6 +319,7 @@ static void uiSync() {
 static void screenState() {
   switch (mode) {
     case M_WIFI:
+      if (uiRec.state != UI_RECS_OFF) break;   // a recording screen is up: Wi-Fi comes back quietly behind it
       uiActive = false;
       uiClearCard();
       clearScreen();
@@ -330,6 +340,7 @@ static void screenState() {
       break;
     }
     default:
+      if (uiRec.state != UI_RECS_OFF) break;
       uiActive = false;
       uiClearCard();
       clearScreen();
@@ -707,6 +718,221 @@ static void idleMic() {
   }
 }
 
+// ---------------------------------------------------------------- the recorder
+// Record from the menu: the microphone's sound is squeezed (neddy_rec.h) and written straight into the flash partition "rec" as it
+// is heard, so nothing is only in memory. Wi-Fi is off while it records (battery). After Stop the watch joins Wi-Fi again and sends the
+// recording to the server in 64 KB pieces (PUT /api/device/recording/<id>); the server writes it up as a meeting in the Muse app. The
+// copy on the watch is only marked "sent" once the server says it has everything, and a recording found at start-up (power lost, or
+// no Wi-Fi at the time) is sent when the watch is next idle.
+#include "esp_partition.h"
+#include "neddy_rec.h"
+
+enum { RS_IDLE, RS_REC, RS_SEND, RS_FAIL };
+static int recState = RS_IDLE;
+static Rec rec;
+static RecIO recIO;
+static RecFound recFound;
+static const esp_partition_t *recPart = nullptr;
+static uint32_t recSent = 0;                 // bytes of slots the server has confirmed
+static bool recStatusKnown = false;
+static int recFailures = 0, recLastPct = -1;
+static unsigned long recNextTry = 0, recAutoAt = 0, recWorstOp = 0, recGaps = 0;
+static uint32_t recLastSecond = 0xFFFFFFFFu;
+
+static bool rpErase(uint32_t off, uint32_t len) { return recPart && esp_partition_erase_range(recPart, off, len) == ESP_OK; }
+static bool rpWrite(uint32_t off, const uint8_t *d, uint32_t len) { return recPart && esp_partition_write(recPart, off, d, len) == ESP_OK; }
+static bool rpRead(uint32_t off, uint8_t *d, uint32_t len) { return recPart && esp_partition_read(recPart, off, d, len) == ESP_OK; }
+
+static bool recPending() { return recPart && recFound.present && !recFound.sent && recFound.slots > 0; }
+static void recMinutesText(char *dst, size_t cap, uint32_t ms) { snprintf(dst, cap, "%u", (unsigned)((ms + 59999UL) / 60000UL)); }
+static void recRefreshSub() {
+  if (recPending()) { snprintf(uiRecSub, sizeof(uiRecSub), "Waiting to send"); return; }
+  uint32_t s = recPart ? recCapacitySeconds(recIO) : 0;
+  snprintf(uiRecSub, sizeof(uiRecSub), "Up to %u h %02u", (unsigned)(s / 3600), (unsigned)((s % 3600) / 60));
+}
+static void recInit() {
+  recPart = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, (esp_partition_subtype_t)0x40, "rec");
+  uiRecAvailable = recPart != nullptr;
+  if (!recPart) { LOGLN("[rec] no 'rec' partition: choose Flash Size 32MB and keep partitions.csv in the sketch folder"); return; }
+  recIO = RecIO{ rpErase, rpWrite, rpRead, recPart->size };
+  recFound = recLook(recIO);
+  LOGF("[rec] partition %u bytes, found: present %d sent %d slots %u\n", (unsigned)recPart->size, recFound.present, recFound.sent, (unsigned)recFound.slots);
+  recRefreshSub();
+  if (recPending()) recAutoAt = millis() + 20000UL;   // a recording was left behind: it is sent once the watch is up and idle
+}
+
+static void recShowSending(const char *small) {
+  char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
+  uiRecInfo(millis(), "Saved on the watch", big, small, recLastPct < 0 ? 0 : recLastPct, "");
+}
+static void recBeginSend() {
+  recState = RS_SEND; recSent = 0; recStatusKnown = false; recFailures = 0; recNextTry = 0; recLastPct = 0;
+  recShowSending("Sending to your phone...");
+}
+static void recShowWaiting() {
+  char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
+  uiRecInfo(millis(), "A recording is waiting", big, "Send it before a new one", -1, "Send now");
+}
+
+static void recBegin() {
+  if (!recPart || recState != RS_IDLE) return;
+  if (held) stopTalking();
+  if (recPending()) { recShowWaiting(); return; }
+  if (!uiIdle.have) { uiRecInfo(millis(), "Not ready yet", "", "Waiting for the time.", -1, "OK"); return; }
+  uint32_t utc = uiIdle.baseUtc + (millis() - uiIdle.baseMs) / 1000;
+  if (!recStart(rec, recIO, (uint32_t)esp_random(), utc)) {
+    uiRecInfo(millis(), "Can't record", "", "The storage didn't answer.", -1, "OK");
+    return;
+  }
+  ws.disconnect(); wsUp = false; socketStarted = false;
+  WiFi.disconnect(true); WiFi.mode(WIFI_OFF);        // no radio while recording: the battery lasts, and nothing competes for the flash
+  flushPlayback = true;
+  recState = RS_REC; recLastSecond = 0xFFFFFFFFu; recWorstOp = 0; recGaps = 0;
+  uiRecRun(millis(), 0, recSecondsLeft(rec), 0);
+  LOGLN("[rec] started");
+}
+
+static void recFinish(const char *why) {
+  bool ok = recStop(rec);
+  recFound = recLook(recIO);
+  LOGF("[rec] stopped (%s): slots %u skipped %u ms %u ok %d worst op %lu ms, gaps %lu\n", why, (unsigned)rec.slots, (unsigned)rec.skipped, (unsigned)recFound.ms, ok, recWorstOp, recGaps);
+  recRefreshSub();
+  if (!recPending()) {                                // nothing was said: nothing to send
+    if (recFound.present && !recFound.sent) recMarkSent(recIO);
+    recFound = recLook(recIO);
+    recState = RS_IDLE;
+    uiRecInfo(millis(), "Nothing recorded", "", "It was all quiet.", -1, "OK");
+    return;
+  }
+  recLastPct = 0; recSent = 0; recStatusKnown = false; recFailures = 0; recNextTry = 0;
+  recState = RS_SEND;
+  char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
+  const char *title = rec.full ? "Storage is full" : rec.failed ? "Saved (with a fault)" : "Saved on the watch";
+  uiRecInfo(millis(), title, big, "Sending to your phone...", 0, "");
+}
+
+// One turn of the recorder (replaces the rest of the main loop while it records).
+static void recLoop() {
+  touchLoop();
+  if (recState != RS_REC) return;                    // Stop was just tapped
+  static int16_t stereo[640];
+  static int16_t mono[320];
+  size_t got = i2s.readBytes((char *)stereo, sizeof(stereo));
+  size_t frames = got / 4;
+  if (frames == 0) recGaps++;
+  for (size_t i = 0; i < frames; i++) {
+    int16_t l = stereo[2 * i], r = stereo[2 * i + 1];
+    mono[i] = (abs((int)l) >= abs((int)r)) ? l : r;
+  }
+  if (frames) {
+    unsigned long t0 = millis();
+    recFeed16k(rec, mono, (int)frames);
+    unsigned long d = millis() - t0;
+    if (d > recWorstOp) recWorstOp = d;
+  }
+  uint32_t sec = recElapsedSeconds(rec);
+  if (sec != recLastSecond) {
+    recLastSecond = sec;
+    uint32_t cap = recSlotCapacity(recIO);
+    uiRecRun(millis(), sec, recSecondsLeft(rec), cap ? (int)((uint64_t)rec.slots * 100 / cap) : 0);
+  }
+  if (rec.full || rec.failed) { recFinish(rec.full ? "full" : "fault"); return; }
+  uiTick(millis());
+}
+
+// Sends the next piece. Called from the main loop while a recording is being sent; a piece takes under a few seconds.
+static WiFiClientSecure recClient;
+static void recSendFail(const char *why) {
+  recFailures++;
+  LOGF("[rec] send problem: %s (%d)\n", why, recFailures);
+  recNextTry = millis() + 2000UL * recFailures;
+  if (recFailures >= 3) {
+    recState = RS_FAIL; recAutoAt = millis() + 600000UL;
+    uiRecInfo(millis(), "Couldn't send it yet", "", "It's safe on the watch.", -1, "Try again");
+  }
+}
+static void recSendStep() {
+  if (WiFi.status() != WL_CONNECTED || millis() < recNextTry) return;
+  char rid[12]; snprintf(rid, sizeof(rid), "%08x", (unsigned)recFound.id);
+  recClient.setInsecure();
+  HTTPClient http;
+  http.setReuse(true);
+  http.setConnectTimeout(10000);
+  if (!recStatusKnown) {                             // ask what the server already has (a send that was cut off carries on from there)
+    http.setTimeout(15000);
+    if (!http.begin(recClient, serverUrl + "/api/device/recording/" + rid)) { recSendFail("begin"); return; }
+    http.addHeader("Authorization", String("Bearer ") + deviceToken);
+    int code = http.GET();
+    String body = code > 0 ? http.getString() : String("");
+    http.end();
+    if (code != 200) { recSendFail("status"); return; }
+    if (body.indexOf("\"done\":true") >= 0) { recSent = recFound.bytes; }
+    else { int r = jsonInt(body, "received", 0); recSent = (uint32_t)r > recFound.bytes ? 0 : (uint32_t)r; }
+    recStatusKnown = true;
+    recFailures = 0;
+  }
+  bool already = recSent >= recFound.bytes;
+  bool done = already;
+  if (!already) {
+    uint32_t left = recFound.bytes - recSent;
+    uint32_t len = left > 65536u ? 65536u : left;
+    uint8_t *buf = (uint8_t *)ps_malloc(len);
+    if (!buf) buf = (uint8_t *)malloc(len = 16384u > left ? left : 16384u);
+    if (!buf) { recSendFail("memory"); return; }
+    if (!rpRead(REC_SECTOR + recSent, buf, len)) { free(buf); recSendFail("flash read"); return; }
+    bool last = recSent + len >= recFound.bytes;
+    if (last) recShowSending("Finishing up...");
+    http.setTimeout(last ? 180000 : 25000);          // the last piece makes the whole recording ready, which takes the server a while
+    String url = serverUrl + "/api/device/recording/" + rid + "?offset=" + recSent + "&final=" + (last ? 1 : 0) + "&started=" + recFound.startedUtc;
+    if (!http.begin(recClient, url)) { free(buf); recSendFail("begin"); return; }
+    http.addHeader("Authorization", String("Bearer ") + deviceToken);
+    http.addHeader("Content-Type", "application/octet-stream");
+    int code = http.sendRequest("PUT", buf, len);
+    String body = code > 0 ? http.getString() : String("");
+    http.end();
+    free(buf);
+    if (code != 200) {
+      LOGF("[rec] PUT answered %d: %s\n", code, body.c_str());
+      if (code >= 400 && code < 500 && code != 408 && code != 429) recFailures = 2;   // the server refused it: one more turn and it stops trying
+      recSendFail(code < 0 ? "no answer" : "refused");
+      return;
+    }
+    if (body.indexOf("needFrom") >= 0) { recSent = (uint32_t)jsonInt(body, "needFrom", 0); recFailures = 0; return; }
+    recSent += len; recFailures = 0;
+    done = body.indexOf("\"done\":true") >= 0;
+    if (last && !done) { recStatusKnown = false; recSendFail("not finished"); return; }
+  }
+  if (done) {
+    recMarkSent(recIO);
+    recFound = recLook(recIO);
+    recState = RS_IDLE; recRefreshSub();
+    char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
+    uiRecInfo(millis(), "Sent", big, "It's in the Muse app now", -1, "OK");
+    LOGLN("[rec] sent");
+    return;
+  }
+  int pct = (int)((uint64_t)recSent * 100 / (recFound.bytes ? recFound.bytes : 1));
+  if (pct != recLastPct) { recLastPct = pct; recShowSending("Sending to your phone..."); }
+}
+
+// What the recording screens ask for: Stop, OK, Try again / Send now.
+static void recAction(int what) {
+  if (what == UI_REC_START) recBegin();
+  else if (what == UI_REC_STOP) { if (recState == RS_REC) recFinish("stop"); }
+  else if (what == UI_REC_OK) { uiRecEnd(); if (recState != RS_SEND) recState = RS_IDLE; }
+  else if (what == UI_REC_RETRY) { if (recPending()) recBeginSend(); }
+}
+static void recPwr() { if (recState != RS_REC && recState != RS_SEND) recAction(UI_REC_OK); }
+// Called each turn of the main loop (not while recording): carries on with a send, and starts one for a recording left behind.
+static void recTick() {
+  if (!recPart) return;
+  if (recState == RS_SEND) { recSendStep(); return; }
+  if (recState == RS_IDLE && recPending() && wsUp && mode == M_READY && !held && uiRec.state == UI_RECS_OFF && recAutoAt && millis() > recAutoAt) {
+    recAutoAt = 0;
+    recBeginSend();
+  }
+}
+
 // ---------------------------------------------------------------- the connection to Neddy
 struct CallbackTimer {  // how long this handler took (the longest is shown on screen)
   unsigned long t = millis();
@@ -965,6 +1191,7 @@ void setup() {
       ws.sendTXT(m.c_str());
     }
   };
+  uiOut.record = recAction;
   uiMotion = NEDDY_MOTION != 0;
   uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0;
   screenBoot("Starting");
@@ -992,12 +1219,15 @@ void setup() {
   }
   xTaskCreatePinnedToCore(playTask, "play", 6144, NULL, 3, NULL, 1);
   touchInit();
+  recInit();
 }
 
 void loop() {
   unsigned long turnAt = millis();
   if (loopPrev && turnAt - loopPrev > maxLoop) maxLoop = turnAt - loopPrev;
   loopPrev = turnAt;
+  // 0. Recording: the recorder has the loop to itself (no Wi-Fi, no talking) until Stop
+  if (recState == RS_REC) { recLoop(); return; }
   // 1. Wi-Fi
   if (WiFi.status() != WL_CONNECTED) {
     wsUp = false;
@@ -1049,7 +1279,8 @@ void loop() {
   touchLoop();
   batteryLoop();
   pwrLoop();
-  bool down = buttonDown() || uiTouchTalk;
+  recTick();
+  bool down = (buttonDown() || uiTouchTalk) && uiRec.state == UI_RECS_OFF;
   if (down && !held) {
     if (wsUp && mode != M_PROBLEM) {
       unsigned long startAt = millis();

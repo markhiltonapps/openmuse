@@ -820,7 +820,7 @@ export function whereaboutsToolSpecs(
           return { removed, message: `Deleted ${removed} trip${removed === 1 ? "" : "s"}.` };
         }
         const zone = (await options.timeZone?.(owner).catch(() => undefined)) ?? "UTC";
-        const now = Date.now();
+        const now = where.since(0); // the service's own clock (tests set it), not the wall clock
         const trips = (await where.trips(owner, periodStart(period, now, zone))).reverse();
         const on = await where.mileageOn(owner);
         if (!trips.length)

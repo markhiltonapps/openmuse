@@ -723,3 +723,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   (tap = giggle, hold = talk, double-tap = hands-free, sideways swipe = cards). The menu is a card kind (`UI_CARD_MENU`), so the idle face, timeouts and redraws already
   work with it. A setting changed on the watch is sent to the server (`device.setting`) or the next idle push overwrites it. Anything not confirmed on the real board
   (here: the PMU's software power-off bit) is left out rather than guessed.
+- **Recording on the watch (owner, 2026-11-10):** the sound goes into its own flash partition as it is heard (`neddy_rec.h`: 4-bit ADPCM at 8 kHz, quiet slots
+  left out with their sample positions kept) and is cleared from the watch only when the server answers `done:true`. Flash that behaves like real flash is part of the
+  test (`firmware/tools/rec_test.cpp`: erase sets bytes to 0xFF, a write may only clear bits). Decode with the SAME formula ffmpeg uses (`((2*code+1)*step)>>3`) in the encoder,
+  the server and the tests, or the sound differs by a few counts. Wi-Fi is off while recording. A recording screen owns the display: anything that clears the screen
+  (Joining Wi-Fi, problems) must leave it alone or mark it to be drawn again. Real-board checks are listed in the session notes.

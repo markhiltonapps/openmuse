@@ -19,7 +19,8 @@ struct UiOut {
   void (*blit)(int x, int y, int w, int h, uint16_t *px);
   void (*fill)(int x, int y, int w, int h, uint16_t colour);
   void (*brightness)(int level);   // optional: 0..255
-  void (*setting)(int which, int value);   // optional: the person changed a setting on the watch (1 = animation speed)
+  void (*setting)(int which, int value);   // optional: the person changed a setting on the watch (1 = animation speed, 2 = face)
+  void (*record)(int action);              // optional: the recording screen or menu asked for something (UI_REC_* below)
 };
 static UiOut uiOut;
 
@@ -816,12 +817,15 @@ static void uiDrawList() {
 }
 
 // ---- the menu: the PWR side button (or a swipe up from the bottom edge) opens big tiles; tap one. Tiles are 176 x 148 px.
-enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2, UI_MENU_FACE = 3 };
+enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2, UI_MENU_FACE = 3, UI_MENU_REC = 4 };
 enum { UI_SET_ANIM = 1, UI_SET_FACE = 2 };
+enum { UI_REC_START = 1, UI_REC_STOP = 2, UI_REC_OK = 3, UI_REC_RETRY = 4 };   // what the recording screens ask the sketch for
 static int uiFpsLevel = 1;                       // animation speed: 0 saver, 1 normal, 2 smooth
 static int uiFace = 0;                           // the watch face: 0 info (clock, weather, meeting), 1 analog, 2 neon digital
-static const int uiMenuIds[] = { UI_MENU_FACE, UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
-static const int uiMenuN = 3;
+static const int uiMenuIds[] = { UI_MENU_REC, UI_MENU_FACE, UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
+static const int uiMenuN = 4;
+static bool uiRecAvailable = false;              // the sketch found the recording storage: the Record tile does something
+static char uiRecSub[28] = "Up to 1 h 40";       // the Record tile's small line (how long it can record, or that one is waiting to be sent)
 static void uiMenuTileRect(int i, int *x, int *y) {
   const int W = 176, H = 148, GAP = 14, X0 = 22;
   int row = i / 2, col = i % 2;
@@ -860,7 +864,13 @@ static void uiDrawMenu() {
     uiBg = panel;
     const char *label = "", *sub = "";
     int cx = x + 88;
-    if (uiMenuIds[i] == UI_MENU_FACE) {
+    if (uiMenuIds[i] == UI_MENU_REC) {
+      label = "Record"; sub = uiRecAvailable ? uiRecSub : "Not available";
+      uint16_t red = uiRecAvailable ? uiRgb(255, 84, 72) : UI_DIM;          // a microphone: a rounded body, a cup, a stem
+      uiOut.fill((cx - 10) & ~1, y + 18, 20, 30, red); uiOut.fill((cx - 6) & ~1, y + 20, 12, 26, panel);
+      uiOut.fill((cx - 18) & ~1, y + 34, 4, 12, red); uiOut.fill((cx + 14) & ~1, y + 34, 4, 12, red); uiOut.fill((cx - 14) & ~1, y + 46, 28, 4, red);
+      uiOut.fill((cx - 2) & ~1, y + 50, 4, 10, red); uiOut.fill((cx - 10) & ~1, y + 58, 20, 4, red);
+    } else if (uiMenuIds[i] == UI_MENU_FACE) {
       label = "Watch face"; sub = uiFaceName();
       uiRing(cx, y + 44, 22, 4, lit);                // a little clock: a ring and two hands
       uiOut.fill(cx - 2, y + 28, 4, 18, lit);
@@ -944,7 +954,10 @@ static void uiMenuTap(uint32_t ms, int px, int py) {
   uiCard.since = ms;
   int i = uiMenuHit(px, py);
   if (i < 0) { uiClearCard(); return; }
-  if (uiMenuIds[i] == UI_MENU_FACE) {
+  if (uiMenuIds[i] == UI_MENU_REC) {
+    uiClearCard();
+    if (uiRecAvailable && uiOut.record) uiOut.record(UI_REC_START);
+  } else if (uiMenuIds[i] == UI_MENU_FACE) {
     uiFace = (uiFace + 1) % 3;
     if (uiOut.setting) uiOut.setting(UI_SET_FACE, uiFace);
     uiAll = true;
@@ -1000,6 +1013,97 @@ static void uiShowList(uint32_t ms, const char *title, int n, const char **label
 #define UI_SLOP 30
 #define UI_SWIPE 60
 static bool uiTchWas = false, uiTchHold = false, uiTchLatched = false, uiTchIgnore = false, uiTchOnNeddy = false;
+// ---- the recording screens. While recording the whole screen is the recorder: a red REC mark, the time, how much room is left, a big Stop.
+// After Stop (and in the sketch's other messages) an info screen shows what is happening to the recording. The sketch drives it.
+enum { UI_RECS_OFF, UI_RECS_RUN, UI_RECS_INFO };
+struct UiRec {
+  int state;
+  bool full, dirty, dimmed, ignoreTouch;
+  uint32_t elapsed, left; int usedPct;
+  char title[40], big[24], small[48], button[16];
+  int pct;                                       // a progress bar (0..100), -1 for none
+  uint32_t lastTouch;
+};
+static UiRec uiRec;
+#define UI_REC_DIM_MS 20000
+static void uiRecRun(uint32_t ms, uint32_t elapsed, uint32_t left, int usedPct) {
+  if (uiRec.state != UI_RECS_RUN) { memset(&uiRec, 0, sizeof(uiRec)); uiRec.state = UI_RECS_RUN; uiRec.full = true; uiRec.lastTouch = ms; }
+  if (uiRec.elapsed != elapsed || uiRec.left != left || uiRec.usedPct != usedPct) uiRec.dirty = true;
+  uiRec.elapsed = elapsed; uiRec.left = left; uiRec.usedPct = usedPct;
+}
+static void uiRecInfo(uint32_t ms, const char *title, const char *big, const char *small, int pct, const char *button) {
+  if (uiRec.state != UI_RECS_INFO) { bool was = uiRec.dimmed; memset(&uiRec, 0, sizeof(uiRec)); uiRec.state = UI_RECS_INFO; uiRec.dimmed = was; }
+  uiRec.full = true; uiRec.lastTouch = ms; uiRec.pct = pct;
+  uiCopyTrim(uiRec.title, sizeof(uiRec.title), title); uiCopyTrim(uiRec.big, sizeof(uiRec.big), big);
+  uiCopyTrim(uiRec.small, sizeof(uiRec.small), small); uiCopyTrim(uiRec.button, sizeof(uiRec.button), button);
+}
+static void uiRecEnd() {
+  if (uiRec.state == UI_RECS_OFF) return;
+  if (uiRec.dimmed && uiOut.brightness) uiOut.brightness(255);
+  memset(&uiRec, 0, sizeof(uiRec)); uiAll = true;
+}
+static void uiRecBar(int y, int pct, uint16_t col) {
+  uiRoundPanel(60, y, 290, 22, 10, uiRgb(52, 74, 88), UI_BLACK);
+  int w = ((286 * (pct < 0 ? 0 : pct > 100 ? 100 : pct)) / 100) & ~1;
+  if (w >= 12) uiOut.fill(62, y + 2, w, 18, col);
+}
+static void uiRecTime(char *dst, size_t cap, uint32_t seconds) {
+  snprintf(dst, cap, "%02u:%02u:%02u", (unsigned)(seconds / 3600), (unsigned)((seconds / 60) % 60), (unsigned)(seconds % 60));
+}
+static void uiRecDraw() {
+  const uint16_t red = uiRgb(255, 84, 72), dark = uiRgb(60, 24, 24), teal = UI_TEAL;
+  if (uiRec.state == UI_RECS_RUN) {
+    if (uiRec.full) {
+      uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
+      uiText(NFONT_MID, 70, 22, "REC", red);
+      uiRoundPanel(96, 340, 218, 100, 26, red, dark);
+      uiBg = dark; uiTextCentered(NFONT_TITLE, 340 + (100 - NFONT_TITLE.h) / 2, "Stop", UI_WHITE); uiBg = UI_BLACK;
+      uiTextCentered(NFONT_SMALL, 462, "The screen dims to save battery", UI_DIM);
+    }
+    uiRing(42, 36, 14, 14, (uiRec.elapsed & 1) ? uiRgb(120, 40, 36) : red);          // the mark blinks each second
+    char t[16]; uiRecTime(t, sizeof(t), uiRec.elapsed);
+    const NeddyFont &f = uiTextWidth(NFONT_TEMP, t) <= 380 ? NFONT_TEMP : NFONT_BIG;
+    uiOut.fill(0, 96, UI_W, 110, UI_BLACK);
+    uiTextCentered(f, 100 + (100 - f.h) / 2, t, UI_WHITE);
+    char left[40];
+    uint32_t m = uiRec.left / 60;
+    if (m >= 60) snprintf(left, sizeof(left), "%u h %u min left on the watch", (unsigned)(m / 60), (unsigned)(m % 60));
+    else snprintf(left, sizeof(left), "%u min left on the watch", (unsigned)m);
+    uiOut.fill(0, 226, UI_W, 36, UI_BLACK);
+    uiTextCentered(NFONT_BODY, 226, left, UI_GREY);
+    uiRecBar(282, uiRec.usedPct, uiRec.usedPct >= 85 ? UI_AMBER : teal);
+  } else if (uiRec.state == UI_RECS_INFO) {
+    uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
+    uiTextCentered(NFONT_MID, 70, uiRec.title, UI_WHITE);
+    if (uiRec.big[0]) uiTextCentered(NFONT_BIG, 140, uiRec.big, teal);
+    char fit[48]; uiFit(fit, sizeof(fit), NFONT_BODY, uiRec.small, 360);
+    uiTextCentered(NFONT_BODY, 250, fit, UI_GREY);
+    if (uiRec.pct >= 0) uiRecBar(318, uiRec.pct, teal);
+    if (uiRec.button[0]) {
+      uiRoundPanel(96, 380, 218, 90, 26, uiRgb(52, 74, 88), uiRgb(20, 28, 36));
+      uiBg = uiRgb(20, 28, 36); uiTextCentered(NFONT_MID, 380 + (90 - NFONT_MID.h) / 2, uiRec.button, UI_WHITE); uiBg = UI_BLACK;
+    }
+  }
+  uiRec.full = false; uiRec.dirty = false;
+}
+// A finger on a recording screen: any touch wakes it; a tap on the big button does what it says.
+static void uiRecTouch(uint32_t ms, bool down, int x, int y) {
+  static bool was = false; static int x0 = 0, y0 = 0; static uint32_t at = 0;
+  if (down && !was) {
+    x0 = x; y0 = y; at = ms; uiRec.lastTouch = ms;
+    uiRec.ignoreTouch = uiRec.dimmed;                               // the touch that wakes the screen only wakes it
+    if (uiRec.dimmed) { uiRec.dimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
+  } else if (!down && was) {
+    int dx = x - x0, dy = y - y0; if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
+    if (!uiRec.ignoreTouch && dx < UI_SLOP && dy < UI_SLOP && ms - at < UI_TAP_MS && uiOut.record) {
+      if (uiRec.state == UI_RECS_RUN && x0 >= 72 && x0 < 338 && y0 >= 324 && y0 < 456) uiOut.record(UI_REC_STOP);
+      else if (uiRec.state == UI_RECS_INFO && uiRec.button[0] && x0 >= 72 && x0 < 338 && y0 >= 364 && y0 < 486) uiOut.record(UI_REC_OK);
+    }
+  }
+  if (down) uiRec.lastTouch = ms;
+  was = down;
+}
+
 static uint32_t uiTchDownAt = 0, uiTchLastTap = 0;
 static int uiTchX0 = 0, uiTchY0 = 0, uiTchX = 0, uiTchY = 0, uiTchMove = 0;
 
@@ -1016,6 +1120,7 @@ static void uiLook(uint32_t ms, int x, int y) { uiLookX = x; uiLookY = y; uiLook
 static void uiTouchTalkEnded() { uiTouchTalk = false; uiTchLatched = false; }
 
 static void uiTouch(uint32_t ms, bool down, int x, int y) {
+  if (uiRec.state != UI_RECS_OFF) { uiRecTouch(ms, down, x, y); return; }
   if (down) { uiActivity(ms); if (uiCard.on && uiCard.kind == UI_CARD_MENU) uiCard.since = ms; }
   if (down && !uiTchWas) {                           // a finger just touched
     uiTchDownAt = ms; uiTchX0 = uiTchX = x; uiTchY0 = uiTchY = y; uiTchMove = 0;
@@ -1404,6 +1509,12 @@ static void uiDrawStage(const UiPose &p) {
 static void uiTick(uint32_t ms) {
   uiNowMs = ms; uiLookupNow = ms;
   if (uiScreenOff) return;
+  if (uiRec.state != UI_RECS_OFF) {                 // the recorder owns the screen; nothing else is drawn or woken
+    uiLastActive = ms;
+    if (uiRec.state == UI_RECS_RUN && !uiRec.dimmed && ms - uiRec.lastTouch > UI_REC_DIM_MS) { uiRec.dimmed = true; if (uiOut.brightness) uiOut.brightness(40); }
+    if (uiRec.full || uiRec.dirty) uiRecDraw();
+    return;
+  }
   // The look-up ends when the answer starts, when he is spoken to again, or after 45 s whatever happens.
   if (uiLookupOn && (uiMode == UI_SPEAK || uiMode == UI_LISTEN || uiMode == UI_LINK || ms - uiLookupSince > 45000)) uiLookupOn = false;
   if (uiCard.on && ms - uiCard.since >= uiCardMs()) uiClearCard();

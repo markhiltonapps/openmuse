@@ -131,10 +131,10 @@ int main(int argc, char **argv) {
   CHECK(recSecondsLeft(c) == 0, "and says there is no time left");
   CHECK(recStop(c), "and still ends properly");
 
-  // 5. How much fits on the real partition (0x17F0000 bytes).
-  RecIO real = RecIO{ nullptr, nullptr, nullptr, 0x17F0000 };
+  // 5. How much fits on the real partition (0x19F0000 bytes).
+  RecIO real = RecIO{ nullptr, nullptr, nullptr, 0x19F0000 };
   printf("the real partition holds %u slots = %u s (%.2f h) of nonstop speech\n", recSlotCapacity(real), recCapacitySeconds(real), recCapacitySeconds(real) / 3600.0);
-  CHECK(recCapacitySeconds(real) > 5400, "over an hour and a half of nonstop speech fits");
+  CHECK(recCapacitySeconds(real) > 6600, "over an hour and three quarters of nonstop speech fits (more with pauses)");
 
   CHECK(violations == 0, "still no bit set back to 1");
   if (argc > 1) {                                                      // what the first recording stored, for the server's test

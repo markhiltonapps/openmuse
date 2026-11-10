@@ -1,0 +1,6 @@
+# Neddy's flash layout for the 32 MB board (Arduino: Tools > Flash Size > 32MB). The Arduino IDE uses this file
+# automatically because it sits in the sketch folder. "rec" is where the recorder keeps what it hears (neddy_rec.h).
+# Name,    Type, SubType, Offset,    Size,      Flags
+nvs,       data, nvs,     0x9000,    0x5000,
+app0,      app,  factory, 0x10000,   0x600000,
+rec,       data, 0x40,    0x610000,  0x19F0000,
