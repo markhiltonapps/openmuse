@@ -1127,11 +1127,11 @@ static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const
     uiFit(fit, sizeof(fit), NFONT_SMALL, ssid ? ssid : "", 340);
     uiTextCentered(NFONT_SMALL, b + 56, fit, UI_GREY);
   } else if (stage == UI_SETUP_PAGE) {
-    uiTextCentered(NFONT_TITLE, 16, "Choose your Wi-Fi", UI_WHITE);
+    uiTextCentered(NFONT_TITLE, 16, "Finish on your phone", UI_WHITE);
     int b = uiDrawQr(qrText, 74, 8);
-    uiTextCentered(NFONT_MID, b + 10, "Page didn't open by itself?", UI_GREY);
-    uiTextCentered(NFONT_MID, b + 40, "Scan this, or go to", UI_GREY);
-    uiTextCentered(NFONT_BODY, b + 72, url ? url : "", UI_TEAL);
+    uiTextCentered(NFONT_MID, b + 8, "Tap 'Sign in' on your phone", UI_WHITE);
+    uiTextCentered(NFONT_MID, b + 38, "or scan this, or go to", UI_GREY);
+    uiTextCentered(NFONT_BODY, b + 68, url ? url : "", UI_TEAL);
   } else if (stage == UI_SETUP_TRYING) {
     uiTextCentered(NFONT_TITLE, 150, "Connecting...", UI_WHITE);
     uiTextCentered(NFONT_BODY, 220, fit, UI_TEAL);
@@ -1144,6 +1144,13 @@ static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const
     uiTextCentered(NFONT_BODY, 200, "Check the password", UI_WHITE);
     uiTextCentered(NFONT_MID, 250, "and try again on your phone", UI_GREY);
   }
+}
+
+// A small line at the bottom of the setup screens: what the phone has asked the watch for so far (so a stuck setup can be read from a photo).
+static void uiSetupDiag(const char *line) {
+  uiOut.fill(0, 468, UI_W, 24, UI_BLACK);
+  uiBg = UI_BLACK;
+  uiTextCentered(NFONT_SMALL, 470, line, UI_DIM);
 }
 
 // A finger on a recording screen: any touch wakes it; a tap on the big button does what it says.

@@ -1224,8 +1224,10 @@ static bool wifiSetupRun() {
   String pendSsid, pendPass;
   bool pending = false;
   int state = 0;                                            // 0 waiting, 1 trying, 2 joined, 3 failed
-  auto redirect = [&]() { web.sendHeader("Location", portal, true); web.send(302, "text/plain", ""); };
-  web.on("/", HTTP_GET, [&]() { web.sendHeader("Cache-Control", "no-store"); web.send(200, "text/html", NEDDY_SETUP_PAGE); });
+  int hitsPage = 0, hitsProbe = 0, hitsOther = 0;            // what the phone has asked for (shown at the bottom of the screen)
+  auto redirect = [&]() { hitsOther++; web.sendHeader("Location", portal, true); web.send(302, "text/plain", ""); };
+  auto probe = [&]() { hitsProbe++; web.sendHeader("Location", portal, true); web.send(302, "text/plain", ""); };
+  web.on("/", HTTP_GET, [&]() { hitsPage++; web.sendHeader("Cache-Control", "no-store"); web.send(200, "text/html", NEDDY_SETUP_PAGE); });
   web.on("/scan", HTTP_GET, [&]() {
     if (web.hasArg("again") && WiFi.scanComplete() != WIFI_SCAN_RUNNING) WiFi.scanNetworks(true);
     if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) { web.send(200, "application/json", "{\"scanning\":true}"); return; }
@@ -1255,12 +1257,12 @@ static bool wifiSetupRun() {
     web.send(200, "application/json", String("{\"state\":\"") + names[state] + "\"}");
   });
   const char *probes[] = { "/generate_204", "/gen_204", "/hotspot-detect.html", "/library/test/success.html", "/connecttest.txt", "/ncsi.txt", "/fwlink", "/redirect" };
-  for (const char *path : probes) web.on(path, HTTP_GET, redirect);   // the little web addresses phones try to find out whether there is internet
+  for (const char *path : probes) web.on(path, HTTP_GET, probe);   // the little web addresses phones try to find out whether there is internet
   web.onNotFound(redirect);
   web.begin();
   LOGF("[setup] %s %s\n", name, pw);
 
-  int stage = 0;
+  int stage = 0, shownHits = -1;
   auto serve = [&](unsigned long ms) { unsigned long t = millis(); while (millis() - t < ms) { dns.processNextRequest(); web.handleClient(); delay(10); } };
   unsigned long lastPhone = millis();
   bool done = false;
@@ -1272,7 +1274,16 @@ static bool wifiSetupRun() {
     int want = stations > 0 ? UI_SETUP_PAGE : UI_SETUP_JOIN;
     if (!pending && stage != want) {
       stage = want;
+      shownHits = -1;
       uiSetupScreen(stage, name, stage == UI_SETUP_JOIN ? joinQr.c_str() : portal.c_str(), ip.toString().c_str());
+    }
+    if (!pending && (stage == UI_SETUP_PAGE || stage == UI_SETUP_JOIN) && (hitsPage + hitsProbe + hitsOther != shownHits)) {
+      shownHits = hitsPage + hitsProbe + hitsOther;
+      if (shownHits > 0) {
+        char d[64];
+        snprintf(d, sizeof(d), "reached watch: page %d  checks %d  other %d", hitsPage, hitsProbe, hitsOther);
+        uiSetupDiag(d);
+      }
     }
     if (pending) {
       pending = false;

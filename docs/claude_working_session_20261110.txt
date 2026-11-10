@@ -95,3 +95,10 @@ Built (all tested on the computer, NOT yet on the real board):
 Unverified on the board: the temporary Wi-Fi + captive page on real iPhone and Android (the page may not pop up by itself: the watch shows the address and a second QR as the fallback), SoftAP + station
   switching channels when joining (the phone's page may lose the connection at the end; the watch screen and the page's wording cover it), stack size of the loop task with the web server inside, scanning only 2.4 GHz.
 Not done yet: pairing QR that opens the Muse app with the code (needs app work + Help), a menu entry to redo Wi-Fi setup, voice "set up my watch's Wi-Fi again", Help guide and website update (watch not offered to testers yet).
+
+=== QR setup, first real test (owner on Android) ===
+Owner scanned the QR, the phone joined Neddy-5AFE, and the watch moved on to the second screen ("Choose your Wi-Fi" + a QR for the page) and stayed there: the page on the phone had not been opened/finished
+(Android sends traffic over mobile data on a Wi-Fi with no internet, and the "Sign in to Wi-Fi network" notification has to be tapped). The watch screen said nothing about that.
+Change: the second screen now says "Finish on your phone / Tap 'Sign in' on your phone / or scan this, or go to 192.168.4.1", and a small bottom line counts what the phone has asked the watch for
+("reached watch: page N  checks N  other N") so a photo shows whether the phone reaches the watch: all zeros = the phone's traffic isn't going to the watch (mobile data / private routing); checks>0, page 0 = Android saw
+the portal but the page wasn't opened (tap the Sign in notification); page>0 = the page opened. If Android still fails, next options: answer the probes differently, DHCP captive-portal option, or Bluetooth setup from the phone's browser (Android Chrome only).
