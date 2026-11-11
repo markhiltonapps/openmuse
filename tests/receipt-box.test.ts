@@ -131,6 +131,9 @@ test("a total that is only a guess between two readings has to be chosen before 
   const { receipt } = await t.box.snap(owner, t.photo);
   assert.deepEqual([...(receipt?.candidates ?? [])].sort(), [61.27, 67.27]);
   await assert.rejects(t.box.file(owner, receipt?.id as string), /Choose which total/);
+  // Changing something else doesn't lift the block; confirming the total does.
+  await t.box.update(owner, receipt?.id as string, { category: "Dining" });
+  await assert.rejects(t.box.file(owner, receipt?.id as string), /Choose which total/);
   await t.box.update(owner, receipt?.id as string, { total: 61.27 });
   assert.equal((await t.box.file(owner, receipt?.id as string)).status, "filed");
   await t.done();
@@ -244,7 +247,7 @@ test("find searches by store, month and text; delete removes photo, record and r
 test("one person's receipts are never another's", async () => {
   const t = await setup(() => target);
   const { receipt } = await t.box.snap("alex", t.photo);
-  await assert.rejects(t.box.get("sam", receipt?.id as string), /not found/);
+  await assert.rejects(t.box.get("sam", receipt?.id as string), /isn’t in your Receipt box/);
   assert.equal((await t.box.list("sam")).length, 0);
   await t.done();
 });

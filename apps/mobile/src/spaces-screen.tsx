@@ -1,5 +1,12 @@
 import type { LucideIcon } from "lucide-react-native";
-import { ArrowLeft, ArrowUpRight, MessageCircle, Plus, UsersRound } from "lucide-react-native";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  MessageCircle,
+  Plus,
+  Receipt,
+  UsersRound,
+} from "lucide-react-native";
 import { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Space, SpaceKind } from "../../../packages/domain/src/spaces";
@@ -31,7 +38,7 @@ type Tab = SpaceTab;
 
 export function SpacesScreen() {
   const { spaces, load, failure } = useSpaces(true);
-  const { api } = useWorkspace();
+  const { api, open } = useWorkspace();
   const { data } = useAgentWorkspace();
   const agentName = data?.identity.name || "Neddy";
   const [, rerender] = useState(0);
@@ -146,6 +153,15 @@ export function SpacesScreen() {
         </Empty>
       )}
       {!!spaces.length && <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>{starters}</View>}
+      {/* The Receipt box isn't a space (no playbook): a plain way in, where people look for such things. */}
+      <Card style={{ gap: 4 }}>
+        <LinkRow
+          icon={Receipt}
+          title="Receipt box"
+          detail="Snap receipts, keep return dates"
+          onPress={() => open({ type: "receipt-box" })}
+        />
+      </Card>
     </View>
   );
 }

@@ -60,6 +60,7 @@ import { OnboardingSheet } from "./onboarding-ui";
 import PdfReader from "./PdfReader";
 import { artifactKind, savedDate } from "./plans";
 import { CommitmentsSheet, RemindersSheet } from "./plans-ui";
+import { ReceiptBoxSheet } from "./receipt-box-ui";
 import { ReceiptSheet } from "./receipt-ui";
 import { RehearsalScoreSheet, RehearseSheet } from "./rehearsal-ui";
 import { ShareLinkCard } from "./share-ui";
@@ -91,6 +92,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "help") return <HelpSheet topic={detail.topic} />;
   if (detail.type === "backdrop") return <BackdropSheet />;
   if (detail.type === "receipt") return <ReceiptSheet info={detail.info} />;
+  if (detail.type === "receipt-box") return <ReceiptBoxSheet start={detail} />;
   if (detail.type === "rehearse") return <RehearseSheet />;
   if (detail.type === "onboarding") return <OnboardingSheet />;
   if (detail.type === "rehearsalScore")

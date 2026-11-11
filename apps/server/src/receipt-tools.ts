@@ -3,7 +3,7 @@ import { type BoxReceipt, KEEP_FOR, type ReceiptBox, type ReceiptSnap } from "./
 import { RECEIPT_CATEGORIES } from "./receipt-reader.ts";
 
 export const receiptToolInstructions =
-  ' The Receipt box keeps the person\'s personal receipts. When they send a photo of a receipt, or say "file this receipt", call receipt_box with do "read" and the photo\'s file id; a Check it card with the store, date, total and category appears on their screen, and they file it with one tap or by saying "file it". Say what you read in one short sentence and name anything marked unsure (never present an unsure number as certain). When they correct a field ("it\'s $61.21", "make it Dining") use do "fix"; "file it" is do "file"; "check it later" needs nothing; "undo that" is do "unfile". For "where\'s my Best Buy receipt", "what did I spend at Costco in October" or "what\'s waiting to check" use do "find" or "to_check" and never answer from memory. "Remind me to return this by the tenth" is do "fix" with returnBy (YYYY-MM-DD), which sets the reminder once it\'s filed. Only the last four card digits are ever kept. Several receipts in one photo can\'t be filed together: ask for them one at a time. The Receipt box is in Spaces, and its card is on Home.';
+  ' The Receipt box keeps the person\'s personal receipts. When they send a photo of a receipt, or say "file this receipt", call receipt_box with do "read" and the photo\'s file id. A card is on their screen only when the result says "On their screen"; otherwise say what happened aloud. If they say "file this receipt" with no photo, ask them to send a photo or tap Snap a receipt in the Receipt box. They file it with one tap or by saying "file it". Say what you read in one short sentence and name anything marked unsure (never present an unsure number as certain). When they correct a field ("it\'s $61.21", "make it Dining") use do "fix"; "file it" is do "file"; "check it later" needs nothing; "undo that" is do "unfile". For "where\'s my Best Buy receipt", "what did I spend at Costco in October" or "what\'s waiting to check" use do "find" or "to_check" and never answer from memory. "Remind me to return this by the tenth" is do "fix" with returnBy (YYYY-MM-DD). Once it\'s filed, a reminder is set a few days before the window closes (say "a few days before", never the return date as the reminder date). Only the last four card digits I read are kept as text; the photo itself stays as it was taken. Several receipts in one photo can\'t be filed together: ask for them one at a time. The Receipt box is in Spaces, and its card is on Home.';
 
 const brief = (receipt: BoxReceipt) => ({
   id: receipt.id,
@@ -44,7 +44,7 @@ function snapResult(snap: ReceiptSnap) {
       return {
         outcome: "duplicate",
         receipt: snap.receipt ? brief(snap.receipt) : undefined,
-        say: "This looks like one that’s already in the box. They can skip it or keep both.",
+        say: "This looks like one that’s already in the box. It’s waiting in To check; they can file it anyway or delete it in the Receipt box.",
       };
     case "filed":
       return {
@@ -123,7 +123,15 @@ export function receiptToolSpec(
       note?: string;
     }) => {
       if (!box.available) return { error: "Reading receipts isn’t set up on this server yet." };
-      const latest = async () => (await box.list(owner, { status: "to-check", limit: 1 }))[0];
+      // "The one just read" is the newest by when it arrived, not by the date printed on it.
+      const latest = async () =>
+        (await box.list(owner, { status: "to-check" })).sort((a, b) =>
+          b.createdAt.localeCompare(a.createdAt),
+        )[0];
+      const lastFiled = async () =>
+        (await box.list(owner, { status: "filed" })).sort((a, b) =>
+          (b.filedAt ?? b.createdAt).localeCompare(a.filedAt ?? a.createdAt),
+        )[0];
       const target = async () => args.id ?? (await latest())?.id;
       switch (args.do) {
         case "read": {
@@ -145,13 +153,17 @@ export function receiptToolSpec(
           return {
             receipt: brief(filed),
             ...(filed.returnBy
-              ? { reminder: `A return reminder is set for ${filed.returnBy}.` }
+              ? {
+                  reminder: filed.reminderId
+                    ? "A reminder is set for a few days before the return window closes, or that morning if that’s too late."
+                    : "No reminder could be set, but the return date will show on Home.",
+                }
               : {}),
             ...shown,
           };
         }
         case "unfile": {
-          const id = args.id ?? (await box.list(owner, { status: "filed", limit: 1 }))[0]?.id;
+          const id = args.id ?? (await lastFiled())?.id;
           if (!id) return { error: "Nothing is filed yet." };
           return { receipt: brief(await box.unfile(owner, id)), ...shown };
         }

@@ -1997,6 +1997,131 @@ const SHOTS = [
       3: { find: (p) => button(p, "Save contact"), side: "top-right" },
     },
   },
+  {
+    // The Receipt box's Check it card: a Target receipt read clearly, with Return window kept. The
+    // sticky File it bar is inside the picture, so the viewport is as tall as the sheet.
+    id: "receipts",
+    start: "home",
+    height: 1220,
+    go: async (p) => {
+      const local = (offsetDays) => {
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+      // A made-up Target receipt, drawn on a canvas in the page (no real photo, no real store data).
+      const photoUrl = await p.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 300;
+        canvas.height = 420;
+        const c = canvas.getContext("2d");
+        c.fillStyle = "#ECE6DA";
+        c.fillRect(0, 0, 300, 420);
+        c.fillStyle = "#fff";
+        c.fillRect(40, 14, 220, 392);
+        c.fillStyle = "#222";
+        c.font = "bold 17px monospace";
+        c.textAlign = "center";
+        c.fillText("TARGET", 150, 46);
+        c.font = "11px monospace";
+        const lines = [
+          ["BATH TOWEL 2PK", "19.99"],
+          ["LAUNDRY BASKET", "12.99"],
+          ["LED BULBS 4PK", "8.49"],
+          ["SHOWER CURTAIN", "14.99"],
+          ["DISH SOAP", "3.79"],
+          ["SUBTOTAL", "60.25"],
+          ["TAX", "1.02"],
+        ];
+        lines.forEach(([a, b], i) => {
+          c.textAlign = "left";
+          c.fillText(a, 54, 84 + i * 24);
+          c.textAlign = "right";
+          c.fillText(b, 246, 84 + i * 24);
+        });
+        c.font = "bold 15px monospace";
+        c.textAlign = "left";
+        c.fillText("TOTAL", 54, 276);
+        c.textAlign = "right";
+        c.fillText("61.27", 246, 276);
+        c.font = "11px monospace";
+        c.textAlign = "left";
+        c.fillText("VISA ****4821", 54, 312);
+        return canvas.toDataURL("image/png");
+      });
+      const target = {
+        id: "help-target",
+        status: "to-check",
+        merchant: "Target",
+        date: local(0),
+        total: 61.27,
+        candidates: [],
+        tax: 1.02,
+        currency: "USD",
+        category: "Home",
+        paidLast4: "4821",
+        keepFor: ["Return window"],
+        returnDays: 30,
+        returnBy: local(30),
+        returnState: "open",
+        returnPolicy: "Returns within 30 days with a receipt.",
+        warranty: false,
+        note: "",
+        unsure: [],
+        fileId: "help-target-file",
+        source: "photo",
+        autoFiled: false,
+        edited: false,
+        createdAt: new Date().toISOString(),
+      };
+      await p.route(/\/api\/receipt-box(\/[^?]*)?(\?.*)?$/, (route) => {
+        const path = new URL(route.request().url()).pathname.replace(/^\/api\/receipt-box\/?/, "");
+        if (route.request().method() === "GET" && path === "")
+          return route.fulfill({
+            json: {
+              available: true,
+              receipts: [target],
+              toCheck: 1,
+              filedCount: 0,
+              filedThisMonth: 0,
+              monthTotal: 0,
+              closingSoon: [],
+              autoFile: { on: false, offer: false },
+            },
+          });
+        if (route.request().method() === "GET" && path === target.id)
+          return route.fulfill({ json: { receipt: target, photoUrl } });
+        return route.fulfill({ json: target });
+      });
+      await p.reload();
+      await p
+        .getByRole("button", { name: /to check\. Check it/ })
+        .first()
+        .waitFor({ timeout: 30000 });
+      await p
+        .getByRole("button", { name: /to check\. Check it/ })
+        .first()
+        .click();
+      await p.getByRole("button", { name: "File it" }).waitFor({ timeout: 15000 });
+      await p.waitForTimeout(1500);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByRole("button", { name: /^Store: Target/ }),
+        also: (p) => p.getByRole("button", { name: /^Total: / }),
+        side: "corner",
+      },
+      2: (p) => p.getByRole("button", { name: /^Category: Home/ }),
+      // The whole "Keep it for" block: its heading and every tag.
+      3: (p) => p.getByText("Keep it for", { exact: true }).first().locator("xpath=../.."),
+      4: (p) => p.getByRole("button", { name: "File it" }),
+      5: {
+        find: (p) => p.getByRole("button", { name: "Check later" }),
+        also: (p) => p.getByRole("button", { name: /not a receipt/i }),
+        side: "corner",
+      },
+    },
+  },
 ];
 
 /**

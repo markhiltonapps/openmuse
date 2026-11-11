@@ -49,6 +49,19 @@ export type Detail =
   | { type: "rehearsalScore"; id: string; ask: RehearsalAsk }
   /** Setup with the agent: the first-run questions (onboarding-ui.tsx). */
   | { type: "onboarding" }
+  /**
+   * The Receipt box (receipt-box-ui.tsx). `photo` is a picture just taken, to read; `native` asks the
+   * phone app's picker; `camera: "blocked"` shows the camera-is-off card; `view: "check"` starts at
+   * what is waiting to check; `id` opens one receipt.
+   */
+  | {
+      type: "receipt-box";
+      photo?: File;
+      native?: boolean;
+      camera?: "blocked";
+      view?: "check" | "list";
+      id?: string;
+    }
   | { type: "menu" };
 export interface WorkspaceContextValue {
   workspace: Workspace;

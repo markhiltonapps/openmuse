@@ -47,12 +47,17 @@ export class MuseApi {
       | undefined;
     if (response.status === 401) signedOut();
     if (!response.ok)
-      throw new Error(
-        typeof payload?.error === "string"
-          ? payload.error
-          : payload === undefined
-            ? "The server is updating. Try again in a minute."
-            : `Request failed (${response.status})`,
+      throw Object.assign(
+        new Error(
+          typeof payload?.error === "string"
+            ? payload.error
+            : payload === undefined
+              ? "The server is updating. Try again in a minute."
+              : `Request failed (${response.status})`,
+        ),
+        // So a screen can tell "not found" (404) from a server that is busy (5xx), and whether the
+        // app's own server said so (a JSON error) or something in front of it did.
+        { status: response.status, fromServer: typeof payload?.error === "string" },
       );
     if (payload === undefined) throw new Error("The server gave an answer the app couldn’t read.");
     if (get) this.tags.keep(path, response.headers.get("etag"), payload);

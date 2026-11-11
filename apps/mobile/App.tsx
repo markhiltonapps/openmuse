@@ -1058,7 +1058,9 @@ function WorkspaceShell({
                           ? JSON.stringify(detail.draft)
                           : detail.type === "event"
                             ? detail.event?.id || "event-new"
-                            : detail.type
+                            : detail.type === "receipt-box"
+                              ? `receipt-box:${detail.id ?? ""}:${detail.view ?? ""}:${detail.photo?.name ?? ""}:${detail.photo?.lastModified ?? ""}`
+                              : detail.type
             }
             detail={detail}
           />

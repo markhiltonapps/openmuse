@@ -78,6 +78,7 @@ import { clearSilence, MicChooserButton, MicHelp, reportSilence } from "./mic-ui
 import { MiniAppToolCard } from "./mini-apps-ui";
 import { ParkedCarToolCard } from "./parked-car-card";
 import { PictureToolCard } from "./picture-card";
+import { ReceiptToolCard } from "./receipt-box-card";
 import { lookedAt } from "./receipt-text";
 import { type ReceiptInfo, useReceipts } from "./receipt-ui";
 import { RehearseToolCard } from "./rehearsal-ui";
@@ -391,6 +392,15 @@ export function WorkspaceTools() {
     parameters: displayParameters,
     render: ({ result, status }) => (
       <PictureToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  // "File this receipt" / "what's waiting to check?": the Check it card, Filed with Undo, or a short list.
+  useRenderTool({
+    name: "receipt_box",
+    description: "Show the receipt the agent read, filed or found",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <ReceiptToolCard result={result} loading={status !== "complete"} />
     ),
   });
   // "How do I…?": the help topic's steps, with a button to it in Help.

@@ -1,0 +1,46 @@
+Working session 2026-11-11 (Receipt box). The watch work of this day is in claude_working_session_20261110.txt.
+
+=== Receipt box: Phase 1 built (not pushed; owner's "push it" is needed) ===
+Owner's decisions: personal records; name "Receipt box"; a Receipt box entry in Spaces plus a Home card; check every receipt at
+first, offer auto-filing after ten good ones in a row; keep-for tags (Return window, Warranty, Tax time, Insurance); return-by
+reminders; only the last four card digits kept as text; test a cheaper against a more accurate reading model first.
+Plan: docs/RECEIPT-BOX-PLAN.md (API table, privacy, phases). Mockups: ten boards, two review rounds (scratchpad, not in the repo).
+
+Server (apps/server/src):
+  receipt-reader.ts   prompt, strict zod shape, tolerant parser, reconcile() (settles a smudged total from the receipt's own sums,
+                      tax-included totals count), date/plausibility checks, readReceipt() with one retry.
+  receipt-box.ts      store kind "receipt-box" (NOT "receipts": that word is the "What I used" privacy receipts), snap / snapFile /
+                      update / file / unfile / setReturn / remove / summary / list, duplicates flagged not dropped, auto-file only for
+                      sure reads, streak of ten unchanged checks, reminders through ReminderService (3 days before at 9, else that
+                      morning; `reminderAt` is the real time), safety cap 30 reads an hour / 120 a day (not a plan limit).
+  receipt-tools.ts    ONE chat tool receipt_box (read, fix, file, unfile, to_check, find), "shown" claimed only in chat, never on a call.
+  app.ts routes       /api/receipt-box (summary), /snap (multipart photo), /auto-file, /:id (GET, POST), /:id/file, /unfile, /return, /delete.
+  vision.ts           lookAtImage takes maxTokens (receipts use 4000); usage kind "receipts"; RECEIPT_MODEL overrides the model.
+App (apps/mobile/src/receipt-box-*.ts(x), 10 files + test): box sheet (list, two panes on desktop), snap flow (downscale to 1600px,
+  offline queue in IndexedDB), Check it, Filed, edge cards, detail, edit, auto-file offer, reminders note, Home card, Spaces row,
+  chat card for receipt_box, app place `receipts`.
+Tests: tests/receipt-reader.test.ts (20), tests/receipt-box.test.ts (13), apps/mobile/test/receipt-box.test.ts (22).
+
+Model test (docs/receipt_model_test_20261111.txt, scripts/receipt-model-test/): 17 RENDERED (not photographed) receipts.
+  claude-sonnet-5 right on all four key fields for 14 of 15 single receipts at ~0.75 cents; haiku-5.5 ~0.04 cents but less reliable;
+  haiku-4.5 worst value. No model leaked a card number. Default: claude-sonnet-5. sonnet-5.5 and Gemini untested: the OpenRouter key hit
+  its $10 limit (usage 10.04 of 10) - OWNER: check that key on Railway too, pictures use it.
+  Findings fixed: max_tokens too small for models that think (4000 now); tax-included totals raised a false "which total"; tip wording;
+  day/month order from the receipt's own clues first. Still to do: rerun on 20-30 REAL receipt photos from the owner.
+
+Reviews (Design division rule): visual, usability and copy reviewers, two rounds, all three signed off. Round 1 found: low-contrast
+  amber pill, File it and Snap-next pushed below the fold (now sticky footers), a way to file a guessed total by tapping a category
+  first (gate was `edited`; now `candidates.length > 1` only), "undo that" acting on the newest-DATED receipt, a reminder claim that
+  wasn't true, "say stop auto-filing" with no tool behind it, Help topic missing. Round 2 found one data-loss bug: a saved offline
+  photo was deleted on a 401 or a deploy's plain "404" (now removed only on 400/413/415/422 with a JSON error from our server).
+
+Help: new topic `receipts` (place `receipts`, group files) in packages/domain/src/help.ts with a picture (scripts/help-shots.mjs shot
+  `receipts`, taken by the app agent; see below for whether it landed). Website: a paragraph in apps/mobile/public/neddy.html (text only,
+  no new picture; no plan numbers claimed because there is no plan counter yet).
+
+NOT verified (cannot be here): a real camera, a real phone, real model reads on real photos, push notifications for the reminders, the
+  native app path (no downscale or offline queue on native: no image library installed), iPhone Share.
+Known/choices: the Home card is leaner than the mock (no category bar or recent list); no Summary tab; the tab bar peeking under a
+  desktop sheet is shared Sheet behaviour (seen on the Menu sheet too); monthTotal adds US dollars only; plan counter and limit text not
+  built (open owner decision: behaviour at the limit); "Not now" on the auto-file offer is now "No thanks" (it answers the offer for good).
+Pending: owner's real receipts for a model re-run; decision on the plan counter; Railway: set RECEIPT_MODEL only if a different model is wanted.

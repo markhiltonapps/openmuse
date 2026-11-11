@@ -752,3 +752,15 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   switch was in the code). A feature that depends on a chip nobody has read yet gets `NEDDY_RAISE_DEBUG`-style numbers on screen (and a message when the chip is missing or silent) from the first build, switched
   on while it is tried out. Don't depend on an unknown sign or start pose: the detector ignores which way the axis points and doesn't need a particular starting position.
 
+- **Receipt box (owner, 2026-11-11):** the model only copies what is printed; the code does the arithmetic (`reconcile`: a smudged total
+  is settled from the receipt's own sums, and prices that already include tax count as agreeing, or every VAT receipt raises a false
+  question). A guessed total must never file: gate on "more than one reading" alone, never on an "edited" flag that a category tap sets.
+  Newer models spend part of `max_tokens` on hidden reasoning, so a long JSON answer needs ~4000 (1500 returned empty or cut off). A
+  model test on rendered images is only a first look; re-run it on real photos. An OpenRouter key has its own lifetime limit: check
+  `/api/v1/key` before a paid test. "The one just read" means newest by when it arrived (`createdAt`/`filedAt`), never by the date printed
+  on it. A device's queued data (offline photos) is deleted only when the server itself says in JSON that it can never work
+  (`fromServer` + 400/413/415/422); a 401, a plain "404 Not Found" from a deploy, a 5xx or a dropped connection keep it. "Saved on this
+  device" is true only when the whole IndexedDB transaction committed (a quota error aborts after `success`). A tool must not say a
+  reminder is set for the return date: it fires days earlier and may not exist; build the sentence from the real `reminderAt`.
+  Copy that promises a voice command ("say stop auto-filing") needs a tool action behind it. Review rounds found all of these: send the
+  reviewers the code and the screenshots.

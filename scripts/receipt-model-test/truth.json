@@ -48,9 +48,7 @@
     "paymentLast4": null,
     "returnDays": null,
     "category": "Dining",
-    "categoryAlso": [
-      "Groceries"
-    ],
+    "categoryAlso": ["Groceries"],
     "isReceipt": true,
     "multipleReceipts": false,
     "note": "faded low-contrast thermal print, cash, no tax line (tax null)"
@@ -144,9 +142,7 @@
     "paymentLast4": "1007",
     "returnDays": null,
     "category": "Other",
-    "categoryAlso": [
-      "Home"
-    ],
+    "categoryAlso": ["Home"],
     "isReceipt": true,
     "multipleReceipts": false,
     "warrantyMentioned": true,
@@ -161,9 +157,7 @@
     "paymentLast4": "6609",
     "returnDays": null,
     "category": "Other",
-    "categoryAlso": [
-      "Travel"
-    ],
+    "categoryAlso": ["Travel"],
     "isReceipt": true,
     "multipleReceipts": false,
     "note": "10px text on a 330px wide image; fuel taxes included, no tax figure"
@@ -179,15 +173,7 @@
     "category": null,
     "isReceipt": true,
     "multipleReceipts": true,
-    "skip": [
-      "merchant",
-      "date",
-      "total",
-      "tax",
-      "paymentLast4",
-      "returnDays",
-      "category"
-    ],
+    "skip": ["merchant", "date", "total", "tax", "paymentLast4", "returnDays", "category"],
     "note": "two different receipts (a cafe and a pharmacy) in one picture; only isReceipt and multipleReceipts are scored"
   },
   {
@@ -201,15 +187,7 @@
     "category": null,
     "isReceipt": false,
     "multipleReceipts": false,
-    "skip": [
-      "merchant",
-      "date",
-      "total",
-      "tax",
-      "paymentLast4",
-      "returnDays",
-      "category"
-    ],
+    "skip": ["merchant", "date", "total", "tax", "paymentLast4", "returnDays", "category"],
     "note": "a restaurant menu page with prices but no total: must say isReceipt false"
   },
   {
@@ -234,9 +212,7 @@
     "paymentLast4": "7391",
     "returnDays": null,
     "category": "Dining",
-    "categoryAlso": [
-      "Groceries"
-    ],
+    "categoryAlso": ["Groceries"],
     "isReceipt": true,
     "multipleReceipts": false,
     "note": "card printed as XXXX XXXX XXXX 7391; also sells a bag of beans"
@@ -250,9 +226,7 @@
     "paymentLast4": "9010",
     "returnDays": null,
     "category": "Other",
-    "categoryAlso": [
-      "Home"
-    ],
+    "categoryAlso": ["Home"],
     "isReceipt": true,
     "multipleReceipts": false,
     "fullCardPrinted": true,

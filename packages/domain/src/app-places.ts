@@ -65,6 +65,12 @@ export const APP_PLACES = {
     about: 'goals, food rules, targets, "Ask me what I ate" (meal check-ins), the weekly check-in',
   },
   "log-meal": { name: "Log a meal", where: "Spaces › Health", about: "say or type a meal" },
+  receipts: {
+    name: "Receipt box",
+    where: "Spaces",
+    about:
+      "personal receipts they photographed: what is waiting to check, what is filed (newest first), each one's photo, total, category and return-by date, and a place to snap a new one",
+  },
   family: {
     name: "Family",
     where: "Spaces",

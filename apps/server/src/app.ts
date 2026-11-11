@@ -1889,7 +1889,7 @@ export async function createApp(
   app.get("/api/receipt-box", async (c) => c.json(await receiptBox.summary(c.get("owner"))));
   app.post("/api/receipt-box/snap", async (c) => {
     const photo = (await c.req.parseBody()).photo;
-    if (!(photo instanceof File)) throw new AppError("Choose a photo of the receipt");
+    if (!(photo instanceof File)) throw new AppError("Choose a photo of the receipt.");
     const snap = await receiptBox.snap(c.get("owner"), {
       bytes: new Uint8Array(await photo.arrayBuffer()),
       name: photo.name || "receipt.jpg",

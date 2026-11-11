@@ -62,6 +62,8 @@ export interface BoxReceipt {
   edited: boolean;
   duplicateOf?: string;
   reminderId?: string;
+  /** When the reminder fires (ISO), so screens say the real day. */
+  reminderAt?: string;
   createdAt: string;
   filedAt?: string;
 }
@@ -300,7 +302,7 @@ export class ReceiptBox {
 
   async get(owner: string, id: string) {
     const receipt = await this.db.get<BoxReceipt>(owner, KIND, id);
-    if (!receipt) throw new AppError("Receipt not found", 404);
+    if (!receipt) throw new AppError("That receipt isn’t in your Receipt box any more.", 404);
     return receipt;
   }
   /** A fresh signed link to the photo (links expire, so one is made each time it's opened). */
@@ -358,7 +360,12 @@ export class ReceiptBox {
       toCheck: all.filter((r) => r.status === "to-check").length,
       filedCount: filed.length,
       filedThisMonth: inMonth.length,
-      monthTotal: Math.round(inMonth.reduce((sum, r) => sum + (r.total ?? 0), 0) * 100) / 100,
+      // Only US dollars are added together; amounts in other currencies are never mixed in.
+      monthTotal:
+        Math.round(
+          inMonth.filter((r) => r.currency === "USD").reduce((sum, r) => sum + (r.total ?? 0), 0) *
+            100,
+        ) / 100,
       closingSoon,
       autoFile: {
         on: settings.autoFile,
@@ -414,7 +421,7 @@ export class ReceiptBox {
     if (receipt.status === "filed") return receipt;
     if (receipt.total === null || !receipt.merchant)
       throw new AppError("Add the store and the total before filing this one.", 422);
-    if (receipt.candidates.length > 1 && !receipt.edited)
+    if (receipt.candidates.length > 1)
       throw new AppError("Choose which total is right before filing this one.", 422);
     const next: BoxReceipt = {
       ...receipt,
@@ -468,6 +475,7 @@ export class ReceiptBox {
             `receipt-box:${id}:snooze:${localDay(this.now(), await this.timeZone(owner))}`,
           );
           next.reminderId = reminder.id;
+          next.reminderAt = reminder.dueAt;
         } catch {
           // A reminder that can't be made leaves the date on the receipt.
         }
@@ -475,7 +483,12 @@ export class ReceiptBox {
       return this.db.put(owner, KIND, next);
     }
     await this.cancelReminder(owner, receipt);
-    return this.db.put(owner, KIND, { ...receipt, returnState: state, reminderId: undefined });
+    return this.db.put(owner, KIND, {
+      ...receipt,
+      returnState: state,
+      reminderId: undefined,
+      reminderAt: undefined,
+    });
   }
 
   /** Removes the photo, the details and any reminder. */
@@ -507,6 +520,7 @@ export class ReceiptBox {
           `receipt-box:${receipt.id}:${receipt.returnBy}:${this.now()}`,
         );
         receipt.reminderId = reminder.id;
+        receipt.reminderAt = reminder.dueAt;
         return;
       } catch {
         // That time has passed (or too many reminders): try the next, then give up quietly.

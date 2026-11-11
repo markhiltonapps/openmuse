@@ -3,6 +3,7 @@ import {
   Bot,
   CalendarClock,
   CalendarDays,
+  Camera,
   CarFront,
   Check,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   type LucideIcon,
   Mail,
   Mic,
+  Receipt,
   UserPlus,
   X,
 } from "lucide-react-native";
@@ -38,6 +40,10 @@ import { useCallControls } from "./live-call";
 import { useLiveVoice } from "./live-talk-ui";
 import { useLiveCallOn } from "./live-voice";
 import { HomeRecordButton, useRecording } from "./meetings-ui";
+import { loadBox, useBox } from "./receipt-box-data";
+import { closesIn, homeCardKind, moneyWhole } from "./receipt-box-logic";
+import { amberInk, TealButton } from "./receipt-box-parts";
+import { refreshCamera, snapFromHome } from "./receipt-box-ui";
 import { glass } from "./theme";
 import { tipProps } from "./tips";
 import { Button, colors, glassSurface, s } from "./ui";
@@ -386,6 +392,8 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
               )}
             </HomeCard>
           )}
+          {/* Something to check or a return date closing: with what needs you, above the day. */}
+          <ReceiptBoxHome place="top" />
           <View style={{ flexDirection: "row", gap: desktop ? 16 : 12, alignItems: "stretch" }}>
             <HomeCard
               title="Today"
@@ -476,6 +484,8 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
             // Holds the card's room while the forecast loads, so the cards below don't jump.
             !weather && lastShown() && <WeatherRoom />
           )}
+          {/* The invitation to snap a first receipt waits below the day's cards. */}
+          <ReceiptBoxHome place="later" />
           <AddressCard agent={agent} />
           {upcoming.length > 0 && (
             <HomeCard title="Coming up" icon={CalendarClock}>
@@ -1057,6 +1067,167 @@ function DrivingBanner({ agent }: { agent: string }) {
         </Button>
       </View>
     </View>
+  );
+}
+
+const RECEIPT_CARD_KEY = "openmuse.receipt-card";
+/** What the card was last time, so its room is held while the box loads and nothing jumps. */
+function rememberedReceiptCard(): string {
+  try {
+    return globalThis.localStorage?.getItem(RECEIPT_CARD_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The Receipt box on Home (owner, 2026-11-11): shown when there is something to say: receipts to
+ * check, a return date closing in the next two weeks, or, for an empty box, the invitation to snap
+ * the first one. Never a card with nothing in it.
+ */
+function ReceiptBoxHome({ place }: { place: "top" | "later" }) {
+  const { api, open, panelOpen } = useWorkspace();
+  const { summary } = useBox(api);
+  const [last] = useState(rememberedReceiptCard);
+  // A receipt filed or deleted in the box changes what Home says: look again when a panel closes.
+  useEffect(() => {
+    if (!panelOpen) void loadBox(api);
+  }, [panelOpen, api]);
+  useEffect(() => {
+    void refreshCamera();
+  }, []);
+  const kind = homeCardKind(summary);
+  // The card is in one of two places, by what it says: the held room too.
+  const mine = (what: string | null) =>
+    (what === "attention" ? "top" : what === "invite" ? "later" : "") === place;
+  useEffect(() => {
+    if (!summary || place !== "top") return;
+    try {
+      globalThis.localStorage?.setItem(RECEIPT_CARD_KEY, kind ?? "none");
+    } catch {
+      // Private browsing: the room just isn't held next time.
+    }
+  }, [summary, kind]);
+  if (!summary)
+    return mine(last) ? (
+      <View aria-hidden>
+        <HomeCard title="Receipt box" icon={Receipt}>
+          <View style={{ height: last === "invite" ? 112 : 168 }} />
+        </HomeCard>
+      </View>
+    ) : null;
+  if (!kind || !mine(kind)) return null;
+  const closing = summary.closingSoon.slice(0, 2);
+  const spoken = [
+    summary.toCheck ? `${summary.toCheck} to check` : "",
+    ...closing.map(
+      (item) => `${item.merchant ?? "A receipt"} return window ${closesIn(item.days)}`,
+    ),
+  ]
+    .filter(Boolean)
+    .join(". ");
+  return (
+    <HomeCard
+      title="Receipt box"
+      icon={Receipt}
+      more="Open"
+      moreLabel={`Open the Receipt box${spoken ? `. ${spoken}` : ""}`}
+      onMore={() => open({ type: "receipt-box" })}
+    >
+      {kind === "invite" ? (
+        <Text style={{ color: soft(), fontSize: 14, lineHeight: 20 }}>
+          Snap a receipt and I’ll read the store, date and total. Return dates and warranties stay
+          in one place.
+        </Text>
+      ) : (
+        <>
+          {summary.toCheck > 0 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${summary.toCheck} ${summary.toCheck === 1 ? "receipt" : "receipts"} to check. Check it`}
+              onPress={() => open({ type: "receipt-box", view: "check" })}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                minHeight: 52,
+                paddingHorizontal: 14,
+                borderRadius: 16,
+                backgroundColor: glass ? "rgba(232,154,46,0.22)" : colors.orange,
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <Text
+                aria-hidden
+                style={{
+                  color: glass ? "#F6B55A" : amberInk,
+                  fontSize: 18,
+                  fontWeight: "800",
+                }}
+              >
+                !
+              </Text>
+              <Text style={{ flex: 1, color: ink(), fontSize: 16, fontWeight: "700" }}>
+                {summary.toCheck} {summary.toCheck === 1 ? "receipt" : "receipts"} to check
+              </Text>
+              <Text
+                style={{
+                  color: glass ? "#F6B55A" : amberInk,
+                  fontSize: 15,
+                  fontWeight: "800",
+                }}
+              >
+                Check it
+              </Text>
+              <ChevronRight size={16} color={glass ? "#F6B55A" : amberInk} />
+            </Pressable>
+          )}
+          {closing.map((item) => (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.merchant ?? "A receipt"} return window ${closesIn(item.days)}. Open the receipt`}
+              onPress={() => open({ type: "receipt-box", id: item.id })}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                minHeight: 48,
+                paddingHorizontal: 14,
+                borderRadius: 16,
+                backgroundColor: glass ? "rgba(20,56,54,0.72)" : colors.sky,
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <Bell size={18} color={glass ? "#FFFFFF" : colors.blueDark} />
+              <Text style={{ flex: 1, color: ink(), fontSize: 15, lineHeight: 20 }}>
+                <Text style={{ fontWeight: "800" }}>{item.merchant ?? "A receipt"}</Text> return
+                window {closesIn(item.days)}
+              </Text>
+            </Pressable>
+          ))}
+          {summary.filedThisMonth > 0 && (
+            <Text style={{ color: soft(), fontSize: 13 }}>
+              {moneyWhole(summary.monthTotal)} filed this month · {summary.filedThisMonth}{" "}
+              {summary.filedThisMonth === 1 ? "receipt" : "receipts"}
+            </Text>
+          )}
+        </>
+      )}
+      <TealButton
+        id="home-snap"
+        label="Snap a receipt"
+        icon={Camera}
+        onPress={() => snapFromHome(open)}
+        disabled={!summary.available}
+        height={52}
+      />
+      <Text style={{ color: soft(), fontSize: 13, textAlign: "center" }}>
+        {summary.available
+          ? "Or send me a photo in the chat."
+          : "Reading receipts isn’t set up on this server yet."}
+      </Text>
+    </HomeCard>
   );
 }
 

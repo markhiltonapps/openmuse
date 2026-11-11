@@ -28,6 +28,7 @@ import {
   Newspaper,
   PanelsTopLeft,
   Radar,
+  Receipt,
   Send,
   Shapes,
   ShieldCheck,
@@ -77,6 +78,7 @@ const ICONS: Record<AppPlaceId, LucideIcon> = {
   "health-food-log": UtensilsCrossed,
   "health-food-plan": CalendarRange,
   "health-playbook": BookOpen,
+  receipts: Receipt,
   "log-meal": Mic,
   family: House,
   "family-weeks": CalendarCheck,
@@ -375,6 +377,7 @@ export function usePlace(request: PlaceRequest) {
     if (request.place === "backdrop") return open({ type: "backdrop" });
     if (request.place === "updates") return open({ type: "notifications" });
     if (request.place === "log-meal") return open({ type: "food", log: true });
+    if (request.place === "receipts") return open({ type: "receipt-box" });
     if (request.place === "agent-computer") return open({ type: "computer" });
     if (request.place === "delegate") return open({ type: "delegate" });
     if (request.place === "setup") return open({ type: "onboarding" });
