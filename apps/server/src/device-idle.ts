@@ -55,6 +55,7 @@ export async function idleInfo(deps: IdleDeps, owner: string, device: Device) {
     off: zoneOffsetMinutes(nowMs, zone),
     after: settings.idleAfter,
     dim: settings.dim ? 1 : 0,
+    da: settings.dimAfter,
     sw: settings.showWeather ? 1 : 0,
     sm: settings.showMeeting ? 1 : 0,
     sb: settings.showBattery ? 1 : 0,

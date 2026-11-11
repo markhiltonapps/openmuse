@@ -161,3 +161,18 @@ NOT verified on the real board (a first run is the real test): the QMI8658's add
   To test the real thing: let the screen dim (idle face, a minute), let the arm hang or hold the watch on its edge for a second, then lift it as if checking the time.
   The sketch was only syntax-checked against stand-in headers (the real Arduino core can't be downloaded here), so the first compile may find a call-shape difference.
 Pending: owner's first run; maybe default ON once it works; a menu tile; steps (same chip, needs the sleep/battery work in #43 to be worth it); notifications; the iPhone/Android apps (not started).
+
+=== 2026-11-11: raise-to-wake did nothing on the owner's board ===
+Owner (Android, watch flashed with the 282a4a9 build, "turn on raise to wake" said and acknowledged): let the screen dim, then picked it up, hung it, moved it several ways: the screen never brightened.
+He saw no readout line at the bottom (NEDDY_IDLE_DEBUG was 0, as shipped). Loop checked: raiseLoop() is reached in the normal connected state, so it isn't an early return. Cause still unknown: it is one of
+(a) the QMI8658's address/registers/scale from the datasheet are wrong on this board, (b) the axis or its sign, (c) my detector's assumptions. A first-run guess was "turned away first" (picked up flat from a desk never armed), but hanging it also failed, so that isn't all of it.
+Built (computer-tested only):
+  - NEDDY_RAISE_DEBUG (ON in this build, set 0 when it works): the first line at the bottom shows "imu6B x y z m r5/2" = the three axes and the overall size in tenths of a g, raises seen, times brightened; or "raise to wake: off",
+    "motion chip: not found", "imuNN: no readings". The chip is read all the time in this mode, so "r" counts a raise even on a bright screen. It shows on the normal screen only (not the clock face): say "turn off the idle screen on my watch" first.
+  - Detector v2 (neddy_raise.h): sign-agnostic (|up|), no "turned away first" rule: it fires when the watch MOVED (angle changed 0.4 g within 1.6 s, or the overall size left 1 g by 0.25 g) and is now STILL with the screen flat (over 0.6 g either way, 200 ms).
+    Known side effect (tested and documented): a knock on a watch lying face down also wakes it. raise_test.cpp: 18 checks.
+  - "Dim after N seconds": DeviceSettings.dimAfter (0 = the usual minute after the idle face), manage_devices dim_after_seconds (also turns dimming on), idle fact `da`, firmware dims when quiet >= N s while the idle face is on
+    (so "dim after 5 s" with the idle face after 10 s dims as soon as the clock face appears; a raise restarts the wait). Needs the push to be usable by voice. touch_test.cpp: 88 checks; ui_sim odd windows 0; server 810 tests pass; lint and tsc clean.
+  - Help: the Raise to wake paragraph now says picking it up counts and names the face-down limit; a "How soon the screen dims" paragraph; an example phrase (a draft). Voice rules and agent text name dim_after_seconds.
+Still NOT verified on the real board: everything about the chip. Next step is the owner's readout numbers: flat on a table (which axis reads 10, what m reads), on its edge, then lifted: does r go up?
+Pending: send the numbers; if the chip is silent ("no readings"/"not found") fix the address/registers from them; then set NEDDY_RAISE_DEBUG 0, push, and re-test with dimming.

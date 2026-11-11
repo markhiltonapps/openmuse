@@ -169,6 +169,22 @@ int main() {
   CHECK(uiScreenOff && level == 7, "a raise never turns on a screen that was switched off");
   uiActivity(now); uiDimmed = false; uiIdleOn = false; pause(100);
 
+  // "Dim after N seconds" (here 5 of quiet, the idle face coming after 20): it dims the moment the idle face is up, a raise brightens it,
+  // and it dims again 5 s after that. 0 goes back to the usual minute after the idle face came.
+  uiIdle.dimAfter = 5; uiActivity(now);
+  for (int sec = 0; sec < 22; sec++) pause(1000);
+  CHECK(uiIdleOn && uiDimmed && level == UI_DIM_LEVEL, "with dim-after 5 the idle face comes up dimmed");
+  uiRaise(now);
+  CHECK(!uiDimmed && uiIdleOn && level == 255, "a raise brightens it");
+  for (int sec = 0; sec < 4; sec++) pause(1000);
+  CHECK(!uiDimmed, "still bright 4 s later");
+  for (int sec = 0; sec < 2; sec++) pause(1000);
+  CHECK(uiDimmed, "dimmed again after 5 s of quiet");
+  uiIdle.dimAfter = 0; uiActivity(now); uiDimmed = false; uiIdleOn = false; pause(100);
+  for (int sec = 0; sec < 40; sec++) pause(1000);
+  CHECK(uiIdleOn && !uiDimmed, "with dim-after 0 it keeps the usual minute (idle face up, not dimmed yet)");
+  uiActivity(now); uiDimmed = false; uiIdleOn = false; pause(100);
+
   // The diagnostic lines change every second. They must never make the words blink (the whole text area redrawn), shown or not.
   uiOut.brightness = nullptr;
   uiIdle.have = false; uiIdleOn = false; uiClearCard(); uiSetMode(UI_READY); uiSetWords("Hold BOOT to talk"); pause(500);

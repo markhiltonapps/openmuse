@@ -16,6 +16,8 @@ export interface DeviceSettings {
   idleAfter: number;
   /** Dim the screen after a minute of idle. */
   dim: boolean;
+  /** Seconds of quiet before it dims; 0 = the usual (a minute after the idle screen comes on). Dimming is part of the idle screen, so it needs that on. */
+  dimAfter: number;
   showWeather: boolean;
   showMeeting: boolean;
   /** A small battery level on the idle screen (when the device has a battery). */
@@ -30,6 +32,7 @@ export interface DeviceSettings {
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   idleAfter: 10,
   dim: true,
+  dimAfter: 0,
   showWeather: true,
   showMeeting: true,
   showBattery: true,
@@ -268,6 +271,7 @@ export class Devices {
     if (!device) throw new AppError("That device isn’t on your list.", 404);
     const next = { ...settingsOf(device), ...patch };
     next.idleAfter = Math.max(0, Math.min(600, Math.round(next.idleAfter)));
+    next.dimAfter = Math.max(0, Math.min(3600, Math.round(next.dimAfter)));
     await this.db.put(owner, "devices", { ...device, settings: next });
     for (const hook of this.settingsHooks) hook(id);
     return next;
@@ -308,7 +312,7 @@ export function describeSettings(settings: DeviceSettings) {
     : "raise to wake is off";
   return settings.idleAfter === 0
     ? `the idle screen is off; ${raise}`
-    : `after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? "dims after a minute" : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}`;
+    : `after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? (settings.dimAfter > 0 ? `dims after ${settings.dimAfter} seconds of quiet` : "dims after a minute") : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}`;
 }
 
 /** The chat's one tool for devices: pair one with the code on its screen, list, rename or remove. */
@@ -353,7 +357,7 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen after a minute of quiet; there is no brightness level to set, so for “turn the screen down” use dim and say so), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen; there is no brightness level to set, so for “turn the screen down” use dim and say so), dim_after_seconds (how many seconds of quiet before it dims, for “dim it after 5 seconds”; 0 goes back to the usual minute after the idle screen comes on; it only dims once the idle screen is on, so idle_after_seconds must be on too and a small number like 5 is best), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
         do: z.enum(["pair", "list", "rename", "remove", "settings"]),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),
@@ -368,6 +372,15 @@ export function deviceToolSpecs(
           .optional()
           .describe("settings: seconds of quiet before the idle screen shows; 0 = never"),
         dim: z.boolean().optional().describe("settings: dim the idle screen after a minute"),
+        dim_after_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(3600)
+          .optional()
+          .describe(
+            "settings: seconds of quiet before the screen dims (it also turns dimming on); 0 = the usual minute after the idle screen comes on",
+          ),
         show_weather: z.boolean().optional().describe("settings: weather on the idle screen"),
         show_meeting: z.boolean().optional().describe("settings: next meeting on the idle screen"),
         show_battery: z
@@ -397,6 +410,7 @@ export function deviceToolSpecs(
         do: "pair" | "list" | "rename" | "remove" | "settings";
         idle_after_seconds?: number;
         dim?: boolean;
+        dim_after_seconds?: number;
         show_weather?: boolean;
         show_meeting?: boolean;
         show_battery?: boolean;
@@ -452,6 +466,14 @@ export function deviceToolSpecs(
                 ? { idleAfter: input.idle_after_seconds }
                 : {}),
               ...(input.dim !== undefined ? { dim: input.dim } : {}),
+              ...(input.dim_after_seconds !== undefined
+                ? {
+                    dimAfter: input.dim_after_seconds,
+                    ...(input.dim_after_seconds > 0 && input.dim === undefined
+                      ? { dim: true }
+                      : {}),
+                  }
+                : {}),
               ...(input.show_weather !== undefined ? { showWeather: input.show_weather } : {}),
               ...(input.show_meeting !== undefined ? { showMeeting: input.show_meeting } : {}),
               ...(input.show_battery !== undefined ? { showBattery: input.show_battery } : {}),

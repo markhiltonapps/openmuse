@@ -104,6 +104,14 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 #define NEDDY_IDLE_DEBUG 0
 #endif
 
+// 1 = while raise-to-wake is on, show what the motion chip reads on the first line at the bottom ("imu6B x y z m10 r2/1": the three axes and the overall size
+// in tenths of a g, raises seen, times the screen was brightened) and read the chip all the time, so a raise is counted even on a bright screen.
+// This is ON while raise-to-wake is being tried out on the real board; set it to 0 once it works.
+// The line shows on the normal screen only (not on the clock face), so while testing say "turn off the idle screen on my watch" first.
+#ifndef NEDDY_RAISE_DEBUG
+#define NEDDY_RAISE_DEBUG 1
+#endif
+
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
 static void outFill(int x, int y, int w, int h, uint16_t colour) { gfx->fillRect(x, y, w, h, colour); }
 static void clearScreen() { gfx->fillScreen(0); }
@@ -300,14 +308,11 @@ static void batteryLoop() {
 // The board has a QMI8658 (accelerometer + gyroscope) on the same I2C bus, normally at 0x6B. Only the accelerometer is used, and only while the
 // person has raise-to-wake turned on (the setting arrives with the idle facts; off, the chip is stopped). The registers below come from the chip's
 // datasheet and were NOT yet checked on the real board when this was written, so: the chip's ID is checked first, the byte order is checked against
-// gravity, and a test build (NEDDY_IDLE_DEBUG 1) shows what the chip reads on the first line at the bottom ("imu 6B x y z r5/2": the three axes
-// in tenths of a g, raises seen, times the screen was brightened). With the watch lying face up on a table the axis that points out of the screen must read +10;
-// if it reads -10 instead, set NEDDY_IMU_UP_SIGN to -1; if another axis reads 10, set NEDDY_IMU_UP_AXIS (0 = x, 1 = y, 2 = z). See neddy_raise.h for the rule.
+// gravity, and a test build (NEDDY_RAISE_DEBUG 1) shows what the chip reads on the first line at the bottom. With the watch lying flat on a table the axis that
+// points through the screen must read +10 or -10 (which sign doesn't matter: the detector ignores it) and m (the overall size) must read about 10.
+// If another axis reads 10 instead of z, set NEDDY_IMU_UP_AXIS (0 = x, 1 = y, 2 = z). See neddy_raise.h for the rule.
 #ifndef NEDDY_IMU_UP_AXIS
 #define NEDDY_IMU_UP_AXIS 2
-#endif
-#ifndef NEDDY_IMU_UP_SIGN
-#define NEDDY_IMU_UP_SIGN 1
 #endif
 static uint8_t imuAddr = 0;
 static bool imuOn = false, imuBig = false;       // the chip is measuring; its bytes come high byte first
@@ -366,34 +371,40 @@ static bool imuStart() {
   LOGF("[imu] QMI8658 at 0x%02X, %s byte order (off from 1 g: %ld vs %ld over %d looks)\n", imuAddr, imuBig ? "high-first" : "low-first", little, bigger, got);
   return true;
 }
-// Called every turn of the loop. Reads the chip about 30 times a second, and only while something is dimmed (a bright screen has nothing to wake).
+// Called every turn of the loop. Reads the chip about 30 times a second, and only while something is dimmed (a bright screen has nothing to wake),
+// or all the time in a test build (NEDDY_RAISE_DEBUG 1) so the readout and the raise count are live.
 static void raiseLoop() {
-  static uint32_t lastPoll = 0, retryAt = 0, lastNote = 0;
+  static uint32_t lastPoll = 0, retryAt = 0, lastNote = 0, lastGood = 0;
   static bool wasNeeded = false;
   static int seen = 0, g[3] = { 0, 0, 0 };
   uint32_t now = millis();
   if (!uiIdle.raise) {                                            // switched off: the chip stops measuring
     if (imuOn) { imuWrite(0x08, 0x00); imuOn = false; wasNeeded = false; }
-    if (NEDDY_IDLE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "raise to wake: off");
+    if (NEDDY_RAISE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "raise to wake: off");
     return;
   }
   if (!imuOn) {
     if (now < retryAt) return;
     if (!imuStart()) {
       retryAt = now + 30000UL;
-      if (NEDDY_IDLE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "motion chip: not found");
+      if (NEDDY_RAISE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "motion chip: not found");
       return;
     }
+    lastGood = now;
   }
-  if (!(uiWantsRaise() || NEDDY_IDLE_DEBUG != 0)) { wasNeeded = false; return; }
+  if (!(uiWantsRaise() || NEDDY_RAISE_DEBUG != 0)) { wasNeeded = false; return; }
   if (!wasNeeded) { raiseReset(raiseDet); wasNeeded = true; }
-  if (now - lastPoll < 33) return;
-  lastPoll = now;
-  if (!imuSample(g, imuBig)) return;
-  if (raiseFeed(raiseDet, now, g[NEDDY_IMU_UP_AXIS] * NEDDY_IMU_UP_SIGN, raiseMag(g[0], g[1], g[2]))) { seen++; uiRaise(now); }
-  if (NEDDY_IDLE_DEBUG && now - lastNote >= 400) {
+  if (now - lastPoll >= 33) {
+    lastPoll = now;
+    if (imuSample(g, imuBig)) {
+      lastGood = now;
+      if (raiseFeed(raiseDet, now, g[NEDDY_IMU_UP_AXIS], raiseMag(g[0], g[1], g[2]))) { seen++; uiRaise(now); }
+    }
+  }
+  if (NEDDY_RAISE_DEBUG && now - lastNote >= 400) {
     lastNote = now;
-    snprintf(uiImuDbg, sizeof(uiImuDbg), "imu %02X %+d %+d %+d r%d/%d", imuAddr, g[0] / 100, g[1] / 100, g[2] / 100, seen, uiRaises);
+    if (now - lastGood > 1500) snprintf(uiImuDbg, sizeof(uiImuDbg), "imu%02X: no readings", imuAddr);
+    else snprintf(uiImuDbg, sizeof(uiImuDbg), "imu%02X x%+d y%+d z%+d m%d r%d/%d", imuAddr, g[0] / 100, g[1] / 100, g[2] / 100, raiseMag(g[0], g[1], g[2]) / 100, seen, uiRaises);
     uiDiagDirty = true;
   }
 }
@@ -1219,6 +1230,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showM = jsonInt(text, "sm", 1) != 0;
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
         uiIdle.raise = jsonInt(text, "rw", 0) != 0;
+        uiIdle.dimAfter = jsonInt(text, "da", 0);
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
@@ -1706,7 +1718,7 @@ void setup() {
   };
   uiOut.record = recAction;
   uiMotion = NEDDY_MOTION != 0;
-  uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0;
+  uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0 || NEDDY_RAISE_DEBUG != 0;
   screenBoot("Starting");
 
   prefs.begin("neddy", false);

@@ -748,3 +748,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   on by an explicit choice, and says in the agent's reply when it can't do anything (raise-to-wake with dimming off). A feature that reads a sensor starts the sensor only while it is on.
   Raise-to-wake (`neddy_raise.h`) works from a "turned away, then facing and still" rule so a watch lying face up never fires; its chip address, registers and axis are from the
   datasheet and unverified until the owner's first run (`NEDDY_IDLE_DEBUG 1` shows the readings). The phone apps (iPhone and Android) will be needed before this goes public.
+- **A sensor feature ships with its own readout (2026-11-11):** raise-to-wake did nothing on the owner's board and the shipped build had no way to see why (the debug line was off and its
+  switch was in the code). A feature that depends on a chip nobody has read yet gets `NEDDY_RAISE_DEBUG`-style numbers on screen (and a message when the chip is missing or silent) from the first build, switched
+  on while it is tried out. Don't depend on an unknown sign or start pose: the detector ignores which way the axis points and doesn't need a particular starting position.
+

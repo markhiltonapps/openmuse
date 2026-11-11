@@ -389,6 +389,7 @@ struct UiIdle {
   bool showB; int bat; bool chg;  // the battery level: shown, percent (-1 = no battery / unknown), charging
   int mv; bool vbus;              // battery millivolts (0 = not read) and whether USB power is present
   bool raise;                     // raise-to-wake is on (the person's setting; the sketch reads the accelerometer only when it is)
+  int dimAfter;                   // seconds of quiet before the idle face dims; 0 = the usual (a minute after the idle face came)
 };
 static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false, 0, false };
 static uint8_t uiBatRaw[2] = { 0, 0 };   // the power chip's two status bytes, for the test line
@@ -1057,7 +1058,7 @@ static bool uiWantsRaise() { return !uiScreenOff && (uiDimmed || (uiRec.state ==
 static void uiRaise(uint32_t ms) {
   if (uiScreenOff) return;
   bool did = false;
-  if (uiDimmed) { uiDimmed = false; uiIdleSince = ms; did = true; }            // the idle face stays, bright, and its dimming wait starts again
+  if (uiDimmed) { uiDimmed = false; uiIdleSince = ms; uiLastActive = ms; did = true; }   // the idle face stays, bright, and its dimming wait starts again
   if (uiRec.state == UI_RECS_RUN && uiRec.dimmed) { uiRec.dimmed = false; uiRec.lastTouch = ms; did = true; }
   if (did) { uiRaises++; if (uiOut.brightness) uiOut.brightness(255); }
 }
@@ -1489,7 +1490,8 @@ static void uiIdleTick(uint32_t ms) {
     return;
   }
   if (uiMode != UI_READY || uiCard.on || !uiIdle.have || uiIdle.after == 0) { uiActivity(ms); return; }
-  if (uiIdle.dim && !uiDimmed && ms - uiIdleSince >= UI_IDLE_DIM_MS) {
+  bool dimDue = uiIdle.dimAfter > 0 ? ms - uiLastActive >= (uint32_t)uiIdle.dimAfter * 1000UL : ms - uiIdleSince >= UI_IDLE_DIM_MS;
+  if (uiIdle.dim && !uiDimmed && dimDue) {
     uiDimmed = true;
     if (uiOut.brightness) uiOut.brightness(UI_DIM_LEVEL);
   }

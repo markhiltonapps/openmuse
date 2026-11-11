@@ -84,6 +84,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     off: -360,
     after: 10,
     dim: 1,
+    da: 0,
     sw: 1,
     sm: 1,
     sb: 1,
@@ -260,6 +261,43 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   await db.close();
 });
 
+test("dim after N seconds: said once, it turns dimming on, reaches the watch, and 0 goes back to the usual minute", async () => {
+  const db = await createStore();
+  const devices = new Devices(db);
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const [tool] = deviceToolSpecs(devices, "o");
+  assert.ok(tool);
+  const deps = {
+    timeZone: async () => "UTC",
+    weather: () => undefined,
+    calendar: async () => undefined,
+    now: () => 1_800_000_000_000,
+  };
+  await tool.execute({ do: "settings", dim: false });
+  const set = (await tool.execute({ do: "settings", dim_after_seconds: 5 })) as {
+    message?: string;
+  };
+  assert.match(set.message ?? "", /dims after 5 seconds of quiet/);
+  const one = (await devices.list("o"))[0];
+  assert.ok(one);
+  assert.equal(settingsOf(one).dim, true, "saying how soon turns dimming on");
+  const info = await idleInfo(deps, "o", one);
+  assert.equal(info.da, 5);
+  assert.equal(info.dim, 1);
+  const back = (await tool.execute({ do: "settings", dim_after_seconds: 0 })) as {
+    message?: string;
+  };
+  assert.match(back.message ?? "", /dims after a minute/);
+  const two = (await devices.list("o"))[0];
+  assert.ok(two);
+  assert.equal((await idleInfo(deps, "o", two)).da, 0);
+  // A silly number is held to an hour.
+  const big = await devices.setSettings("o", two.id, { dimAfter: 99999 });
+  assert.equal(big.dimAfter, 3600);
+  await db.close();
+});
+
 test("the chat changes a device's idle screen by what's said", async () => {
   const db = await createStore();
   const devices = new Devices(db);
@@ -287,6 +325,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
   assert.deepEqual(settingsOf(device as never), {
     idleAfter: 60,
     dim: false,
+    dimAfter: 0,
     showWeather: false,
     showMeeting: true,
     showBattery: true,
