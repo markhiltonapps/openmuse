@@ -95,6 +95,7 @@ import { Pictures } from "./pictures.ts";
 import { PlaceReminders } from "./place-reminders.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
 import { PushService } from "./push.ts";
+import { ReceiptBox } from "./receipt-box.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
 import { hideText } from "./redaction.ts";
 import {
@@ -116,7 +117,6 @@ import { isPurchase, SpendingService } from "./spending.ts";
 import { jsonUnlessUnchanged } from "./unchanged.ts";
 import { UrgentAlerts } from "./urgent-alerts.ts";
 import { UsageMeter } from "./usage.ts";
-import { ReceiptBox } from "./receipt-box.ts";
 import { lookAtImage } from "./vision.ts";
 import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
 import { LiveVoice, liveInstructions, pickHello } from "./voice-live.ts";
@@ -989,6 +989,7 @@ export async function createApp(
             lookAtImage(image, question, {
               ...claude,
               model: process.env.RECEIPT_MODEL?.trim() || claude.model,
+              maxTokens: 4000,
               onUsage: owner ? usage.sink(owner, "receipts") : undefined,
             })
         : undefined,

@@ -14,6 +14,8 @@ export async function lookAtImage(
     baseUrl?: string;
     fetcher?: typeof fetch;
     onUsage?: UsageSink;
+    /** Newer models spend some of this on hidden reasoning, so a long JSON answer needs room. */
+    maxTokens?: number;
   },
 ) {
   if (image.bytes.length > MAX_IMAGE)
@@ -30,7 +32,7 @@ export async function lookAtImage(
     },
     body: JSON.stringify({
       model: options.model,
-      max_tokens: 1500,
+      max_tokens: options.maxTokens ?? 1500,
       messages: [
         {
           role: "user",

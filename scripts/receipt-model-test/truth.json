@@ -1,0 +1,261 @@
+[
+  {
+    "file": "01-grocery-clean.png",
+    "merchant": "Greenfield Market",
+    "date": "2026-11-03",
+    "total": 61.75,
+    "tax": 1.07,
+    "paymentLast4": "4417",
+    "returnDays": null,
+    "category": "Groceries",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "clean monospace grocery receipt on gray"
+  },
+  {
+    "file": "02-retail-return-policy.png",
+    "merchant": "Pinecrest Home & Garden",
+    "date": "2026-10-18",
+    "total": 93.58,
+    "tax": 7.13,
+    "paymentLast4": "8821",
+    "returnDays": 30,
+    "category": "Home",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "sans-serif retail on wood; 30-day return policy"
+  },
+  {
+    "file": "03-restaurant-handwritten-tip.png",
+    "merchant": "Luigi's Trattoria",
+    "date": "2026-11-07",
+    "total": 78.23,
+    "tax": 5.73,
+    "paymentLast4": "0093",
+    "returnDays": null,
+    "category": "Dining",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "printed total is the truth (prompt rule); handwritten tip 12.00 and handwritten total 90.23 must go in notes, not the total",
+    "handwrittenTotal": 90.23
+  },
+  {
+    "file": "04-faded-thermal.png",
+    "merchant": "Sweet Rise Bakery",
+    "date": "2026-10-29",
+    "total": 23.7,
+    "tax": null,
+    "paymentLast4": null,
+    "returnDays": null,
+    "category": "Dining",
+    "categoryAlso": [
+      "Groceries"
+    ],
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "faded low-contrast thermal print, cash, no tax line (tax null)"
+  },
+  {
+    "file": "05-rotated-skewed.png",
+    "merchant": "Maple Street Hardware",
+    "date": "2026-09-14",
+    "total": 56.25,
+    "tax": 3.8,
+    "paymentLast4": "3306",
+    "returnDays": null,
+    "category": "Home",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "rotated 4 degrees and skewed, on a dark desk"
+  },
+  {
+    "file": "06-blurred.png",
+    "merchant": "Fresh Basket Grocers",
+    "date": "2026-11-09",
+    "total": 51.62,
+    "tax": 0,
+    "paymentLast4": "7742",
+    "returnDays": null,
+    "category": "Groceries",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "Gaussian blur 2.2px over the whole receipt; tax printed as 0.00"
+  },
+  {
+    "file": "07-smudged-total.png",
+    "merchant": "Bluebird Pet Supply",
+    "date": "2026-10-22",
+    "total": 58.4,
+    "tax": 1.94,
+    "paymentLast4": "5512",
+    "returnDays": null,
+    "category": "Pets",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "smudgedTotal": true,
+    "note": "first digit of the printed total (58.40) is covered by a dark smudge; subtotal 56.46 + tax 1.94 give it"
+  },
+  {
+    "file": "08-long-narrow.png",
+    "merchant": "Valley Foods Co-op",
+    "date": "2026-11-01",
+    "total": 208.31,
+    "tax": 2.31,
+    "paymentLast4": "2290",
+    "returnDays": null,
+    "category": "Groceries",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "40 item lines, 290px wide and very tall"
+  },
+  {
+    "file": "09-cropped-top.png",
+    "merchant": "Little Sprouts",
+    "date": "2026-10-11",
+    "total": 54.68,
+    "tax": 3.22,
+    "paymentLast4": "6150",
+    "returnDays": null,
+    "category": "Kids",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "top of the receipt is cut off; the store name appears only in a logo-style box near the bottom"
+  },
+  {
+    "file": "10-foreign-eur.png",
+    "merchant": "Epicerie Lenoir",
+    "date": "2026-11-04",
+    "total": 18.8,
+    "tax": 1.42,
+    "currency": "EUR",
+    "paymentLast4": "0481",
+    "returnDays": null,
+    "category": "Groceries",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "French receipt, 04/11/2026 means 4 November (a US reading gives April 11), decimal commas, EUR"
+  },
+  {
+    "file": "11-electronics-warranty.png",
+    "merchant": "Voltline Electronics",
+    "date": "2026-08-27",
+    "total": 264.86,
+    "tax": 19.89,
+    "paymentLast4": "1007",
+    "returnDays": null,
+    "category": "Other",
+    "categoryAlso": [
+      "Home"
+    ],
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "warrantyMentioned": true,
+    "note": "2-year protection plan; no return window in days is printed"
+  },
+  {
+    "file": "12-gas-station-tiny.png",
+    "merchant": "Ridgeway Fuel Stop",
+    "date": "2026-11-08",
+    "total": 43.8,
+    "tax": null,
+    "paymentLast4": "6609",
+    "returnDays": null,
+    "category": "Other",
+    "categoryAlso": [
+      "Travel"
+    ],
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "10px text on a 330px wide image; fuel taxes included, no tax figure"
+  },
+  {
+    "file": "13-two-receipts.png",
+    "merchant": null,
+    "date": null,
+    "total": null,
+    "tax": null,
+    "paymentLast4": null,
+    "returnDays": null,
+    "category": null,
+    "isReceipt": true,
+    "multipleReceipts": true,
+    "skip": [
+      "merchant",
+      "date",
+      "total",
+      "tax",
+      "paymentLast4",
+      "returnDays",
+      "category"
+    ],
+    "note": "two different receipts (a cafe and a pharmacy) in one picture; only isReceipt and multipleReceipts are scored"
+  },
+  {
+    "file": "14-not-a-receipt-menu.png",
+    "merchant": null,
+    "date": null,
+    "total": null,
+    "tax": null,
+    "paymentLast4": null,
+    "returnDays": null,
+    "category": null,
+    "isReceipt": false,
+    "multipleReceipts": false,
+    "skip": [
+      "merchant",
+      "date",
+      "total",
+      "tax",
+      "paymentLast4",
+      "returnDays",
+      "category"
+    ],
+    "note": "a restaurant menu page with prices but no total: must say isReceipt false"
+  },
+  {
+    "file": "15-pharmacy.png",
+    "merchant": "Cedar Health Pharmacy",
+    "date": "2026-11-05",
+    "total": 31.9,
+    "tax": 1.43,
+    "paymentLast4": "9921",
+    "returnDays": 28,
+    "category": "Health",
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "prescription plus over-the-counter items; 28-day return window for unopened OTC items"
+  },
+  {
+    "file": "16-card-masked-xxxx.png",
+    "merchant": "Sunrise Coffee Roasters",
+    "date": "2026-11-10",
+    "total": 29.5,
+    "tax": 0,
+    "paymentLast4": "7391",
+    "returnDays": null,
+    "category": "Dining",
+    "categoryAlso": [
+      "Groceries"
+    ],
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "note": "card printed as XXXX XXXX XXXX 7391; also sells a bag of beans"
+  },
+  {
+    "file": "17-card-full-number.png",
+    "merchant": "Metro Office Supply",
+    "date": "2026-10-05",
+    "total": 128.77,
+    "tax": 9.81,
+    "paymentLast4": "9010",
+    "returnDays": null,
+    "category": "Other",
+    "categoryAlso": [
+      "Home"
+    ],
+    "isReceipt": true,
+    "multipleReceipts": false,
+    "fullCardPrinted": true,
+    "note": "the whole 16-digit card number (a made-up test number) is printed; the reader must output only 9010"
+  }
+]

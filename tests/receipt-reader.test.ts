@@ -182,3 +182,24 @@ test("readReceipt flags the fields to check: missing date and merchant", async (
   assert.ok(result.unclear.includes("date"));
   assert.ok(result.unclear.includes("merchant"));
 });
+
+test("reconcile: prices that already include tax don't raise a false question", () => {
+  const read = parse({
+    ...good,
+    currency: "EUR",
+    subtotal: null,
+    tax: 1.42,
+    total: 18.8,
+    items: [
+      { name: "Pain", amount: 8.8 },
+      { name: "Fromage", amount: 10 },
+    ],
+  });
+  assert.equal(reconcile(read).status, "sure");
+});
+
+test("the prompt tells the model to leave a handwritten tip out and to read dates from the receipt first", () => {
+  const prompt = receiptPrompt({ today: "2026-11-11" });
+  assert.ok(/handwritten/.test(prompt));
+  assert.ok(/own clues first/.test(prompt));
+});

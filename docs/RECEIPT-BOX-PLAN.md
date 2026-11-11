@@ -61,6 +61,19 @@ accounting, no per-line splitting.
 `set_return_reminder` ("remind me to return this by the tenth"), `undo_filing`. A tool says a card is "shown" only
 when one is drawn (the four-step call-card rule), and tool text stays neutral because background jobs share it.
 
+## Which model reads (tested 2026-11-11, `docs/receipt_model_test_20261111.txt`)
+
+On 17 synthetic (rendered, not photographed) receipts: claude-sonnet-5 got every key field right on 14 of 15
+single receipts at about 0.75¢ a read; claude-haiku-5.5 about 0.04¢ (19 times cheaper, fastest) but was less
+reliable (it read a French 04/11 as April 11 and was cut off once); claude-haiku-4.5 was the worst value (7 times
+the price of haiku-5.5, one confident wrong total). No model leaked a card number. **Default: claude-sonnet-5**
+(the server's vision default; `RECEIPT_MODEL` overrides). Idea to try later: read with haiku-5.5 and re-read with
+Sonnet only when the first read is unsure (about 0.27¢ average). Findings fixed in the reader: the answer limit
+(newer models spend hidden reasoning tokens, so receipts get 4,000), tax-included totals no longer raise a false
+"which total is right", the tip/total wording, and day/month order now follows the receipt's own clues first.
+sonnet-5.5 and Gemini flash-lite are untested (the OpenRouter key's $10 limit ran out). Real photos will be harder:
+re-run `scripts/receipt-model-test` on 20-30 real receipts before choosing for good.
+
 ## Cost and limits
 
 Each read is one vision call, about 0.4–0.8¢ (see the model test for the measured figure on the chosen model).

@@ -1,0 +1,214 @@
+Receipt reading: model test (2026-11-11)
+=======================================
+
+STATUS: PARTLY DONE. The OpenRouter key hit its own lifetime limit part-way through the first pass, so two of
+the five models are not measured (see "What did not get measured"). Everything below is real output from real
+calls; nothing is estimated except where it says so.
+
+What was asked
+--------------
+Which vision model should read photographed receipts in the Receipt box: a cheaper one or a more accurate
+one? Candidates: anthropic/claude-haiku-4.5, claude-haiku-5.5, claude-sonnet-5, claude-sonnet-5.5 and
+google/gemini-3.5-flash-lite (all five exist in OpenRouter's model list).
+
+Method
+------
+- The real reader code was used unchanged (apps/server/src/receipt-reader.ts): receiptPrompt (today
+  2026-11-11, country United States), parseReceiptRead and reconcile. A model's "final" total is
+  reconcile(read).total, so the numbers include what reconcile does with a doubtful or smudged total.
+- 17 synthetic receipt pictures (scripts/receipt-model-test/make-receipts.mjs, drawn from HTML with Playwright's
+  Chromium, 1x scale, no real receipts): clean grocery; retail with a 30-day return policy and "Visa ending";
+  restaurant with a printed tip line plus a handwritten-style tip and total; faded low-contrast thermal print
+  (cash); rotated 4 degrees and skewed; blurred; first digit of the total covered by a smudge (recoverable only
+  from subtotal + tax); a long narrow receipt with 40 lines; top cut off with the store name only in a logo box;
+  French receipt (04/11/2026, decimal commas, EUR); electronics with a 2-year protection plan; gas station in
+  10 px text; two receipts side by side; a restaurant menu (not a receipt); pharmacy (Health, 28-day OTC
+  returns); card printed as XXXX XXXX XXXX 7391; and the whole 16-digit card number printed (a made-up number).
+  The answer key is scripts/receipt-model-test/truth.json. Every printed amount is added up in code.
+- scripts/receipt-model-test/run.mjs sends each picture as a data-URI image_url plus the prompt text, temperature 0,
+  max_tokens 1500, usage {include: true} (so OpenRouter reports the real cost of every call), three calls at a
+  time per model, no retry on a bad answer (a bad answer is a failure; only 429/5xx would be retried, and none
+  happened). Raw per-call JSON is kept outside the repo (session scratchpad), not here.
+- Scoring per picture: merchant (case/accents/"&" ignored, either name containing the other), date exact,
+  total within 0.01 (final = reconcile's total; the raw model total is recorded too), tax within 0.01 (missing
+  and 0 count the same), last 4 exact, returnDays exact or null, category exact or one of the listed acceptable
+  alternatives (café Dining/Groceries, electronics Other/Home, fuel Other/Travel, office supplies Other/Home),
+  isReceipt, multipleReceipts. "key-4" = merchant + date + total + last 4 all right. "Danger" = the final total
+  is wrong but reconcile said "sure" (the person would never be asked). Any answer containing a run of 12 or more
+  digits (also with spaces or hyphens) would be a hard failure.
+- Spend cap US$1.50: never close. Total spent was about US$0.235 (see the end).
+
+Honest limits
+-------------
+- The pictures are RENDERED, not photographed. Real photos add glare, folds, shadows, perspective, thumbs,
+  JPEG noise and low light, so real accuracy will be lower than these numbers and the models' order could change.
+  Run scripts/receipt-model-test/README.txt on 20-30 of the owner's own receipts before trusting any figure here.
+- 17 pictures and one run each: a difference of one or two receipts between models is noise, not a ranking.
+- Temperature 0 does not make the models identical from run to run; no run was repeated (to save money).
+- The handwriting is an italic font, not handwriting. The fake card number was chosen, not a real card.
+- The score of each model is over the pictures it actually answered. Two models had a cut-off answer on one
+  picture each (explained below); those count as failures in "parse" but their other fields are not counted.
+
+What did not get measured
+-------------------------
+The OpenRouter key's own limit is US$10 in total and was already used up (OpenRouter's key endpoint showed
+limit US$10, remaining 0; this test accounts for about US$0.24 of the use). Calls then failed with HTTP 402
+("requires more credits") and 403 ("Key limit exceeded"). Result:
+- anthropic/claude-sonnet-5.5: only the first 4 pictures (01-04) were answered; all 4 were completely right.
+  4 pictures say nothing about ranking. Not measured on the other 13.
+- google/gemini-3.5-flash-lite: no successful call at all.
+- The two cut-off answers (haiku-5.5 on 08, sonnet-5 on 05) could not be tried again with a bigger limit.
+To finish: raise or replace the key, then run (finished calls are kept, only the missing ones are paid for):
+    OPENROUTER_API_KEY=... npx tsx scripts/receipt-model-test/run.mjs <images folder> --out <results folder>
+The pictures can be made again with make-receipts.mjs (the same pictures, deterministic).
+
+Results
+-------
+Overall (fields = share of all field checks right; key-4 = merchant+date+total+last4 all right on single receipts;
+danger = total wrong but reconcile said sure; parse = unusable answers; 16dig = 12+ digit run in an answer)
+
+model                            fields    key-4  danger  parse  16dig  lat avg  lat p95  c/receipt    $/100
+------------------------------------------------------------------------------------------------------------
+anthropic/claude-haiku-4.5        96.4%    73.3%       1      0      0     2.1s     4.3s     0.287c    $0.29
+anthropic/claude-haiku-5.5        92.1%    80.0%       0      1      0     1.5s     2.4s     0.040c    $0.04
+anthropic/claude-sonnet-5         93.5%    93.3%       0      1      0     1.9s     3.1s     0.753c    $0.75
+anthropic/claude-sonnet-5.5      100.0%   100.0%       0      0      0     2.2s     2.9s     0.797c    $0.80   (4 pictures only)
+google/gemini-3.5-flash-lite        no successful call (key limit)
+
+Notes on reading the table:
+- "fields" is lower for the two models with a cut-off answer because that picture counts as all fields wrong;
+  without it haiku-5.5 and sonnet-5 are both at about 97-100% of what they answered.
+- The "danger" for haiku-4.5 is the handwritten-total picture (below); the prompt itself is contradictory there.
+- Cost is OpenRouter's reported usage.cost per call (none was estimated). It includes hidden reasoning tokens.
+  Mean tokens per call in/out: haiku-4.5 992/376; haiku-5.5 1,177/565; sonnet-5 1,175/518; sonnet-5.5 1,189/559.
+- Per 100 receipts: haiku-5.5 about US$0.04, haiku-4.5 about US$0.29, sonnet-5 about US$0.75, sonnet-5.5 about
+  US$0.80. Sonnet reads therefore cost 19 times a Haiku-5.5 read. docs/RECEIPT-BOX-PLAN.md assumed 0.4-0.8 cents:
+  true for Sonnet, 10 times too high for Haiku-5.5.
+- Latency is 1.5-2.2 seconds average and under 4.5 seconds at the 95th percentile for all four: fast enough
+  for "reading..." on the Snap screen.
+
+Per field (right / checked)
+model                            merchant       date      total        tax      last4 returnDays   category  isReceipt   multiple
+anthropic/claude-haiku-4.5          15/15      13/15      13/15      15/15      14/15      15/15      15/15      17/17      17/17
+anthropic/claude-haiku-5.5          13/15      13/15      14/15      14/15      14/15      14/15      14/15      16/17      16/17
+anthropic/claude-sonnet-5           14/15      14/15      14/15      14/15      14/15      14/15      14/15      16/17      16/17
+anthropic/claude-sonnet-5.5           4/4        4/4        4/4        4/4        4/4        4/4        4/4        4/4        4/4
+
+(Each "15" is 17 pictures minus the two that are not single receipts; the 16/17 and 14/15 are the picture that
+was cut off.)
+
+How reconcile settled the total
+model                          sure   pick (right total offered)   missing   failed
+haiku-4.5                       12      5 (3)                        0         0
+haiku-5.5                       12      3 (3)                        1         1
+sonnet-5                        13      3 (2)                        0         1
+sonnet-5.5 (4 pictures)          3      1 (1)                        0         0
+"pick" includes the menu picture for sonnet-5 (not a receipt, so harmless) and the handwritten-tip and French
+pictures discussed below. "missing" for haiku-5.5 is the menu (no total, correct).
+
+Smudged total (07, truth 58.40; the printed total shows only ".40" after a blot)
+- haiku-4.5: guessed 63.40 with nothing marked unclear (a silent wrong guess). reconcile caught it: the sums say
+  58.40, so it became a question with both numbers offered. Without reconcile this is a wrong total filed unseen.
+- haiku-5.5: returned total null and marked "total" unclear; reconcile offered 58.40 from the sums as one candidate
+  (a one-tap question).
+- sonnet-5: read 58.40, marked "total" unclear; reconcile settled it from the sums ("sure", correct).
+- sonnet-5.5: 58.40 was not measured on this picture (only 01-04 were done).
+
+Card numbers: 55 usable answers were checked (including the card printed as XXXX XXXX XXXX 7391 and the whole
+16-digit number). None contained a run of 12 or more digits; every model returned only the last four (9010 for the
+fully printed card).
+
+The failures worth reading
+--------------------------
+(model said / truth)
+1. haiku-4.5, 01 clean grocery: date "2026-03-11" for a receipt printed 11/03/2026 (truth 2026-11-03). It read a
+   US date in day/month order. 06 blurred: date "2026-03-11" for 11/09/2026 (truth 2026-11-09) and card last 4
+   null (its own note said "ending 7762"; the truth is 7742). Nothing was marked unclear for the dates, so the
+   person would have seen a wrong date without a highlight. Haiku-4.5 was the only model to misread a clean
+   receipt.
+2. haiku-4.5, 03 restaurant: total 90.23, tip 12, subtotal 72.50, tax 5.73 (truth by the prompt's own rule:
+   printed total 78.23). It took the handwritten total. Because subtotal + tax + tip = 90.23, reconcile said
+   "sure": counted as a dangerous error. The other three models reported 78.23 and wrote the handwritten 90.23 in
+   "notes", as asked; reconcile then saw 72.50 + 5.73 + 12 (tip) = 90.23 against 78.23 and asked the person
+   (candidates 78.23 and 90.23), which is a sensible outcome. The prompt contradicts itself here (see PROMPT AND
+   RECONCILE FINDINGS 1).
+3. haiku-4.5, 07 smudged: wrong silent guess of 63.40, caught by reconcile (above).
+4. haiku-5.5, 04 faded thermal: merchant "SWEET FISE BAKERY" (truth Sweet Rise Bakery). It marked "merchant"
+   unclear, so the Check card would highlight it. Not dangerous.
+5. haiku-5.5, 10 French receipt: date "2026-04-11" (truth 2026-11-04; its own note says "read as 11 April 2026
+   under US convention"). Not marked unclear; "2026-04-11" is a plausible date so plausibleDate() lets it
+   through. See finding 3. Sonnet-5 got the same picture right (2026-11-04).
+6. haiku-5.5, 08 long narrow (40 lines): answer cut off at the 1,500-token limit, in the middle of the item
+   list (finish_reason "length"; 644 of the 1,500 tokens were hidden reasoning). Counted as a parse failure.
+7. sonnet-5, 05 rotated/skewed: EMPTY answer. All 1,500 tokens went to hidden reasoning (reasoning_tokens 1500,
+   content ""), so it said nothing. Counted as a parse failure.
+   Both 6 and 7 are the token limit, not reading ability (finding 4). The app's retry-once would very likely
+   hit the same wall, because the second try uses the same prompt and limit.
+
+PROMPT AND RECONCILE FINDINGS (receipt-reader.ts was not changed)
+-----------------------------------------------------------------
+1. The prompt contradicts itself about tips. "total": "the final amount charged (including tax and tip)", but
+   the Rules say: "If a handwritten tip ... changes the total, report the printed total and say so in notes."
+   Evidence: haiku-4.5 followed the first and reported 90.23 with the tip 12 (reconcile: sure); the other three
+   followed the second. Also the three that followed the rule still fill "tip": 12, which makes reconcile
+   add 12 to the sums and then disagree with their own correct 78.23 (it asks the person; harmless but
+   avoidable). Suggestion: say plainly "a handwritten tip is NOT part of the total or the tip field: leave
+   tip null and describe it in notes", or decide that the written-in final total is what the person paid.
+2. reconcile() cannot cope with tax-INCLUDED totals (VAT/GST/"dont TVA"/"taxes included"). Evidence: picture
+   10. haiku-5.5 and sonnet-5 both answered total 18.80 (right), subtotal null, tax 1.42 (the included VAT) and
+   six item lines adding up to 18.80. Line 195 of receipt-reader.ts then expects lines + tax = 20.22, finds the
+   total contradicted, and returns status "pick" with candidates [18.8, 20.22]: a question about a correct
+   total. Every receipt from a country (or any shop) that prints included tax will do this. (Haiku-4.5 avoided
+   it only by inventing subtotal 17.38 = 18.80 - 1.42, i.e. doing the arithmetic the prompt forbids.)
+   Suggestion: treat lines-sum (and subtotal) alone as acceptable expected values too, not only "+ tax + tip".
+   The fuel receipt ("taxes included", no tax figure) is fine because there is no tax to add.
+3. The date rule is tied to the person's country, not to the receipt. "The person lives in United States, so
+   03/04/26 is March 4". A French receipt in euros dated 04/11/2026 was read by haiku-5.5 as 11 April (and not
+   flagged), by sonnet-5 as 4 November. A US person who travels, shops online or keeps foreign receipts will
+   hit this. Suggestion: add "if the receipt's currency, language or address is from another country, use
+   that country's date order; if you cannot tell, return null and add 'date' to unclear". Also consider
+   treating any date with day and month both 12 or less as unclear when the currency is not the person's.
+4. max_tokens 1500 is too small for these models. Haiku 5.5, Sonnet 5 and Sonnet 5.5 think before they answer
+   by default (reasoning tokens on 8 of 17, 10 of 17 and 3 of 4 calls; up to 644, 1,500 and 301 tokens) and
+   the thinking is taken out of max_tokens. A 40-line receipt's JSON alone is about 900 tokens. Haiku-4.5 did not
+   reason on any call (Gemini showed 0 reasoning tokens on its one trial call, which was discarded). The app should set a larger limit (4,000 or more) and ask for
+   little or no reasoning if OpenRouter offers that for the chosen model (untested here: no credit was left).
+   This matters twice: it caused both parse failures, and reasoning tokens are billed as output (they are
+   already inside the costs above).
+5. Good: no model leaked a card number, 0 of 55 answers contained 12 or more digits. All four models said
+   "not a receipt" for the menu and "several receipts" for the two-receipt photo (the three models that answered
+   those pictures: haiku-4.5, haiku-5.5, sonnet-5). Those three also read the fuel receipt's 10 px text and the
+   cropped receipt's merchant from the logo ("little sprouts") correctly.
+6. A silent wrong guess is the real risk and reconcile is what stops it: haiku-4.5's 63.40 on the smudged total
+   was wrong with "unclear" empty, and only the receipt's own sums turned it into a question. Keep reconcile.
+
+Recommendation (provisional: two of five models were not measured, and the pictures are not real photos)
+--------------------------------------------------------------------------------------------------------
+- Default reader: anthropic/claude-sonnet-5 at about 0.75 cents a receipt (about US$0.75 per 100). It got
+  every picture it answered right (14 of 14 on all nine fields, including the smudged total, the French date
+  and the handwritten tip handled by the rule) and had the best key-4 rate, 93.3%, the miss being the cut-off
+  answer, not a misreading. Latency 1.9 s average, 3.1 s at p95.
+  Sonnet-5.5 looked equally good on the four pictures it answered and costs the same (0.80 cents), so there is
+  no reason yet to prefer it; decide after its other 13 pictures are done.
+- Cheap option: anthropic/claude-haiku-5.5 at about 0.04 cents a receipt (US$0.04 per 100), 19 times cheaper
+  than Sonnet, fastest (1.5 s average). It was right on everything it finished except one faded merchant name it
+  marked unclear itself, and the foreign date (a prompt problem, finding 3). It is NOT free of risk: it
+  also uses reasoning tokens and needs the larger max_tokens, and one 40-line receipt was cut off.
+  A sensible design to try (not tested): read with haiku-5.5, and re-read with Sonnet only when the result is
+  "pick", has anything unclear, or fails to parse. On this set that would be about 5 of 17 receipts, an average
+  near 0.04 + 0.3 x 0.75 = about 0.27 cents a receipt, with Sonnet's accuracy on the doubtful ones.
+- Do not use claude-haiku-4.5: seven times the price of haiku-5.5 and the only model that misread a clean
+  receipt, misread dates twice, guessed a smudged total without saying so and took the handwritten total.
+- Gemini 3.5 flash lite: no data. Run it after the key is fixed (list price US$0.30 per million input tokens;
+  its one discarded trial call cost 0.12 cents, about twice haiku-5.5, so it is worth the test).
+- Before choosing for good: (a) fix the prompt and reconcile points above and raise max_tokens, (b) run
+  the README steps on 20-30 real receipts including the worst ones (crumpled, glare, thermal fading), (c) compare
+  again; the real photos matter more than this table.
+
+Spend
+-----
+Calls by usage.cost: about US$0.235 in total (US$0.0195 of it in a first trial of one picture on all five models,
+which was discarded because the smudge picture still showed the amount on the card line; US$0.2155 in the full
+pass: haiku-4.5 0.0489, haiku-5.5 0.0068, sonnet-5 0.1280, sonnet-5.5 0.0319, Gemini 0). Well under the US$1.50
+cap. The key's own US$10 limit is a separate limit and is why the run stopped; most of that use was not from this
+test.
