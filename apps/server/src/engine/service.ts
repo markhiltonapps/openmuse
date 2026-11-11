@@ -58,6 +58,7 @@ import type { LookAtImage } from "../file-tools.ts";
 import type { Files } from "../files.ts";
 import type { HeadsUps } from "../heads-ups.ts";
 import type { HealthService } from "../health.ts";
+import type { ReceiptBox } from "../receipt-box.ts";
 import { ideasSystemPrompt, parseIdeas } from "../ideas-ai.ts";
 import { jobEmail } from "../job-email.ts";
 import { backgroundFailure } from "../log.ts";
@@ -1371,6 +1372,8 @@ export class AgentService {
   }
   /** Meal log and guided workouts. */
   health?: HealthService;
+  /** Personal receipts the person photographs, checks and files. */
+  receiptBox?: ReceiptBox;
   /** "What did you have for lunch?" at meal times; asked from the maintenance loop. */
   checkIns?: MealCheckIns;
   /** Neddy speaks first about the day's calendar; checked from the maintenance loop. */

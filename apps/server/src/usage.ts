@@ -27,6 +27,7 @@ export type UsageKind =
   | "summary"
   | "code"
   | "recipes"
+  | "receipts"
   | "voice"
   /** Meetings recorded in the app, transcribed by the minute. */
   | "meetings"

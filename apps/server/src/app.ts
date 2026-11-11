@@ -116,6 +116,7 @@ import { isPurchase, SpendingService } from "./spending.ts";
 import { jsonUnlessUnchanged } from "./unchanged.ts";
 import { UrgentAlerts } from "./urgent-alerts.ts";
 import { UsageMeter } from "./usage.ts";
+import { ReceiptBox } from "./receipt-box.ts";
 import { lookAtImage } from "./vision.ts";
 import { type VoiceBrain, voiceAnswer, voiceToday } from "./voice-brain.ts";
 import { LiveVoice, liveInstructions, pickHello } from "./voice-live.ts";
@@ -977,6 +978,23 @@ export async function createApp(
     },
   );
   agent.reminders = reminders;
+  // The Receipt box reads photos with the vision model (RECEIPT_MODEL, else VISION_MODEL / the server's Claude).
+  const receiptBox = new ReceiptBox(
+    db,
+    files,
+    (owner) => agent.timeZone(owner),
+    (owner) =>
+      claude
+        ? (image, question) =>
+            lookAtImage(image, question, {
+              ...claude,
+              model: process.env.RECEIPT_MODEL?.trim() || claude.model,
+              onUsage: owner ? usage.sink(owner, "receipts") : undefined,
+            })
+        : undefined,
+    reminders,
+  );
+  agent.receiptBox = receiptBox;
   // Meetings recorded in the room: Soniox writes the words, the simple-jobs model the notes.
   const soniox =
     options.soniox ??
@@ -1866,6 +1884,47 @@ export async function createApp(
   app.post("/api/health-log/meals", async (c) =>
     c.json(await health.logMeal(c.get("owner"), await c.req.json()), 201),
   );
+  // Receipt box: snap, check, file (docs/RECEIPT-BOX-PLAN.md).
+  app.get("/api/receipt-box", async (c) => c.json(await receiptBox.summary(c.get("owner"))));
+  app.post("/api/receipt-box/snap", async (c) => {
+    const photo = (await c.req.parseBody()).photo;
+    if (!(photo instanceof File)) throw new AppError("Choose a photo of the receipt");
+    const snap = await receiptBox.snap(c.get("owner"), {
+      bytes: new Uint8Array(await photo.arrayBuffer()),
+      name: photo.name || "receipt.jpg",
+      mimeType: photo.type,
+    });
+    return c.json(snap, snap.receipt ? 201 : 200);
+  });
+  app.post("/api/receipt-box/auto-file", async (c) => {
+    const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());
+    return c.json(await receiptBox.setAutoFile(c.get("owner"), on));
+  });
+  app.get("/api/receipt-box/:id", async (c) => {
+    const owner = c.get("owner");
+    const receipt = await receiptBox.get(owner, c.req.param("id"));
+    return c.json({ receipt, photoUrl: await receiptBox.photoUrl(owner, receipt) });
+  });
+  app.post("/api/receipt-box/:id", async (c) =>
+    c.json(await receiptBox.update(c.get("owner"), c.req.param("id"), await c.req.json())),
+  );
+  app.post("/api/receipt-box/:id/file", async (c) =>
+    c.json(await receiptBox.file(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/receipt-box/:id/unfile", async (c) =>
+    c.json(await receiptBox.unfile(c.get("owner"), c.req.param("id"))),
+  );
+  app.post("/api/receipt-box/:id/return", async (c) => {
+    const { state } = z
+      .object({ state: z.enum(["returned", "keeping", "snooze"]) })
+      .parse(await c.req.json());
+    return c.json(await receiptBox.setReturn(c.get("owner"), c.req.param("id"), state));
+  });
+  app.post("/api/receipt-box/:id/delete", async (c) => {
+    const { confirm } = z.object({ confirm: z.literal(true) }).parse(await c.req.json());
+    void confirm;
+    return c.json(await receiptBox.remove(c.get("owner"), c.req.param("id")));
+  });
   app.get("/api/approval-rules", async (c) => c.json(await approvals.list(c.get("owner"))));
   app.post("/api/approval-rules", async (c) =>
     c.json(await approvals.add(c.get("owner"), await c.req.json()), 201),

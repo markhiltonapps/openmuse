@@ -39,6 +39,7 @@ import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { headsUpInstructions, headsUpToolSpecs } from "../heads-ups.ts";
 import { healthTargets, healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
+import { receiptToolInstructions, receiptToolSpec } from "../receipt-tools.ts";
 import { helpToolInstructions, helpToolSpecs } from "../help-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { earlierPages, searchEarlierPages } from "../main-pages.ts";
@@ -1163,6 +1164,20 @@ export class ConversationAgent extends AbstractAgent {
           }),
         ),
       );
+    const receiptBox = this.service.receiptBox;
+    if (receiptBox?.available)
+      tools.push(
+        defineTool({
+          ...receiptToolSpec(receiptBox, this.owner, { onCall }),
+          execute: async (args: unknown) => {
+            try {
+              return await receiptToolSpec(receiptBox, this.owner, { onCall }).execute(args as never);
+            } catch (error) {
+              return { error: error instanceof Error ? error.message : "Could not do that" };
+            }
+          },
+        }),
+      );
     const mail = this.service.mail;
     if (mail)
       tools.push(
@@ -1482,6 +1497,7 @@ export class ConversationAgent extends AbstractAgent {
         (search ? webSearchInstructions : "") +
         (mail ? agentEmailInstructions : "") +
         (health ? healthToolInstructions : "") +
+        (this.service.receiptBox?.available ? receiptToolInstructions : "") +
         (health && this.service.checkIns ? checkInInstructions : "") +
         redactionInstructions +
         (this.service.headsUps ? headsUpInstructions : "") +
