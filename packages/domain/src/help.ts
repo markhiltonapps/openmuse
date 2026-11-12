@@ -359,6 +359,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "A device talks on {agent}’s own voice and uses your call minutes, like a call from your phone. It does what a call does: looks things up, sets reminders, reads things back. Anything that needs your OK shows its Approve card on your phone or in the app.",
       "**Raise to wake** is optional and off until you ask for it. Say “turn on raise to wake on my watch” and, once the watch’s screen has dimmed, raising your wrist or picking the watch up to look at it brightens it again, the way a normal watch does. It only brightens a screen that has already dimmed (so it needs dimming on, which it is by default), it leaves a screen you switched off from the menu alone, and it uses a little battery while it’s on. It can’t tell which way up the watch is, so a knock on a watch lying face down also brightens it. Say “turn off raise to wake” to turn it off again.",
       "**Volume:** if the watch is too loud or too quiet, say so: “turn my watch down”, “a bit louder” or “set my watch volume to 40 percent”. Or press the watch’s side button, tap **Volume**, and use the big **−** and **+** (each one is a step of 10), or tap one of the ten bars to jump there; the watch plays a short note at the new volume. It goes from 0 (muted) to 100 and starts at 85.",
+      "**Battery:** the watch’s battery level shows on its clock face, and {agent} can tell you more: say “how’s my watch’s battery?” and {agent} reads what the watch last reported (the percentage, whether it’s charging, its Wi-Fi strength and how long it has been on; the watch sends a report a few minutes after it connects and every five minutes after that). **Battery saver** is on unless you turn it off: the watch’s Wi-Fi sleeps between messages and its processor runs slower, so the battery lasts longer, at the cost of {agent}’s first word arriving a moment later. Say “turn off battery saver on my watch” for the fastest answers, or “turn on battery saver” again to save power.",
       "**How soon the screen dims:** by default it dims a minute after the clock face comes on. Say “dim my watch after 5 seconds” to make it quicker (it dims only once the clock face is on, so keep the clock face on; “come on after 5 seconds” sets that), or “dim my watch after a minute” to go back.",
       "Honest limits: it needs Wi-Fi. If you start a call on your phone, the device’s conversation ends (one at a time). After a quiet spell the next press takes a moment longer to start. You can pair up to five devices. The **Your devices** card shows only for the admin and for anyone who has already paired one; everyone else can say “pair my device” and read out the code.",
     ],
@@ -370,6 +371,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Turn on raise to wake on my watch.",
       "Dim my watch after 5 seconds.",
       "My watch is too loud.",
+      { text: "How’s my watch’s battery?", send: true },
+      "Turn off battery saver on my watch.",
     ],
     keywords: [
       "raise to wake",

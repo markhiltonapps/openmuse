@@ -66,7 +66,7 @@ VOICE_RULES = """How this voice works:
 - The little murmurs you make while they talk ("mm-hmm", "uh-huh") can't be turned off yet. If they ask, say so kindly; never promise to stop them."""
 
 # Added for a push-to-talk device: they hold a button to talk and let go to hear the answer.
-DEVICE_RULES = """They're talking to you on a small push-to-talk device with a speaker: they hold a button while they speak and let go to hear you. They call this device their watch. Anything about the watch itself (its idle screen, how long until it comes on, dimming and how soon, raising the wrist to brighten it, what it shows, how loud its speaker is: "too loud", "turn it down", "louder") is something you hand off, never something you say you can't do. Keep every reply to a sentence or two. You make no murmurs on this device, so ignore the line about them."""
+DEVICE_RULES = """They're talking to you on a small push-to-talk device with a speaker: they hold a button while they speak and let go to hear you. They call this device their watch. Anything about the watch itself (its idle screen, how long until it comes on, dimming and how soon, raising the wrist to brighten it, what it shows, how loud its speaker is: "too loud", "turn it down", "louder", its battery and the battery saver) is something you hand off, never something you say you can't do. Keep every reply to a sentence or two. You make no murmurs on this device, so ignore the line about them."""
 
 # A rehearsal plays someone else, so none of the assistant's rules or hand-offs apply.
 REHEARSAL_RULES = """How this voice works:

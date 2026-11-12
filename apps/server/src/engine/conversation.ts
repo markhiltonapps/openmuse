@@ -39,7 +39,6 @@ import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
 import { headsUpInstructions, headsUpToolSpecs } from "../heads-ups.ts";
 import { healthTargets, healthToolInstructions, healthToolSpecs } from "../health-tools.ts";
-import { receiptToolInstructions, receiptToolSpec } from "../receipt-tools.ts";
 import { helpToolInstructions, helpToolSpecs } from "../help-tools.ts";
 import { mailAlertInstructions, mailAlertToolSpecs } from "../mail-alerts.ts";
 import { earlierPages, searchEarlierPages } from "../main-pages.ts";
@@ -54,6 +53,7 @@ import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
 import { pictureToolInstructions, pictureToolSpecs } from "../picture-tools.ts";
 import { placeReminderToolSpecs } from "../place-reminders.ts";
+import { receiptToolInstructions, receiptToolSpec } from "../receipt-tools.ts";
 import { guardInput, guardTools, redactionInstructions } from "../redaction.ts";
 import { reminderToolSpecs } from "../reminders.ts";
 import { restaurantInstructions, restaurantToolSpecs } from "../restaurants.ts";
@@ -1171,7 +1171,9 @@ export class ConversationAgent extends AbstractAgent {
           ...receiptToolSpec(receiptBox, this.owner, { onCall }),
           execute: async (args: unknown) => {
             try {
-              return await receiptToolSpec(receiptBox, this.owner, { onCall }).execute(args as never);
+              return await receiptToolSpec(receiptBox, this.owner, { onCall }).execute(
+                args as never,
+              );
             } catch (error) {
               return { error: error instanceof Error ? error.message : "Could not do that" };
             }

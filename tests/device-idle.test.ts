@@ -92,6 +92,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     face: 0,
     rw: 0,
     vol: 85,
+    bs: 1,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -213,7 +214,7 @@ test("the home screen defaults to ten seconds and the battery can be hidden by v
   const hidden = (await tool.execute({ do: "settings", show_battery: false })) as {
     message?: string;
   };
-  assert.doesNotMatch(hidden.message ?? "", /battery/);
+  assert.doesNotMatch(hidden.message ?? "", /the battery level/);
   await db.close();
 });
 
@@ -272,7 +273,7 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   };
   assert.match(
     idleOff.message ?? "",
-    /the idle screen is off; the speaker volume is 85 percent; raise to wake is off/,
+    /the idle screen is off; the speaker volume is 85 percent; battery saver is on; raise to wake is off/,
   );
   await db.close();
 });
@@ -349,6 +350,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     face: "info",
     raiseToWake: false,
     volume: 85,
+    batterySaver: true,
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
@@ -446,6 +448,104 @@ test("a device is sent its idle facts when it connects and when its settings cha
     () => text.filter((event) => event.type === "idle").some((event) => event.vol === 100),
     "an out-of-range volume is held to 100",
   );
+  ws.close();
+  bridge.stop();
+  server.close();
+  await db.close();
+});
+
+test("battery saver is on by default, goes on and off by voice and reaches the watch; the watch's report is kept and said back", async () => {
+  const db = await createStore();
+  let now = 1_800_000_000_000;
+  const devices = new Devices(db, () => now);
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const [tool] = deviceToolSpecs(devices, "o");
+  assert.ok(tool);
+  const deps = {
+    timeZone: async () => "UTC",
+    weather: () => undefined,
+    calendar: async () => undefined,
+    now: () => now,
+  };
+  const device = (await devices.list("o"))[0];
+  assert.ok(device);
+  assert.equal((await idleInfo(deps, "o", device)).bs, 1, "on until the person says otherwise");
+  const off = (await tool.execute({ do: "settings", battery_saver: false })) as {
+    message?: string;
+  };
+  assert.match(off.message ?? "", /battery saver is off/);
+  const again = (await devices.list("o"))[0];
+  assert.ok(again);
+  assert.equal((await idleInfo(deps, "o", again)).bs, 0, "the watch is told it is off");
+  // Before any report the agent says so; after one it says what the watch reported, and how old it is.
+  const before = (await tool.execute({ do: "list" })) as { devices: { report: string }[] };
+  assert.match(before.devices[0]?.report ?? "", /no report yet/);
+  devices.setStatus(again.id, {
+    battery: 72,
+    millivolts: 3950,
+    charging: false,
+    usb: false,
+    wifiDbm: -61,
+    upSeconds: 2040,
+    connects: 3,
+    saver: true,
+  });
+  now += 5 * 60_000;
+  const after = (await tool.execute({ do: "list" })) as { devices: { report: string }[] };
+  assert.match(after.devices[0]?.report ?? "", /battery 72% \(3\.95 V\), running on the battery/);
+  assert.match(
+    after.devices[0]?.report ?? "",
+    /Wi-Fi -61 dBm, on for 34 minutes, connected 3 times/,
+  );
+  assert.match(after.devices[0]?.report ?? "", /reported 5 minutes ago/);
+  await db.close();
+});
+
+test("a watch's status report over its socket is kept and logged (bad numbers are dropped, not trusted)", async () => {
+  const db = await createStore();
+  const devices = new Devices(db);
+  const lines: string[] = [];
+  const server = createServer();
+  const bridge = new DeviceBridge(
+    devices,
+    () => undefined,
+    (line) => lines.push(line),
+    Date.now,
+    async () => ({ type: "idle", t: 1 }),
+  );
+  bridge.attach(server);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const polled = await devices.poll(started.pollToken);
+  const token = (polled as { token: string }).token;
+  const ws = new WebSocket(
+    `ws://127.0.0.1:${(server.address() as AddressInfo).port}/api/device/audio`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  await once(ws, "open");
+  const id = (await devices.list("o"))[0]?.id as string;
+  ws.send(
+    JSON.stringify({
+      type: "device.status",
+      battery: 64,
+      mv: 3890,
+      charging: 0,
+      usb: 0,
+      rssi: -58,
+      up: 600,
+      connects: 2,
+      saver: 1,
+    }),
+  );
+  await until(() => devices.statusOf(id)?.battery === 64, "the status kept");
+  assert.ok(lines.some((line) => line.includes("status: battery 64% 3890 mV on battery")));
+  assert.equal(devices.statusOf(id)?.saver, true);
+  ws.send(JSON.stringify({ type: "device.status", battery: 900, mv: "x", rssi: 50, up: -4 }));
+  await until(() => devices.statusOf(id)?.battery === null, "a nonsense battery is dropped");
+  assert.equal(devices.statusOf(id)?.wifiDbm, null);
   ws.close();
   bridge.stop();
   server.close();

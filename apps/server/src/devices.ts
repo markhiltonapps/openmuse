@@ -30,6 +30,8 @@ export interface DeviceSettings {
   raiseToWake: boolean;
   /** How loud the watch's speaker is, 0 (silent) to 100. The firmware starts at 85 until it hears otherwise. */
   volume: number;
+  /** Saves battery: the Wi-Fi radio sleeps between messages and the processor runs slower. Neddy's first word may come a moment later. */
+  batterySaver: boolean;
 }
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   idleAfter: 10,
@@ -42,6 +44,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   face: "info",
   raiseToWake: false,
   volume: 85,
+  batterySaver: true,
 };
 export const settingsOf = (device: Pick<Device, "settings">): DeviceSettings => ({
   ...DEFAULT_DEVICE_SETTINGS,
@@ -96,11 +99,36 @@ export const pairClaimSchema = z.object({
   name: z.string().trim().min(1).max(40).optional(),
 });
 
+/** What a watch last told the server about itself (kept in memory, so it's as fresh as the last report). */
+export interface DeviceStatus {
+  at: number;
+  battery: number | null;
+  millivolts: number | null;
+  charging: boolean;
+  usb: boolean;
+  wifiDbm: number | null;
+  upSeconds: number;
+  connects: number;
+  saver: boolean;
+}
+/** A watch's last report in plain words, for the agent to say. */
+export function describeStatus(status: DeviceStatus | undefined, now: number) {
+  if (!status) return "no report yet (it sends one a few minutes after it connects)";
+  const ago = Math.max(0, Math.round((now - status.at) / 60_000));
+  const battery =
+    status.battery === null
+      ? "no battery is detected"
+      : `battery ${status.battery}%${status.millivolts ? ` (${(status.millivolts / 1000).toFixed(2)} V)` : ""}, ${status.charging ? "charging" : status.usb ? "plugged in" : "running on the battery"}`;
+  const wifi = status.wifiDbm === null ? "" : `, Wi-Fi ${status.wifiDbm} dBm`;
+  return `${battery}${wifi}, on for ${Math.round(status.upSeconds / 60)} minutes, connected ${status.connects} time${status.connects === 1 ? "" : "s"} since it started, battery saver ${status.saver ? "on" : "off"}; reported ${ago === 0 ? "just now" : `${ago} minute${ago === 1 ? "" : "s"} ago`}`;
+}
+
 export class Devices {
   /** Calls to start a pairing per address, and wrong codes per person, in the last while. */
   private readonly starts = new Map<string, number[]>();
   private readonly wrong = new Map<string, number[]>();
   private readonly seen = new Map<string, number>();
+  private readonly statuses = new Map<string, DeviceStatus>();
   private readonly removedHooks: ((deviceId: string) => void)[] = [];
   private readonly settingsHooks: ((deviceId: string) => void)[] = [];
   constructor(
@@ -238,6 +266,17 @@ export class Devices {
     return device ? { owner: found.owner, device } : null;
   }
 
+  /** The watch's own report of its battery and link; the last one is kept. */
+  setStatus(deviceId: string, status: Omit<DeviceStatus, "at">) {
+    this.statuses.set(deviceId, { ...status, at: this.now() });
+  }
+  statusOf(deviceId: string) {
+    return this.statuses.get(deviceId);
+  }
+  /** The watch's last report in words, aged by this service's own clock. */
+  statusText(deviceId: string) {
+    return describeStatus(this.statuses.get(deviceId), this.now());
+  }
   /** Notes that a device connected (once a minute at most), and what firmware it runs. */
   async touch(owner: string, device: Device, firmware?: string) {
     const last = this.seen.get(device.id) ?? 0;
@@ -296,6 +335,7 @@ export class Devices {
         await this.db.remove("system", "device-tokens", value.id);
     await this.db.remove(owner, "devices", id);
     this.seen.delete(id);
+    this.statuses.delete(id);
     for (const hook of this.removedHooks) hook(id);
     return { ok: true as const, id };
   }
@@ -314,13 +354,14 @@ export function describeSettings(settings: DeviceSettings) {
       ? "raise to wake is on (raising the wrist brightens the screen once it has dimmed)"
       : "raise to wake is on, but the screen never dims, so there's nothing for it to brighten until dimming is on"
     : "raise to wake is off";
+  const saver = settings.batterySaver ? "battery saver is on" : "battery saver is off";
   const sound =
     settings.volume === 0
       ? "the speaker is muted"
       : `the speaker volume is ${settings.volume} percent`;
   return settings.idleAfter === 0
-    ? `the idle screen is off; ${sound}; ${raise}`
-    : `${sound}; after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? (settings.dimAfter > 0 ? `dims after ${settings.dimAfter} seconds of quiet` : "dims after a minute") : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}`;
+    ? `the idle screen is off; ${sound}; ${saver}; ${raise}`
+    : `${sound}; ${saver}; after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? (settings.dimAfter > 0 ? `dims after ${settings.dimAfter} seconds of quiet` : "dims after a minute") : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}`;
 }
 
 /** The chat's one tool for devices: pair one with the code on its screen, list, rename or remove. */
@@ -365,7 +406,7 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them and their idle-screen settings; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen; there is no brightness level to set, so for “turn the screen down” use dim and say so), dim_after_seconds (how many seconds of quiet before it dims, for “dim it after 5 seconds”; 0 goes back to the usual minute after the idle screen comes on; it only dims once the idle screen is on, so idle_after_seconds must be on too and a small number like 5 is best), volume (how loud the speaker is, 0 to 100; “it’s too loud” or “turn it down” means a lower number, and there is no louder-than-100), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them, their idle-screen settings and the watch's last report of itself (battery percentage and whether it is charging, Wi-Fi strength, how long it has been on): use it for “how’s my watch’s battery?” and never guess; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen; there is no brightness level to set, so for “turn the screen down” use dim and say so), dim_after_seconds (how many seconds of quiet before it dims, for “dim it after 5 seconds”; 0 goes back to the usual minute after the idle screen comes on; it only dims once the idle screen is on, so idle_after_seconds must be on too and a small number like 5 is best), battery_saver (the Wi-Fi radio sleeps between messages and the processor runs slower, to make the battery last longer; Neddy’s first word can come a moment later; “my battery drains fast” means turn it on), volume (how loud the speaker is, 0 to 100; “it’s too loud” or “turn it down” means a lower number, and there is no louder-than-100), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
         do: z.enum(["pair", "list", "rename", "remove", "settings"]),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),
@@ -398,6 +439,10 @@ export function deviceToolSpecs(
           .describe(
             "settings: how loud the watch's speaker is, 0 (muted) to 100; it is 85 until changed, so for “a bit quieter” try 60 and for “much quieter” 35; read the current one with do list first for “louder” or “quieter”",
           ),
+        battery_saver: z
+          .boolean()
+          .optional()
+          .describe("settings: save battery (Wi-Fi sleeps between messages, slower processor)"),
         show_weather: z.boolean().optional().describe("settings: weather on the idle screen"),
         show_meeting: z.boolean().optional().describe("settings: next meeting on the idle screen"),
         show_battery: z
@@ -429,6 +474,7 @@ export function deviceToolSpecs(
         dim?: boolean;
         dim_after_seconds?: number;
         volume?: number;
+        battery_saver?: boolean;
         show_weather?: boolean;
         show_meeting?: boolean;
         show_battery?: boolean;
@@ -449,6 +495,7 @@ export function deviceToolSpecs(
                 model: device.model,
                 lastSeenAt: device.lastSeenAt ?? null,
                 idleScreen: describeSettings(settingsOf(device)),
+                report: devices.statusText(device.id),
               })),
               message: list.length
                 ? `They have ${list.length} device${list.length === 1 ? "" : "s"}.`
@@ -493,6 +540,7 @@ export function deviceToolSpecs(
                   }
                 : {}),
               ...(input.volume !== undefined ? { volume: input.volume } : {}),
+              ...(input.battery_saver !== undefined ? { batterySaver: input.battery_saver } : {}),
               ...(input.show_weather !== undefined ? { showWeather: input.show_weather } : {}),
               ...(input.show_meeting !== undefined ? { showMeeting: input.show_meeting } : {}),
               ...(input.show_battery !== undefined ? { showBattery: input.show_battery } : {}),

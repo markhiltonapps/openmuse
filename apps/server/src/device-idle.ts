@@ -63,6 +63,7 @@ export async function idleInfo(deps: IdleDeps, owner: string, device: Device) {
     face: settings.face === "analog" ? 1 : settings.face === "neon" ? 2 : 0,
     rw: settings.raiseToWake ? 1 : 0,
     vol: settings.volume,
+    bs: settings.batterySaver ? 1 : 0,
   };
   const [forecast, calendar] = await Promise.all([
     settings.idleAfter && settings.showWeather

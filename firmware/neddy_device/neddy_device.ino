@@ -128,6 +128,20 @@ static String wifiSsid, wifiPass;   // the saved Wi-Fi (set up with the QR code)
 
 static WebSocketsClient ws;
 static bool wsUp = false;
+// Battery saver (the person's setting, also the default): the Wi-Fi radio sleeps between messages and the processor runs at 160 MHz instead of 240.
+// Neddy's first word may come a moment later. The server says it with the idle facts ("bs"); the watch also tells the server how it is doing (statusLoop).
+#ifndef NEDDY_BATTERY_SAVER
+#define NEDDY_BATTERY_SAVER 1
+#endif
+static bool batterySaver = NEDDY_BATTERY_SAVER != 0;
+static int statPct = -1, statMv = 0, wsConnects = 0;
+static bool statCharging = false, statUsb = false;
+static void applySaver(bool on) {
+  batterySaver = on;
+  WiFi.setSleep(on);                                // modem sleep between messages
+  setCpuFrequencyMhz(on ? 160 : 240);
+  LOGF("[power] battery saver %s (Wi-Fi sleep %d, %d MHz)\n", on ? "on" : "off", on ? 1 : 0, (int)getCpuFrequencyMhz());
+}
 static String wsHeader;
 static unsigned long wsFailures = 0;
 
@@ -337,7 +351,26 @@ static void batteryLoop() {
   int cs = s2 & 0x07;
   bool charging = present && ((((s2 >> 5) & 0x03) == 0x01) || (cs >= 1 && cs <= 4));
   LOGF("[batt] status0=0x%02X status1=0x%02X battery_mV=%d present=%d percent=%d charging=%d usb=%d\n", s1, s2, mv, present ? 1 : 0, pct, charging ? 1 : 0, vbus ? 1 : 0);
+  statPct = pct; statMv = mv; statCharging = charging; statUsb = vbus;
   uiSetBattery(pct, charging, s1, s2, mv, vbus);
+}
+
+// Tells the server how the watch is doing (battery, power source, Wi-Fi strength, how long it has been on, how often it reconnected, whether the saver is on):
+// about 30 s after it connects, then every 5 minutes. Small, and only while the connection to Neddy is up. The server keeps the last one and logs each.
+static void statusLoop() {
+  static unsigned long lastSent = 0;
+  static bool first = true;
+  if (!wsUp) { first = true; return; }
+  unsigned long now = millis();
+  if (lastSent == 0) lastSent = now;
+  if (now - lastSent < (first ? 30000UL : 300000UL)) return;
+  lastSent = now; first = false;
+  String m = String("{\"type\":\"device.status\"");
+  if (statPct >= 0) m += String(",\"battery\":") + statPct;
+  if (statMv > 0) m += String(",\"mv\":") + statMv;
+  m += String(",\"charging\":") + (statCharging ? 1 : 0) + ",\"usb\":" + (statUsb ? 1 : 0);
+  m += String(",\"rssi\":") + (int)WiFi.RSSI() + ",\"up\":" + (now / 1000) + ",\"connects\":" + wsConnects + ",\"saver\":" + (batterySaver ? 1 : 0) + "}";
+  ws.sendTXT(m.c_str());
 }
 
 // ---------------------------------------------------------------- the motion chip, for raise-to-wake
@@ -1234,6 +1267,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
       LOGLN("[neddy] connected");
+      wsConnects++;
       if (wsDropAt) wsBackMs = (long)(millis() - wsDropAt);
       wsUp = true;
       wsFailures = 0;
@@ -1323,6 +1357,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
         uiIdle.raise = jsonInt(text, "rw", 0) != 0;
         uiIdle.dimAfter = jsonInt(text, "da", 0);
+        { int b = jsonInt(text, "bs", -1); if (b >= 0 && (b != 0) != batterySaver) applySaver(b != 0); }
         { int v = jsonInt(text, "vol", -1); if (v >= 0 && v <= 100 && (volLocalAt == 0 || millis() - volLocalAt > 4000)) applyVolume(v); }
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
@@ -1715,7 +1750,8 @@ static bool joinWifi() {
   if (recState == RS_SEND) { recShowSending("Joining Wi-Fi, please wait"); }   // (the recording's screen stays; the usual "Joining Wi-Fi" screen would cover it)
   setMode(M_WIFI);
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);  // faster answers
+  WiFi.setSleep(batterySaver);  // saver on: the radio sleeps between messages; off: faster answers
+  setCpuFrequencyMhz(batterySaver ? 160 : 240);
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   unsigned long began = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - began < 30000) delay(250);
@@ -1923,6 +1959,7 @@ void loop() {
   // 4. The touch screen and the button: holding Neddy (or a double tap) counts as holding the button
   touchLoop();
   batteryLoop();
+  statusLoop();
   pwrLoop();
   raiseLoop();
   recTick();

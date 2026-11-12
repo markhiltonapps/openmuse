@@ -57,3 +57,15 @@ Owner's message was cut off ("Is there a way for you to…"). The watch reads th
 percent from 0xA4, else estimated from the voltage; charging from status1. Added a serial line under DEBUG_SERIAL every 5 s (first looks) then 30 s: "[batt] status0=.. status1=..
 battery_mV=.. present=.. percent=.. charging=.. usb=..". On screen the idle/normal screen's bottom line shows the raw bytes when no battery is read. Safety note given: check the
 battery's polarity against the board's +/- marks before plugging; a reversed battery can destroy the board.
+
+=== Battery drain: battery saver + the watch reports its battery to the server (owner said "yes to both, build it") ===
+Owner: a larger battery drops ~20% in 30 minutes. Findings: the firmware ran Wi-Fi with sleep OFF (WiFi.setSleep(false), "faster answers"), the CPU at 240 MHz, the speaker amp on
+all the time (since PLAY_ANSWERS 1), the IMU read ~30x/s in the test build, and the server logs showed the watch reconnecting every 5-10 minutes (many "code 1006": the Wi-Fi link dropping).
+Built:
+  Battery saver (a device setting, ON by default, owner's rule "everything is a toggle"): Wi-Fi modem sleep + CPU 160 MHz. Server: DeviceSettings.batterySaver, manage_devices battery_saver,
+  idle fact `bs`; firmware applySaver() (also NEDDY_BATTERY_SAVER compile default). Cost: Neddy's first word may come ~0.1 s later.
+  Status report: the watch sends {type:"device.status", battery, mv, charging, usb, rssi, up, connects, saver} ~30 s after connecting and every 5 minutes. The server keeps the last one in
+  memory and logs "Device <name> status: battery N% MMMM mV on battery, Wi-Fi -61 dBm, up N min, connects N, saver on". manage_devices list now includes `report` (say "how's my watch's battery?").
+  Tests: tests/device-idle.test.ts (11 pass with help/voice-brain: 29). Help: Battery paragraph + example phrases. Voice rules name the battery and saver.
+NOT done (listed to the owner as options): amp off except while talking, IMU reads only when raise-to-wake needs them, slower animation on the clock face. Firmware is uncompiled here (the sketch can't be built in this sandbox).
+How to use the new log: Railway api logs, filter "status:" (grep "Device .* status").

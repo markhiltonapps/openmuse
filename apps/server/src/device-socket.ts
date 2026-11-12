@@ -31,6 +31,7 @@ const FROM_DEVICE = new Set([
   "ping",
   "device.info",
   "device.setting",
+  "device.status",
 ]);
 const ANIMATION_LEVELS = ["saver", "normal", "smooth"] as const;
 const FACES = ["info", "analog", "neon"] as const;
@@ -220,7 +221,20 @@ export class DeviceBridge {
   }
 
   private fromText(connection: Connection, bytes: Uint8Array) {
-    let event: { type?: unknown; firmware?: unknown; key?: unknown; value?: unknown };
+    let event: {
+      type?: unknown;
+      firmware?: unknown;
+      key?: unknown;
+      value?: unknown;
+      battery?: unknown;
+      mv?: unknown;
+      charging?: unknown;
+      usb?: unknown;
+      rssi?: unknown;
+      up?: unknown;
+      connects?: unknown;
+      saver?: unknown;
+    };
     try {
       event = JSON.parse(Buffer.from(bytes).toString("utf8"));
     } catch {
@@ -234,6 +248,28 @@ export class DeviceBridge {
         void this.devices
           .touch(connection.owner, connection.device, event.firmware)
           .catch(() => undefined);
+      return;
+    }
+    if (type === "device.status") {
+      // The watch's own report (every few minutes): kept in memory and written to the log, so its battery can be followed from here.
+      const num = (value: unknown, low: number, high: number) =>
+        typeof value === "number" && Number.isFinite(value) && value >= low && value <= high
+          ? Math.round(value)
+          : null;
+      const status = {
+        battery: num(event.battery, 0, 100),
+        millivolts: num(event.mv, 0, 6000),
+        charging: event.charging === 1,
+        usb: event.usb === 1,
+        wifiDbm: num(event.rssi, -120, 0),
+        upSeconds: num(event.up, 0, 10_000_000) ?? 0,
+        connects: num(event.connects, 0, 100_000) ?? 0,
+        saver: event.saver === 1,
+      };
+      this.devices.setStatus(connection.device.id, status);
+      this.log(
+        `Device ${connection.device.name} status: battery ${status.battery ?? "none"}%${status.millivolts ? ` ${status.millivolts} mV` : ""} ${status.charging ? "charging" : status.usb ? "plugged in" : "on battery"}, Wi-Fi ${status.wifiDbm ?? "?"} dBm, up ${Math.round(status.upSeconds / 60)} min, connects ${status.connects}, saver ${status.saver ? "on" : "off"}`,
+      );
       return;
     }
     if (type === "device.setting") {
