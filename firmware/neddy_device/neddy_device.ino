@@ -1777,6 +1777,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   LOGLN("\nNeddy device " FIRMWARE_VERSION);
+  LOGLN("[build] 2026-11-12 volume screen, power-chip key, [batt] and [raise] lines");
   bootCount++;
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
   LOGLN(resetWhy);
