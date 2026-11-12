@@ -249,18 +249,51 @@ static bool pmuByte(uint8_t reg, uint8_t &value) {
 // Between presses the microphone is read only this often (ms); 0 = every turn of the loop, as before.
 #define IDLE_MIC_EVERY_MS 120
 static void recPwr();   // (in the recorder section below)
+static void pmuWrite(uint8_t reg, uint8_t value);   // (just below)
+// What a short press of PWR does.
+static void pwrShortPress() {
+  if (uiRec.state != UI_RECS_OFF) recPwr();   // on a recording screen the button leaves it (never while recording or sending)
+  else uiMenuOpen(millis());
+}
+// On some units the PWR button reaches only the power chip (AXP2101), not GPIO10. The chip keeps a note of each press in its second
+// interrupt-status byte (0x49: bit 3 short press, bit 2 long press, bit 1 released, bit 0 pressed; writing a 1 clears a bit), once those
+// are enabled in 0x41. Looked at every 40 ms. Returns true on a short press.
+static bool pmuKeyShort() {
+  static bool armed = false;
+  static unsigned long last = 0;
+  if (millis() - last < 40) return false;
+  last = millis();
+  uint8_t v = 0;
+  if (!armed) {
+    if (pmuByte(0x41, v)) {
+      pmuWrite(0x41, v | 0x0F);
+      armed = true;
+      LOGLN("[pwr] power chip key watch on");
+    }
+    return false;
+  }
+  if (!pmuByte(0x49, v) || v == 0) return false;
+  pmuWrite(0x49, v);
+  LOGF("[pwr] power chip key status 0x%02X\n", v);
+  return (v & 0x08) != 0;
+}
 static void pwrLoop() {
   static bool was = false;
   static unsigned long downAt = 0, changed = 0;
+#if DEBUG_SERIAL
+  static unsigned long beat = 0;
+  if (millis() - beat > 5000) {   // proof that these messages reach the Serial Monitor
+    beat = millis();
+    LOGF("[dbg] alive, GPIO10=%d\n", digitalRead(10));
+  }
+#endif
+  if (pmuKeyShort()) pwrShortPress();
   bool raw = digitalRead(10) == HIGH;
   if (raw != was && millis() - changed > 30) {
     LOGF("[pwr] GPIO10 is now %d\n", raw ? 1 : 0);
     changed = millis();
     if (raw) downAt = millis();
-    else if (millis() - downAt < 1200) {
-      if (uiRec.state != UI_RECS_OFF) recPwr();   // on a recording screen the button leaves it (never while recording or sending)
-      else uiMenuOpen(millis());
-    }
+    else if (millis() - downAt < 1200) pwrShortPress();
     was = raw;
   }
 }

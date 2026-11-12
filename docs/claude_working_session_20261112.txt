@@ -25,3 +25,12 @@ Owner: the second watch now plays answers, "somewhat loud"; wants a way to adjus
   Help: "Volume" paragraph and an example phrase in the "Pair a Neddy device" topic (no picture: the sandbox can't show the watch). Site: nothing (the page says nothing about watch settings).
 Not verified: the ES8311 volume range (0-100 per Waveshare's example driver) on the real board; a menu tile (the PWR button still doesn't open the menu on the second board).
 PWR button: still unexplained; waiting for the owner's Serial Monitor lines ([pwr] / [i2c]) with DEBUG_SERIAL 1.
+
+=== PWR button: second path through the power chip (uncompiled) ===
+Owner's Serial Monitor showed nothing when pressing PWR (no "[pwr] GPIO10" lines), so GPIO10 may not carry this unit's button (it was not
+established whether the monitor showed the boot lines; the boot banner "Neddy device 0.1.0" and a new "[dbg] alive, GPIO10=N" every 5 s under
+DEBUG_SERIAL tell). Added pmuKeyShort(): enables the AXP2101 key interrupts (0x41 |= 0x0F) and reads/clears its second status byte 0x49 every
+40 ms (bit 3 short press, 2 long, 1 released, 0 pressed; register layout from the AXP2101 datasheet / Zephyr's driver); a short press does the
+same as a GPIO10 press (opens the menu, or leaves the recorder screen). Prints "[pwr] power chip key status 0xNN" on any change.
+Needs a flash to test; if "[dbg] alive" never prints the debug output itself is not reaching the Serial Monitor (check DEBUG_SERIAL in settings.h,
+USB CDC On Boot enabled, 115200 baud, reset the watch after opening the monitor).
