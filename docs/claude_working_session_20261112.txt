@@ -69,3 +69,12 @@ Built:
   Tests: tests/device-idle.test.ts (11 pass with help/voice-brain: 29). Help: Battery paragraph + example phrases. Voice rules name the battery and saver.
 NOT done (listed to the owner as options): amp off except while talking, IMU reads only when raise-to-wake needs them, slower animation on the clock face. Firmware is uncompiled here (the sketch can't be built in this sandbox).
 How to use the new log: Railway api logs, filter "status:" (grep "Device .* status").
+
+=== First battery numbers from the new status reports ===
+Server log (Railway api, filter "saver"): charging 22:11 48% -> 22:41 90% (4.06 -> 4.19 V); the watch restarted when USB came off (~22:45); on battery: 22:46 100% (4037 mV),
+22:56 92%, 23:06 83%, 23:16 76%, 23:26 69%, 23:31 65% (3741 mV). From 22:56 to 23:31: 27 points in 35 min = about 46%/hour; BEFORE the saver the owner saw ~20% per 30 min (40%/hour).
+Battery saver (Wi-Fi modem sleep + 160 MHz) was on in every report, Wi-Fi steady at -50 dBm, 1 connect since the restart: so those two were NOT the main drain. 
+Round 2 (uncompiled): with the saver on, (a) loop() ends with delay(4) when not talking/recording (the loop spun flat out, so the CPU never rested and Wi-Fi sleep couldn't help much),
+(b) the speaker amplifier (pin 46) switches on only while sound plays and 4 s after (paTick, called from playTask), (c) NEDDY_RAISE_DEBUG now defaults to 0 (the motion chip is read only
+while the screen is dimmed; the [raise] serial lines under DEBUG_SERIAL still work then). Next measurement: same 35+ minute stretch on battery with the new build; plus a "Screen off" test
+(menu tile) to see the display's share. Owner's battery capacity (mAh) not yet known: at 0.8%/min, 300 mAh = ~145 mA, 500 mAh = ~240 mA (both far above a good idle).

@@ -110,7 +110,7 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDT
 // This is ON while raise-to-wake is being tried out on the real board; set it to 0 once it works.
 // The line shows on the normal screen only (not on the clock face), so while testing say "turn off the idle screen on my watch" first.
 #ifndef NEDDY_RAISE_DEBUG
-#define NEDDY_RAISE_DEBUG 1
+#define NEDDY_RAISE_DEBUG 0
 #endif
 
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
@@ -136,6 +136,18 @@ static bool wsUp = false;
 static bool batterySaver = NEDDY_BATTERY_SAVER != 0;
 static int statPct = -1, statMv = 0, wsConnects = 0;
 static bool statCharging = false, statUsb = false;
+// The speaker amplifier (pin 46) draws current all the time it is on. With the battery saver on, it is switched on only while there is sound to play
+// (and for 4 seconds after), instead of all day. Without the saver it stays on, as before.
+static volatile unsigned long paOnUntil = 0;
+static bool paState = false;
+static void paTick(bool soundNow) {
+  if (!PLAY_ANSWERS) return;
+  unsigned long now = millis();
+  if (!batterySaver) { if (!paState) { digitalWrite(46, HIGH); paState = true; } return; }
+  if (soundNow) paOnUntil = now + 4000UL;
+  bool want = soundNow || now < paOnUntil;
+  if (want != paState) { digitalWrite(46, want ? HIGH : LOW); paState = want; }
+}
 static void applySaver(bool on) {
   batterySaver = on;
   WiFi.setSleep(on);                                // modem sleep between messages
@@ -738,7 +750,8 @@ static bool audioInit() {
   }
 #endif
   pinMode(46, OUTPUT);
-  digitalWrite(46, PLAY_ANSWERS ? HIGH : LOW);  // speaker amplifier
+  digitalWrite(46, (PLAY_ANSWERS && !batterySaver) ? HIGH : LOW);  // speaker amplifier (with the saver on it wakes when there is sound: see paTick)
+  paState = PLAY_ANSWERS && !batterySaver;
   if (codecInit() != ESP_OK) {
     LOGLN("[audio] audio chip setup failed");
     return false;
@@ -789,6 +802,7 @@ static void playTask(void *) {
       got = 1;
     }
     got += xStreamBufferReceive(playBuffer, into + got, room - got, pdMS_TO_TICKS(10));
+    paTick(got > 0);
     if (got == 0) {
       memset(stereo, 0, 160 * 4);
       i2s.write((uint8_t *)stereo, 160 * 4);  // 10 ms of silence
@@ -2001,4 +2015,6 @@ void loop() {
     }
     uiTick(millis());
   }
+  // With the battery saver on the processor rests between turns of the loop instead of spinning: nothing here needs more than ~250 turns a second (not while talking).
+  if (batterySaver && !held && uiRec.state == UI_RECS_OFF) delay(4);
 }
