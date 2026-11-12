@@ -434,6 +434,15 @@ static void raiseLoop() {
     lastPoll = now;
     if (imuSample(g, imuBig)) {
       lastGood = now;
+#if DEBUG_SERIAL
+      {                                                           // every real movement, as it happens (readings in thousandths of a g)
+        static int pg[3] = { 0, 0, 0 };
+        static uint32_t lastMove = 0;
+        int d = (g[0] > pg[0] ? g[0] - pg[0] : pg[0] - g[0]) + (g[1] > pg[1] ? g[1] - pg[1] : pg[1] - g[1]) + (g[2] > pg[2] ? g[2] - pg[2] : pg[2] - g[2]);
+        if (d > 250 && now - lastMove >= 150) { lastMove = now; LOGF("[raise] moving: x=%d y=%d z=%d mg, screen dimmed=%d\n", g[0], g[1], g[2], uiDimmed ? 1 : 0); }
+        pg[0] = g[0]; pg[1] = g[1]; pg[2] = g[2];
+      }
+#endif
       if (raiseFeed(raiseDet, now, g[NEDDY_IMU_UP_AXIS], raiseMag(g[0], g[1], g[2]))) { seen++; LOGF("[raise] a raise was seen (screen dimmed: %d)\n", uiDimmed ? 1 : 0); uiRaise(now); }
     }
   }
