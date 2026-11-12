@@ -433,9 +433,17 @@ static void raiseLoop() {
     lastPoll = now;
     if (imuSample(g, imuBig)) {
       lastGood = now;
-      if (raiseFeed(raiseDet, now, g[NEDDY_IMU_UP_AXIS], raiseMag(g[0], g[1], g[2]))) { seen++; uiRaise(now); }
+      if (raiseFeed(raiseDet, now, g[NEDDY_IMU_UP_AXIS], raiseMag(g[0], g[1], g[2]))) { seen++; LOGF("[raise] a raise was seen (screen dimmed: %d)\n", uiDimmed ? 1 : 0); uiRaise(now); }
     }
   }
+#if DEBUG_SERIAL
+  static uint32_t lastLog = 0;
+  if (now - lastLog >= 1000) {                                    // once a second: is it on, is the chip answering, what does it read, is the screen dimmed
+    lastLog = now;
+    LOGF("[raise] setting=%d chip=%d dimmed=%d g=%d,%d,%d (tenths of a g /10) seen=%d brightened=%d\n", uiIdle.raise ? 1 : 0, imuOn ? 1 : 0, uiDimmed ? 1 : 0,
+         g[0] / 100, g[1] / 100, g[2] / 100, seen, uiRaises);
+  }
+#endif
   if (NEDDY_RAISE_DEBUG && now - lastNote >= 400) {
     lastNote = now;
     if (now - lastGood > 1500) snprintf(uiImuDbg, sizeof(uiImuDbg), "imu%02X: no readings", imuAddr);

@@ -46,3 +46,8 @@ Built (firmware tested on the PC with the real neddy_ui.h: touch_test 100 checks
   server: device-socket.ts accepts key "volume" (0-100); tests/device-idle.test.ts covers it (16 pass with help.test.ts). Help: the Volume paragraph names the menu tile.
 Not verified on the real board: the touch coordinates on the volume screen (same mapping as the existing menu tiles, which work), the beep, ES8311 volume range.
 Note for later: a hold on a plus/minus doesn't repeat (tap steps by 10).
+
+=== Pushed 8604fab..47039d7 (owner "push it", no call running); raise-to-wake still not working (second watch) ===
+Owner says raise-to-wake still doesn't brighten the screen. Likely first cause to rule out: the second watch is a NEW device record, so raise_to_wake is OFF (and dim/dim_after default)
+until the person says "turn on raise to wake on my watch" for it. Added (uncompiled) serial lines under DEBUG_SERIAL: once a second "[raise] setting= chip= dimmed= g=x,y,z seen= brightened="
+and "[raise] a raise was seen" on each detection, so one run shows which stage fails (setting off, chip not on, screen never dims, no movement seen, or seen but not brightened).
