@@ -534,9 +534,23 @@ static void setMode(int next) {
 }
 
 // ---------------------------------------------------------------- audio
+static es8311_handle_t codecHandle = NULL;
+static int speakerVolume = SPEAKER_VOLUME;   // 0 to 100; Neddy's server sends the person's choice ("vol") with the idle facts
+// Sets the speaker volume (only if the audio chip is up and the number changed). Called from the loop's own turn, like the other I2C reads.
+static void applyVolume(int v) {
+  if (v < 0) v = 0;
+  if (v > 100) v = 100;
+  if (v == speakerVolume) return;
+  speakerVolume = v;
+  if (codecHandle) {
+    esp_err_t e = es8311_voice_volume_set(codecHandle, v, NULL);
+    LOGF("[audio] volume %d (%s)\n", v, e == ESP_OK ? "ok" : "failed");
+  }
+}
 static esp_err_t codecInit() {
   es8311_handle_t handle = es8311_create(0, ES8311_ADDRRES_0);
   ESP_RETURN_ON_FALSE(handle, ESP_FAIL, "codec", "es8311 create failed");
+  codecHandle = handle;
   const es8311_clock_config_t clk = {
     .mclk_inverted = false,
     .sclk_inverted = false,
@@ -548,7 +562,7 @@ static esp_err_t codecInit() {
   ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(handle, clk.mclk_frequency, clk.sample_frequency),
                       "codec", "sample rate failed");
   ESP_RETURN_ON_ERROR(es8311_microphone_config(handle, false), "codec", "microphone failed");
-  ESP_RETURN_ON_ERROR(es8311_voice_volume_set(handle, SPEAKER_VOLUME, NULL), "codec", "volume failed");
+  ESP_RETURN_ON_ERROR(es8311_voice_volume_set(handle, speakerVolume, NULL), "codec", "volume failed");
   ESP_RETURN_ON_ERROR(es8311_microphone_gain_set(handle, (es8311_mic_gain_t)MIC_GAIN), "codec",
                       "microphone gain failed");
   return ESP_OK;
@@ -1240,6 +1254,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
         uiIdle.raise = jsonInt(text, "rw", 0) != 0;
         uiIdle.dimAfter = jsonInt(text, "da", 0);
+        { int v = jsonInt(text, "vol", -1); if (v >= 0 && v <= 100) applyVolume(v); }
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;

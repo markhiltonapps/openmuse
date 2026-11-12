@@ -14,3 +14,14 @@ STILL UNKNOWN: why the PWR button does nothing on the new board (the same GPIO10
 output with DEBUG_SERIAL 1 (put `#define DEBUG_SERIAL 1` in settings.h, 115200 baud; set it back to 0 afterwards: with nothing reading, USB messages
 freeze the board). If "[pwr]" never prints on a press, GPIO10 isn't the button on this unit (then check the power chip's key register).
 Known risk to watch: on the first prototype, the microphone stopped after an answer was played (the reason PLAY_ANSWERS was 0). Ask the owner whether it listens again after an answer.
+
+=== Receipt box pushed; watch volume setting ===
+Owner said "If you have something to push, please proceed" (2026-11-12 ~15:38 UTC): pushed a61c251..294d575 (Receipt box + watch speaker default), deployment 79324651 SUCCESS.
+Owner: the second watch now plays answers, "somewhat loud"; wants a way to adjust audio. Built a volume setting (0-100, default 85 = the old fixed value):
+  server: DeviceSettings.volume, manage_devices `volume`, describeSettings says "the speaker volume is N percent" / "muted", idle fact `vol`; tests/device-idle.test.ts (9 pass).
+  firmware (uncompiled here): applyVolume() sets the ES8311 volume when the idle fact's `vol` changes (also logs "[audio] volume N" under DEBUG_SERIAL); it takes effect
+  within a few seconds of the change, once the new firmware is flashed AND the server is updated.
+  voice: pipeline.py DEVICE_RULES and voice-brain.ts name volume so the voice hands "too loud" off instead of saying it can't.
+  Help: "Volume" paragraph and an example phrase in the "Pair a Neddy device" topic (no picture: the sandbox can't show the watch). Site: nothing (the page says nothing about watch settings).
+Not verified: the ES8311 volume range (0-100 per Waveshare's example driver) on the real board; a menu tile (the PWR button still doesn't open the menu on the second board).
+PWR button: still unexplained; waiting for the owner's Serial Monitor lines ([pwr] / [i2c]) with DEBUG_SERIAL 1.

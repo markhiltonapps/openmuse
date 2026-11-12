@@ -91,6 +91,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     fps: 1,
     face: 0,
     rw: 0,
+    vol: 85,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -253,11 +254,23 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   const third = (await devices.list("o"))[0];
   assert.ok(third);
   assert.equal((await idleInfo(deps, "o", third)).rw, 0);
+  // Speaker volume: 85 until the person asks, then what they chose (0 to 100, never outside it).
+  assert.equal((await idleInfo(deps, "o", third)).vol, 85);
+  const quieter = (await tool.execute({ do: "settings", volume: 45 })) as { message?: string };
+  assert.match(quieter.message ?? "", /the speaker volume is 45 percent/);
+  const fourth = (await devices.list("o"))[0];
+  assert.ok(fourth);
+  assert.equal((await idleInfo(deps, "o", fourth)).vol, 45, "the watch is told the volume");
+  assert.equal((await devices.setSettings("o", fourth.id, { volume: 400 })).volume, 100);
+  assert.equal((await devices.setSettings("o", fourth.id, { volume: -5 })).volume, 0);
+  const muted = (await tool.execute({ do: "settings" })) as { message?: string };
+  assert.match(muted.message ?? "", /the speaker is muted/);
+  await devices.setSettings("o", fourth.id, { volume: 85 });
   // Turning the idle screen off still reports it.
   const idleOff = (await tool.execute({ do: "settings", idle_after_seconds: 0 })) as {
     message?: string;
   };
-  assert.match(idleOff.message ?? "", /the idle screen is off; raise to wake is off/);
+  assert.match(idleOff.message ?? "", /the idle screen is off; the speaker volume is 85 percent; raise to wake is off/);
   await db.close();
 });
 
@@ -332,6 +345,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     animation: "normal",
     face: "info",
     raiseToWake: false,
+    volume: 85,
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
