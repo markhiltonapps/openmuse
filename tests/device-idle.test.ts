@@ -270,7 +270,10 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   const idleOff = (await tool.execute({ do: "settings", idle_after_seconds: 0 })) as {
     message?: string;
   };
-  assert.match(idleOff.message ?? "", /the idle screen is off; the speaker volume is 85 percent; raise to wake is off/);
+  assert.match(
+    idleOff.message ?? "",
+    /the idle screen is off; the speaker volume is 85 percent; raise to wake is off/,
+  );
   await db.close();
 });
 
@@ -378,6 +381,7 @@ test("a device is sent its idle facts when it connects and when its settings cha
         after: settingsOf(device).idleAfter,
         fps: animation === "saver" ? 0 : animation === "smooth" ? 2 : 1,
         face: settingsOf(device).face === "analog" ? 1 : settingsOf(device).face === "neon" ? 2 : 0,
+        vol: settingsOf(device).volume,
         t: 1,
       };
     },
@@ -430,6 +434,18 @@ test("a device is sent its idle facts when it connects and when its settings cha
     "the watch face kept and sent back",
   );
   assert.equal(settingsOf((await devices.list("o"))[0] as never).face, "analog");
+  // The volume changed on the watch's own volume screen is kept and said back too (held to 0..100).
+  ws.send(JSON.stringify({ type: "device.setting", key: "volume", value: 40 }));
+  await until(
+    () => text.filter((event) => event.type === "idle").some((event) => event.vol === 40),
+    "the volume kept and sent back",
+  );
+  assert.equal(settingsOf((await devices.list("o"))[0] as never).volume, 40);
+  ws.send(JSON.stringify({ type: "device.setting", key: "volume", value: 900 }));
+  await until(
+    () => text.filter((event) => event.type === "idle").some((event) => event.vol === 100),
+    "an out-of-range volume is held to 100",
+  );
   ws.close();
   bridge.stop();
   server.close();

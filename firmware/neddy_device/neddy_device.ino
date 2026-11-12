@@ -568,11 +568,13 @@ static void setMode(int next) {
 
 // ---------------------------------------------------------------- audio
 static es8311_handle_t codecHandle = NULL;
+static unsigned long volLocalAt = 0;   // when the person last changed the volume on the watch (a slower echo from the server is ignored for a few seconds)
 static int speakerVolume = SPEAKER_VOLUME;   // 0 to 100; Neddy's server sends the person's choice ("vol") with the idle facts
 // Sets the speaker volume (only if the audio chip is up and the number changed). Called from the loop's own turn, like the other I2C reads.
 static void applyVolume(int v) {
   if (v < 0) v = 0;
   if (v > 100) v = 100;
+  uiVolume = v;                                     // what the menu's volume screen shows
   if (v == speakerVolume) return;
   speakerVolume = v;
   if (codecHandle) {
@@ -693,6 +695,22 @@ static bool audioInit() {
   es7210Init();  // the microphone chip; a problem is shown on screen, not fatal
   playBuffer = xStreamBufferCreate(48 * 1024, 2);
   return playBuffer != NULL;
+}
+
+// A short note (about a tenth of a second) so the person hears the new volume when they change it on the watch.
+static void playBeep() {
+#if PLAY_ANSWERS
+  if (!playBuffer) return;
+  static int16_t tone[320];
+  for (int part = 0; part < 6; part++) {            // 6 pieces of 20 ms of a 660 Hz note, faded in and out
+    for (int i = 0; i < 320; i++) {
+      int n = part * 320 + i;
+      float env = n < 160 ? n / 160.0f : (n > 1760 ? (1920 - n) / 160.0f : 1.0f);
+      tone[i] = (int16_t)(sinf(2.0f * 3.14159265f * 660.0f * n / (float)SAMPLE_RATE) * 9000.0f * env);
+    }
+    xStreamBufferSend(playBuffer, tone, sizeof(tone), 0);
+  }
+#endif
 }
 
 // Plays what the server sends (mono 16 kHz) on both speaker channels, and keeps the speaker fed with
@@ -1287,7 +1305,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
         uiIdle.raise = jsonInt(text, "rw", 0) != 0;
         uiIdle.dimAfter = jsonInt(text, "da", 0);
-        { int v = jsonInt(text, "vol", -1); if (v >= 0 && v <= 100) applyVolume(v); }
+        { int v = jsonInt(text, "vol", -1); if (v >= 0 && v <= 100 && (volLocalAt == 0 || millis() - volLocalAt > 4000)) applyVolume(v); }
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
@@ -1768,8 +1786,9 @@ void setup() {
   };
   // A setting changed on the watch itself (the menu): tell the server so it keeps it and says it back after a restart.
   uiOut.setting = [](int which, int value) {
-    if (wsUp && (which == UI_SET_ANIM || which == UI_SET_FACE)) {
-      String m = String("{\"type\":\"device.setting\",\"key\":\"") + (which == UI_SET_ANIM ? "animation" : "face") + "\",\"value\":" + value + "}";
+    if (which == UI_SET_VOLUME) { volLocalAt = millis(); applyVolume(value); playBeep(); }   // the audio chip first, then a short note at the new volume
+    if (wsUp && (which == UI_SET_ANIM || which == UI_SET_FACE || which == UI_SET_VOLUME)) {
+      String m = String("{\"type\":\"device.setting\",\"key\":\"") + (which == UI_SET_ANIM ? "animation" : which == UI_SET_VOLUME ? "volume" : "face") + "\",\"value\":" + value + "}";
       ws.sendTXT(m.c_str());
     }
   };

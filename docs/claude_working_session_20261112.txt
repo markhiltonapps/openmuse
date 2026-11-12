@@ -34,3 +34,15 @@ DEBUG_SERIAL tell). Added pmuKeyShort(): enables the AXP2101 key interrupts (0x4
 same as a GPIO10 press (opens the menu, or leaves the recorder screen). Prints "[pwr] power chip key status 0xNN" on any change.
 Needs a flash to test; if "[dbg] alive" never prints the debug output itself is not reaching the Serial Monitor (check DEBUG_SERIAL in settings.h,
 USB CDC On Boot enabled, 115200 baud, reset the watch after opening the monitor).
+
+=== PWR works (through the power chip); a Volume tile with big finger controls ===
+Owner: the PWR button now opens the menu (the AXP2101 key path worked; GPIO10 is not this unit's button path). Asked for a finger control for the volume.
+Built (firmware tested on the PC with the real neddy_ui.h: touch_test 100 checks, ui_sim odd windows 0; the .ino itself is still uncompiled here):
+  menu: a fifth tile "Volume" (speaker icon, shows 60% or Muted); it opens a volume screen inside the menu: the level in big digits, ten tappable bars (tap one to jump),
+  a big minus and a big plus (176x120 px each, steps of 10), Done (closes the menu). Neddy steps out of the way while the volume screen or the 5-tile menu shows (the
+  fifth tile and Done reach down to where he stands). Holding the menu area no longer starts talking. The PWR button still closes the menu from the volume screen.
+  sketch: applyVolume() sets the ES8311 volume, playBeep() plays a ~0.12 s 660 Hz note at the new volume (only when PLAY_ANSWERS is on), the change is sent to the server
+  as device.setting {key:"volume"}; the server keeps it and echoes it in the idle facts (`vol`), which the watch ignores for 4 s after a local change.
+  server: device-socket.ts accepts key "volume" (0-100); tests/device-idle.test.ts covers it (16 pass with help.test.ts). Help: the Volume paragraph names the menu tile.
+Not verified on the real board: the touch coordinates on the volume screen (same mapping as the existing menu tiles, which work), the beep, ES8311 volume range.
+Note for later: a hold on a plus/minus doesn't repeat (tap steps by 10).

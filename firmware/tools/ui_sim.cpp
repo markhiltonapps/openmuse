@@ -183,6 +183,12 @@ int main(int argc, char **argv) {
   // 15. the recording screens and the 4-tile menu
   uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiRecAvailable = true; uiFace = 1;
   uiMenuOpen(800000); uiTick(800100); save(dir, "m3_menu_four");
+  // the volume screen (menu tile, then the screen at 60% and muted)
+  uiClearCard(); uiVolume = 60; uiAll = true; uiMenuOpen(800050); uiTick(800060); save(dir, "m4_menu_five");
+  uiMenuVol = true; uiAll = true; uiTick(800070); save(dir, "m5_volume_60");
+  uiVolume = 0; uiAll = true; uiTick(800080); save(dir, "m6_volume_muted");
+  uiVolume = 100; uiAll = true; uiTick(800090); save(dir, "m7_volume_100");
+  uiMenuVol = false; uiVolume = 85;
   uiClearCard(); uiFace = 0; uiAll = true;
   uiRecRun(800200, 2530, 4680, 35); uiTick(800300); save(dir, "r1_recording");
   uiRecRun(800400, 2531, 4679, 35); uiTick(800500); save(dir, "r1b_recording_next_second");

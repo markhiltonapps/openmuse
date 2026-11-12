@@ -245,6 +245,13 @@ export class DeviceBridge {
             .setSettings(connection.owner, connection.device.id, { animation: level })
             .catch(() => undefined);
       }
+      if (event.key === "volume" && typeof event.value === "number") {
+        void this.devices
+          .setSettings(connection.owner, connection.device.id, {
+            volume: Math.max(0, Math.min(100, Math.round(event.value))),
+          })
+          .catch(() => undefined);
+      }
       if (event.key === "face" && typeof event.value === "number") {
         const face = FACES[Math.max(0, Math.min(2, Math.round(event.value)))];
         if (face)

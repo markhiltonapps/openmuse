@@ -234,6 +234,36 @@ int main() {
   CHECK(uiFpsLevel == 2 && setKey == UI_SET_ANIM && setVal == 2 && uiCard.on, "tapping Animation goes normal -> smooth and tells the server");
   finger(tx + 88, ty + 74, 60); finger(tx + 88, ty + 74, 60);
   CHECK(uiFpsLevel == 1 && setVal == 1, "and round again to normal");
+  // The volume screen: the Volume tile opens it; plus and minus move by one bar; a tap on a bar jumps there; Done closes the menu.
+  uiClearCard(); uiMenuOpen(now); uiVolume = 85; setKey = 0; setVal = -1;
+  uiMenuTileRect(tileOf(UI_MENU_VOLUME), &tx, &ty);
+  finger(tx + 88, ty + 74, 60);
+  CHECK(uiMenuVol && uiCard.on && setKey == 0, "tapping Volume shows the volume screen and changes nothing yet");
+  finger(UI_VOL_PLUS_X + 88, UI_VOL_BTN_Y + 60, 60);
+  CHECK(uiVolume == 90 && setKey == UI_SET_VOLUME && setVal == 90, "plus goes up one bar (85 -> 90) and tells the sketch");
+  finger(UI_VOL_MINUS_X + 88, UI_VOL_BTN_Y + 60, 60); finger(UI_VOL_MINUS_X + 88, UI_VOL_BTN_Y + 60, 60);
+  CHECK(uiVolume == 70, "minus goes down a bar each time (90 -> 80 -> 70)");
+  finger(UI_VOL_BARS_X + 2 * UI_VOL_BAR_PITCH + 10, UI_VOL_BARS_Y + 60, 60);
+  CHECK(uiVolume == 30, "tapping the third bar jumps to 30");
+  for (int i = 0; i < 5; i++) finger(UI_VOL_MINUS_X + 88, UI_VOL_BTN_Y + 60, 60);
+  CHECK(uiVolume == 0, "minus stops at 0 (muted)");
+  finger(UI_VOL_PLUS_X + 88, UI_VOL_BTN_Y + 60, 60);
+  CHECK(uiVolume == 10, "plus from muted goes to the first bar");
+  for (int i = 0; i < 12; i++) finger(UI_VOL_PLUS_X + 88, UI_VOL_BTN_Y + 60, 60);
+  CHECK(uiVolume == 100, "plus stops at 100");
+  finger(205, 40, 60);
+  CHECK(uiCard.on && uiMenuVol, "a tap on the title does nothing (it doesn't close by accident)");
+  finger(UI_VOL_DONE_X + 180, UI_VOL_DONE_Y + 30, 60);
+  CHECK(!uiCard.on && !uiMenuVol, "Done closes the menu");
+  uiMenuOpen(now);
+  CHECK(!uiMenuVol && uiCard.on, "the next time the menu opens it shows the tiles again");
+  uiMenuTileRect(tileOf(UI_MENU_VOLUME), &tx, &ty);
+  finger(tx + 88, ty + 74, 60);
+  uiMenuOpen(now);                                                  // the PWR button closes it from the volume screen too
+  CHECK(!uiCard.on, "PWR closes the menu from the volume screen");
+  uiMenuOpen(now);
+  CHECK(!uiMenuVol, "and it opens on the tiles");
+  uiClearCard();
   uiShowFact(now, "Fact", "1", "", "", 0); uiMenuOpen(now);       // a card behind: swiping must not flip it away
   uiMenuOpen(now);
   CHECK(uiCard.kind == UI_CARD_FACT || uiCard.kind == UI_CARD_MENU, "a card and the menu don't mix up");

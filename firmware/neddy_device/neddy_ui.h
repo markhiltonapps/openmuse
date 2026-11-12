@@ -821,13 +821,19 @@ static void uiDrawList() {
 }
 
 // ---- the menu: the PWR side button (or a swipe up from the bottom edge) opens big tiles; tap one. Tiles are 176 x 148 px.
-enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2, UI_MENU_FACE = 3, UI_MENU_REC = 4 };
-enum { UI_SET_ANIM = 1, UI_SET_FACE = 2 };
+enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2, UI_MENU_FACE = 3, UI_MENU_REC = 4, UI_MENU_VOLUME = 5 };
+enum { UI_SET_ANIM = 1, UI_SET_FACE = 2, UI_SET_VOLUME = 3 };
 enum { UI_REC_START = 1, UI_REC_STOP = 2, UI_REC_OK = 3, UI_REC_RETRY = 4 };   // what the recording screens ask the sketch for
 static int uiFpsLevel = 1;                       // animation speed: 0 saver, 1 normal, 2 smooth
 static int uiFace = 0;                           // the watch face: 0 info (clock, weather, meeting), 1 analog, 2 neon digital
-static const int uiMenuIds[] = { UI_MENU_REC, UI_MENU_FACE, UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
-static const int uiMenuN = 4;
+static const int uiMenuIds[] = { UI_MENU_REC, UI_MENU_VOLUME, UI_MENU_FACE, UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
+static const int uiMenuN = 5;
+static int uiVolume = 85;                        // the speaker volume, 0 to 100 (the sketch keeps it in step with the audio chip and the server)
+static bool uiMenuVol = false;                   // the menu is showing the volume screen (big minus and plus, a row of bars) instead of the tiles
+// The volume screen's parts (all on even pixels): the bars you can tap, the minus and plus tiles, and Done.
+static const int UI_VOL_BARS_X = 28, UI_VOL_BARS_Y = 150, UI_VOL_BAR_PITCH = 36, UI_VOL_BARS_BOTTOM = 270;
+static const int UI_VOL_BTN_Y = 290, UI_VOL_BTN_W = 176, UI_VOL_BTN_H = 120, UI_VOL_MINUS_X = 22, UI_VOL_PLUS_X = 212;
+static const int UI_VOL_DONE_X = 22, UI_VOL_DONE_Y = 424, UI_VOL_DONE_W = 366, UI_VOL_DONE_H = 60;
 static bool uiRecAvailable = false;              // the sketch found the recording storage: the Record tile does something
 static char uiRecSub[28] = "Up to 1 h 40";       // the Record tile's small line (how long it can record, or that one is waiting to be sent)
 static void uiMenuTileRect(int i, int *x, int *y) {
@@ -860,7 +866,36 @@ static void uiRing(int cx, int cy, int r, int t, uint16_t col) {
     }
   }
 }
+static char uiVolSub[12] = "";
+static void uiVolText(char *out, size_t n) {
+  if (uiVolume <= 0) snprintf(out, n, "Muted"); else snprintf(out, n, "%d%%", uiVolume);
+}
+static int uiVolLevel() { return (uiVolume + 5) / 10; }   // 0 to 10 bars
+// The volume screen: the level in big digits, ten bars (tap one to jump there), a big minus and a big plus, and Done.
+static void uiDrawVolume() {
+  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88), lit = UI_TEAL;
+  uiText(NFONT_BODY, (205 - uiTextWidth(NFONT_BODY, "Volume") / 2) & ~1, 20, "Volume", UI_WHITE);
+  char num[12];
+  if (uiVolume <= 0) snprintf(num, sizeof(num), "Muted"); else snprintf(num, sizeof(num), "%d%%", uiVolume);
+  if (uiVolume <= 0) uiText(NFONT_BODY, (205 - uiTextWidth(NFONT_BODY, num) / 2) & ~1, 78, num, UI_GREY);
+  else uiText(NFONT_BIG, (205 - uiTextWidth(NFONT_BIG, num) / 2) & ~1, 66, num, UI_WHITE);
+  for (int b = 0; b < 10; b++) {
+    int h = 20 + b * 6, bx = UI_VOL_BARS_X + b * UI_VOL_BAR_PITCH;
+    uiOut.fill(bx, (UI_VOL_BARS_BOTTOM - h) & ~1, 28, h & ~1, b < uiVolLevel() ? lit : UI_DIM);
+  }
+  uiRoundPanel(UI_VOL_MINUS_X, UI_VOL_BTN_Y, UI_VOL_BTN_W, UI_VOL_BTN_H, 22, border, panel);
+  uiRoundPanel(UI_VOL_PLUS_X, UI_VOL_BTN_Y, UI_VOL_BTN_W, UI_VOL_BTN_H, 22, border, panel);
+  int my = UI_VOL_BTN_Y + UI_VOL_BTN_H / 2;
+  uiOut.fill(UI_VOL_MINUS_X + 60, my - 4, 56, 8, lit);                       // a minus
+  uiOut.fill(UI_VOL_PLUS_X + 60, my - 4, 56, 8, lit);                        // a plus: a bar across and a bar up
+  uiOut.fill(UI_VOL_PLUS_X + 84, my - 28, 8, 56, lit);
+  uiRoundPanel(UI_VOL_DONE_X, UI_VOL_DONE_Y, UI_VOL_DONE_W, UI_VOL_DONE_H, 20, border, panel);
+  uiBg = panel;
+  uiText(NFONT_BODY, (UI_VOL_DONE_X + UI_VOL_DONE_W / 2 - uiTextWidth(NFONT_BODY, "Done") / 2) & ~1, UI_VOL_DONE_Y + 12, "Done", UI_WHITE);
+  uiBg = UI_BLACK;
+}
 static void uiDrawMenu() {
+  if (uiMenuVol) { uiDrawVolume(); return; }
   const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88), lit = UI_TEAL;
   for (int i = 0; i < uiMenuN; i++) {
     int x, y; uiMenuTileRect(i, &x, &y);
@@ -874,6 +909,14 @@ static void uiDrawMenu() {
       uiOut.fill((cx - 10) & ~1, y + 18, 20, 30, red); uiOut.fill((cx - 6) & ~1, y + 20, 12, 26, panel);
       uiOut.fill((cx - 18) & ~1, y + 34, 4, 12, red); uiOut.fill((cx + 14) & ~1, y + 34, 4, 12, red); uiOut.fill((cx - 14) & ~1, y + 46, 28, 4, red);
       uiOut.fill((cx - 2) & ~1, y + 50, 4, 10, red); uiOut.fill((cx - 10) & ~1, y + 58, 20, 4, red);
+    } else if (uiMenuIds[i] == UI_MENU_VOLUME) {
+      label = "Volume"; sub = uiVolSub;
+      uiVolText(uiVolSub, sizeof(uiVolSub));
+      uiOut.fill((cx - 26) & ~1, y + 32, 14, 22, lit);                       // a speaker: a box, a cone and two sound waves
+      uiOut.fill((cx - 12) & ~1, y + 26, 8, 34, lit);
+      uiOut.fill((cx - 4) & ~1, y + 20, 8, 46, lit);
+      uiOut.fill((cx + 12) & ~1, y + 30, 4, 26, uiVolume > 0 ? lit : UI_DIM);
+      uiOut.fill((cx + 22) & ~1, y + 22, 4, 42, uiVolume > 50 ? lit : UI_DIM);
     } else if (uiMenuIds[i] == UI_MENU_FACE) {
       label = "Watch face"; sub = uiFaceName();
       uiRing(cx, y + 44, 22, 4, lit);                // a little clock: a ring and two hands
@@ -952,15 +995,39 @@ static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, c
 static void uiStartCard(uint32_t ms, int kind) { uiActivity(ms); memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
 static void uiMenuOpen(uint32_t ms) {
   if (uiCard.on && uiCard.kind == UI_CARD_MENU) { uiClearCard(); return; }   // the button again closes it
+  uiMenuVol = false;
   uiStartCard(ms, UI_CARD_MENU);
 }
+// A change to the volume from the watch's own screen: held to 0..100, the sketch is told (it sets the audio chip, beeps, and tells the server).
+static void uiVolChange(int v) {
+  if (v < 0) v = 0;
+  if (v > 100) v = 100;
+  uiVolume = v;
+  if (uiOut.setting) uiOut.setting(UI_SET_VOLUME, uiVolume);
+  uiAll = true;
+}
+static void uiVolTap(uint32_t ms, int px, int py) {
+  uiCard.since = ms;
+  if (py >= UI_VOL_BTN_Y && py < UI_VOL_BTN_Y + UI_VOL_BTN_H) {
+    if (px >= UI_VOL_MINUS_X && px < UI_VOL_MINUS_X + UI_VOL_BTN_W) uiVolChange(((uiVolume - 1) / 10) * 10);          // down to the bar below
+    else if (px >= UI_VOL_PLUS_X && px < UI_VOL_PLUS_X + UI_VOL_BTN_W) uiVolChange(((uiVolume / 10) + 1) * 10);        // up to the bar above
+  } else if (py >= UI_VOL_BARS_Y && py < UI_VOL_BARS_BOTTOM + 10 && px >= UI_VOL_BARS_X - 4 && px < UI_VOL_BARS_X + 10 * UI_VOL_BAR_PITCH) {
+    int b = (px - UI_VOL_BARS_X + 4) / UI_VOL_BAR_PITCH;                                                               // tap a bar: that level
+    uiVolChange((b < 0 ? 0 : b > 9 ? 9 : b) * 10 + 10);
+  } else if (px >= UI_VOL_DONE_X && px < UI_VOL_DONE_X + UI_VOL_DONE_W && py >= UI_VOL_DONE_Y && py < UI_VOL_DONE_Y + UI_VOL_DONE_H) {
+    uiMenuVol = false; uiClearCard();                                  // Done closes the menu
+  }
+}
 static void uiMenuTap(uint32_t ms, int px, int py) {
+  if (uiMenuVol) { uiVolTap(ms, px, py); return; }
   uiCard.since = ms;
   int i = uiMenuHit(px, py);
   if (i < 0) { uiClearCard(); return; }
   if (uiMenuIds[i] == UI_MENU_REC) {
     uiClearCard();
     if (uiRecAvailable && uiOut.record) uiOut.record(UI_REC_START);
+  } else if (uiMenuIds[i] == UI_MENU_VOLUME) {
+    uiMenuVol = true; uiAll = true;                                    // the volume screen
   } else if (uiMenuIds[i] == UI_MENU_FACE) {
     uiFace = (uiFace + 1) % 3;
     if (uiOut.setting) uiOut.setting(UI_SET_FACE, uiFace);
@@ -1223,7 +1290,7 @@ static void uiTouch(uint32_t ms, bool down, int x, int y) {
   if (down && !uiTchWas) {                           // a finger just touched
     uiTchDownAt = ms; uiTchX0 = uiTchX = x; uiTchY0 = uiTchY = y; uiTchMove = 0;
     uiTchHold = false; uiTchIgnore = false;
-    uiTchOnNeddy = uiHitNeddy(x, y) && !uiHitCard(x, y);
+    uiTchOnNeddy = uiHitNeddy(x, y) && !uiHitCard(x, y) && !(uiCard.on && uiCard.kind == UI_CARD_MENU);
     if (uiTchLatched) {                              // any touch ends hands-free talking
       uiTchLatched = false; uiTouchTalk = false; uiTchIgnore = true;
     }
@@ -1628,6 +1695,9 @@ static void uiDrawStage(const UiPose &p) {
   }
 }
 
+// The menu's fifth tile and the volume screen reach down to where Neddy stands, so he steps out of the way while they are showing.
+static bool uiStageHidden() { return uiCard.on && uiCard.kind == UI_CARD_MENU && (uiMenuVol || uiMenuN > 4); }
+
 static void uiTick(uint32_t ms) {
   uiNowMs = ms; uiLookupNow = ms;
   if (uiScreenOff) return;
@@ -1653,7 +1723,7 @@ static void uiTick(uint32_t ms) {
     uiStageRect(nominal, &uiStageX, &uiStageY, &uiStageW, &uiStageH);
     uiDrawText();
     uiDrawDiag();
-    uiDrawStage(p);
+    if (!uiStageHidden()) uiDrawStage(p);
     uiAll = false; uiTextDirty = false; uiLevelDirty = false; uiLastEye = p.eye; uiLastStage = ms;
     return;
   }
@@ -1677,6 +1747,7 @@ static void uiTick(uint32_t ms) {
     if (uiMode == UI_LISTEN && gap < 150) gap = 150;
   }
   if ((uiMotion || uiLookupOn || ms < uiReactUntil || ms < uiLookUntil) && ms - uiLastStage >= gap) draw = true;
+  if (draw && uiStageHidden()) draw = false;                  // (he stays out of the menu's way: nothing to animate)
   if (draw) {
     uiDrawStage(p);
     uiLastEye = p.eye; uiLastStage = ms; uiFrames++;
