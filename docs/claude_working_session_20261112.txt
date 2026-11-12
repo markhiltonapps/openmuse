@@ -51,3 +51,9 @@ Note for later: a hold on a plus/minus doesn't repeat (tap steps by 10).
 Owner says raise-to-wake still doesn't brighten the screen. Likely first cause to rule out: the second watch is a NEW device record, so raise_to_wake is OFF (and dim/dim_after default)
 until the person says "turn on raise to wake on my watch" for it. Added (uncompiled) serial lines under DEBUG_SERIAL: once a second "[raise] setting= chip= dimmed= g=x,y,z seen= brightened="
 and "[raise] a raise was seen" on each detection, so one run shows which stage fails (setting off, chip not on, screen never dims, no movement seen, or seen but not brightened).
+
+=== Battery not detected (owner plugged one in) ===
+Owner's message was cut off ("Is there a way for you to…"). The watch reads the AXP2101: present if status0 bit 3 is set or the battery voltage register (0x34/0x35) is 2.8-4.6 V;
+percent from 0xA4, else estimated from the voltage; charging from status1. Added a serial line under DEBUG_SERIAL every 5 s (first looks) then 30 s: "[batt] status0=.. status1=..
+battery_mV=.. present=.. percent=.. charging=.. usb=..". On screen the idle/normal screen's bottom line shows the raw bytes when no battery is read. Safety note given: check the
+battery's polarity against the board's +/- marks before plugging; a reversed battery can destroy the board.

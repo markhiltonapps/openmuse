@@ -336,6 +336,7 @@ static void batteryLoop() {
   }
   int cs = s2 & 0x07;
   bool charging = present && ((((s2 >> 5) & 0x03) == 0x01) || (cs >= 1 && cs <= 4));
+  LOGF("[batt] status0=0x%02X status1=0x%02X battery_mV=%d present=%d percent=%d charging=%d usb=%d\n", s1, s2, mv, present ? 1 : 0, pct, charging ? 1 : 0, vbus ? 1 : 0);
   uiSetBattery(pct, charging, s1, s2, mv, vbus);
 }
 
