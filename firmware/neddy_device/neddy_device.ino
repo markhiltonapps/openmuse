@@ -49,10 +49,11 @@
 #endif
 
 // 1 = play Neddy's voice through the speaker. 0 = words on screen only (the speaker stays silent and its
-// amplifier off). The prototype's speaker wire is broken, and after an answer was played the microphone
-// stopped delivering sound, so this is off while that is being tracked down.
+// amplifier off). It is ON from 2026-11-12, for boards with a working speaker. The first prototype's speaker
+// wire is broken, and on it, after an answer was played, the microphone stopped delivering sound: put
+// `#define PLAY_ANSWERS 0` in settings.h for such a board (settings.h is read first, so it wins).
 #ifndef PLAY_ANSWERS
-#define PLAY_ANSWERS 0
+#define PLAY_ANSWERS 1
 #endif
 
 // ---------------------------------------------------------------- screen
@@ -253,6 +254,7 @@ static void pwrLoop() {
   static unsigned long downAt = 0, changed = 0;
   bool raw = digitalRead(10) == HIGH;
   if (raw != was && millis() - changed > 30) {
+    LOGF("[pwr] GPIO10 is now %d\n", raw ? 1 : 0);
     changed = millis();
     if (raw) downAt = millis();
     else if (millis() - downAt < 1200) {
@@ -628,6 +630,13 @@ static bool audioInit() {
   }
   i2s.setTimeout(100);  // a read that finds no sound gives up quickly instead of freezing everything
   Wire.begin(IIC_SDA, IIC_SCL);
+#if DEBUG_SERIAL
+  // Which chips answer on the I2C bus (for finding out what a board really has): printed once.
+  for (uint8_t a = 1; a < 127; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) LOGF("[i2c] a chip answers at 0x%02X\n", a);
+  }
+#endif
   pinMode(46, OUTPUT);
   digitalWrite(46, PLAY_ANSWERS ? HIGH : LOW);  // speaker amplifier
   if (codecInit() != ESP_OK) {

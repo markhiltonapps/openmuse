@@ -1,0 +1,16 @@
+Working session 2026-11-12 (watch: a second board)
+
+=== Second Waveshare 2.06 board: no sound, PWR button not opening the menu ===
+Owner bought a second board (identical model, speaker plugged in, latest firmware 2026-11-11 build). Uploading failed first with
+"Could not open COM9" (build was fine: wrong/absent port; it came up on COM10). Pairing worked after a fresh six-digit code.
+Findings: PLAY_ANSWERS defaulted to 0 in neddy_device.ino (a leftover from the first prototype's broken speaker wire: amplifier pin 46
+stays LOW and the data written is silence), so no sound was expected. Tapping Neddy is an animation only (no giggle sound exists):
+I told the owner a sound would play, which was wrong.
+Changed (uncompiled here: the Arduino core can't be downloaded; edits are three small lines): PLAY_ANSWERS now defaults to 1 (settings.h can
+override with 0 for a board with a broken speaker); under DEBUG_SERIAL the firmware prints each PWR (GPIO10) level change as "[pwr] GPIO10 is now N"
+and, once at boot, every I2C address that answers ("[i2c] a chip answers at 0x..."). docs/neddy_device_update.zip has the new neddy_device.ino
+(backup of the previous zip in the scratchpad).
+STILL UNKNOWN: why the PWR button does nothing on the new board (the same GPIO10 code worked on the first board?). Next: the owner's Serial Monitor
+output with DEBUG_SERIAL 1 (put `#define DEBUG_SERIAL 1` in settings.h, 115200 baud; set it back to 0 afterwards: with nothing reading, USB messages
+freeze the board). If "[pwr]" never prints on a press, GPIO10 isn't the button on this unit (then check the power chip's key register).
+Known risk to watch: on the first prototype, the microphone stopped after an answer was played (the reason PLAY_ANSWERS was 0). Ask the owner whether it listens again after an answer.
