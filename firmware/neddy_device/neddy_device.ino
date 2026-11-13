@@ -148,8 +148,12 @@ static void paTick(bool soundNow) {
   bool want = soundNow || now < paOnUntil;
   if (want != paState) { digitalWrite(46, want ? HIGH : LOW); paState = want; }
 }
+static bool micAsleep = false;
+static void micWake();
 static void applySaver(bool on) {
   batterySaver = on;
+  uiSaver = on;                                      // the idle face dims sooner and the screen goes dark by itself
+  if (!on && micAsleep) micWake();
   WiFi.setSleep(on);                                // modem sleep between messages
   setCpuFrequencyMhz(on ? 160 : 240);
   LOGF("[power] battery saver %s (Wi-Fi sleep %d, %d MHz)\n", on ? "on" : "off", on ? 1 : 0, (int)getCpuFrequencyMhz());
@@ -677,6 +681,8 @@ static bool es7210Write(uint8_t addr, uint8_t reg, uint8_t val) {
   return Wire.endTransmission() == 0;
 }
 
+static uint8_t micAddr = 0;
+static unsigned long micUsedAt = 0;
 static bool es7210Init() {
   uint8_t addr = 0;
   for (uint8_t a = 0x40; a <= 0x43; a++) {
@@ -691,6 +697,8 @@ static bool es7210Init() {
     LOGLN("[mic] no ES7210 answered at 0x40-0x43");
     return false;
   }
+  micAddr = addr;
+  micAsleep = false;
   int bad = 0;
   auto w = [&](uint8_t reg, uint8_t val) {
     if (!es7210Write(addr, reg, val)) bad++;
@@ -732,6 +740,33 @@ static bool es7210Init() {
   micChip = note;
   LOGF("[mic] ES7210 at 0x%02X, %d failed writes\n", addr, bad);
   return bad == 0;
+}
+
+// With the battery saver on, the microphone chip is powered down after 15 s of nobody talking or recording, and
+// started again (about 100 ms) when a press, hands-free or a recording needs it. The stop sequence is Espressif's:
+// every microphone input and its bias off, the ADCs and the clock tree to sleep.
+#define MIC_SLEEP_AFTER_MS 15000UL
+static void micSleep() {
+  if (micAsleep || !micAddr) return;
+  uint8_t a = micAddr;
+  es7210Write(a, 0x4B, 0xFF);  // mic bias and the analog parts off
+  es7210Write(a, 0x4C, 0xFF);
+  es7210Write(a, 0x47, 0xFF);  // the four microphone inputs off
+  es7210Write(a, 0x48, 0xFF);
+  es7210Write(a, 0x49, 0xFF);
+  es7210Write(a, 0x4A, 0xFF);
+  es7210Write(a, 0x01, 0x7F);  // the clocks off
+  es7210Write(a, 0x06, 0x07);  // power down
+  micAsleep = true;
+  LOGLN("[power] microphone chip asleep");
+}
+// Wakes it before sound is needed; returns once the first samples are usable.
+static void micWake() {
+  micUsedAt = millis();
+  if (!micAsleep) return;
+  es7210Init();  // resets and starts it again (also clears micAsleep)
+  delay(60);     // the filters settle
+  LOGLN("[power] microphone chip awake");
 }
 
 static bool audioInit() {
@@ -929,6 +964,7 @@ static void touchLoop() {
 
 static void startTalking() {
   if (!wsUp) return;
+  micWake();
   held = true;
   pressStart = millis();
   saying = "";
@@ -1102,6 +1138,7 @@ static void recShowWaiting() {
 
 static void recBegin() {
   if (!recPart || recState != RS_IDLE) return;
+  micWake();
   if (held) stopTalking();
   if (recPending()) { recShowWaiting(); return; }
   if (!uiIdle.have) { uiRecInfo(millis(), "Not ready yet", "", "Waiting for the time.", -1, "OK"); return; }
@@ -1836,7 +1873,8 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   LOGLN("\nNeddy device " FIRMWARE_VERSION);
-  LOGLN("[build] 2026-11-12 volume screen, power-chip key, [batt] and [raise] lines");
+  LOGLN("[build] 2026-11-13 saver: screen dims 15 s then off, microphone chip sleeps");
+  uiSaver = batterySaver;
   bootCount++;
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
   LOGLN(resetWhy);
@@ -1900,6 +1938,12 @@ void setup() {
   xTaskCreatePinnedToCore(playTask, "play", 6144, NULL, 3, NULL, 1);
   touchInit();
   recInit();
+}
+
+static void micPowerLoop() {
+  if (!batterySaver) { if (micAsleep) micWake(); return; }
+  if (micAsleep || held || recState != RS_IDLE) { micUsedAt = millis(); return; }
+  if (millis() - micUsedAt >= MIC_SLEEP_AFTER_MS) micSleep();
 }
 
 void loop() {
@@ -1996,7 +2040,7 @@ void loop() {
   if (held) {
     if (!down || millis() - pressStart > (unsigned long)MAX_TALK_SECONDS * 1000UL) stopTalking();
     else sendMicChunk();
-  } else if (wsUp) {
+  } else if (wsUp && !micAsleep) {
     // The microphone only needs emptying now and then between presses (each read waits 20 ms, which held the animation at about 17 frames a second).
     static unsigned long lastIdleRead = 0;
     if (IDLE_MIC_EVERY_MS == 0 || millis() - lastIdleRead >= IDLE_MIC_EVERY_MS) {
@@ -2016,5 +2060,6 @@ void loop() {
     uiTick(millis());
   }
   // With the battery saver on the processor rests between turns of the loop instead of spinning: nothing here needs more than ~250 turns a second (not while talking).
+  micPowerLoop();
   if (batterySaver && !held && uiRec.state == UI_RECS_OFF) delay(4);
 }

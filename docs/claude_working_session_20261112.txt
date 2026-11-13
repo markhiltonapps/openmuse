@@ -78,3 +78,18 @@ Round 2 (uncompiled): with the saver on, (a) loop() ends with delay(4) when not 
 (b) the speaker amplifier (pin 46) switches on only while sound plays and 4 s after (paTick, called from playTask), (c) NEDDY_RAISE_DEBUG now defaults to 0 (the motion chip is read only
 while the screen is dimmed; the [raise] serial lines under DEBUG_SERIAL still work then). Next measurement: same 35+ minute stretch on battery with the new build; plus a "Screen off" test
 (menu tile) to see the display's share. Owner's battery capacity (mAh) not yet known: at 0.8%/min, 300 mAh = ~145 mA, 500 mAh = ~240 mA (both far above a good idle).
+
+== Battery plan items 1 and 2 (built 2026-11-13, owner: "yes, build 1 and 2") ==
+1. Screen: with Battery saver on the idle face dims 15 s after it comes up (to level 10 instead of 40), and 45 s later the
+   screen goes fully dark by itself (neddy_ui.h: UI_SAVER_DIM_MS / UI_SAVER_DIM_LEVEL / UI_SAVER_OFF_MS, uiSaver, uiScreenOffAuto).
+   A touch, a button, words or a raise of the wrist wakes it. The menu's own "Screen off" is still not woken by a raise.
+   Saver off keeps the old timing (a minute, level 40, never dark by itself).
+2. Microphone chip: with the saver on it is powered down after 15 s of nobody talking or recording (Espressif's stop sequence on the
+   ES7210) and re-initialised on a press or a recording start (+about 100 ms on the first press after a long quiet).
+   Logged as "[power] microphone chip asleep/awake" when DEBUG_SERIAL is on.
+Tests: firmware/tools/touch_test.cpp 111 checks pass (11 new for the saver), ui_sim odd windows 0, tests/help.test.ts passes.
+NOT compiled: no Arduino toolchain in the sandbox; the sketch was read through for order of declarations only. The owner's first
+compile may find a call-shape problem. Real-board checks: the screen goes dark about a minute after the idle face; a press after
+a long quiet still talks (check the first words aren't cut off); recording still works after the chip slept.
+Next: re-measure the drain (server "status:" lines) against the 32%/h baseline.
+Help: Battery paragraph updated in packages/domain/src/help.ts (no new screen, so no new pictures).

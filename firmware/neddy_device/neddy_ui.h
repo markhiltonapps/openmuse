@@ -404,6 +404,11 @@ static void uiSetBattery(int pct, bool charging, uint8_t s1, uint8_t s2, int mv 
   uiIdle.bat = pct; uiIdle.chg = charging; uiBatRaw[0] = s1; uiBatRaw[1] = s2; uiIdle.mv = mv; uiIdle.vbus = vbus;
 }
 #define UI_IDLE_DIM_MS 60000
+// Battery saver (set by the sketch): the idle face dims after 15 s instead of a minute, to a much lower brightness, and 45 s later the screen goes fully dark by itself;
+// a touch, the side button, words or a raise of the wrist wake it. The person's own "dim after N seconds" setting still wins over the 15 s.
+#define UI_SAVER_DIM_MS 15000
+#define UI_SAVER_DIM_LEVEL 10
+#define UI_SAVER_OFF_MS 45000
 #define UI_DIM_LEVEL 40
 
 // ---- touch: what he does when touched, and the cards he remembers
@@ -421,9 +426,12 @@ static void uiLookup(uint32_t ms, bool on) { if (on != uiLookupOn) { uiLookupOn 
 static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
 // Anything happening (a touch, a press, words, a card) wakes the idle face and restarts the wait for it.
 static bool uiScreenOff = false;                 // the menu's Screen off: dark and not drawing until any touch, press or words
+static bool uiScreenOffAuto = false;             // the screen went dark by itself (battery saver): unlike the menu's Screen off, a raise of the wrist wakes it too
+static bool uiSaver = false;                     // the battery saver is on (the sketch sets this; off here so the tests of the old behaviour still hold)
+static uint32_t uiDimmedAt = 0;                  // when the idle face dimmed
 static void uiActivity(uint32_t ms) {
   uiLastActive = ms;
-  if (uiScreenOff) { uiScreenOff = false; uiAll = true; if (uiOut.brightness) uiOut.brightness(255); }
+  if (uiScreenOff) { uiScreenOff = false; uiScreenOffAuto = false; uiAll = true; if (uiOut.brightness) uiOut.brightness(255); }
   if (uiIdleOn) {
     uiIdleOn = false; uiAll = true;
     if (uiDimmed) { uiDimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
@@ -1042,7 +1050,7 @@ static void uiMenuTap(uint32_t ms, int px, int py) {
     uiAll = true;
   } else if (uiMenuIds[i] == UI_MENU_SCREEN_OFF) {
     uiClearCard();
-    uiScreenOff = true;                          // dark, and nothing is drawn (saves battery); any touch, press or words wake it
+    uiScreenOff = true; uiScreenOffAuto = false;   // dark, and nothing is drawn (saves battery); any touch, press or words wake it (a raise of the wrist does not)
     if (uiOut.brightness) uiOut.brightness(0);
   }
 }
@@ -1121,10 +1129,11 @@ static void uiRecEnd() {
 // It only brightens a screen that has dimmed (the idle face after a quiet minute, a recording screen after 20 s). It never turns on a
 // screen that was switched off from the menu (that was a choice), and it doesn't change what is on the screen: the clock stays the clock.
 static int uiRaises = 0;                                   // how many times it has fired (shown on the test line)
-static bool uiWantsRaise() { return !uiScreenOff && (uiDimmed || (uiRec.state == UI_RECS_RUN && uiRec.dimmed)); }
+static bool uiWantsRaise() { return (!uiScreenOff || uiScreenOffAuto) && (uiDimmed || (uiRec.state == UI_RECS_RUN && uiRec.dimmed)); }
 static void uiRaise(uint32_t ms) {
-  if (uiScreenOff) return;
+  if (uiScreenOff && !uiScreenOffAuto) return;
   bool did = false;
+  if (uiScreenOffAuto) { uiScreenOff = false; uiScreenOffAuto = false; uiAll = true; did = true; }   // it went dark by itself: the raise wakes it
   if (uiDimmed) { uiDimmed = false; uiIdleSince = ms; uiLastActive = ms; did = true; }   // the idle face stays, bright, and its dimming wait starts again
   if (uiRec.state == UI_RECS_RUN && uiRec.dimmed) { uiRec.dimmed = false; uiRec.lastTouch = ms; did = true; }
   if (did) { uiRaises++; if (uiOut.brightness) uiOut.brightness(255); }
@@ -1557,10 +1566,15 @@ static void uiIdleTick(uint32_t ms) {
     return;
   }
   if (uiMode != UI_READY || uiCard.on || !uiIdle.have || uiIdle.after == 0) { uiActivity(ms); return; }
-  bool dimDue = uiIdle.dimAfter > 0 ? ms - uiLastActive >= (uint32_t)uiIdle.dimAfter * 1000UL : ms - uiIdleSince >= UI_IDLE_DIM_MS;
+  bool dimDue = uiIdle.dimAfter > 0 ? ms - uiLastActive >= (uint32_t)uiIdle.dimAfter * 1000UL : ms - uiIdleSince >= (uiSaver ? UI_SAVER_DIM_MS : UI_IDLE_DIM_MS);
   if (uiIdle.dim && !uiDimmed && dimDue) {
-    uiDimmed = true;
-    if (uiOut.brightness) uiOut.brightness(UI_DIM_LEVEL);
+    uiDimmed = true; uiDimmedAt = ms;
+    if (uiOut.brightness) uiOut.brightness(uiSaver ? UI_SAVER_DIM_LEVEL : UI_DIM_LEVEL);
+  }
+  if (uiSaver && uiIdle.dim && uiDimmed && !uiScreenOff && ms - uiDimmedAt >= UI_SAVER_OFF_MS) {   // dimmed long enough: dark until something wakes it
+    uiScreenOff = true; uiScreenOffAuto = true;
+    if (uiOut.brightness) uiOut.brightness(0);
+    return;
   }
   if ((int)((uiUtcNow(ms) + (int64_t)uiIdle.off * 60) / 60) != uiIdleMinute && !uiAll) { uiDrawIdle(ms); }   // a new minute
 }

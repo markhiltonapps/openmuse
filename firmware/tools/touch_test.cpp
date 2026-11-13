@@ -185,6 +185,33 @@ int main() {
   CHECK(uiIdleOn && !uiDimmed, "with dim-after 0 it keeps the usual minute (idle face up, not dimmed yet)");
   uiActivity(now); uiDimmed = false; uiIdleOn = false; pause(100);
 
+  // Battery saver: the idle face dims after 15 s to a much lower level, goes fully dark 45 s later by itself, and a touch, words or a raise of the wrist wake it.
+  uiSaver = true; uiIdle.dimAfter = 0; uiActivity(now); uiDimmed = false; uiIdleOn = false; level = 255; pause(100);
+  for (int sec = 0; sec < 22; sec++) pause(1000);                    // the idle face comes after 20 s of quiet
+  CHECK(uiIdleOn && !uiDimmed, "(saver) the idle face is up and still bright just after it came");
+  for (int sec = 0; sec < 15; sec++) pause(1000);
+  CHECK(uiDimmed && level == UI_SAVER_DIM_LEVEL && !uiScreenOff, "(saver) it dims about 15 s after the idle face, to the low level");
+  for (int sec = 0; sec < 40; sec++) pause(1000);
+  CHECK(uiDimmed && !uiScreenOff && level == UI_SAVER_DIM_LEVEL, "(saver) still dim 40 s later");
+  for (int sec = 0; sec < 10; sec++) pause(1000);
+  CHECK(uiScreenOff && uiScreenOffAuto && level == 0, "(saver) 45 s after dimming the screen goes dark by itself");
+  CHECK(uiWantsRaise(), "(saver) while dark by itself the watch still listens for a raise");
+  uiRaise(now);
+  CHECK(!uiScreenOff && !uiScreenOffAuto && !uiDimmed && level == 255, "(saver) a raise of the wrist wakes a screen that went dark by itself");
+  for (int sec = 0; sec < 70; sec++) pause(1000);
+  CHECK(uiScreenOff && uiScreenOffAuto, "(saver) and it goes dark again after the same waits");
+  uiTouch(now, true, 100, 100); frame(); now += 16; uiTouch(now, false, 100, 100); frame();
+  CHECK(!uiScreenOff && level == 255, "(saver) a touch wakes it too");
+  uiScreenOff = true; uiScreenOffAuto = false; level = 7; uiDimmed = true;
+  CHECK(!uiWantsRaise(), "(saver) the menu's Screen off is not woken by a raise");
+  uiRaise(now);
+  CHECK(uiScreenOff && level == 7, "(saver) a raise never wakes the menu's Screen off");
+  uiActivity(now);
+  uiSaver = false; uiDimmed = false; uiIdleOn = false; level = 255; pause(100);
+  for (int sec = 0; sec < 40; sec++) pause(1000);
+  CHECK(uiIdleOn && !uiDimmed && !uiScreenOff, "(saver off) the old timing: nothing dims 20 s after the idle face, and the screen never goes dark by itself");
+  uiActivity(now); uiDimmed = false; uiIdleOn = false; pause(100);
+
   // The diagnostic lines change every second. They must never make the words blink (the whole text area redrawn), shown or not.
   uiOut.brightness = nullptr;
   uiIdle.have = false; uiIdleOn = false; uiClearCard(); uiSetMode(UI_READY); uiSetWords("Hold BOOT to talk"); pause(500);
