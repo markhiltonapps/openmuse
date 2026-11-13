@@ -93,6 +93,7 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     rw: 0,
     vol: 85,
     bs: 1,
+    nap: 1,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -273,7 +274,7 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   };
   assert.match(
     idleOff.message ?? "",
-    /the idle screen is off; the speaker volume is 85 percent; battery saver is on; raise to wake is off/,
+    /the idle screen is off; the speaker volume is 85 percent; battery saver is on[^;]*; raise to wake is off/,
   );
   await db.close();
 });
@@ -351,6 +352,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
     raiseToWake: false,
     volume: 85,
     batterySaver: true,
+    sleepWhenIdle: true,
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
@@ -478,6 +480,20 @@ test("battery saver is on by default, goes on and off by voice and reaches the w
   const again = (await devices.list("o"))[0];
   assert.ok(again);
   assert.equal((await idleInfo(deps, "o", again)).bs, 0, "the watch is told it is off");
+  // Sleeping with Wi-Fi off when idle: on until the person says otherwise, the watch is told, and it can be turned off by voice.
+  assert.equal((await idleInfo(deps, "o", again)).nap, 1, "sleep when idle is on by default");
+  const awake = (await tool.execute({
+    do: "settings",
+    battery_saver: true,
+    sleep_when_idle: false,
+  })) as {
+    message?: string;
+  };
+  assert.match(awake.message ?? "", /stays connected/);
+  const third = (await devices.list("o"))[0];
+  assert.ok(third);
+  assert.equal((await idleInfo(deps, "o", third)).nap, 0, "the watch is told to stay connected");
+  await tool.execute({ do: "settings", sleep_when_idle: true });
   // Before any report the agent says so; after one it says what the watch reported, and how old it is.
   const before = (await tool.execute({ do: "list" })) as { devices: { report: string }[] };
   assert.match(before.devices[0]?.report ?? "", /no report yet/);

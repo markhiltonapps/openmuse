@@ -31,6 +31,8 @@
 #include "pin_config.h"
 #include "esp_check.h"
 #include "esp_system.h"
+#include "esp_sleep.h"
+#include "driver/gpio.h"
 #include "es8311.h"
 #include "settings.h"
 
@@ -136,6 +138,17 @@ static bool wsUp = false;
 static bool batterySaver = NEDDY_BATTERY_SAVER != 0;
 static int statPct = -1, statMv = 0, wsConnects = 0;
 static bool statCharging = false, statUsb = false;
+// All-day sleep (the "sleep when idle" setting, on with the battery saver): once the screen has been dark for a minute on battery, the watch turns its Wi-Fi
+// off and sleeps in 100 ms naps (a button press, a touch, the power chip's key and a raise are still looked at between naps). A press that needs Neddy
+// (BOOT, a touch-and-hold, a recording to send) turns Wi-Fi back on; it takes a few seconds to join. Neddy can't reach the watch while it sleeps.
+#define NEDDY_NAP 1
+#define NAP_WIFI_OFF_AFTER_MS 60000UL
+#define NAP_TICK_US 100000
+static bool napEnabled = NEDDY_NAP != 0;
+static bool napWifiOff = false;
+static unsigned long napDarkSince = 0;
+static int napSleeps = 0, napWakes = 0;
+static int pendAnim = -1, pendFace = -1, pendVol = -1;   // menu changes made while Wi-Fi was off: sent to Neddy once it is back
 // The speaker amplifier (pin 46) draws current all the time it is on. With the battery saver on, it is switched on only while there is sound to play
 // (and for 4 seconds after), instead of all day. Without the saver it stays on, as before.
 static volatile unsigned long paOnUntil = 0;
@@ -342,7 +355,7 @@ static void batteryLoop() {
   static bool adcOn = false;
   uint32_t now = millis();
   if (now < 3000UL) return;
-  if (last != 0 && now - last < (looks < 3 ? 5000UL : 30000UL)) return;
+  if (last != 0 && now - last < (looks < 3 || napWifiOff ? 5000UL : 30000UL)) return;   // (asleep: look every 5 s, so a USB cable is noticed quickly)
   last = now;
   uint8_t v = 0;
   if (!adcOn) {                                          // switch on the chip's battery and USB voltage measuring, and battery detection
@@ -1324,6 +1337,9 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       wsFailures = 0;
       static String info = String("{\"type\":\"device.info\",\"firmware\":\"") + FIRMWARE_VERSION + "\"}";
       ws.sendTXT(info.c_str());
+      if (pendAnim >= 0) { String m = String("{\"type\":\"device.setting\",\"key\":\"animation\",\"value\":") + pendAnim + "}"; ws.sendTXT(m.c_str()); pendAnim = -1; }
+      if (pendFace >= 0) { String m = String("{\"type\":\"device.setting\",\"key\":\"face\",\"value\":") + pendFace + "}"; ws.sendTXT(m.c_str()); pendFace = -1; }
+      if (pendVol >= 0) { String m = String("{\"type\":\"device.setting\",\"key\":\"volume\",\"value\":") + pendVol + "}"; ws.sendTXT(m.c_str()); pendVol = -1; }
       setMode(M_READY);
       break;
     case WStype_DISCONNECTED:
@@ -1333,11 +1349,11 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         wsDropAt = millis();
       }
       wsUp = false;
-      wsFailures++;
+      if (!napWifiOff) wsFailures++;
       if (held) {
         held = false;
       }
-      if (mode != M_PROBLEM) setMode(M_LINK);
+      if (mode != M_PROBLEM && !napWifiOff) setMode(M_LINK);   // (asleep on purpose: nothing to show)
       break;
     case WStype_TEXT: {
       String text = String((const char *)payload).substring(0, length);
@@ -1409,6 +1425,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.raise = jsonInt(text, "rw", 0) != 0;
         uiIdle.dimAfter = jsonInt(text, "da", 0);
         { int b = jsonInt(text, "bs", -1); if (b >= 0 && (b != 0) != batterySaver) applySaver(b != 0); }
+        { int n = jsonInt(text, "nap", -1); if (n >= 0) napEnabled = n != 0; }
         { int v = jsonInt(text, "vol", -1); if (v >= 0 && v <= 100 && (volLocalAt == 0 || millis() - volLocalAt > 4000)) applyVolume(v); }
         { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
         { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
@@ -1873,7 +1890,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   LOGLN("\nNeddy device " FIRMWARE_VERSION);
-  LOGLN("[build] 2026-11-13 saver: screen dims 15 s then off, microphone chip sleeps");
+  LOGLN("[build] 2026-11-13 all-day sleep: Wi-Fi off and light sleep once the screen has been dark a minute");
   uiSaver = batterySaver;
   bootCount++;
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
@@ -1897,7 +1914,9 @@ void setup() {
     if (wsUp && (which == UI_SET_ANIM || which == UI_SET_FACE || which == UI_SET_VOLUME)) {
       String m = String("{\"type\":\"device.setting\",\"key\":\"") + (which == UI_SET_ANIM ? "animation" : which == UI_SET_VOLUME ? "volume" : "face") + "\",\"value\":" + value + "}";
       ws.sendTXT(m.c_str());
-    }
+    } else if (which == UI_SET_ANIM) pendAnim = value;      // not connected (asleep with Wi-Fi off): kept and sent once Neddy is back, or the next idle push would undo it
+    else if (which == UI_SET_FACE) pendFace = value;
+    else if (which == UI_SET_VOLUME) pendVol = value;
   };
   uiOut.record = recAction;
   uiMotion = NEDDY_MOTION != 0;
@@ -1946,19 +1965,64 @@ static void micPowerLoop() {
   if (millis() - micUsedAt >= MIC_SLEEP_AFTER_MS) micSleep();
 }
 
-void loop() {
-  unsigned long turnAt = millis();
-  if (loopPrev && turnAt - loopPrev > maxLoop) maxLoop = turnAt - loopPrev;
-  loopPrev = turnAt;
-  // 0. Recording: the recorder has the loop to itself (no Wi-Fi, no talking) until Stop
-  if (recState == RS_REC) { recLoop(); return; }
+// ---- all-day sleep (see napEnabled above)
+static void napWake(const char *why) {
+  if (!napWifiOff) return;
+  napWifiOff = false;
+  socketStarted = false;      // the connection starts again from the beginning once Wi-Fi is back
+  wsFailures = 0;
+  napDarkSince = 0;
+  napWakes++;
+  uiActivity(millis());       // the screen comes on while it joins
+  LOGF("[nap] Wi-Fi back (%s)\n", why);
+}
+static void napSleepWifi() {
+  napWifiOff = true;          // first: the disconnect below must not change what the screen shows
+  if (socketStarted) ws.disconnect();
+  wsUp = false;
+  socketStarted = false;
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  napSleeps++;
+  LOGLN("[nap] screen dark for a minute: Wi-Fi off, sleeping");
+}
+// Looked at every turn: should Wi-Fi go off, or come back?
+static void napCheck() {
+  unsigned long now = millis();
+  bool plugged = statUsb || statCharging;
+  if (napWifiOff) {
+    if (digitalRead(BUTTON) == LOW) napWake("BOOT pressed");
+    else if (uiTouchTalk) napWake("touch and hold");
+    else if (recState == RS_SEND) napWake("a recording to send");
+    else if (!batterySaver || !napEnabled) napWake("setting changed");
+    else if (plugged) napWake("USB power");
+    else if (pendAnim >= 0 || pendFace >= 0 || pendVol >= 0) napWake("a setting to tell Neddy");
+    return;
+  }
+  if (uiScreenOff) { if (!napDarkSince) napDarkSince = now; } else napDarkSince = 0;
+  bool idle = !held && recState == RS_IDLE && uiRec.state == UI_RECS_OFF && mode == M_READY && wsUp && !plugged && batterySaver && napEnabled && !uiTouchTalk && problemUntil == 0;
+  if (napDarkSince && idle && now - napDarkSince >= NAP_WIFI_OFF_AFTER_MS) napSleepWifi();
+}
+// With Wi-Fi off and the screen dark the processor sleeps between 100 ms naps (a BOOT press wakes it at once). Returns true if it slept.
+static bool napSleep() {
+  if (!napWifiOff || !uiScreenOff || held || recState != RS_IDLE || uiRec.state != UI_RECS_OFF || statUsb || statCharging) return false;
+  if (digitalRead(BUTTON) == LOW) return false;
+  esp_sleep_enable_timer_wakeup(NAP_TICK_US);
+  gpio_wakeup_enable((gpio_num_t)BUTTON, GPIO_INTR_LOW_LEVEL);
+  esp_sleep_enable_gpio_wakeup();
+  esp_light_sleep_start();
+  return true;
+}
+
+// One turn of the link to Neddy: Wi-Fi, pairing and the connection. Returns false when this turn of the loop should end here.
+static bool linkTurn() {
   // 1. Wi-Fi
   if (WiFi.status() != WL_CONNECTED) {
     wsUp = false;
     if (wifiSsid.length() == 0) {              // none saved yet (a new watch, or it was forgotten): the QR code setup
       wifiSetupRun();
       mode = M_BOOT;
-      return;
+      return false;
     }
     if (!joinWifi()) {
       screenProblem("Can't join Wi-Fi",
@@ -1975,16 +2039,16 @@ void loop() {
         delay(50);
       }
       mode = M_BOOT;
-      return;
+      return false;
     }
   }
 
   // 2. Pairing (only until it works once; it's remembered after that)
   if (deviceToken.length() == 0) {
     setMode(M_PAIR);
-    if (!pairWithNeddy()) return;
+    if (!pairWithNeddy()) return false;
     socketStarted = false;  // the connection below starts with the new key
-    return;
+    return false;
   }
 
   // 3. The connection to Neddy
@@ -2013,6 +2077,19 @@ void loop() {
     mode = M_BOOT;
     setMode(wsUp ? M_READY : M_LINK);
   }
+
+  return true;
+}
+
+void loop() {
+  unsigned long turnAt = millis();
+  if (loopPrev && turnAt - loopPrev > maxLoop) maxLoop = turnAt - loopPrev;
+  loopPrev = turnAt;
+  // 0. Recording: the recorder has the loop to itself (no Wi-Fi, no talking) until Stop
+  if (recState == RS_REC) { recLoop(); return; }
+  // 1-3. Wi-Fi, pairing and the connection to Neddy (skipped while the watch sleeps with Wi-Fi off)
+  napCheck();
+  if (!napWifiOff && !linkTurn()) return;
 
   // 4. The touch screen and the button: holding Neddy (or a double tap) counts as holding the button
   touchLoop();
@@ -2061,5 +2138,6 @@ void loop() {
   }
   // With the battery saver on the processor rests between turns of the loop instead of spinning: nothing here needs more than ~250 turns a second (not while talking).
   micPowerLoop();
+  if (napSleep()) return;
   if (batterySaver && !held && uiRec.state == UI_RECS_OFF) delay(4);
 }
