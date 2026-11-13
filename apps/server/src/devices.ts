@@ -113,6 +113,9 @@ export interface DeviceStatus {
   upSeconds: number;
   connects: number;
   saver: boolean;
+  /** How much of its last Wi-Fi-off stretch the watch's processor really slept (percent), and how many times a sleep was refused. */
+  napPct?: number | null;
+  napRefused?: number | null;
 }
 /** A watch's last report in plain words, for the agent to say. */
 export function describeStatus(status: DeviceStatus | undefined, now: number) {

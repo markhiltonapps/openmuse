@@ -110,3 +110,19 @@ Expected: ~5-8 mA asleep (not measured; unknown: how much the dark AMOLED driver
 NOT compiled (no Arduino toolchain here). Tests: tests/device-idle.test.ts 11 pass (new: sleep_when_idle setting + `nap` fact), tests/help.test.ts. Help: Battery paragraph.
 Known limits: pull-only (no heads-ups while asleep); the press that wakes it is used up joining Wi-Fi, so press again once it says ready; light sleep stops the USB serial monitor (it is skipped while USB power is present).
 Possible next steps if still not enough: put the AMOLED driver in its own sleep mode (command 0x10) while dark, lower the CPU to 80 MHz, let the IMU raise detector use its own interrupt.
+
+== Measured 2026-11-13 14:05-15:06 local: all-day sleep build (400 mAh, untouched, dark) ==
+75% (after unplugging) -> 71% in 61 min = about 4%/h (~16 mA). Worked: the server saw "disconnected (code 1000)" 2 min 20 s after the last touch and nothing after.
+Owner: the watch will need the 220 mAh battery (size), so that is the target; ~16 mA on 220 mAh is ~7%/h = ~13 h idle, borderline with use.
+
+== Sleep round 2 (2026-11-13) from what others found on this same board (waveshareteam/ESP32-S3-Touch-AMOLED-2.06 issue #6) ==
+(1) The USB-serial peripheral keeps esp_light_sleep_start() from sleeping unless USB_SERIAL_JTAG_USB_PAD_ENABLE is cleared first (done around each nap, only when no USB cable);
+(2) an enabled I2S port blocks light sleep too: i2s.end() while asleep, i2s.begin() again on waking (napHwDown/napHwUp), CPU 80 MHz while asleep;
+(3) the display chip goes to sleep with the screen dark (gfx->displayOff()/displayOn() inside the brightness callback; NEDDY_PANEL_SLEEP 0 turns it off). The wake redraws everything.
+(4) The watch now reports how much of its last Wi-Fi-off stretch the processor REALLY slept ("nap": percent, "rej": refused sleeps): server log "slept N% of its last Wi-Fi-off stretch (R refused)".
+   If N is low, light sleep was not engaging and that explains the drain.
+NOT done on purpose: one commenter drives GPIO13 as an AMOLED enable; Waveshare's docs say GPIO13 is the display's TE (tearing) signal, so it is left alone. The AXP2101 rails (ALDO/BLDO) feeding the display, touch and audio chips are not
+switched either: without the board's rail map a wrong guess could blank a chip. Ask Waveshare or read the schematic before touching rails.
+Server: DeviceStatus gets napPct/napRefused (optional); device-socket parses "nap"/"rej" and logs them. tests/device-idle.test.ts 11 pass; tsc clean.
+NOT compiled (no Arduino toolchain): new calls to check on the owner's first compile: esp_timer_get_time, CLEAR_PERI_REG_MASK / USB_SERIAL_JTAG_CONF0_REG (soc/usb_serial_jtag_reg.h), i2s.end(), gfx->displayOn()/displayOff().
+Real-board checks: the screen comes back after a long dark spell (touch, BOOT, PWR); the clock redraws properly; sound still plays after a nap; the "slept N%" log line after the first wake.

@@ -234,6 +234,8 @@ export class DeviceBridge {
       up?: unknown;
       connects?: unknown;
       saver?: unknown;
+      nap?: unknown;
+      rej?: unknown;
     };
     try {
       event = JSON.parse(Buffer.from(bytes).toString("utf8"));
@@ -265,10 +267,12 @@ export class DeviceBridge {
         upSeconds: num(event.up, 0, 10_000_000) ?? 0,
         connects: num(event.connects, 0, 100_000) ?? 0,
         saver: event.saver === 1,
+        napPct: num(event.nap, 0, 100),
+        napRefused: num(event.rej, 0, 10_000_000),
       };
       this.devices.setStatus(connection.device.id, status);
       this.log(
-        `Device ${connection.device.name} status: battery ${status.battery ?? "none"}%${status.millivolts ? ` ${status.millivolts} mV` : ""} ${status.charging ? "charging" : status.usb ? "plugged in" : "on battery"}, Wi-Fi ${status.wifiDbm ?? "?"} dBm, up ${Math.round(status.upSeconds / 60)} min, connects ${status.connects}, saver ${status.saver ? "on" : "off"}`,
+        `Device ${connection.device.name} status: battery ${status.battery ?? "none"}%${status.millivolts ? ` ${status.millivolts} mV` : ""} ${status.charging ? "charging" : status.usb ? "plugged in" : "on battery"}, Wi-Fi ${status.wifiDbm ?? "?"} dBm, up ${Math.round(status.upSeconds / 60)} min, connects ${status.connects}, saver ${status.saver ? "on" : "off"}${status.napPct === null ? "" : `, slept ${status.napPct}% of its last Wi-Fi-off stretch (${status.napRefused ?? 0} refused)`}`,
       );
       return;
     }

@@ -33,6 +33,8 @@
 #include "esp_system.h"
 #include "esp_sleep.h"
 #include "driver/gpio.h"
+#include "esp_timer.h"
+#include "soc/usb_serial_jtag_reg.h"
 #include "es8311.h"
 #include "settings.h"
 
@@ -148,6 +150,13 @@ static bool napEnabled = NEDDY_NAP != 0;
 static bool napWifiOff = false;
 static unsigned long napDarkSince = 0;
 static int napSleeps = 0, napWakes = 0;
+// Sleep details found in other people's work on this same board: (1) the USB serial peripheral keeps light sleep from ever starting unless its pad is switched off
+// first (only done when no USB cable is attached); (2) an I2S port that is switched on blocks light sleep too, so it is stopped while asleep and started again on waking;
+// (3) the display chip is put into its own sleep (NEDDY_PANEL_SLEEP 1; set it to 0 if the screen ever stays black after waking).
+#define NEDDY_PANEL_SLEEP 1
+static bool napHw = false;                                // the I2S port is stopped and the processor slowed
+static unsigned long long napAsleepUs = 0, napSinceUs = 0;   // how long it really slept since Wi-Fi went off (reported so a failed sleep can be seen)
+static int napRefused = 0, lastNapPct = -1, lastNapRefused = 0;
 static int pendAnim = -1, pendFace = -1, pendVol = -1;   // menu changes made while Wi-Fi was off: sent to Neddy once it is back
 // The speaker amplifier (pin 46) draws current all the time it is on. With the battery saver on, it is switched on only while there is sound to play
 // (and for 4 seconds after), instead of all day. Without the saver it stays on, as before.
@@ -398,7 +407,9 @@ static void statusLoop() {
   if (statPct >= 0) m += String(",\"battery\":") + statPct;
   if (statMv > 0) m += String(",\"mv\":") + statMv;
   m += String(",\"charging\":") + (statCharging ? 1 : 0) + ",\"usb\":" + (statUsb ? 1 : 0);
-  m += String(",\"rssi\":") + (int)WiFi.RSSI() + ",\"up\":" + (now / 1000) + ",\"connects\":" + wsConnects + ",\"saver\":" + (batterySaver ? 1 : 0) + "}";
+  m += String(",\"rssi\":") + (int)WiFi.RSSI() + ",\"up\":" + (now / 1000) + ",\"connects\":" + wsConnects + ",\"saver\":" + (batterySaver ? 1 : 0);
+  if (lastNapPct >= 0) m += String(",\"nap\":") + lastNapPct + ",\"rej\":" + lastNapRefused;   // how much of the last Wi-Fi-off stretch the processor really slept
+  m += "}";
   ws.sendTXT(m.c_str());
 }
 
@@ -1904,6 +1915,16 @@ void setup() {
   uiMicros = []() -> uint32_t { return (uint32_t)micros(); };
   // The idle face dims the screen with the display chip's own brightness command (0x51).
   uiOut.brightness = [](int level) {
+#if NEDDY_PANEL_SLEEP
+    static bool panelOff = false;
+    if (level <= 0 && !panelOff) {                      // dark for good: the display chip goes to sleep too
+      bus->beginWrite(); bus->writeC8D8(0x51, 0); bus->endWrite();
+      gfx->displayOff();
+      panelOff = true;
+      return;
+    }
+    if (level > 0 && panelOff) { gfx->displayOn(); panelOff = false; uiAll = true; }
+#endif
     bus->beginWrite();
     bus->writeC8D8(0x51, (uint8_t)level);
     bus->endWrite();
@@ -1966,9 +1987,28 @@ static void micPowerLoop() {
 }
 
 // ---- all-day sleep (see napEnabled above)
+static void napHwDown() {
+  if (napHw) return;
+  i2s.end();                    // an I2S port that is switched on keeps the processor from sleeping
+  setCpuFrequencyMhz(80);
+  napHw = true;
+}
+static void napHwUp() {
+  if (!napHw) return;
+  setCpuFrequencyMhz(batterySaver ? 160 : 240);
+  if (!i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) LOGLN("[nap] I2S did not restart");
+  i2s.setTimeout(100);
+  napHw = false;
+}
 static void napWake(const char *why) {
   if (!napWifiOff) return;
   napWifiOff = false;
+  if (napSinceUs) {           // how much of the time since Wi-Fi went off the processor really slept (sent to Neddy with the next report)
+    unsigned long long span = (unsigned long long)esp_timer_get_time() - napSinceUs;
+    lastNapPct = span ? (int)(napAsleepUs * 100ULL / span) : 0;
+    lastNapRefused = napRefused;
+  }
+  napSinceUs = 0; napAsleepUs = 0; napRefused = 0;
   socketStarted = false;      // the connection starts again from the beginning once Wi-Fi is back
   wsFailures = 0;
   napDarkSince = 0;
@@ -1989,6 +2029,7 @@ static void napSleepWifi() {
 // Looked at every turn: should Wi-Fi go off, or come back?
 static void napCheck() {
   unsigned long now = millis();
+  if (napHw && !(napWifiOff && uiScreenOff)) napHwUp();        // the screen came on or Wi-Fi is coming back: the audio port and the full speed return
   bool plugged = statUsb || statCharging;
   if (napWifiOff) {
     if (digitalRead(BUTTON) == LOW) napWake("BOOT pressed");
@@ -2007,10 +2048,16 @@ static void napCheck() {
 static bool napSleep() {
   if (!napWifiOff || !uiScreenOff || held || recState != RS_IDLE || uiRec.state != UI_RECS_OFF || statUsb || statCharging) return false;
   if (digitalRead(BUTTON) == LOW) return false;
+  napHwDown();
   esp_sleep_enable_timer_wakeup(NAP_TICK_US);
   gpio_wakeup_enable((gpio_num_t)BUTTON, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
-  esp_light_sleep_start();
+  unsigned long long t0 = (unsigned long long)esp_timer_get_time();
+  if (!napSinceUs) napSinceUs = t0;
+  CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);   // (no USB cable here: checked above) or it would not sleep
+  esp_err_t e = esp_light_sleep_start();
+  SET_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
+  if (e == ESP_OK) napAsleepUs += (unsigned long long)esp_timer_get_time() - t0; else napRefused++;
   return true;
 }
 
