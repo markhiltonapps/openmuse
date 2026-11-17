@@ -21,7 +21,9 @@ The phone side can stay the web app for now. (This is the plan; an experiment wi
 - Out of range of the phone and with no Wi-Fi, a non-LTE watch cannot reach us at all. The Data Layer relay through a native phone app only helps when the phone is online, so it adds reliability, not range.
   A native phone companion stays optional (one-tap pairing, steadier delivery); it is not required for the first version.
 - Push (FCM) to a non-LTE watch is believed to arrive through the same phone link: verify it before promising instant delivery.
-- Test to run on the owner's watch: turn off the watch's Wi-Fi and cellular (keep Bluetooth), send a message from MetaMuse's watch app, and see whether it works.
+- Owner confirmed (2026-11-17): MetaMuse's watch app works over Bluetooth only, with no Wi-Fi. That fits either the phone-lent connection above or a relay through its phone app; which one it is is not known.
+  Our design assumes the phone-lent connection (no phone app) and should be checked on the owner's watch first; if it fails, a native phone app with the Wearable Data Layer becomes required, not optional.
+- Test to run on the owner's watch (partly done by the owner for MetaMuse): turn off the watch's Wi-Fi and cellular (keep Bluetooth), send a message from MetaMuse's watch app, and see whether it works.
 
 ## Shape (from general Wear OS knowledge and the explainer the owner shared; Meta's internals are not public)
 - The watch never runs the model; it sends text and shows results. Our server already works this way for the ESP32 watch.
