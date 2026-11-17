@@ -14,6 +14,15 @@ No. A native phone app is only needed for the one-tap "connect your watch" promp
 A standalone Wear OS app can pair with a six-digit code (the same flow the ESP32 watch already uses) and talk to our server over the watch's own Wi-Fi/LTE.
 The phone side can stay the web app for now. (This is the plan; an experiment with the phone left at home confirms the watch works on its own.)
 
+## Watches WITHOUT LTE must work too (owner, 2026-11-17: "MetaMuse doesn't need LTE")
+- Wear OS lends the paired phone's connection to the watch over Bluetooth ("proxied" network), so ordinary small HTTPS requests from a standalone watch app work on a Wi-Fi-only watch whenever the phone is near.
+  It is slow and low-bandwidth, so: text only, small payloads, no streaming audio, no held-open socket, retry with a short backoff, queue a message when there is no connection and send it later, and
+  say "no connection" on screen. (General Wear OS behaviour; to be verified on the owner's watch.)
+- Out of range of the phone and with no Wi-Fi, a non-LTE watch cannot reach us at all. The Data Layer relay through a native phone app only helps when the phone is online, so it adds reliability, not range.
+  A native phone companion stays optional (one-tap pairing, steadier delivery); it is not required for the first version.
+- Push (FCM) to a non-LTE watch is believed to arrive through the same phone link: verify it before promising instant delivery.
+- Test to run on the owner's watch: turn off the watch's Wi-Fi and cellular (keep Bluetooth), send a message from MetaMuse's watch app, and see whether it works.
+
 ## Shape (from general Wear OS knowledge and the explainer the owner shared; Meta's internals are not public)
 - The watch never runs the model; it sends text and shows results. Our server already works this way for the ESP32 watch.
 - Background limits: no permanent socket on a watch. The watch sends over plain HTTPS when the person acts; Google's push (FCM, needs a Firebase project the owner creates)
