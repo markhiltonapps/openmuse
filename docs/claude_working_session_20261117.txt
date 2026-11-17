@@ -1,0 +1,7 @@
+Working session 2026-11-17
+
+- Owner asked how hard a Galaxy Watch (Wear OS) feature like MetaMuse's would be, then shared photos and a reference explainer (how that app works on a watch).
+- Wrote docs/WEAR-OS-WATCH-PLAN.md and a pointer in CLAUDE.md: the idea is recorded for later, nothing built. A phone app is NOT required first: a standalone Wear OS app can pair with a code and use the watch's own connection.
+- 2026-11-16: weekly upstream check run (91 upstream commits, 30 conflicting files if merged whole); recommendation: cherry-pick the security and reliability fixes in batches on a scratch branch; skip the OpenFuse rename, SDK telemetry, E2B desktop and Parallel search unless wanted. Not started; waiting on the owner.
+- Pending: commit 5b417ab (watch sleep round 2) is local and not pushed; waiting for "push it" and the owner's next watch battery test with that build.
+- Time log: not kept on this project.

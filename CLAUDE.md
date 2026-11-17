@@ -752,6 +752,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   switch was in the code). A feature that depends on a chip nobody has read yet gets `NEDDY_RAISE_DEBUG`-style numbers on screen (and a message when the chip is missing or silent) from the first build, switched
   on while it is tried out. Don't depend on an unknown sign or start pose: the detector ignores which way the axis points and doesn't need a particular starting position.
 
+- **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
+  reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every
+  card needs a short plain-text form; a watch gets its own scoped token, never the account session. A phone app is not required first (the watch can pair with a code and use its own connection).
 - **Receipt box (owner, 2026-11-11):** the model only copies what is printed; the code does the arithmetic (`reconcile`: a smudged total
   is settled from the receipt's own sums, and prices that already include tax count as agreeing, or every VAT receipt raises a false
   question). A guessed total must never file: gate on "more than one reading" alone, never on an "edited" flag that a category tap sets.
