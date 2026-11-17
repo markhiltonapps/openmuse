@@ -25,6 +25,17 @@ The phone side can stay the web app for now. (This is the plan; an experiment wi
   Our design assumes the phone-lent connection (no phone app) and should be checked on the owner's watch first; if it fails, a native phone app with the Wearable Data Layer becomes required, not optional.
 - Test to run on the owner's watch (partly done by the owner for MetaMuse): turn off the watch's Wi-Fi and cellular (keep Bluetooth), send a message from MetaMuse's watch app, and see whether it works.
 
+## Other watches, including Apple Watch (owner, 2026-11-17: "I need this to also work on other watches, including Apple")
+- Each watch platform is its own native app and its own project: Wear OS (Kotlin + Compose for Wear OS; covers Galaxy Watch 4+, Pixel Watch, OnePlus, Fossil and others) and Apple Watch (Swift + SwiftUI, watchOS).
+  Nothing shares UI code between them. Garmin (Monkey C) and others are possible later and would also be separate.
+- What CAN be shared is the server: one platform-neutral "watch API" (paired device token, latest messages, send a message, list and decide an approval, plain-text cards) used by every watch app and by the ESP32 watch.
+  Build and test that first, with nothing in it that is specific to Wear OS (no Google-only fields); push providers sit behind one function (FCM for Wear OS, APNs for Apple Watch).
+- Apple Watch needs: a Mac with Xcode, an Apple Developer account (paid yearly), and TestFlight or the App Store for anyone but the owner. A non-cellular Apple Watch reaches the internet through its iPhone (or Wi-Fi); a
+  watch-only app is allowed, but it is still installed via the iPhone's Watch app. Ask the owner whether they have a Mac and an Apple Developer account before promising a date.
+- Works on every watch with NO watch app: web push to the phone (already built) mirrors to a paired Apple Watch or Wear OS watch as a notification (Apple: the web app must be added to the iPhone Home Screen, iOS 16.4+).
+  It is read-only or quick-reply at best, but it is the fallback that covers all brands today.
+- Order proposed: (1) platform-neutral watch API, (2) Wear OS app, (3) Apple Watch app, (4) others on demand. Keep text-only, small payloads, queued sends and "no connection" states on all of them.
+
 ## Shape (from general Wear OS knowledge and the explainer the owner shared; Meta's internals are not public)
 - The watch never runs the model; it sends text and shows results. Our server already works this way for the ESP32 watch.
 - Background limits: no permanent socket on a watch. The watch sends over plain HTTPS when the person acts; Google's push (FCM, needs a Firebase project the owner creates)

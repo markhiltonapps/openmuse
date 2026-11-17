@@ -754,7 +754,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 
 - **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
   reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every
-  card needs a short plain-text form; a watch gets its own scoped token, never the account session. A phone app is not required first (the watch can pair with a code and use its own connection).
+  card needs a short plain-text form; a watch gets its own scoped token, never the account session; the server side must stay platform-neutral (Wear OS, Apple Watch and others, 2026-11-17). A phone app is not required first (the watch can pair with a code and use its own connection).
 - **Receipt box (owner, 2026-11-11):** the model only copies what is printed; the code does the arithmetic (`reconcile`: a smudged total
   is settled from the receipt's own sums, and prices that already include tax count as agreeing, or every VAT receipt raises a false
   question). A guessed total must never file: gate on "more than one reading" alone, never on an "edited" flag that a category tap sets.
