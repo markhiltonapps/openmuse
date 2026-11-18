@@ -34,6 +34,8 @@ The phone side can stay the web app for now. (This is the plan; an experiment wi
   watch-only app is allowed, but it is still installed via the iPhone's Watch app. Ask the owner whether they have a Mac and an Apple Developer account before promising a date.
 - Works on every watch with NO watch app: web push to the phone (already built) mirrors to a paired Apple Watch or Wear OS watch as a notification (Apple: the web app must be added to the iPhone Home Screen, iOS 16.4+).
   It is read-only or quick-reply at best, but it is the fallback that covers all brands today.
+- DECISION (owner, 2026-11-18): no Apple Developer account, so the target is **Wear OS on Android only** for now. The Apple Watch app waits until the owner has an account and a Mac.
+  The server API still stays platform-neutral so Apple Watch can be added later without reworking it.
 - Order proposed: (1) platform-neutral watch API, (2) Wear OS app, (3) Apple Watch app, (4) others on demand. Keep text-only, small payloads, queued sends and "no connection" states on all of them.
 
 ## Shape (from general Wear OS knowledge and the explainer the owner shared; Meta's internals are not public)
