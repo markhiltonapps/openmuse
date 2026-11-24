@@ -191,10 +191,35 @@ function decodeSnippet(value: string): string {
   );
 }
 function addresses(value: string): string[] {
+  // Comments may contain addresses, nested comments and escaped parentheses.
+  // Quoted display names treat parentheses literally instead.
+  let uncommented = "";
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  // Encoded words are display text, never mailbox syntax, even if their raw
+  // payload happens to contain an address or parentheses.
+  for (const character of value.replace(/=\?[^?]+\?[bq]\?[^?]*\?=/gi, "")) {
+    if (escaped) {
+      if (!depth) uncommented += character;
+      escaped = false;
+    } else if (character === "\\") {
+      if (!depth) uncommented += character;
+      escaped = true;
+    } else if (!depth && character === '"') {
+      quoted = !quoted;
+      uncommented += character;
+    } else if (!quoted && character === "(") {
+      if (!depth) uncommented += " ";
+      depth++;
+    } else if (depth && character === ")") {
+      depth--;
+    } else if (!depth) uncommented += character;
+  }
   // A quoted display name may itself contain an e-mail-looking string; only
   // addresses outside display names count.
   return (
-    value
+    uncommented
       .replace(/"(?:[^"\\]|\\.)*"\s*(?=<)/g, " ")
       .match(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+/g) ?? []
   );
@@ -315,8 +340,9 @@ function mapMessage(message: z.infer<typeof messageSchema>): Mail {
     if (!attached) for (const child of part.parts ?? []) visit(child, depth + 1);
   };
   if (message.payload) visit(message.payload, 0);
-  const from = decodeHeader(metadata.get("from") ?? "");
-  const address = addresses(from)[0] ?? from;
+  const rawFrom = metadata.get("from") ?? "";
+  const from = decodeHeader(rawFrom);
+  const address = addresses(rawFrom)[0] ?? from;
   const displayName = from.includes("<")
     ? from.slice(0, from.indexOf("<")).trim().replace(/^"|"$/g, "")
     : "";

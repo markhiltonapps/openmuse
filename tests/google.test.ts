@@ -37,6 +37,88 @@ const eventResponse = {
 };
 const base64url = (text: string) => Buffer.from(text).toString("base64url");
 
+test("mail addresses exclude comments, including nested and escaped parentheses", async () => {
+  for (const comment of [
+    "(old@example.com)",
+    "(old@example.com (another@example.com))",
+    "(legacy \\) old@example.com)",
+  ]) {
+    const client = clientWith(() =>
+      json({
+        id: "thread1",
+        messages: [
+          {
+            id: "msg1",
+            threadId: "thread1",
+            payload: {
+              headers: [
+                { name: "From", value: `Support ${comment} <sender@example.com>` },
+                {
+                  name: "To",
+                  value: `${comment} <reader@example.com>, second@example.com ${comment}`,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    const [mail] = await client.getThread("thread1");
+    assert.equal(mail.from, "sender@example.com", comment);
+    assert.deepEqual(mail.to, ["reader@example.com", "second@example.com"], comment);
+  }
+});
+
+test("parentheses inside a quoted display name do not start address comments", async () => {
+  const client = clientWith(() =>
+    json({
+      id: "thread1",
+      messages: [
+        {
+          id: "msg1",
+          threadId: "thread1",
+          payload: {
+            headers: [
+              { name: "From", value: '"Support (West" <sender@example.com>' },
+              { name: "To", value: '"Help \\"desk (west@example.com)" <reader@example.com>' },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+  const [mail] = await client.getThread("thread1");
+  assert.equal(mail.from, "sender@example.com");
+  assert.deepEqual(mail.to, ["reader@example.com"]);
+});
+
+test("encoded display-name punctuation does not become address syntax", async () => {
+  for (const name of ["Support (West", "Support ) West", "old@example.com (West)"]) {
+    const encoded = `=?UTF-8?B?${Buffer.from(name).toString("base64")}?=`;
+    const client = clientWith(() =>
+      json({
+        id: "thread1",
+        messages: [
+          {
+            id: "msg1",
+            threadId: "thread1",
+            payload: {
+              headers: [
+                { name: "From", value: `${encoded} <sender@example.com>` },
+                { name: "To", value: "=?UTF-8?Q?old@example.com_=28West?= <reader@example.com>" },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    const [mail] = await client.getThread("thread1");
+    assert.equal(mail.from, "sender@example.com", name);
+    assert.equal(mail.sender, name);
+    assert.deepEqual(mail.to, ["reader@example.com"]);
+  }
+});
+
 test("mail reads nested plain text and attachment references over authenticated Gmail paths", async () => {
   const paths: URL[] = [];
   const client = clientWith((request) => {
