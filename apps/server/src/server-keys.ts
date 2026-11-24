@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decryptSecret, encryptSecret } from "../../../packages/integrations/src/vault.ts";
 import type { Store } from "./db.ts";
@@ -33,9 +34,19 @@ export async function keptSecret(
     if (existing) return existing;
     await mkdir(options.dataDir, { recursive: true, mode: 0o700 });
     const made = options.make();
-    // Another copy starting at the same moment may have written it first: use theirs.
-    await writeFile(file, made, { mode: 0o600, flag: "wx" }).catch(() => undefined);
-    return (await fromFile()) ?? made;
+    const temporary = `${file}.${randomBytes(16).toString("hex")}.tmp`;
+    await writeFile(temporary, made, { mode: 0o600, flag: "wx" });
+    try {
+      // Publish only complete bytes, without replacing another process's key.
+      await link(temporary, file);
+      return made;
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+      // Another copy starting at the same moment wrote it first: use theirs.
+      return await readFile(file, "utf8");
+    } finally {
+      await unlink(temporary);
+    }
   }
   const kept = await db.get<KeptSecret>("system", "server-keys", options.name);
   if (kept) return decryptSecret(kept.secret, encryptionKey);

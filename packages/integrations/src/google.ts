@@ -162,7 +162,7 @@ function decodeHeader(value: string): string {
                     ),
                   "latin1",
                 );
-          return new TextDecoder(charset).decode(bytes);
+          return new TextDecoder(charset.split("*")[0]).decode(bytes);
         } catch {
           return original;
         }
@@ -186,12 +186,46 @@ function decodeSnippet(value: string): string {
         entity[1].toLowerCase() === "x"
           ? Number.parseInt(entity.slice(2), 16)
           : Number.parseInt(entity.slice(1), 10);
-      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : original;
+      // Surrogates are not scalar values: fromCodePoint throws on them, and one
+      // such reference in a snippet must not reject the whole message list.
+      const scalar = code >= 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff);
+      return scalar ? String.fromCodePoint(code) : original;
     },
   );
 }
 function addresses(value: string): string[] {
-  return value.match(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+/g) ?? [];
+  // Comments may contain addresses, nested comments and escaped parentheses.
+  // Quoted display names treat parentheses literally instead.
+  let uncommented = "";
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  // Encoded words are display text, never mailbox syntax, even if their raw
+  // payload happens to contain an address or parentheses.
+  for (const character of value.replace(/=\?[^?]+\?[bq]\?[^?]*\?=/gi, "")) {
+    if (escaped) {
+      if (!depth) uncommented += character;
+      escaped = false;
+    } else if (character === "\\") {
+      if (!depth) uncommented += character;
+      escaped = true;
+    } else if (!depth && character === '"') {
+      quoted = !quoted;
+      uncommented += character;
+    } else if (!quoted && character === "(") {
+      if (!depth) uncommented += " ";
+      depth++;
+    } else if (depth && character === ")") {
+      depth--;
+    } else if (!depth) uncommented += character;
+  }
+  // A quoted display name may itself contain an e-mail-looking string; only
+  // addresses outside display names count.
+  return (
+    uncommented
+      .replace(/"(?:[^"\\]|\\.)*"\s*(?=<)/g, " ")
+      .match(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+/g) ?? []
+  );
 }
 /** Extract text from a parsed HTML tree. Nothing is rendered or fetched. */
 function htmlToPlainText(html: string): string {
@@ -270,6 +304,14 @@ function htmlToPlainText(html: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+/** UTF-8 when the declared charset is not one TextDecoder knows (`unknown-8bit`, `utf-7`). */
+function decoderFor(charset: string): TextDecoder {
+  try {
+    return new TextDecoder(charset);
+  } catch {
+    return new TextDecoder();
+  }
+}
 function mapMessage(message: z.infer<typeof messageSchema>): Mail {
   const metadata = headers(message.payload);
   const plain: string[] = [];
@@ -277,12 +319,16 @@ function mapMessage(message: z.infer<typeof messageSchema>): Mail {
   const attachments: string[] = [];
   const visit = (part: GmailPart, depth: number) => {
     if (depth > 30) throw new Error("Gmail message MIME nesting exceeds the limit");
+    // Attachments carry their own content (or an attached message); never merge
+    // their parts into the parent text. A remote body has no filename: it is
+    // hydrated above and still counts as message text.
+    const attached = Boolean(part.filename) || part.mimeType === "message/rfc822";
     if (part.filename && part.body?.attachmentId)
       attachments.push(
         `${message.id}:${part.body.attachmentId}:${encodeURIComponent(part.filename)}`,
       );
     if (
-      !part.filename &&
+      !attached &&
       (part.mimeType === "text/plain" || part.mimeType === "text/html") &&
       part.body?.data
     ) {
@@ -290,18 +336,20 @@ function mapMessage(message: z.infer<typeof messageSchema>): Mail {
         headers(part)
           .get("content-type")
           ?.match(/charset=["']?([^;"'\s]+)/i)?.[1] ?? "utf-8";
-      const text = new TextDecoder(charset).decode(decodeBase64url(part.body.data, 1024 * 1024));
+      const text = decoderFor(charset).decode(decodeBase64url(part.body.data, 1024 * 1024));
       if (part.mimeType === "text/plain") plain.push(text);
       else html.push(htmlToPlainText(text));
     }
-    for (const child of part.parts ?? []) visit(child, depth + 1);
+    if (!attached) for (const child of part.parts ?? []) visit(child, depth + 1);
   };
   if (message.payload) visit(message.payload, 0);
-  const from = decodeHeader(metadata.get("from") ?? "");
-  const address = addresses(from)[0] ?? from;
-  const sender = from.includes("<")
+  const rawFrom = metadata.get("from") ?? "";
+  const from = decodeHeader(rawFrom);
+  const address = addresses(rawFrom)[0] ?? from;
+  const displayName = from.includes("<")
     ? from.slice(0, from.indexOf("<")).trim().replace(/^"|"$/g, "")
-    : address;
+    : "";
+  const sender = displayName || address;
   const time = message.internalDate
     ? Number(message.internalDate)
     : Date.parse(metadata.get("date") ?? "");

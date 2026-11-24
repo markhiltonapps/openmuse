@@ -1482,10 +1482,14 @@ export async function createApp(
     return c.json(await devices.poll(body.pollToken));
   });
   app.use("/api/*", async (c, next) => {
+    // A signed URL grants only the requests its page makes: reads, and the console's input.
+    const method = c.req.method === "HEAD" ? "GET" : c.req.method;
     const signedRoute =
-      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$|^\/api\/meetings\/[^/]+\/mp3\/file$/.test(
-        c.req.path,
-      );
+      (method === "GET" &&
+        /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$|^\/api\/meetings\/[^/]+\/mp3\/file$/.test(
+          c.req.path,
+        )) ||
+      (method === "POST" && /^\/api\/browsers\/[^/]+\/console$/.test(c.req.path));
     const owner =
       signedRoute && c.req.query("signature")
         ? auth.verify(new URL(c.req.url))
@@ -1494,6 +1498,10 @@ export async function createApp(
     await next();
   });
   app.get("/api/session", (c) => c.json({ mode: config.mode }));
+  app.delete("/api/session", async (c) => {
+    await auth.revoke(c.req.header("authorization"));
+    return c.json({ ok: true });
+  });
   // The person's devices: pair one with the code on its screen, rename it, or turn it off.
   app.get("/api/devices", async (c) => {
     const list = await devices.list(c.get("owner"));
@@ -2222,7 +2230,9 @@ export async function createApp(
   });
   app.get("/api/drafts", async (c) => c.json(await db.list(c.get("owner"), "drafts")));
   app.post("/api/drafts", async (c) => {
-    const body = emailDraftSchema.extend({ id: z.string().optional() }).parse(await c.req.json());
+    const body = emailDraftSchema
+      .extend({ id: z.string().uuid().optional() })
+      .parse(await c.req.json());
     const existing = body.id
       ? await db.get<{ createdAt: string }>(c.get("owner"), "drafts", body.id)
       : null;

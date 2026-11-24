@@ -32,6 +32,23 @@ export interface FileText {
 const textKey = (id: string) => `files/${id}.text.json`;
 const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
+/** File ids are the UUIDs `import` makes; anything else is turned away before storage is asked. */
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** The last part of a path, without control characters, never empty. */
+export function sanitizeFileName(name: string): string {
+  const base = name.split(/[\\/]/).at(-1) ?? "document.pdf";
+  const cleaned = Array.from(base)
+    .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
+    .join("")
+    .slice(0, 180);
+  return cleaned || "document.pdf";
+}
+
+function assertFileId(id: string): void {
+  if (!FILE_ID.test(id)) throw new AppError("File not found", 404);
+}
+
 export class Files {
   constructor(
     private readonly db: Store,
@@ -48,10 +65,7 @@ export class Files {
     parentId?: string,
   ): Promise<Artifact> {
     if (bytes.length > 10 * 1024 * 1024) throw new AppError("Files must be 10 MB or smaller", 413);
-    const safeName = Array.from(name.split(/[\\/]/).at(-1) ?? "document.pdf")
-      .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
-      .join("")
-      .slice(0, 180);
+    const safeName = sanitizeFileName(name);
     const kind = detectKind(safeName, bytes);
     if (!kind) throw new AppError(`Files can be ${SUPPORTED_FILES}`, 422);
     let metadata: { pageCount: number; fields: NonNullable<Artifact["fields"]> } = {
@@ -104,6 +118,7 @@ export class Files {
     return (await this.db.list<Artifact>(owner, "files")).map((file) => this.signed(owner, file));
   }
   async get(owner: string, id: string) {
+    assertFileId(id);
     const file = await this.db.get<Artifact>(owner, "files", id);
     if (!file) throw new AppError("File not found", 404);
     return file;

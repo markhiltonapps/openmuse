@@ -72,7 +72,13 @@ export class Auth {
         ? (await this.db.get<{ status: string }>("system", "accounts", session.account))?.status ===
           "active"
         : session.key === this.keyDigest());
-    if (!session || !valid) throw new AppError("Session expired. Sign in again.", 401);
+    if (!session || !valid) {
+      // Expired sessions can never be valid again, so drop the row instead of keeping it forever.
+      // Best-effort: a failed cleanup must not turn the rejection into a 5xx.
+      if (session && session.expiresAt < now)
+        await this.db.remove("system", "sessions", id).catch(() => {});
+      throw new AppError("Session expired. Sign in again.", 401);
+    }
     if (session.expiresAt - now < SESSION_TTL / 2)
       await this.db.put("system", "sessions", { ...session, id, expiresAt: now + SESSION_TTL });
     return session.owner;
