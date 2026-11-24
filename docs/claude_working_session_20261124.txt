@@ -4,3 +4,6 @@ Working session 2026-11-24
 - Read the code (commitments.ts, heads-ups, mail alerts) and wrote docs/INTELLIGENCE-PLAN.md: what exists, why the Cambodia example does not work yet (fragile capture, no live flight/traffic data, generic nudges), and phases A-E with a first slice.
 - Nothing built. Waiting on the owner's answers to the five decisions at the end of that doc.
 - Pending: commits 3099d74 and dbea0e5 (docs only) are local, waiting for "push it". Watch: next battery test of the sleep round 2 firmware; Wear OS server routes not started; upstream fixes not started.
+- Owner clarified: the proactive work must cover the whole ecosystem, not just travel or email. Rewrote docs/INTELLIGENCE-PLAN.md as a platform plan: one proactive engine (signals, open loops, detectors, moments, judge, feedback)
+  with domain packs and a daily "chief of staff" pass for the long tail; travel is the first pack and the test. Also discussed: the app's chat runs on Haiku 4.5 (not Sonnet 5.5, which is the coding assistant's model);
+  proposed a model test (Haiku 4.5 vs 5.5 vs Sonnet 5.5) and a mobile chat layout redesign (docked notice, slim header, tab bar hides while typing). Neither built; waiting on the owner.

@@ -1,57 +1,74 @@
-# Making Neddy more forward-thinking (plan, 2026-11-24)
+# Making Neddy proactive across everything (plan, rewritten 2026-11-24)
 
-Why: the owner uses MetaMuse more than Neddy because it speaks first. Example: he asked it to check an email from his partner with the Cambodia trip itinerary. A week later,
-unprompted, it said "leave about 7:15 to make it to the airport" and already had the gate. MetaMuse's internals are not public; the pattern below is inferred from that one example.
+Owner (2026-11-24): MetaMuse told him, unprompted and a week after he asked about a trip email, when to leave for the airport and the gate. "Don't get caught up in just that scenario: there are hundreds if not
+thousands of kinds of things this app should be proactive about. It has to cover the entire ecosystem, not just travel or email." MetaMuse's internals are not public; this is inferred from that one example.
 
-## The pattern behind the example
-ASK ONCE -> SAVED AS A STRUCTURED TRIP (flight, time, airport, reference) -> LATER, A SCHEDULER ENRICHES IT WITH LIVE DATA (flight status and gate, traffic from where you are)
--> IT SPEAKS UP AT THE RIGHT MOMENTS, UNSOLICITED. Three layers: **Capture**, **Enrich**, **Act**.
+## The idea: one proactive engine, many domain packs
+Hand-coding travel, then bills, then deliveries... never reaches thousands of cases. Build ONE small, general engine that any signal can feed and any domain can plug into. Travel is the first pack and the test, not the product.
 
-## What Neddy already has (checked in the code, 2026-11-24)
-- `commitments.ts`: reservation, delivery, trip, appointment, bill, event; tracked from chat (`track_commitment`) or from new email (`engine/service.ts` ~line 1111: a keyword filter `looksLikeConfirmation`,
-  then one small-model call); de-duplicated by confirmation reference; two generic nudges ("day" and "soon", 2 h before); closed a day after.
-- Heads-ups (`heads-ups.ts`, `heads-up-rules.ts`): calendar rules, leave-by using the person's usual travel time or a rough car estimate ("no live traffic"), push + bell + chat card + watch.
-- Urgent alerts on a call, place reminders, location while the app is open, mail alerts (Composio webhook), jobs, About-you facts, Receipt box, the ESP32 watch.
+```
+SIGNALS (everything Neddy can see)                      PERSON MODEL (what Neddy knows)
+ mail, calendar, chat + voice, location, time,           facts, people, places, habits,
+ files + receipts, health, jobs, web watches,            OPEN LOOPS (plans, promises, waits, watches),
+ devices, every connected app (Composio)                 preferences, what they dismissed or liked
+        │                                                        ▲
+        ▼                                                        │
+  1. NOTICE  ──► candidate "Moments" ──► 2. DECIDE (the judge) ──► 3. DELIVER ──► 4. LEARN
+  detectors: time, change, pattern,       value x urgency x         watch, push, card,     thumbs, dismissals, acted-on
+  absence, opportunity, social,           confidence - cost of      voice, digest;         rate tune each detector;
+  plus a daily "chief of staff" pass      interrupting; budgets,    one-tap actions        autonomy dial per person
+  for the long tail                       quiet hours, dedupe       (approval gate)        (ask / suggest / do)
+```
 
-## Why Neddy did not do the Cambodia thing
-1. **Capture is fragile.** An email the person asks about in chat is tracked only if the model chooses to call `track_commitment`. The automatic path sees only mail that arrives after the mail watch is on,
-   and only if the subject/preview match the keyword filter. An itinerary forwarded by a person ("from Amanda") may match nothing.
-2. **One email = one commitment with one time.** A real itinerary has several legs (outbound, return, hotel, transfers).
-3. **No live data:** no flight status, gate, terminal or delay; no real traffic; no weather at the destination.
-4. **Generic, few nudges:** "Coming up: Flight..." the day before and 2 h before. Nothing like "leave by 7:15", "check-in is open", "gate changed", "you've landed: here's your hotel".
-5. **Silent tracking.** Neddy never says "I noticed this and I'm tracking it", so there is no trust and no feedback.
+## The six concepts (each is small)
+1. **Signal**: a normalised event (mail arrived, event changed, location, a chat sentence, a receipt, a flight delay). Everything already in Neddy emits one through a single door.
+2. **Open loop** (generalises `commitments.ts`): anything with future relevance: a plan with a time, a promise ("I'll reply Friday"), a wait ("expecting the part"), a watch ("tell me when it's back"), a habit, a deadline.
+   Made by an extractor (a model reads messy text once) or by the person ("tell me when..."). The engine then watches loops with cheap code, not a model.
+3. **Detector**: a plain function over signals + loops that proposes Moments. Kinds: TIME (T-minus before things), CHANGE (delay, price drop, status, calendar conflict), PATTERN (you usually... today you haven't), ABSENCE (no reply in 3 days; bill not paid; the thing didn't arrive),
+   OPPORTUNITY (free hour near an errand; good time for X), SOCIAL (birthdays, people you haven't talked to).
+4. **Moment**: {why, evidence, suggested action, urgency, confidence, expires}. The unit everything else works on.
+5. **Judge**: scores Moments, applies budgets (daily cap, quiet hours, dedupe, snooze), asks a small model only when borderline, and chooses the channel. This is where "forward-thinking" becomes "not annoying".
+6. **Feedback loop**: one tap or one word ("useful", "not useful", "less of this", "I wish you'd told me that"). Each detector's thresholds move with it; "I wish you'd told me" saves the situation as a new example and a new loop/detector request.
 
-## Plan, in order of impact per effort (efforts are rough)
-**Phase A, capture everything (a few days).**
-- A1. Whenever the agent reads an email in chat (Gmail/Outlook read results), the SERVER runs the extractor on it (not the model's choice) and says "I'm tracking your flight to Phnom Penh on Dec 3".
-- A2. Trips as containers: one email can yield several linked legs (flight out, flight back, hotel, transfer); dedupe by reference (exists).
-- A3. Better filter: a cheap two-stage check instead of one keyword list; a one-time, capped backfill of the last 30 days of mail after the person turns it on (opt-in); calendar events as a second source.
-- A4. "Track this" / "what's on for Cambodia?" by voice and chat.
+## The long tail without writing a rule per case: the "chief of staff" pass
+Once or twice a day per person (and on big changes) a small model gets a compact snapshot (calendar, open loops, recent mail digests, recent chat topics, location habits, weather, what was dismissed) and answers: "What would a thoughtful assistant flag or prepare for this person today?"
+It returns candidate Moments, which go through the same judge. This is how hundreds of unforeseen cases get covered. Cost is one small call per person per day (capped per plan); the always-on part stays code.
 
-**Phase B, enrich with live data (about a week plus accounts and keys).**
-- B1. Flight status (gate, terminal, delay, cancellation): a flight-data API, polled adaptively (a few times a day far out, every ~15 min in the last 3 h). Needs flight number + date from the extractor.
-- B2. Real travel time with live traffic (a routing API) from where the person is, or home when we don't know. Leave-by = departure - airport buffer (about 2 h domestic, 3 h international) - drive - parking, recomputed as traffic changes.
-- B3. Weather at the destination (worldwide source; NWS is US-only). B4. Package tracking and delivery windows.
-- Costs are per lookup and small (roughly a cent or less each; about 10-20 lookups per trip) but UNVERIFIED: compare providers' real prices and free tiers before choosing, and count lookups against plans.
+## Domain packs (each = extractors + enrichers + detectors + message templates + safe actions)
+| Area | Examples of what it notices |
+|---|---|
+| Travel and commute | flight status and gate, leave-by with live traffic, check-in opening, visa/passport, hotel and transfer details, landing info |
+| Errands and deliveries | out for delivery, a missed delivery, return window closing (Receipt box), pickup ready, store closing before you get there |
+| Money and bills | bill due, unusual charge, subscription renewing, failed payment, price drop on something watched |
+| Work | meeting prep (who, last thread, open items), a promised reply, a deadline moved, a double-booking, doc shared with you |
+| People and family | birthday, someone you owe a reply, kids' schedules, a message from a person you marked important |
+| Health and routine | missed medication or check-in, sleep or step trends, a habit slipping, appointment prep |
+| Home and car | renewal dates, service due, weather affecting the plan, trash day, a warranty ending |
+| Shopping and plans | restock, deals on watched items, a reservation to confirm, event tickets on sale |
+| Learning and goals | a goal with no progress, a milestone, "you said you wanted to..." |
+| Admin and life | passport/licence expiry found in mail, tax and insurance dates, forms waiting for a signature |
+Packs are added one at a time; adding one never touches the core.
 
-**Phase C, the "moments" engine (about a week).** Per kind, a timeline of rule-based moments with templates (a small model only for wording), delivered by push, watch, chat card, and spoken on a call:
-- Flight: 48 h "check-in opens tomorrow" (link); 24 h check-in, weather, passport/visa reminder (international); ~3-4 h "leave by 7:15, traffic adds 12 min"; 2 h gate and terminal; gate change; delay or cancellation with options;
-  landing "welcome, your hotel is at..., transfer...".
-- Hotel (check-in time, address), reservation (leave-by), delivery (out for delivery, arriving today), bill (due in 3 days with amount), appointment (leave-by, forms).
-- Guard rails: quiet hours, daily cap, dedupe, snooze, "stop tracking this", per-moment toggles (everything is a toggle).
+## What already exists and moves onto the engine
+`commitments.ts` (becomes open loops + TIME detectors), `heads-ups.ts` and `heads-up-rules.ts` (the first detectors and the delivery filters), place reminders, meal check-ins, reminders, web watches (`watch-judge.ts`), the Receipt box return reminders,
+urgent alerts on calls, `family-weeks.ts` and `social-weeks.ts`, the approval gate (proactive actors may only draft), push, the bell, chat cards and the watch. These stop being separate islands: same loop store, same judge, same budgets, same feedback.
 
-**Phase D, anticipation beyond travel (ongoing).** Conflicts and tight connections; follow-ups ("you told Dana you'd reply by Friday"); important mail unanswered; renewals and expiries found in mail (passport, registration);
-bills and subscriptions tied to the Receipt box; birthdays; a smarter morning brief and a "week ahead"; proactive drafts that wait for approval (the approval gate already forces review for proactive actors).
+## Guard rails (non-negotiable)
+Everything is a toggle (per pack, per detector, per channel). Default autonomy is SUGGEST (never act for the person without a tap, money and sign-in always need a tap). Every Moment can answer "why am I seeing this" (evidence + the receipt idea). Redaction on everything a model sees.
+Per-person daily budgets for messages AND model cost. Nothing is sent without being able to say what it used. A weekly "proactive scorecard": sent, acted on, dismissed, complained about, cost.
 
-**Phase E, trust and control (built alongside).** A visible "What Neddy is tracking" list with Stop; "why am I seeing this" (uses the receipts idea); the first time per kind, ask once ("I found a flight in your mail: track flights like this automatically?");
-redaction on everything that reaches a model; cost caps per person; thumbs up/down on each proactive message to tune rules.
-
-## First slice ("Cambodia in a box", about 1-2 weeks)
-A1 + A2 + B1 + B2 + the flight moments from C. It reproduces the example end to end. Golden test: a fixture itinerary email goes in; with a simulated clock the tests expect the exact messages at the exact times.
+## Build order (efforts are rough)
+1. **Core engine** (about 1-2 weeks): signal door, open-loop store (migrating commitments), Moment + judge + budgets + delivery + feedback taps, "what Neddy is tracking" screen, "why am I seeing this". Re-point the existing features onto it with no change in behaviour.
+2. **Eval harness** (about 3-4 days, built with 1): a simulated person-day (mail, calendar, chat, location) and a clock; scenarios assert the exact Moments, and that annoying ones do NOT fire. Every pack ships with scenarios. Seeded from the owner's "I wish you'd told me" examples.
+3. **Chief-of-staff pass** (about 3-5 days): the daily model pass over the snapshot, behind the judge, with a cost cap.
+4. **Capture everywhere** (about 3-5 days): the server turns what the agent reads or hears (an email opened in chat, a sentence like "I'll call the dentist Friday") into open loops without relying on the model's choice, and says so ("I'm keeping an eye on this").
+5. **Packs, most valuable first** (about 2-4 days each, plus any data API): Travel is the first (flight status, traffic leave-by, landing info) because it exercises enrichers; then the owner's own top 4-5.
+6. **Live-data enrichers** as packs need them: flights, traffic, packages, prices, worldwide weather, sports and markets. Costs are per lookup and small but UNVERIFIED; compare providers before choosing and count lookups against plans.
 
 ## Decisions needed from the owner
-1. Build order A -> B -> C with travel as the first scenario?
-2. OK to add two paid data APIs (flight status, traffic routing)? The owner creates the accounts and adds the keys as Railway variables (and presses Deploy).
-3. Mail scanning: track what the person asks about and new confirmations automatically, but make the 30-day backfill opt-in? (Recommended.)
-4. Home address and airport buffers: ask once and save in About you.
-5. Delivery: push, watch and chat card now; SMS later (needs a business registration).
+1. Platform first (engine, then packs) rather than one more feature at a time? (Recommended.)
+2. Default autonomy: SUGGEST only? A per-person "do routine things for me" level later?
+3. OK for the daily chief-of-staff pass, with a cost cap per plan?
+4. Which 4-5 areas from the table matter most to you, so they are the first packs after Travel?
+5. "I wish you'd told me that" by voice or chat as the standing way to teach it: yes?
+6. Data APIs (flights, traffic): OK to add paid accounts? The owner creates them and adds the keys as Railway variables (and presses Deploy).
