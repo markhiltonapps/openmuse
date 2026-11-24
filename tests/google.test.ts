@@ -170,6 +170,19 @@ test("mail reads nested plain text and attachment references over authenticated 
   assert.deepEqual(mail.attachments, ["msg1:attach1:Permission%3A%20form.pdf"]);
 });
 
+test("a numeric character reference to a surrogate stays literal instead of failing the list", async () => {
+  // String.fromCodePoint throws on surrogate code points; a sender can put the
+  // literal text &#xD800; in a snippet, and one such message must not reject
+  // the whole list (Promise.all over per-message parses).
+  const client = clientWith((request) =>
+    new URL(request.url).pathname.endsWith("/messages")
+      ? json({ messages: [{ id: "msg1" }] })
+      : json({ id: "msg1", threadId: "thread1", snippet: "Entity notes: &#xD800; and &#55296;" }),
+  );
+  const [mail] = await client.listMail();
+  assert.equal(mail.body, "Entity notes: &#xD800; and &#55296;");
+});
+
 test("HTML-only messages expose complete plain text while removing active and non-content elements", async () => {
   let reads = 0;
   const fullText = "Complete museum itinerary. ".repeat(4500);
