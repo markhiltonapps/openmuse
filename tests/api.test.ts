@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,7 @@ import { after, before, test } from "node:test";
 import { EventType } from "@ag-ui/core";
 import { lastValueFrom, toArray } from "rxjs";
 import { createApp } from "../apps/server/src/app.ts";
+import type { Auth } from "../apps/server/src/auth.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
 import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
@@ -14,6 +16,7 @@ import type { ActionProposal, Artifact, Workspace } from "../packages/domain/src
 
 let db: Store,
   app: Awaited<ReturnType<typeof createApp>>["app"],
+  auth: Auth,
   agent: AgentService,
   config: Config,
   token: string,
@@ -33,7 +36,7 @@ before(async () => {
     googleRedirectUri: "http://localhost:8787/api/google/callback",
     allowedOrigins: ["http://localhost:8081"],
   };
-  ({ app, agent } = await createApp(db, config));
+  ({ app, agent, auth } = await createApp(db, config));
   const response = await app.request("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -213,4 +216,36 @@ test("guided document delegation streams a rich tool result bound to its saved t
   );
   assert.equal(task?.kind, "document");
   assert.equal(task?.input.messageId, "mail-fieldtrip");
+});
+
+test("signed links authorize only the requests their page makes", async () => {
+  const link = (path: string) => {
+    const url = new URL(auth.sign("local-user", path));
+    return `${url.pathname}${url.search}`;
+  };
+  const file = link(`/api/files/${randomUUID()}/content`);
+  const consoleLink = link(`/api/browsers/${randomUUID()}/console`);
+  // Accepted links reach the handler, which then finds no such resource.
+  assert.equal((await app.request(file)).status, 404);
+  assert.equal((await app.request(file, { method: "HEAD" })).status, 404);
+  assert.equal((await app.request(consoleLink)).status, 404);
+  assert.equal(
+    (
+      await app.request(consoleLink, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "key", key: "Enter" }),
+      })
+    ).status,
+    404,
+  );
+  // Any other method needs a session, so a route added later cannot inherit link access.
+  for (const [path, method] of [
+    [file, "PUT"],
+    [file, "DELETE"],
+    [file, "POST"],
+    [consoleLink, "DELETE"],
+    [consoleLink, "PATCH"],
+  ])
+    assert.equal((await app.request(path, { method })).status, 401, `${method} ${path}`);
 });

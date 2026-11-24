@@ -1448,10 +1448,14 @@ export async function createApp(
     return c.json(await devices.poll(body.pollToken));
   });
   app.use("/api/*", async (c, next) => {
+    // A signed URL grants only the requests its page makes: reads, and the console's input.
+    const method = c.req.method === "HEAD" ? "GET" : c.req.method;
     const signedRoute =
-      /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$|^\/api\/meetings\/[^/]+\/mp3\/file$/.test(
-        c.req.path,
-      );
+      (method === "GET" &&
+        /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$|^\/api\/account\/export$|^\/api\/meetings\/[^/]+\/audio\/\d+$|^\/api\/meetings\/[^/]+\/mp3\/file$/.test(
+          c.req.path,
+        )) ||
+      (method === "POST" && /^\/api\/browsers\/[^/]+\/console$/.test(c.req.path));
     const owner =
       signedRoute && c.req.query("signature")
         ? auth.verify(new URL(c.req.url))
