@@ -79,7 +79,7 @@ test("a later email with the same tracking number updates the delivery instead o
   const list = await commitments.list("o");
   assert.equal(list.length, 1);
   assert.equal(list[0]?.title, "Grinder out for delivery");
-  assert.equal(list[0]?.when, "Tue, Sep 29, 9:00 AM");
+  assert.equal(list[0]?.when, "Tue, Sep 29");
   assert.deepEqual(await commitments.list("someone-else"), []);
 });
 

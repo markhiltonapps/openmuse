@@ -4,6 +4,7 @@ import { ActivityIndicator, type LayoutChangeEvent, Pressable, Text, View } from
 import { useAgentWorkspace } from "./agent-workspace";
 import { type Column, DataTable, Segmented } from "./charts";
 import { Emoji } from "./emoji";
+import { FINE, SwitchRow } from "./heads-ups-ui";
 import {
   COMMITMENT_EMOJI,
   type Commitment,
@@ -48,6 +49,8 @@ const KIND_NAME: Record<Commitment["kind"], string> = {
   appointment: "Appointment",
   bill: "Bill",
   event: "Event",
+  promise: "To do",
+  waiting: "Waiting on",
   other: "Plan",
 };
 
@@ -103,15 +106,25 @@ function RowAction({
 }
 
 /** The day on one line and the time under it, in the person's time zone. */
-function WhenCell({ at, timeZone }: { at?: string; timeZone?: string }) {
+function WhenCell({
+  at,
+  timeZone,
+  dateOnly,
+}: {
+  at?: string;
+  timeZone?: string;
+  dateOnly?: boolean;
+}) {
   const when = localWhen(at, timeZone);
   if (!when) return <Text style={[cellText, { color: colors.mutedStrong }]}>No date yet</Text>;
   return (
     <View>
       <Text style={[cellText, numbers]}>{when.day}</Text>
-      <Text style={[s.small, numbers, { color: colors.mutedStrong, fontSize: 12 }]}>
-        {when.time}
-      </Text>
+      {!dateOnly && (
+        <Text style={[s.small, numbers, { color: colors.mutedStrong, fontSize: 12 }]}>
+          {when.time}
+        </Text>
+      )}
     </View>
   );
 }
@@ -152,6 +165,156 @@ function SubHeading({ children }: { children: ReactNode }) {
     <Text role="heading" aria-level={3} style={s.heading}>
       {children}
     </Text>
+  );
+}
+
+interface SpeaksFirstState {
+  on: boolean;
+  dailyLimit: number;
+  dailyCheck: boolean;
+  areas: { id: string; name: string; paused: boolean; until?: string; because?: "feedback" }[];
+}
+const LIMITS = ["3", "5", "8", "12"];
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+/** A group's name, tied to its controls for a screen reader (as Heads-ups' settings do). */
+const groupLabel = (title: string, id: string) => (
+  <Text nativeID={id} accessibilityRole="header" style={[s.text, { fontWeight: "600" }]}>
+    {title}
+  </Text>
+);
+
+/**
+ * When the agent speaks first (owner, 2026-11-24): the main switch, the daily check, the daily
+ * limit and each kind of notice (switch one off to pause it for 30 days). Everything here can also
+ * be said ("fewer notices like that", "turn bills back on"). While a change saves, the controls dim
+ * and the line under them says so; a failure is said in that same line, next to the tap.
+ */
+function SpeaksFirst({ agent }: { agent: string }) {
+  const { api } = useWorkspace();
+  const [state, setState] = useState<SpeaksFirstState>();
+  const [loadError, setLoadError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState("");
+  useEffect(() => {
+    api.request<SpeaksFirstState>("/api/proactive").then(setState, (e) => setLoadError(message(e)));
+  }, [api]);
+  async function change(body: Record<string, unknown>, done: string) {
+    if (busy) return;
+    setBusy(true);
+    setSaid("Saving…");
+    try {
+      setState(await api.request<SpeaksFirstState>("/api/proactive", body));
+      setSaid(done);
+    } catch (e) {
+      setSaid(`Couldn’t save that (${message(e)}). Try again.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const limits =
+    state && !LIMITS.includes(String(state.dailyLimit))
+      ? [...LIMITS, String(state.dailyLimit)].sort((a, b) => Number(a) - Number(b))
+      : LIMITS;
+  return (
+    <View
+      style={{
+        gap: 6,
+        marginTop: 8,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+      }}
+    >
+      <SubHeading>When {agent} speaks first</SubHeading>
+      <Text style={FINE}>
+        Notices under Recent on Home, and on your phone if notifications are on: before what’s
+        tracked here is due, and the day after something you’re waiting on was expected. {agent}{" "}
+        only suggests. Nothing is sent or booked because of a notice.
+      </Text>
+      <ErrorNotice error={loadError} />
+      {!state ? (
+        !loadError && <ActivityIndicator color={colors.blueDark} style={{ padding: 16 }} />
+      ) : (
+        <View aria-busy={busy} style={{ gap: 14, opacity: busy ? 0.5 : 1 }}>
+          <SwitchRow
+            label={`Let ${agent} speak first`}
+            detail={
+              state.on
+                ? "Calendar heads-ups too. Off means none of these."
+                : "Off: none of these, calendar heads-ups included. Your other choices are kept."
+            }
+            checked={state.on}
+            onPress={() =>
+              void change(
+                { on: !state.on },
+                state.on ? `${agent} won’t speak first now.` : `${agent} will speak first again.`,
+              )
+            }
+          />
+          {state.on && (
+            <>
+              <SwitchRow
+                label="Daily check"
+                detail="One short look each morning for anything else worth a word. It adds 3 notices at most, and most days none."
+                checked={state.dailyCheck}
+                onPress={() =>
+                  void change(
+                    { dailyCheck: !state.dailyCheck },
+                    state.dailyCheck ? "Daily check: off." : "Daily check: on.",
+                  )
+                }
+              />
+              <View style={{ gap: 8 }}>
+                {groupLabel("Most notices a day", "speaks-first-limit")}
+                <View role="group" aria-labelledby="speaks-first-limit">
+                  <Segmented
+                    label="Most notices a day"
+                    value={String(state.dailyLimit)}
+                    options={limits.map((id) => ({ id, label: id }))}
+                    onChange={(id) =>
+                      void change({ dailyLimit: Number(id) }, `Up to ${id} notices a day.`)
+                    }
+                  />
+                </View>
+                <Text style={FINE}>
+                  Time to head to the airport comes even in quiet hours or past the limit. Right
+                  after a notice you can say “that wasn’t useful” or “I wish you’d told me that.”
+                </Text>
+              </View>
+              <View style={{ gap: 2 }}>
+                {groupLabel("Kinds of notice", "speaks-first-kinds")}
+                <View role="group" aria-labelledby="speaks-first-kinds">
+                  {state.areas.map((area) => (
+                    <SwitchRow
+                      key={area.id}
+                      label={area.name}
+                      detail={
+                        !area.paused
+                          ? undefined
+                          : area.until
+                            ? `Paused until ${shortDate(area.until)}.`
+                            : "Paused because you asked for fewer."
+                      }
+                      checked={!area.paused}
+                      onPress={() =>
+                        void change(
+                          area.paused ? { resume: area.id } : { pause: area.id },
+                          area.paused
+                            ? `${area.name}: back on.`
+                            : `${area.name}: paused for 30 days.`,
+                        )
+                      }
+                    />
+                  ))}
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+      )}
+      <StatusLine text={said} />
+    </View>
   );
 }
 
@@ -221,7 +384,9 @@ export function CommitmentsSheet({ tab: first = "upcoming" }: { tab?: "upcoming"
   const under = (item: Commitment) =>
     wide
       ? ""
-      : [narrow ? whenLine(item.at, item.timeZone) : "", item.where].filter(Boolean).join(" · ");
+      : [narrow ? whenLine(item.at, item.timeZone, undefined, item.dateOnly) : "", item.where]
+          .filter(Boolean)
+          .join(" · ");
   const status: Column<Commitment> = {
     title: "Status",
     flex: 0,
@@ -275,7 +440,9 @@ export function CommitmentsSheet({ tab: first = "upcoming" }: { tab?: "upcoming"
             title: "When",
             flex: 0,
             minWidth: wide ? 132 : 96,
-            render: (item: Commitment) => <WhenCell at={item.at} timeZone={item.timeZone} />,
+            render: (item: Commitment) => (
+              <WhenCell at={item.at} timeZone={item.timeZone} dateOnly={item.dateOnly} />
+            ),
           },
         ]),
     {
@@ -301,7 +468,7 @@ export function CommitmentsSheet({ tab: first = "upcoming" }: { tab?: "upcoming"
   return (
     <Sheet
       title="Plans & bookings"
-      subtitle={`Reservations, deliveries, trips, appointments, bills and events ${agent} is keeping track of for you.`}
+      subtitle={`What ${agent} is keeping track of for you: bookings, trips, deliveries, bills, and things you said you’d do or are waiting on.`}
       onClose={close}
     >
       <View style={{ gap: 16 }}>
@@ -345,7 +512,7 @@ export function CommitmentsSheet({ tab: first = "upcoming" }: { tab?: "upcoming"
               rowKey={(item) => item.id}
               empty={
                 showingUpcoming
-                  ? `Nothing coming up. Tell ${agent} about a reservation, delivery, trip, appointment or bill and it’ll show up here.`
+                  ? `Nothing coming up. Tell ${agent} about a booking, a delivery, a bill, or something you’ll do by Friday, and it’ll show up here.`
                   : "Nothing finished yet. Plans you mark done or cancelled stay here for a month."
               }
             />
@@ -368,6 +535,7 @@ export function CommitmentsSheet({ tab: first = "upcoming" }: { tab?: "upcoming"
             Plans you mark done or cancelled stay here for a month.
           </Text>
         )}
+        {showingUpcoming && <SpeaksFirst agent={agent} />}
       </View>
     </Sheet>
   );

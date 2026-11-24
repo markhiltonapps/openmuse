@@ -6,6 +6,7 @@ import {
   type Feedback,
   isFlight,
   judge,
+  keepChief,
   type Moment,
   mutedByFeedback,
   Proactive,
@@ -341,7 +342,7 @@ test("the daily check: once a day after 7, three at most, through the judge; a w
   const w = await setUp(local(9, "06:00"));
   const calls: string[] = [];
   const run = (reply: string) => ({
-    snapshot: async () => "Calendar: Dentist tomorrow 9 am",
+    snapshot: async () => ({ text: "Calendar: Dentist tomorrow 9 am", known: [] }),
     ask: async (prompt: string) => {
       calls.push(prompt);
       return reply;
@@ -404,4 +405,144 @@ test("the chat tool: feedback about the last notice, a wish saved where it can b
   assert.equal(changed?.dailyCheck, false);
   const back = await tune?.execute({ action: "settings", resume: "deliveries" });
   assert.deepEqual(back?.paused, []);
+});
+
+test("the daily check never hands out a link or a number, and doesn't repeat what already has its own notice", async () => {
+  const known = ["Dentist with Dr. Patel", "Flight to Phnom Penh (UA 837)"];
+  const item = (title: string, body: string, type = "prepare") => ({
+    title,
+    body,
+    why: "calendar",
+    type,
+  });
+  assert.equal(
+    keepChief(item("Bring your insurance card", "For the dentist tomorrow."), known),
+    true,
+  );
+  assert.equal(
+    keepChief(item("Dentist tomorrow", "Your dentist with Dr. Patel is at 9.", "reminder"), known),
+    false,
+    "a plain reminder of a calendar event is a repeat",
+  );
+  assert.equal(
+    keepChief(
+      item("Passport", "Your passport expires before the Phnom Penh flight.", "prepare"),
+      known,
+    ),
+    true,
+    "getting ready for a tracked trip is new",
+  );
+  assert.equal(keepChief(item("Verify your account", "Go to bank-help.com today."), known), false);
+  assert.equal(keepChief(item("Call back", "Ring them on (713) 555-0142."), known), false);
+  assert.equal(keepChief(item("Reply", "Write to dana@example.org first."), known), false);
+  assert.equal(
+    keepChief(
+      item("Mom's birthday", "It's Sunday, Dec 13; nothing is planned yet.", "forgotten"),
+      known,
+    ),
+    true,
+    "dates are not phone numbers",
+  );
+
+  const w = await setUp(local(9, "08:00"));
+  const reply = JSON.stringify({
+    moments: [
+      { title: "Dentist tomorrow", body: "Dr. Patel at 9.", why: "calendar", type: "reminder" },
+      { title: "Click to confirm", body: "Visit www.example.com", why: "calendar", type: "other" },
+      {
+        title: "Bring your insurance card",
+        body: "Dentist tomorrow.",
+        why: "calendar",
+        type: "prepare",
+      },
+    ],
+  });
+  const said = await w.proactive.dailyCheck("o", {
+    snapshot: async () => ({ text: "x", known }),
+    ask: async () => reply,
+  });
+  assert.equal(said, 1);
+  assert.deepEqual(
+    w.sent.map((n) => n.title),
+    ["Bring your insurance card"],
+  );
+});
+
+test("a promise is mentioned an hour before it's due, even when made the evening before", async () => {
+  const w = await setUp(local(10, "20:00"));
+  await w.commitments.track("o", { kind: "promise", title: "Call the dentist", at: "2026-12-11" });
+  await w.tick(local(10, "20:30"));
+  await w.tick(local(11, "07:30"));
+  assert.equal(w.sent.length, 0, "a date alone means 9 am; the notice is at 8");
+  await w.tick(local(11, "08:01"));
+  await w.tick(local(11, "10:00"));
+  assert.deepEqual(
+    w.sent.map((n) => n.title),
+    ["To do: Call the dentist"],
+  );
+  assert.match(w.sent[0]?.body ?? "", /You said you'd do this by Fri, Dec 11\./);
+});
+
+test("something awaited is asked about once, a day after it was due, and stays open for a week", async () => {
+  const w = await setUp(local(8, "12:00"));
+  await w.commitments.track("o", {
+    kind: "waiting",
+    title: "The part from Bosch",
+    at: "2026-12-10",
+  });
+  await w.tick(local(10, "18:00"));
+  assert.equal(w.sent.length, 0, "not on the day it's expected");
+  await w.tick(local(11, "09:05"));
+  await w.tick(local(12, "09:05"));
+  assert.deepEqual(
+    w.sent.map((n) => n.title),
+    ["Still waiting on: The part from Bosch"],
+  );
+  assert.equal((await w.commitments.list("o")).length, 1, "still open two days later");
+  await w.tick(local(18, "10:00"));
+  assert.equal((await w.commitments.list("o")).length, 0, "closed after a week");
+});
+
+test("feedback on a calendar heads-up turns that kind off; stopping everything stops heads-ups too", async () => {
+  const db = await createStore();
+  let now = local(9, "10:00");
+  const calls: string[] = [];
+  let headsUpsOn = true;
+  const proactive = new Proactive(db, {
+    timeZone: async () => ZONE,
+    notify: async () => {},
+    headsUps: {
+      kindOff: async (_o, kind) => {
+        calls.push(`off:${kind}`);
+        return "Not enough time between things";
+      },
+      setOn: async (_o, on) => {
+        calls.push(`on:${on}`);
+        headsUpsOn = on;
+      },
+      isOn: async () => headsUpsOn,
+    },
+    now: () => now,
+  });
+  await proactive.remember("o", {
+    key: "heads-up:1",
+    area: "calendar",
+    title: "Head back right after Dentist",
+    kind: "tight_gap",
+  });
+  const result = await proactive.feedback("o", { verdict: "not_useful" });
+  assert.equal(result.saved, true);
+  assert.match(result.message, /turned off "Not enough time between things" heads-ups/);
+  await proactive.update("o", { on: false });
+  await proactive.update("o", { on: true });
+  assert.deepEqual(calls, ["off:tight_gap", "on:false", "on:true"]);
+  // Heads-ups the person turned off on their own screen stay off when this switch comes back on.
+  headsUpsOn = false;
+  await proactive.update("o", { on: false });
+  await proactive.update("o", { on: true });
+  assert.deepEqual(calls, ["off:tight_gap", "on:false", "on:true"], "not touched");
+  // Half a day later, "that wasn't useful" no longer points at that old notice.
+  now += 13 * HOUR;
+  const stale = await proactive.feedback("o", { verdict: "not_useful" });
+  assert.equal(stale.saved, false);
 });

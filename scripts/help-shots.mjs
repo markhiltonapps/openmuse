@@ -757,7 +757,7 @@ const SHOTS = [
   },
   {
     id: "headsupsettings",
-    height: 1000,
+    height: 1100,
     // From the tab row down to More options: the dock would cover what's under it.
     clip: (p) => p.getByRole("tab", { name: /^About you/ }).first(),
     go: async (p) => {
@@ -1323,6 +1323,97 @@ const SHOTS = [
       },
       2: (p) => button(p, /^Talk to /),
       3: { find: (p) => button(p, "I’m not driving"), side: "left" },
+    },
+  },
+  {
+    // Plans & bookings with the "When Neddy speaks first" card: a flight, a promise and a wait being
+    // tracked, Deliveries paused because two weren't useful.
+    id: "speaks-first",
+    height: 1700,
+    go: async (p) => {
+      const at = (days, hour) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        // The sample person is in Chicago (UTC-6 in winter): 9 am there.
+        d.setUTCHours(hour + 6, 0, 0, 0);
+        return d.toISOString();
+      };
+      const plan = (id, kind, title, when, where) => ({
+        id,
+        kind,
+        title,
+        at: when,
+        // A to-do and a wait are usually given a day, not a time.
+        ...(kind === "promise" || kind === "waiting" ? { dateOnly: true } : {}),
+        timeZone: "America/Chicago",
+        ...(where ? { where } : {}),
+        status: "upcoming",
+        when: "",
+      });
+      const plans = [
+        plan("p1", "promise", "Send Dana the budget", at(1, 9)),
+        plan("p2", "waiting", "The part from Bosch", at(2, 9)),
+        plan("p3", "trip", "Flight to Phnom Penh (UA 837)", at(8, 9), "IAH, Houston"),
+      ];
+      await p.route(/\/api\/commitments(\?.*)?$/, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({ json: { commitments: plans } })
+          : route.fallback(),
+      );
+      await p.route(/\/api\/proactive$/, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({
+              json: {
+                on: true,
+                dailyLimit: 8,
+                dailyCheck: true,
+                areas: [
+                  ["travel", "Travel"],
+                  ["deliveries", "Deliveries"],
+                  ["bills", "Bills"],
+                  ["plans", "Plans and appointments"],
+                  ["promises", "Things you said you’d do"],
+                  ["waiting", "Things you’re waiting on"],
+                ].map(([id, name]) => ({
+                  id,
+                  name,
+                  paused: id === "deliveries",
+                  ...(id === "deliveries" ? { because: "feedback" } : {}),
+                })),
+              },
+            })
+          : route.fallback(),
+      );
+      await viaMenu(p, "Feed");
+      await p.waitForTimeout(2500);
+      await p
+        .getByText(/See all plans/)
+        .first()
+        .click();
+      await p.waitForTimeout(2000);
+      await reveal(p.getByRole("heading", { name: /speaks first/ }), 40);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByText(/^Let .* speak first$/).first(),
+        side: "left",
+        tight: true,
+      },
+      2: {
+        find: (p) => p.getByText("Daily check", { exact: true }),
+        side: "left",
+        tight: true,
+      },
+      3: {
+        find: (p) => p.getByText("Most notices a day", { exact: true }),
+        side: "left",
+        tight: true,
+      },
+      4: {
+        find: (p) => p.getByText("Deliveries", { exact: true }),
+        side: "left",
+        tight: true,
+      },
     },
   },
   {

@@ -708,15 +708,16 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "plans",
     group: "day",
     title: "Plans & bookings",
-    summary: "Trips, appointments, deliveries and bookings, kept track of for you.",
+    summary:
+      "Bookings, trips, deliveries, bills, and things you said you’d do or are waiting on, kept track of for you.",
     place: "plans",
     steps: [
-      "Tell {agent} about something coming up, or it notices booking emails when **Email alerts** are on.",
+      "Tell {agent} about something coming up (“I’ll call the dentist Friday”, “the part should come Thursday”), or it notices booking emails when **Email alerts** are on.",
       "See them on the **Feed** and tap **See all plans & bookings**, upcoming and past.",
       "Mark one done or cancelled there, or just say so.",
     ],
     body: [
-      "{agent} tells you about each one by itself: the day before (or that morning), and shortly before for things with a time. For a flight it also tells you when it’s time to head to the airport: about two and a half hours before takeoff, which is the two hours airlines usually want plus your usual travel time. A later email about the same booking, such as the one with your gate, updates it, and the next notice includes the gate. See **When {agent} speaks first** to turn these up, down or off.",
+      "{agent} tells you about each one by itself: the day before (or that morning), and shortly before for things with a time. A to-do is mentioned an hour before it’s due (8 am for a date alone), and something you’re waiting on is asked about the day after it was expected. For a flight it also tells you when it’s time to head to the airport: about two and a half hours before takeoff, which is the two hours airlines usually want plus your usual travel time. A later email about the same booking, such as the one with your gate, updates it, and the next notice includes the gate. See **When {agent} speaks first** to turn these up, down or off.",
     ],
     say: ["Keep track of my flight on Friday.", "My dentist appointment is cancelled."],
     keywords: ["commitments", "bookings", "trips", "appointments", "deliveries", "coming up"],
@@ -1723,15 +1724,20 @@ export const HELP_TOPICS: HelpTopic[] = [
     group: "day",
     title: "When {agent} speaks first",
     summary:
-      "{agent} tells you about trips, bookings, deliveries and bills before they happen, and once a day looks for anything else worth a word. You decide how much.",
+      "{agent} tells you about trips, bookings, deliveries, bills and things you said you’d do before they come up, and once a day looks for anything else worth a word. You decide how much.",
+    shot: "speaks-first",
+    place: "plans",
     steps: [
-      "Notices arrive under **Recent** on Home and as a phone notification, with a line at the end saying where it came from, like “From a confirmation email you had on Dec 3.”",
-      "Right after one, say how it landed: “That wasn’t useful”, “Fewer notices like that”, or “That was useful”. Two “not useful” in a row pause that kind for two weeks, and “fewer notices like that” pauses it for a month.",
-      "If something happened that you wish {agent} had mentioned, say “I wish you’d told me that” and what it was. It’s saved under **You › About you**, where you can change or forget it, and the daily check looks for things like it.",
-      "To change how much: say “Only 3 a day”, “Stop the daily check”, “Pause delivery notices” or “Turn bills back on”. Quiet hours (10 pm to 7 am to start) are set by saying “quiet hours 9 pm to 8 am”.",
+      "Open **Plans & bookings** (on the **Feed**, **See all plans & bookings**) and scroll to **When {agent} speaks first**. Switch off **Let {agent} speak first** and none of these notices come, calendar heads-ups included. Your other choices are kept for when you switch it back on.",
+      "**Daily check** is one short look each morning for anything else worth mentioning. It adds 3 notices at most, and most days none.",
+      "**Most notices a day** sets the limit (8 to start). Time to head to the airport comes even past the limit or in quiet hours.",
+      "Under **Kinds of notice**, each kind has its own switch, like **Deliveries** here. Switch one off to pause it for 30 days; switch it back on any time. One paused because you asked for fewer says so.",
     ],
     body: [
-      "{agent} only suggests. It never sends, books or pays because of a notice; you decide, and anything that goes to someone else still waits for your OK. Leaving for a flight is the one kind that ignores quiet hours and the daily limit (8 to start), because it can’t wait for morning.",
+      "Notices arrive under **Recent** on Home and as a phone notification, with a line at the end saying where it came from, like “From a confirmation email you had on Dec 3.” Right after one, say how it landed: “That wasn’t useful”, “Fewer notices like that”, or “That was useful”. Two “not useful” in two weeks pause that kind for up to two weeks; “fewer notices like that” pauses it for a month. After a calendar heads-up, it turns that kind of heads-up off, like **Stop these**.",
+      "If something happened that you wish {agent} had mentioned, say “I wish you’d told me that” and what it was. It’s saved under **You › About you**, where you can change or forget it, and the daily check looks for things like it.",
+      "Say “I’ll call the dentist Friday” or “I’m waiting on the part from Bosch, it should come Thursday” and {agent} keeps track of it here: a to-do is mentioned an hour before it’s due, and something you’re waiting on is asked about the day after it was expected. Quiet hours (10 pm to 7 am to start) are set by saying “quiet hours 9 pm to 8 am”.",
+      "{agent} only suggests. It never sends, books or pays because of a notice; you decide, and anything that goes to someone else still waits for your OK. Time to head to the airport is the one notice that comes even in quiet hours or past the daily limit, because it can’t wait for morning. It still stops if you pause **Travel** or switch everything off.",
       "The daily check is one short look each morning, after 7: your next two days, what’s being tracked, and anything you said you wished you’d been told. It says at most three things, and most days nothing. It costs a small part of your plan’s allowance and has its own off switch. It can’t see live flight status or traffic, so it won’t claim a flight is delayed unless an email said so.",
       "Say “What are you tracking?” to see what’s coming up, or “What is paused?” to see which kinds you’ve switched off.",
     ],
@@ -1782,6 +1788,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "**Email** is off to start with. It’s only for things that can wait, like two things overlapping or a long stretch with no break. If email isn’t available yet, the switch says so.",
       "Tapped **Stop these** on a card? That kind is switched off here: turn it back on under **What I watch for** in **More options**.",
       "{agent} stays quiet from 10 pm to 7 am; say “quiet hours 9 pm to 8 am” to change it. On a live call, **Urgent alerts on calls** speaks up about what’s coming; that’s separate.",
+      "Plans, bookings and things you’re doing or waiting on have notices of their own, outside the calendar: **Choose them in Plans & bookings** opens those switches. See **When {agent} speaks first**.",
     ],
     say: [
       { text: "What are my heads-ups?", send: true },
@@ -1801,7 +1808,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "phone notifications",
       "fewer",
     ],
-    related: ["heads-ups", "urgent-alerts", "notifications"],
+    related: ["heads-ups", "urgent-alerts", "notifications", "speaks-first"],
   },
   {
     id: "urgent-alerts",

@@ -37,3 +37,19 @@ Built (local, not pushed):
 - Honest limits: no live flight status or traffic; the daily check sees calendar, tracked plans and wishes only (not mail); a flight is recognised by words (flight, airport, gate, airline code), so an odd title may only get the ordinary nudges.
 Not done, and why: model change (chat stays on Haiku 4.5; no measured quality evidence and it would roughly double chat cost; switching is one Railway variable, CHAT_MODEL), upstream cherry-picks (upstream repo is outside this session's repository scope; needs its own scratch branch and review, not mixed into this push),
 Wear OS (needs the owner's Android Studio and watch), the watch battery retest (needs the physical watch).
+
+## Proactive round 2 (owner: "make all the other changes", keep Neddy's model as is)
+- Re-evaluation found a real bug in round 1: "that wasn't useful" after a calendar heads-up would have been blamed on the last plan notice. Heads-ups now report what they said (`spoke`), and feedback
+  on one turns that heads-up kind off (like Stop these). The main switch also covers heads-ups (restoring them only if it turned them off). "The last notice" counts for 12 hours only.
+- Daily check: drops any notice with a link, email address or phone number (calendar titles and email subjects come from anyone); drops plain "coming up" repeats of things that have their own notices
+  (`keepChief`, code not prompt); runs at most once a day per person without asking the store every minute (in-memory day cache).
+- Promises and waits: commitment kinds `promise` (nudged an hour before; 8 am for a date alone) and `waiting` (asked the day after it was expected, kept open a week). The chat agent tracks them when
+  someone says "I'll call the dentist Friday" or "the part should come Thursday". Date-only plans carry `dateOnly` (no invented clock times anywhere).
+- Plans & bookings: new "When Neddy speaks first" card (main switch, daily check, most notices a day, a switch per kind) via GET/POST /api/proactive; Heads-ups settings link to it.
+- Design division: visual, usability and copy reviewers, two rounds, all signed off. Round 1 blockers fixed: failure shown next to the tap, saving state, false "always said", intro wording,
+  over-claiming "off", invented 9:00 AM, stale Plans Help topic, site paragraph.
+- Help: speaks-first topic now has a picture (new shot `speaks-first`, mocked plans), steps match marks; Plans and Heads-ups settings topics updated; `headsupsettings` shot retaken (taller window,
+  1100, because the new link pushed More options under the bar). Site #headsup paragraph updated; looked at 390x844 and 1280x800.
+- Upstream: added `upstream` remote (CopilotKit/openmuse, read-only). 92 commits since our last merge; the security/hardening ones are being ported on a scratch branch (see below).
+- Check-in scheduled for 2026-11-25 08:40 Chicago to read the first live daily check in Railway's logs.
+- Pictures are OFF on Railway: the api's start log says OPENROUTER_API_KEY isn't set. Owner to re-add it if that wasn't intended.

@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Store } from "./db.ts";
 import { localInstant } from "./engine/routines.ts";
 import { AppError } from "./errors.ts";
-import { type Proactive, planMoments } from "./proactive.ts";
+import { keepOpenFor, type Proactive, planMoments } from "./proactive.ts";
 
 /**
  * Plans with an outcome: reservations, deliveries, trips, appointments, bills and events. Tracked
@@ -17,6 +17,8 @@ export const COMMITMENT_KINDS = [
   "appointment",
   "bill",
   "event",
+  "promise",
+  "waiting",
   "other",
 ] as const;
 export type CommitmentKind = (typeof COMMITMENT_KINDS)[number];
@@ -26,6 +28,8 @@ export interface Commitment {
   title: string;
   /** When it happens, arrives or is due. */
   at?: string;
+  /** Only a date was given: `at` is 9 am that day, and no clock time is ever shown or said. */
+  dateOnly?: boolean;
   timeZone: string;
   where?: string;
   /** Confirmation, order or tracking number. */
@@ -128,10 +132,17 @@ export class Commitments {
     // A date alone means the start of that day, for deliveries and bills.
     const when = localInstant(at.length === 10 ? `${at}T09:00` : at, timeZone);
     if (!Number.isFinite(when)) throw new AppError("That time isn't valid", 422);
-    return { at: new Date(when).toISOString() };
+    return { at: new Date(when).toISOString(), dateOnly: at.length === 10 };
   }
   describe(item: Commitment) {
     if (!item.at) return "";
+    if (item.dateOnly)
+      return new Date(item.at).toLocaleDateString("en-US", {
+        timeZone: item.timeZone,
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
     return new Date(item.at).toLocaleString("en-US", {
       timeZone: item.timeZone,
       weekday: "short",
@@ -179,6 +190,7 @@ export class Commitments {
       kind: input.kind,
       title: input.title,
       ...(timing.at ? { at: timing.at } : same?.at ? { at: same.at } : {}),
+      ...((timing.at ? timing.dateOnly : same?.dateOnly) ? { dateOnly: true } : {}),
       timeZone: await this.timeZone(owner),
       ...((input.where ?? same?.where) ? { where: input.where ?? same?.where } : {}),
       ...((input.reference ?? same?.reference)
@@ -205,7 +217,7 @@ export class Commitments {
     const updated: Commitment = {
       ...item,
       ...(input.status ? { status: input.status } : {}),
-      ...(timing.at ? { at: timing.at, nudged: [] } : {}),
+      ...(timing.at ? { at: timing.at, dateOnly: !!timing.dateOnly, nudged: [] } : {}),
       ...(input.details ? { details: input.details } : {}),
       updatedAt: new Date(this.now()).toISOString(),
     };
@@ -231,7 +243,7 @@ export class Commitments {
       }
       if (await skip(owner)) continue;
       const at = Date.parse(value.at);
-      if (now > at + 24 * HOUR) {
+      if (now > at + keepOpenFor(value.kind)) {
         await this.db.compareAndSwap<Commitment>(
           owner,
           "commitments",
@@ -274,14 +286,14 @@ export class Commitments {
 }
 
 export const commitmentInstructions =
-  " Keep track of the person's plans with an outcome: when they book, order or schedule something, or mention a reservation, delivery, trip, appointment, bill or event with a time, call track_commitment (it's what's coming up in the context). Update it with update_commitment when it moves, is done or is cancelled. Confirmation emails are tracked on their own when inbox alerts are on. Mention what's coming up when it's relevant (\"your flight is tomorrow\").";
+  ' Keep track of the person\'s plans with an outcome: when they book, order or schedule something, or mention a reservation, delivery, trip, appointment, bill or event with a time, call track_commitment (it\'s what\'s coming up in the context). Update it with update_commitment when it moves, is done or is cancelled. Confirmation emails are tracked on their own when inbox alerts are on. Mention what\'s coming up when it\'s relevant ("your flight is tomorrow"). Open loops too: when the person says they will do something by a time ("I\'ll call the dentist Friday", "I promised Dana the deck by Monday") track it as kind promise; when they say they\'re waiting for something ("the part should come Thursday", "waiting on Dana\'s reply by Wednesday") track it as kind waiting; then say you\'ll keep an eye on it. An explicit "remind me" is a reminder, not a promise. A promise without a day isn\'t tracked: ask when.';
 
 export function commitmentToolSpecs(commitments: Commitments, owner: string) {
   return [
     {
       name: "track_commitment",
       description:
-        "Start tracking a reservation, delivery, trip, appointment, bill or event until it's done: the person gets a nudge the day before (or that morning) and shortly before timed things. Use the local time or date. A second call with the same confirmation or tracking number updates it.",
+        "Start tracking a reservation, delivery, trip, appointment, bill or event until it's done: the person gets a nudge the day before (or that morning) and shortly before timed things. Also open loops: promise (something they said they'd do by a time; one nudge an hour before, 9 am for a date alone) and waiting (something they expect by a date; asked about once, a day after). Use the local time or date. A second call with the same confirmation or tracking number updates it.",
       parameters: commitmentInput,
       execute: (input: Input) => commitments.track(owner, input),
     },

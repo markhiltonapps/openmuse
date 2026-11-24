@@ -89,6 +89,8 @@ export interface HeadsUpsDeps {
    * hasn't shared a fresh spot or the address can't be found.
    */
   driveTo?: (owner: string, address: string) => Promise<number | undefined>;
+  /** Tells the proactive engine what was just said, so "that wasn't useful" finds this heads-up. */
+  spoke?: (owner: string, note: { key: string; title: string; kind: string }) => Promise<unknown>;
   /** Emails the person, when the server can send email. */
   email?: (owner: string, item: { title: string; body: string }) => Promise<void>;
   now?: () => number;
@@ -284,6 +286,9 @@ export class HeadsUps {
         day: today,
         pushed: pushed + (push ? 1 : 0),
       });
+      await this.deps
+        .spoke?.(owner, { key: `heads-up:${item.id}`, title: item.title, kind: item.kind })
+        .catch((error) => backgroundFailure("heads-up feedback link", error));
     }
     // Email is for what can wait; "leave now" is never emailed.
     if (settings.channels.email && candidate.urgency !== "now")

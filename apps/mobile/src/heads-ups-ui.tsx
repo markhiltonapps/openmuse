@@ -56,7 +56,7 @@ const changed = () => {
     window.dispatchEvent(new Event(HEADS_UPS_CHANGED));
 };
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const FINE = { fontSize: 13, lineHeight: 18, color: colors.mutedStrong } as const;
+export const FINE = { fontSize: 13, lineHeight: 18, color: colors.mutedStrong } as const;
 const POLL = 2 * 60_000;
 /** How long "Turned off …" stays, with its Undo. */
 const UNDO_FOR = 15_000;
@@ -206,7 +206,7 @@ function focusComposer() {
 }
 
 /** A small round switch, a real `switch` for screen readers; Space and Enter both flip it. */
-function SwitchRow({
+export function SwitchRow({
   label,
   detail,
   checked,
@@ -1111,7 +1111,7 @@ function LookNotice({ state }: { state: HeadsUpsState }) {
 /** You › Alerts: Heads-ups on or off and how much; more options and what to say are below. */
 export function HeadsUpsCard() {
   const { state, save } = useHeadsUps();
-  const { notify } = useWorkspace();
+  const { notify, open } = useWorkspace();
   const [error, setError] = useState("");
   const [said, say] = useAnnouncer();
   const [more, setMore] = useState(false);
@@ -1159,6 +1159,27 @@ export function HeadsUpsCard() {
           I stay quiet from 10 pm to 7 am, or the quiet hours you’ve told me. Say “quiet hours 9 pm
           to 8 am” to change it.
         </Text>
+      )}
+      {settings.on && (
+        <View style={{ marginLeft: 56 }}>
+          <Text style={FINE}>
+            Plans, bookings and things you’re doing or waiting on have notices of their own.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => open({ type: "commitments" })}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              alignSelf: "flex-start",
+              justifyContent: "center",
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Text style={[FINE, { color: colors.blueDark, fontWeight: "600" }]}>
+              Choose them in Plans & bookings
+            </Text>
+          </Pressable>
+        </View>
       )}
       {settings.on && (
         <View

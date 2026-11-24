@@ -765,8 +765,12 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   A held notice is NOT claimed (quiet hours, daily limit) so it goes out later while it still matters; a flight leave-by is `urgent` and ignores quiet hours and the limit. Autonomy is SUGGEST only. Feedback
   ("not useful" x2 in 14 days, "fewer notices like that" 30 days) mutes an AREA, never a single plan; "I wish you'd told me that" is saved as a memory (visible under You › About you) and read by the daily check.
   Test with a made-up week (`tests/proactive.test.ts`): assert what must fire AND what must not (a plan added in its last day, quiet hours, a train is not an airport trip). Scenario slips cost time: a "day before"
-  window opens exactly 24 h ahead, and a `say` line in Help may not contain "this"/"those" without a place. Not built yet: the open-loop store (promises, waits), live flight status and traffic (no paid
-  accounts yet), a "what Neddy is tracking" screen, a scorecard.
+  window opens exactly 24 h ahead, and a `say` line in Help may not contain "this"/"those" without a place. Round 2 (same day): promises and waits are commitment kinds (`promise`: an hour before,
+  8 am for a date alone; `waiting`: asked the day after, kept open a week); a plan given only a date carries `dateOnly` and no clock time is ever shown or said (an invented "9:00 AM" was
+  caught in review). Calendar heads-ups keep their own rules but tell the engine what they said (`spoke` → `remember`), so "that wasn't useful" after one turns that heads-up kind off; the main
+  switch turns heads-ups off and back on only if it was the one that turned them off (`headsUpsOffByMe`). Daily-check notices with a link, email address or phone number are dropped (calendar
+  titles and email subjects are anyone's words), and a plain "coming up" about something with its own notice is dropped in code (`keepChief`), not just in the prompt. The switches live at the
+  bottom of Plans & bookings (`SpeaksFirst`, reusing Heads-ups' `SwitchRow`/`FINE`). Still not built: live flight status and traffic, promises found in sent mail, a scorecard.
 
 - **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
   reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every

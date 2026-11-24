@@ -12,6 +12,8 @@ export type CommitmentKind =
   | "appointment"
   | "bill"
   | "event"
+  | "promise"
+  | "waiting"
   | "other";
 export interface Commitment {
   id: string;
@@ -19,6 +21,8 @@ export interface Commitment {
   title: string;
   /** When it happens, arrives or is due (an instant). */
   at?: string;
+  /** Only a date was given: no clock time is shown. */
+  dateOnly?: boolean;
   /** The person's time zone when it was saved. */
   timeZone?: string;
   where?: string;
@@ -36,6 +40,8 @@ export const COMMITMENT_EMOJI: Record<CommitmentKind, string> = {
   appointment: "🩺",
   bill: "💳",
   event: "🎟️",
+  promise: "📝",
+  waiting: "⏳",
   other: "📌",
 };
 
@@ -96,10 +102,15 @@ export function localWhen(iso: string | undefined, timeZone?: string, now = new 
   };
 }
 
-/** "Wed, Sep 30 · 7:30 PM" on one line, for a narrow table's line under the title. */
-export function whenLine(iso: string | undefined, timeZone?: string, now = new Date()) {
+/** "Wed, Sep 30 · 7:30 PM" on one line, for a narrow table's line under the title ("Wed, Sep 30" for a date alone). */
+export function whenLine(
+  iso: string | undefined,
+  timeZone?: string,
+  now = new Date(),
+  dateOnly = false,
+) {
   const when = localWhen(iso, timeZone, now);
-  return when ? `${when.day} · ${when.time}` : "No date yet";
+  return when ? (dateOnly ? when.day : `${when.day} · ${when.time}`) : "No date yet";
 }
 
 /** Upcoming soonest first (undated last); done and cancelled most recent first. */

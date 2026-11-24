@@ -1291,8 +1291,13 @@ export class AgentService {
       .slice(0, 10)
       .map((m) => `- ${m.text}`);
     const status = await this.proactive?.status(owner);
-    if (!events.length && !plans && !memories.length) return "";
-    return hideText(
+    // What already gets its own notices (calendar heads-ups, plan nudges): a plain "coming up" about one is dropped.
+    const known = [
+      ...(calendar?.events ?? []).map((e) => e.title),
+      ...((await this.commitments?.list(owner)) ?? []).map((c) => c.title),
+    ];
+    if (!events.length && !plans && !memories.length) return { text: "", known };
+    const text = hideText(
       [
         `Now: ${localNow(zone, now)}.`,
         events.length ? `Calendar, next 48 hours:\n${events.join("\n")}` : "",
@@ -1304,6 +1309,7 @@ export class AgentService {
         .filter(Boolean)
         .join("\n\n"),
     );
+    return { text, known };
   }
   async refreshIdeas(owner: string, asked = false) {
     await this.thinkOfIdeas(owner, asked).catch((error) => backgroundFailure("ideas", error));

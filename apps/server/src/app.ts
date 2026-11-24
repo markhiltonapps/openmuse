@@ -6,6 +6,11 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { ownWords } from "../../../packages/domain/src/chat-export.ts";
+import {
+  HEADS_UP_KIND_INFO,
+  HEADS_UP_KINDS,
+  type HeadsUpKind,
+} from "../../../packages/domain/src/heads-up.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
 import { driveMinutes, metersBetween } from "../../../packages/domain/src/location.ts";
 import { PERSONA_FACTS } from "../../../packages/domain/src/persona.ts";
@@ -94,7 +99,7 @@ import { PastChats } from "./past-chats.ts";
 import { Pictures } from "./pictures.ts";
 import { PlaceReminders } from "./place-reminders.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
-import { Proactive } from "./proactive.ts";
+import { Proactive, proactiveChange } from "./proactive.ts";
 import { PushService } from "./push.ts";
 import { ReceiptBox } from "./receipt-box.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
@@ -925,6 +930,7 @@ export async function createApp(
         { headsUpId: note.id },
         note.push,
       ),
+    spoke: async (owner, note) => agent.proactive?.remember(owner, { ...note, area: "calendar" }),
     // Rough minutes by car from where the phone is now (fresh spot only) to an address on the calendar.
     driveTo: async (owner, address) => {
       const here = await whereabouts.current(owner);
@@ -1141,6 +1147,17 @@ export async function createApp(
     timeZone: (owner) => agent.timeZone(owner),
     quietHours: async (owner) => (await agent.persona.get(owner, "prefs.quietHours"))?.value,
     notify: (owner, note) => agent.notify(owner, note.title, note.body, undefined, note.key),
+    headsUps: {
+      kindOff: async (owner, kind) => {
+        if (!(HEADS_UP_KINDS as readonly string[]).includes(kind)) return undefined;
+        await headsUps.update(owner, { kinds: { [kind]: false } });
+        return HEADS_UP_KIND_INFO[kind as HeadsUpKind].label;
+      },
+      setOn: async (owner, on) => {
+        await headsUps.update(owner, { on });
+      },
+      isOn: async (owner) => (await headsUps.settings(owner)).on,
+    },
   });
   agent.proactive = proactive;
   const commitments = new Commitments(
@@ -1953,6 +1970,20 @@ export async function createApp(
     c.json(await approvals.remove(c.get("owner"), c.req.param("id"))),
   );
   app.get("/api/reminders", async (c) => c.json(await reminders.list(c.get("owner"))));
+  // When Neddy speaks first: what's on and paused, changed from the Plans & bookings screen.
+  app.get("/api/proactive", async (c) => c.json(await proactive.screen(c.get("owner"))));
+  app.post("/api/proactive", async (c) => {
+    const input = proactiveChange.parse(await c.req.json());
+    const owner = c.get("owner");
+    await proactive.update(owner, {
+      ...(input.on === undefined ? {} : { on: input.on }),
+      ...(input.dailyLimit === undefined ? {} : { dailyCap: input.dailyLimit }),
+      ...(input.dailyCheck === undefined ? {} : { dailyCheck: input.dailyCheck }),
+      ...(input.pause ? { mute: input.pause } : {}),
+      ...(input.resume ? { unmute: input.resume } : {}),
+    });
+    return c.json(await proactive.screen(owner));
+  });
   app.get("/api/commitments", async (c) =>
     c.json({ commitments: await commitments.list(c.get("owner"), c.req.query("all") === "1") }),
   );
