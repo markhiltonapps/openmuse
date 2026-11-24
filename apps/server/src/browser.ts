@@ -29,6 +29,14 @@ const failureSchema = z.object({
   createdAt: z.string(),
 });
 type ChatBrowser = { id: string; sessionId: string };
+
+/** Session ids are the UUIDs this service makes (the worker checks the same shape). */
+const BROWSER_SESSION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assertSessionId(id: string): void {
+  if (!BROWSER_SESSION_ID.test(id)) throw new AppError("Browser session not found", 404);
+}
 export const elementSchema = z.object({
   ref: z.string().regex(/^e\d{1,4}$/),
   role: z.string().max(40),
@@ -114,6 +122,7 @@ export class BrowserService {
     return response;
   }
   async get(owner: string, id: string) {
+    assertSessionId(id);
     const value = await this.db.get<BrowserSession>(owner, "browsers", id);
     if (!value) throw new AppError("Browser session not found", 404);
     return value;
@@ -168,7 +177,9 @@ export class BrowserService {
   private async readOwned(owner: string, id: string, signal?: AbortSignal) {
     const session = await this.get(owner, id);
     const result = readSchema.parse(
-      await (await this.request(`/sessions/${id}/read`, undefined, signal)).json(),
+      await (
+        await this.request(`/sessions/${encodeURIComponent(id)}/read`, undefined, signal)
+      ).json(),
     );
     await this.save(
       owner,
@@ -232,19 +243,25 @@ export class BrowserService {
   async close(owner: string, id: string) {
     return this.serial(id, async () => {
       await this.get(owner, id);
-      return this.save(owner, await (await this.request(`/sessions/${id}/close`, {})).json(), id);
+      return this.save(
+        owner,
+        await (await this.request(`/sessions/${encodeURIComponent(id)}/close`, {})).json(),
+        id,
+      );
     });
   }
   async preview(owner: string, id: string) {
     await this.get(owner, id);
-    return this.request(`/sessions/${id}/screenshot`);
+    return this.request(`/sessions/${encodeURIComponent(id)}/screenshot`);
   }
   async input(owner: string, id: string, value: unknown) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new AppError("A JSON object is required for browser input", 422);
     return this.serial(id, async () => {
       await this.get(owner, id);
       return this.save(
         owner,
-        await (await this.request(`/sessions/${id}/input`, value)).json(),
+        await (await this.request(`/sessions/${encodeURIComponent(id)}/input`, value)).json(),
         id,
       );
     });
@@ -258,7 +275,7 @@ export class BrowserService {
         ),
         failures: z.array(failureSchema),
       })
-      .parse(await (await this.request(`/sessions/${id}/downloads`)).json());
+      .parse(await (await this.request(`/sessions/${encodeURIComponent(id)}/downloads`)).json());
     const saved = [];
     for (const download of downloads) {
       const existing = await this.db.get<{ fileId: string }>(
@@ -271,7 +288,7 @@ export class BrowserService {
         continue;
       }
       const response = await this.request(
-        `/sessions/${id}/downloads/${encodeURIComponent(download.id)}`,
+        `/sessions/${encodeURIComponent(id)}/downloads/${encodeURIComponent(download.id)}`,
       );
       const file = await this.files.import(
         owner,
@@ -296,7 +313,7 @@ export class BrowserService {
       const payload = z
         .object({ url: z.string(), title: z.string(), elements: z.array(elementSchema).max(200) })
         .loose()
-        .parse(await (await this.request(`/sessions/${id}/elements`)).json());
+        .parse(await (await this.request(`/sessions/${encodeURIComponent(id)}/elements`)).json());
       await this.db.put(owner, "browsers", {
         ...session,
         url: payload.url,
@@ -311,7 +328,11 @@ export class BrowserService {
   act(owner: string, id: string, step: PageStep) {
     return this.serial(id, async () => {
       await this.get(owner, id);
-      return this.save(owner, await (await this.request(`/sessions/${id}/act`, step)).json(), id);
+      return this.save(
+        owner,
+        await (await this.request(`/sessions/${encodeURIComponent(id)}/act`, step)).json(),
+        id,
+      );
     });
   }
   console(owner: string, id: string) {
