@@ -94,6 +94,7 @@ import { PastChats } from "./past-chats.ts";
 import { Pictures } from "./pictures.ts";
 import { PlaceReminders } from "./place-reminders.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
+import { Proactive } from "./proactive.ts";
 import { PushService } from "./push.ts";
 import { ReceiptBox } from "./receipt-box.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
@@ -1135,10 +1136,22 @@ export async function createApp(
         }
       : undefined,
   );
+  // Neddy speaking first: the judge (quiet hours, daily limit, what the person asked for less of).
+  const proactive = new Proactive(db, {
+    timeZone: (owner) => agent.timeZone(owner),
+    quietHours: async (owner) => (await agent.persona.get(owner, "prefs.quietHours"))?.value,
+    notify: (owner, note) => agent.notify(owner, note.title, note.body, undefined, note.key),
+  });
+  agent.proactive = proactive;
   const commitments = new Commitments(
     db,
     (owner) => agent.timeZone(owner),
     (owner, note) => agent.notify(owner, note.title, note.body, undefined, note.key),
+    undefined,
+    proactive,
+    async (owner) =>
+      (await db.get<{ travelBuffer?: number }>(owner, "heads-up-settings", "settings"))
+        ?.travelBuffer ?? 30,
   );
   agent.commitments = commitments;
   const approvals = new ApprovalRules(db);

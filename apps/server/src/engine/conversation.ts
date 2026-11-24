@@ -53,6 +53,7 @@ import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
 import { pictureToolInstructions, pictureToolSpecs } from "../picture-tools.ts";
 import { placeReminderToolSpecs } from "../place-reminders.ts";
+import { proactiveInstructions, proactiveToolSpecs } from "../proactive.ts";
 import { receiptToolInstructions, receiptToolSpec } from "../receipt-tools.ts";
 import { guardInput, guardTools, redactionInstructions } from "../redaction.ts";
 import { reminderToolSpecs } from "../reminders.ts";
@@ -907,6 +908,7 @@ export class ConversationAgent extends AbstractAgent {
         ...(this.service.commitments
           ? commitmentToolSpecs(this.service.commitments, this.owner)
           : []),
+        ...(this.service.proactive ? proactiveToolSpecs(this.service.proactive, this.owner) : []),
         ...(this.service.appEvents?.available && this.service.mailAlerts
           ? appEventToolSpecs(this.service.appEvents, this.owner)
           : []),
@@ -1486,6 +1488,7 @@ export class ConversationAgent extends AbstractAgent {
         peopleInstructions +
         personaInstructions +
         (this.service.commitments ? commitmentInstructions : "") +
+        (this.service.proactive ? proactiveInstructions : "") +
         restaurantInstructions +
         errandInstructions +
         browserToolInstructions +

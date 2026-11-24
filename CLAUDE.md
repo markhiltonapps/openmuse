@@ -759,6 +759,15 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   Help pictures: when content below a scrolled shot grows, `reveal()` scrolls further and a mark can go off the top (place-reminders): raise its gap. The sandbox's system Python can have a broken
   Pillow; run `help-shots.mjs` with the scratchpad venv first on PATH.
 
+- **Neddy speaks first goes through one judge (owner, 2026-11-24; owner handed the decisions to Claude):** `apps/server/src/proactive.ts` holds the Moment, the judge (off, muted areas, quiet hours, a daily
+  limit, dedupe, expiry; every refusal has a reason), the time detectors for tracked plans (day before, soon before, a flight's "time to head to the airport" = 2 h + the person's travel time) and the daily check
+  (one small-model call a day after 7 am, at most 3 notices, marked first so a failing model isn't asked again). New proactive things are a detector plus a Moment: never a new `notify` call that skips the judge.
+  A held notice is NOT claimed (quiet hours, daily limit) so it goes out later while it still matters; a flight leave-by is `urgent` and ignores quiet hours and the limit. Autonomy is SUGGEST only. Feedback
+  ("not useful" x2 in 14 days, "fewer notices like that" 30 days) mutes an AREA, never a single plan; "I wish you'd told me that" is saved as a memory (visible under You › About you) and read by the daily check.
+  Test with a made-up week (`tests/proactive.test.ts`): assert what must fire AND what must not (a plan added in its last day, quiet hours, a train is not an airport trip). Scenario slips cost time: a "day before"
+  window opens exactly 24 h ahead, and a `say` line in Help may not contain "this"/"those" without a place. Not built yet: the open-loop store (promises, waits), live flight status and traffic (no paid
+  accounts yet), a "what Neddy is tracking" screen, a scorecard.
+
 - **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
   reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every
   card needs a short plain-text form; a watch gets its own scoped token, never the account session; the server side must stay platform-neutral (Wear OS, Apple Watch and others, 2026-11-17). A phone app is not required first (the watch can pair with a code and use its own connection).

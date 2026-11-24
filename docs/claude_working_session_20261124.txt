@@ -23,3 +23,17 @@ Working session 2026-11-24
 - Website: the chat mock in neddy.html no longer shows the "Neddy" name chip (matches the app); screenshots at 390x844 and 1280x800 looked at.
 - Tests: pnpm test 867/867; biome: no errors (warnings only); mobile tsc clean.
 - Not pushed: waiting for "push it" (check Railway for a live call first). Backups: the pre-change Help pictures are in the scratchpad (help-before-20261124), neddy.html backup there too; git has the rest.
+
+## Owner delegated the open decisions ("do what you think is best, make the changes, then tell me")
+Decisions (also in docs/INTELLIGENCE-PLAN.md): platform first; SUGGEST only; daily check on with a cap of 3 notices; first packs after Travel = Errands/deliveries, Money/bills, Work, People/family;
+"I wish you'd told me that" is the standing way to teach it; no paid data accounts for now (travel works from mail and calendar).
+Built (local, not pushed):
+- apps/server/src/proactive.ts: Moment, judge, plan detectors, feedback rules, daily check, tool `tune_nudges`, settings (on, daily limit 8, daily check, muted areas).
+- Commitments.nudgeDue now runs on it: same day-before and soon-before nudges, plus: details (gate/terminal) in the notice, a "why" line, a flight's "time to head to the airport" (urgent), quiet hours (default 10 pm-7 am or the person's own),
+  a daily limit, and no extra "soon" for flights. The email extractor now asks for terminal/gate and lets gate-change, rescheduled and delayed emails through.
+- Wired in app.ts (proactive + travel buffer from Heads-ups settings), service.ts (daily check in the maintenance loop), conversation.ts (chat tool and instructions; not in background jobs, to keep job prompts small).
+- tests/proactive.test.ts: 13 scenarios (the Cambodia week, quiet hours, limit, feedback, off switch, daily check, tool). Help: new topic "When Neddy speaks first", Plans topic updated. Site: Heads-ups section paragraph. No Help picture: it is a notification and a
+  voice setting, there is no new screen to photograph (say so in the notes, per the standing rule).
+- Honest limits: no live flight status or traffic; the daily check sees calendar, tracked plans and wishes only (not mail); a flight is recognised by words (flight, airport, gate, airline code), so an odd title may only get the ordinary nudges.
+Not done, and why: model change (chat stays on Haiku 4.5; no measured quality evidence and it would roughly double chat cost; switching is one Railway variable, CHAT_MODEL), upstream cherry-picks (upstream repo is outside this session's repository scope; needs its own scratch branch and review, not mixed into this push),
+Wear OS (needs the owner's Android Studio and watch), the watch battery retest (needs the physical watch).

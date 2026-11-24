@@ -65,10 +65,19 @@ Per-person daily budgets for messages AND model cost. Nothing is sent without be
 5. **Packs, most valuable first** (about 2-4 days each, plus any data API): Travel is the first (flight status, traffic leave-by, landing info) because it exercises enrichers; then the owner's own top 4-5.
 6. **Live-data enrichers** as packs need them: flights, traffic, packages, prices, worldwide weather, sports and markets. Costs are per lookup and small but UNVERIFIED; compare providers before choosing and count lookups against plans.
 
-## Decisions needed from the owner
-1. Platform first (engine, then packs) rather than one more feature at a time? (Recommended.)
-2. Default autonomy: SUGGEST only? A per-person "do routine things for me" level later?
-3. OK for the daily chief-of-staff pass, with a cost cap per plan?
-4. Which 4-5 areas from the table matter most to you, so they are the first packs after Travel?
-5. "I wish you'd told me that" by voice or chat as the standing way to teach it: yes?
-6. Data APIs (flights, traffic): OK to add paid accounts? The owner creates them and adds the keys as Railway variables (and presses Deploy).
+## Decisions (made by Claude on the owner's behalf, 2026-11-24)
+The owner asked for the most frictionless choice for each question, with the changes made. They can be reversed by saying so.
+1. **Platform first (engine, then packs): yes.** Each pack is small once the engine exists, and one engine means one set of budgets and one way to say "less of this".
+2. **Autonomy: SUGGEST only.** Neddy never acts for the person from a proactive nudge (money and sign-in always need a tap). No "do routine things for me" level yet; it needs the scorecard first.
+3. **Daily chief-of-staff pass: yes, on by default, one small-model call per person per day** (after 7 am, same cost class as the daily ideas pass), at most 3 candidates, and everything it finds goes through the same judge. Off with one sentence ("stop the daily check").
+4. **First packs after Travel: Errands and deliveries, Money and bills, Work (meeting prep and promised replies), People and family.** They are what a mailbox-and-calendar user is most often surprised by, and they need no new accounts. Health, Home and car, Shopping, Learning and Admin wait for real feedback.
+5. **"I wish you'd told me that" as the standing way to teach it: yes** (chat or voice, tool `proactive_feedback`). The wish is kept where the person can see and change it (About you) and read by the daily pass.
+6. **Data APIs: no paid accounts for now.** Travel works from what is already in the person's mail (flight time, gate, terminal, confirmation number) and calendar. Live flight status and live traffic wait until the owner wants them; nothing is promised that needs them.
+
+## Built in slice 1 (2026-11-24, local, not pushed)
+- `apps/server/src/proactive.ts`: Moment, the judge (on/off, per-area mute, quiet hours, daily budget, dedupe), time detectors for tracked plans (the day before, soon before, and "time to leave for the airport" for trips), and the feedback rules (less of this mutes an area for 30 days; "not useful" twice in 14 days mutes it for 14 days).
+- `Commitments.nudgeDue` now runs on the engine (same nudges as before, plus the trip leave-by and the booking's details, such as gate and terminal, in the nudge).
+- Chat and voice tools: `proactive_feedback` (useful / not useful / less of this / I wish you'd told me that) and `manage_proactive` (on/off, quiet hours, daily limit, mute or unmute an area, the daily check).
+- The daily chief-of-staff pass (`ChiefOfStaff` in `proactive.ts`, run from the maintenance loop).
+- Tests: `tests/proactive.test.ts` simulates a person's trip week and asserts what fires and, as importantly, what does not.
+Not built yet: the "what Neddy is tracking" screen, "why am I seeing this" taps on a card (the reason is a line in the notice for now), the open-loop store for promises and waits (Work and People packs), the proactive scorecard.

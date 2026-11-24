@@ -72,6 +72,7 @@ import { Persona } from "../persona.ts";
 import type { Pictures } from "../pictures.ts";
 import type { PlaceReminders } from "../place-reminders.ts";
 import type { Plans } from "../plans.ts";
+import { chiefSystemPrompt, type Proactive } from "../proactive.ts";
 import type { ReceiptBox } from "../receipt-box.ts";
 import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
@@ -97,6 +98,7 @@ import type { WebSearch } from "../web-search.ts";
 import type { WebsiteBuilds } from "../website/builds.ts";
 import type { Whereabouts } from "../whereabouts.ts";
 import type { WorkspaceService } from "../workspace.ts";
+import { localNow } from "./clock.ts";
 import { analyzeSpending } from "./finance.ts";
 import { rememberStep } from "./job-steps.ts";
 import { executeModelTask } from "./model.ts";
@@ -284,6 +286,7 @@ export class AgentService {
       await this.commitments
         ?.nudgeDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("commitments", error));
+      await this.runDailyChecks().catch((error) => backgroundFailure("daily check", error));
       await this.checkIns
         ?.due((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("meal check-ins", error));
@@ -1232,6 +1235,76 @@ export class AgentService {
         createdAt: date(),
       } satisfies Idea);
   }
+  /**
+   * The daily check (owner, 2026-11-24): for each person, once a day after 7 am, one small-model
+   * call over a compact snapshot decides what a thoughtful assistant would mention. The judge
+   * (proactive.ts) applies quiet hours, the daily limit and what the person asked for less of.
+   */
+  private async runDailyChecks() {
+    const proactive = this.proactive;
+    const plan = this.modelFor("simple");
+    if (!proactive || this.config.agentBackend !== "model" || !plan.model) return;
+    for (const { owner, value } of await this.db.scan<{ id: string; name?: string }>(
+      "agent-settings",
+    )) {
+      if (value.id !== "identity" || (await this.removed(owner))) continue;
+      await proactive
+        .dailyCheck(owner, {
+          snapshot: () => this.dailyCheckSnapshot(owner),
+          ask: (prompt) =>
+            this.complete({
+              ...plan,
+              stronger: this.modelFor("chat"),
+              system: chiefSystemPrompt(value.name || "Neddy"),
+              prompt,
+              onUsage: this.usage?.sink(owner, "background"),
+            }),
+        })
+        .catch((error) => backgroundFailure("daily check", error));
+    }
+  }
+  /** What the daily check may see, redacted: the next two days, tracked plans, and what the person said they wish they'd been told. */
+  private async dailyCheckSnapshot(owner: string) {
+    const zone = await this.timeZone(owner);
+    const now = Date.now();
+    const calendar = await this.calendarRange?.(
+      owner,
+      new Date(now).toISOString(),
+      new Date(now + 48 * 3_600_000).toISOString(),
+    ).catch(() => undefined);
+    const clock = (iso: string) =>
+      new Date(iso).toLocaleString("en-US", {
+        timeZone: zone,
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    const events = (calendar?.events ?? [])
+      .filter((e) => !e.allDay)
+      .slice(0, 25)
+      .map((e) => `- ${e.title} (${clock(e.start)}${e.location ? `, at ${e.location}` : ""})`);
+    const plans = (await this.commitments?.context(owner)) ?? "";
+    const memories = (await this.db.list<AgentMemory>(owner, "memories"))
+      .filter((m) => /^I wish Neddy had told me/.test(m.text))
+      .slice(0, 10)
+      .map((m) => `- ${m.text}`);
+    const status = await this.proactive?.status(owner);
+    if (!events.length && !plans && !memories.length) return "";
+    return hideText(
+      [
+        `Now: ${localNow(zone, now)}.`,
+        events.length ? `Calendar, next 48 hours:\n${events.join("\n")}` : "",
+        plans ? `Tracked plans:\n${plans}` : "",
+        memories.length ? `Things they wish you had told them:\n${memories.join("\n")}` : "",
+        status?.paused.length ? `They asked for less of: ${status.paused.join(", ")}.` : "",
+        status?.lastNotice ? `Last thing you told them: ${status.lastNotice}.` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    );
+  }
   async refreshIdeas(owner: string, asked = false) {
     await this.thinkOfIdeas(owner, asked).catch((error) => backgroundFailure("ideas", error));
     const w = await this.workspace.snapshot(owner);
@@ -1412,6 +1485,7 @@ export class AgentService {
   spacePosts?: ScheduledPosts;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
   commitments?: Commitments;
+  proactive?: Proactive;
   /** Alerts from connected apps beyond email, such as a new booking or message. */
   appEvents?: AppEvents;
   /** Connected-app actions the person always allows. */
