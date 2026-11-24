@@ -1,0 +1,6 @@
+Working session 2026-11-24
+
+- Owner asked for a plan to make Neddy more forward-thinking (MetaMuse told him unprompted when to leave for the airport, with gate details, a week after he asked about a trip email).
+- Read the code (commitments.ts, heads-ups, mail alerts) and wrote docs/INTELLIGENCE-PLAN.md: what exists, why the Cambodia example does not work yet (fragile capture, no live flight/traffic data, generic nudges), and phases A-E with a first slice.
+- Nothing built. Waiting on the owner's answers to the five decisions at the end of that doc.
+- Pending: commits 3099d74 and dbea0e5 (docs only) are local, waiting for "push it". Watch: next battery test of the sleep round 2 firmware; Wear OS server routes not started; upstream fixes not started.
