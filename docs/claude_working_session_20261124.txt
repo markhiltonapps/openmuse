@@ -77,3 +77,17 @@ Wear OS (needs the owner's Android Studio and watch), the watch battery retest (
   polling would trip it; patch saved in the scratchpad as upstream-103-rate-limit.patch). image-size CVE update (needs a pnpm override and a network install; pptxgenjs still wants 1.x).
 - Watch the first Railway build after the push: the lockfile entry for hono was written by hand (verified checksum).
 - Tests: 911/911 after the merge; tsc (server and app) and Biome clean.
+
+## Making Neddy smarter in general (owner: "don't get hung up on that question; future ones will hit the same problem")
+- Root cause, from Railway's logs: the quick chat model (Haiku 4.5) under a ~26k-token prompt answered a real-world question from memory with no tool calls, and repeated itself
+  when told it had failed. Nothing in the system made it check first. The chat model itself stays as the owner chose.
+- Turn coach (apps/server/src/turn-coach.ts, plain code, no cost): reads each message for directions, places, shopping, live facts (hours, prices, schedules, news), recommendations
+  and corrections ("still can't find it", "that's not helpful"), and puts a short note in that turn ("Coach for this message") naming the tool to use first; a correction is told to say
+  what was missing and fix it with a tool, not repeat itself. Only points at tools the server has. Volatile tail, so the prompt cache is untouched.
+- Grounding rule in the fixed chat instructions: real-world specifics come from a tool or the person's own data, never memory alone; say what can't be checked.
+- Miss detector: a turn that needed checking but made no tool call logs "Answered without checking: <kinds>" (no content), so how often Neddy guesses can be measured.
+- Help: "What I used" topic says Neddy looks things up for real-world questions and what an empty "Where I looked" means.
+- Tests: tests/turn-coach.test.ts (17 real phrasings incl. the Singapore ones and ones that must not trigger; a full chat turn proving the note reaches the model after the words and
+  the miss line logs). Full suite 915/915.
+- Morning check-in (2026-11-25 08:40 Chicago) now also counts "Answered without checking" lines.
+- Next, if the owner wants it: a replay set of 20-30 real questions run against the live model (a few cents a run) to measure tool use before/after each prompt change.

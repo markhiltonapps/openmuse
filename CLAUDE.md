@@ -784,6 +784,16 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   (Nominatim and the router answer): test landmarks with recorded answers. The chat's evidence was in Railway's logs: four chat calls
   and no tool calls for the whole exchange.
 
+- **A small model needs to be told, per message, what this message needs (owner, 2026-11-24: "make it more intelligent, not
+  just for that one question"):** under a ~26k-token prompt the quick chat model answers questions about the world from memory
+  and repeats itself when told it failed; a rule in the fixed instructions alone isn't enough. `turn-coach.ts` reads the person's
+  latest words in plain code (directions, places, shopping, live facts, recommendations, a correction) and adds a short "Coach
+  for this message" note in the turn's volatile tail (it matches `VOLATILE_CONTEXT`, so caching holds) naming the tool to use
+  first, only tools the server really has; their own things (my calendar, how much did I spend) get no note. A turn that needed
+  checking but made no tool call logs "Answered without checking: <kinds>" (no content): count those in Railway's logs before
+  and after any prompt change. New kinds of question that fail: add a pattern and a line, with a test row in
+  tests/turn-coach.test.ts (phrasings that must NOT trigger belong there too).
+
 - **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
   reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every
   card needs a short plain-text form; a watch gets its own scoped token, never the account session; the server side must stay platform-neutral (Wear OS, Apple Watch and others, 2026-11-17). A phone app is not required first (the watch can pair with a code and use its own connection).

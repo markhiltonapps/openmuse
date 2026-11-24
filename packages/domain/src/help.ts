@@ -2606,6 +2606,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     body: [
       "{agent} can use everything on your About you page in any answer, so this sheet can’t honestly say which of those facts one answer leaned on. It shows what is on the page right now, and you can remove any of it; **Undo** works until you close the sheet. Other things {agent} remembers, such as memories, are under **You › About you**, in **Other things I remember**. A change shows from your next message, and on a call from the next call.",
+      "For questions about the world outside your own things (places, directions, shops, prices, opening hours, schedules, news), {agent} is told to look it up before answering, and to say so when it can’t check something rather than guess. If **Where I looked** is empty for an answer like that, it answered from memory: tell it, and it tries again with a look-up.",
       "The button shows under the last answer of each question in the main chat and your other chats, not on live calls, earlier parts of a long chat, or a copy kept on your device while the chat loads. The list covers the main places {agent} can look, and is worked out from what {agent} did in that answer. Private things are spotted by how they look, so a number written out in words might not be caught. What you typed stays in your chat until you delete it.",
     ],
     say: [{ text: "What did you use for that answer?", send: true }, "Forget my work hours."],

@@ -65,6 +65,7 @@ import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
+import { CHECKED, coachNote, groundingInstructions, latestWords, needsOf } from "../turn-coach.ts";
 import { urgentToolSpecs } from "../urgent-alerts.ts";
 import { voiceApprovalTools } from "../voice-approval.ts";
 import { SPOKEN_PREFIX, showOnScreenToolSpec, spokenCallText } from "../voice-brain.ts";
@@ -1503,6 +1504,7 @@ export class ConversationAgent extends AbstractAgent {
         (this.service.commitments ? commitmentInstructions : "") +
         (this.service.proactive ? proactiveInstructions : "") +
         (this.service.directions ? directionsInstructions : "") +
+        groundingInstructions +
         restaurantInstructions +
         errandInstructions +
         browserToolInstructions +
@@ -1582,6 +1584,17 @@ export class ConversationAgent extends AbstractAgent {
           if (closed) return;
           // Moving at car speed (from the phone, while the app is open): short answers, no screens to read.
           const driving = await this.service.whereabouts?.driving(this.owner).catch(() => false);
+          // What this message needs (turn-coach.ts): a note in the turn itself, and a log line when a
+          // message that needed checking was answered without a single tool.
+          const needs = needsOf(
+            latestWords(compacted.messages as { role?: string; content?: unknown }[]),
+          );
+          const coach = coachNote(needs, {
+            search: Boolean(this.service.search),
+            directions: Boolean(this.service.directions),
+            nearby: Boolean(this.service.nearby && this.service.whereabouts),
+          });
+          let toolCalls = 0;
           subscription = agent
             .run({
               ...input,
@@ -1595,6 +1608,7 @@ export class ConversationAgent extends AbstractAgent {
                   value: `Your name is ${identity?.name?.trim() || "Neddy"}. Your tone is ${identity?.tone?.trim() || "warm"}.`,
                 },
                 { description: "Current date and time", value: localNow(timeZone) },
+                ...(coach ? [{ description: "Coach for this message", value: coach }] : []),
                 ...(driving
                   ? [
                       {
@@ -1673,7 +1687,21 @@ export class ConversationAgent extends AbstractAgent {
                   : []),
               ],
             })
-            .subscribe(subscriber);
+            .subscribe({
+              next: (event) => {
+                if (event.type === EventType.TOOL_CALL_START) toolCalls++;
+                subscriber.next(event);
+              },
+              error: (error) => subscriber.error(error),
+              complete: () => {
+                const checked = needs.filter((need) => CHECKED.includes(need));
+                if (checked.length && toolCalls === 0)
+                  console.info(
+                    `[OpenMuse] Answered without checking: ${checked.join(", ")} (no tool calls in the turn)`,
+                  );
+                subscriber.complete();
+              },
+            });
         },
       );
       return () => {
