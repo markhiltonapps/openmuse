@@ -16,6 +16,7 @@ import {
   useReopenPill,
 } from "./backdrop";
 import { BrowserRunContext } from "./browser-tool-card";
+import { CHAT_HEADER_DESKTOP, CHAT_HEADER_PHONE, useToastRoom } from "./chat-room";
 import { useLiveCallOn } from "./live-voice";
 import { savedBackdrop } from "./theme";
 import { Button, CheckRow, colors, ErrorNotice, Sheet, s } from "./ui";
@@ -428,6 +429,7 @@ export function BackdropReopenPill({
 }) {
   const wanted = useReopenPill();
   const call = useLiveCallOn();
+  const toastRoom = useToastRoom();
   const shown = wanted && canShow && !call;
   return (
     // Always there, so a screen reader hears it when it appears.
@@ -437,7 +439,11 @@ export function BackdropReopenPill({
       // The new-version pill's slot under the header, clear of every control (that one gives way).
       style={{
         position: "absolute",
-        top: chat ? (desktop ? 58 : 50) : desktop ? 92 : 70,
+        top: chat
+          ? (desktop ? CHAT_HEADER_DESKTOP - 6 : CHAT_HEADER_PHONE + 2) + toastRoom
+          : desktop
+            ? 92
+            : 70,
         left: 0,
         right: 0,
         alignItems: "center",

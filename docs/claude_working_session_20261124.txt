@@ -7,3 +7,19 @@ Working session 2026-11-24
 - Owner clarified: the proactive work must cover the whole ecosystem, not just travel or email. Rewrote docs/INTELLIGENCE-PLAN.md as a platform plan: one proactive engine (signals, open loops, detectors, moments, judge, feedback)
   with domain packs and a daily "chief of staff" pass for the long tail; travel is the first pack and the test. Also discussed: the app's chat runs on Haiku 4.5 (not Sonnet 5.5, which is the coding assistant's model);
   proposed a model test (Haiku 4.5 vs 5.5 vs Sonnet 5.5) and a mobile chat layout redesign (docked notice, slim header, tab bar hides while typing). Neither built; waiting on the owner.
+
+## Phone chat layout (owner asked for an answer area of 60% or more; the mascot could go)
+- Chat screen on a phone now has a slim one-row header (menu, Neddy's picture with the count badge, the chat button, New job), the Neddy name chip is gone from this screen (still on Home).
+  New: apps/mobile/src/chat-room.ts (shared store: height the docked notice takes, and whether the keyboard is up in the message box).
+- Notices ("N things need you", heads-ups) dock under the header and push the message list down instead of covering it; a short fade under the header keeps cut-off bubbles tidy.
+  The notice is one slim card: a single line of text, "See them" / "Open", and a 44 px close ("Close. It stays in Recent on Home.").
+- The bottom bar is slim on the chat screen only (icon + label for the active tab) and steps aside while typing (phone keyboard detected from visualViewport; fails safe if it is missing).
+  Other screens keep their labelled bar, so the bar changes shape when you leave chat (reviewers accepted; told to the owner).
+- Message actions: Copy is an icon (still shares where copying isn't allowed), bin and Copy are 44 px targets; composer shows one row down to 360 px wide; one focus ring.
+- Menu has an Activity row. Help (navigate, side chats, retry tip, updates, copy-delete topics) and the app guide match.
+- Measured at 416x657: answer area about 62% with a notice up, about 72% without. 360x640, 475x751, 1100x640, dark mode and keyboard checked in Playwright.
+- Design review: visual, usability and copy reviewers, two rounds, all three signed off. Non-blocking notes left: the bar's outer edge at 360 px is a few px wider than the notice and composer; orientationchange can briefly keep a stale keyboard baseline while the box is focused (cleared on blur); Help's bottom-bar line still lists "alerts" under You.
+- Help pictures retaken (all, light and dark). place-reminders needed a larger scroll gap (reveal 560) because the You tab now has more below it. The `weight` picture came out with no weigh-ins (the aging sample database), so the previous picture and its size were kept; reset ${DATA_DIR}/postgres if it needs retaking. help-shots.ts: privacy 492 -> 500.
+- Website: the chat mock in neddy.html no longer shows the "Neddy" name chip (matches the app); screenshots at 390x844 and 1280x800 looked at.
+- Tests: pnpm test 867/867; biome: no errors (warnings only); mobile tsc clean.
+- Not pushed: waiting for "push it" (check Railway for a live call first). Backups: the pre-change Help pictures are in the scratchpad (help-before-20261124), neddy.html backup there too; git has the rest.

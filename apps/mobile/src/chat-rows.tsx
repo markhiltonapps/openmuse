@@ -83,6 +83,7 @@ export interface MessageRowProps {
  * Pressable ignores hitSlop).
  */
 const TAP = { minHeight: 44, justifyContent: "center", marginVertical: -13 } as const;
+const ICON_TAP = { minWidth: 44, alignItems: "center", marginHorizontal: -10 } as const;
 const receiptKey = (info?: ReceiptInfo) =>
   info ? `${info.used.join("|")}/${info.hiddenCount}/${info.hidden}/${info.known}` : "";
 const same = (a: MessageRowProps, b: MessageRowProps) =>
@@ -226,15 +227,17 @@ function MessageBody({
             }
             hitSlop={8}
             onPress={() => onCopy(message.id, user ? text : plainText(text))}
-            style={[s.row, TAP, { gap: 5 }]}
+            // An icon on its own: still a 44px target (react-native-web ignores hitSlop).
+            style={[s.row, TAP, ICON_TAP, { gap: copied ? 5 : 0 }]}
           >
             {copied ? (
               <Check size={14} color={colors.greenDark} />
             ) : (
               <Copy size={14} color={colors.muted} />
             )}
+            {/* Only the icon until it's done: Copy and Share still say so to a screen reader. */}
             <Text style={s.small} accessibilityLiveRegion="polite">
-              {copied ? "Copied" : canCopy ? "Copy" : "Share"}
+              {copied ? "Copied" : ""}
             </Text>
           </Pressable>
           {receipt && (
@@ -276,7 +279,7 @@ function MessageBody({
               accessibilityLabel="Delete this message"
               hitSlop={8}
               onPress={() => onAskDelete(message.id)}
-              style={[TAP, { opacity: 0.55 }]}
+              style={[TAP, ICON_TAP, { opacity: 0.55 }]}
             >
               <Trash2 size={13} color={colors.muted} />
             </Pressable>

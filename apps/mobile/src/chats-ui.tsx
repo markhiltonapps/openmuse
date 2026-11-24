@@ -25,7 +25,7 @@ import { Button, colors, dateLabel, ErrorNotice, Field, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 /**
- * Chats live with the conversation: the chat button under the agent's name says which chat you're
+ * Chats live with the conversation: the chat button beside the agent's picture says which chat you're
  * in and opens the Chats list (Main chat, the spaces' chats, other chats, archived ones). Each chat's
  * Rename, Archive and Delete wait behind its own ⋯.
  */

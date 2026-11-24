@@ -1332,7 +1332,7 @@ const SHOTS = [
     go: async (p) => {
       await mockLocation(p, { waiting: true });
       await appsTab(p, /Account/);
-      await reveal(p.getByText("Waiting for a place", { exact: true }), 300);
+      await reveal(p.getByText("Waiting for a place", { exact: true }), 560);
     },
     marks: {
       1: (p) => p.getByRole("checkbox", { name: /^Share where I am/ }),

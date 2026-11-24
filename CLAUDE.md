@@ -752,6 +752,13 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   switch was in the code). A feature that depends on a chip nobody has read yet gets `NEDDY_RAISE_DEBUG`-style numbers on screen (and a message when the chip is missing or silent) from the first build, switched
   on while it is tried out. Don't depend on an unknown sign or start pose: the detector ignores which way the axis points and doesn't need a particular starting position.
 
+- **Phone chat layout (owner, 2026-11-24):** the answer area must stay 60%+ of a phone's screen. The chat header is one slim row (`CHAT_HEADER_PHONE` 64 px, no name chip),
+  notices dock under it and push the list down (`toastRoom` in `chat-room.ts`, measured by `onLayout`, never an overlay), a mask fade softens the cut under the header, and the bottom bar is slim on the
+  chat screen and hidden while typing (`useTyping`: a focused message box plus `visualViewport` under 80% of its baseline; the baseline resets on focus/blur/rotation, and a missing `visualViewport`
+  means the bar stays). Anything new that sits above the composer or under the header must count toward that room. Every tap target 44 px, including the slim tabs, Copy, bin and close.
+  Help pictures: when content below a scrolled shot grows, `reveal()` scrolls further and a mark can go off the top (place-reminders): raise its gap. The sandbox's system Python can have a broken
+  Pillow; run `help-shots.mjs` with the scratchpad venv first on PATH.
+
 - **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
   reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every
   card needs a short plain-text form; a watch gets its own scoped token, never the account session; the server side must stay platform-neutral (Wear OS, Apple Watch and others, 2026-11-17). A phone app is not required first (the watch can pair with a code and use its own connection).

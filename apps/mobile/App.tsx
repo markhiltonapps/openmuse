@@ -59,6 +59,7 @@ import BackdropLayer from "./src/BackdropLayer";
 import { takeReopenedToPicker, useBackdropSync, useReopenPill } from "./src/backdrop";
 import { BackdropReopenPill } from "./src/backdrop-ui";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
+import { CHAT_HEADER_DESKTOP, CHAT_HEADER_PHONE, useToastRoom, useTyping } from "./src/chat-room";
 import { ChatButton, ChatReporter, ChatsSheet, onOpenChats } from "./src/chats-ui";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
@@ -558,17 +559,47 @@ function WorkspaceShell({
   const reopenPillCanShow = !detail && !threadsOpen && !chatNow && call.phase === "idle";
   // The chat's header takes the height of what's in it (the chat button grows with big text);
   // this is its least.
-  const headerHeight = chat ? (desktop ? 176 : 155) : desktop && !shortDesk ? 158 : 132;
+  const headerHeight = chat
+    ? desktop
+      ? CHAT_HEADER_DESKTOP
+      : CHAT_HEADER_PHONE
+    : desktop && !shortDesk
+      ? 158
+      : 132;
   const avatarSize = chat
     ? desktop
-      ? 68
-      : 62
+      ? 48
+      : 40
     : desktop && !shortDesk
       ? 88
       : width < 360
         ? 64
         : 76;
   const pillsRoom = usePillsRoom(section);
+  // The chat's notice sits in the page under the header, so the messages start below it; and the
+  // bar of four doors steps aside while the keyboard is up (a phone has little room then).
+  const toastRoom = useToastRoom();
+  const typing = useTyping();
+  const hideBar = chat && !desktop && typing;
+  // On a phone in the chat the bar is one slim row: icons, and the name of the door you are in.
+  const slimBar = chat && !desktop;
+  // What a screen reader says about Neddy at the top.
+  const avatarLabel = `${agentName}${
+    needYou || unread
+      ? `: ${[
+          needYou
+            ? `${countWords(needYou).toLowerCase()} ${needYou === 1 ? "thing needs" : "things need"} you`
+            : "",
+          unread
+            ? `${countWords(unread).toLowerCase()} new ${unread === 1 ? "update" : "updates"}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(", ")}`
+      : mood === "idle" || mood === "attention"
+        ? ""
+        : `: ${status.replace(/…$/, "")}`
+  }. Opens Home`;
   // The space beside the 760px column on a wide screen.
   const sideRoom = Math.max(0, (width - 760) / 2);
   return (
@@ -589,9 +620,9 @@ function WorkspaceShell({
               chat
                 ? {
                     minHeight: headerHeight,
-                    paddingTop: desktop ? 14 : 8,
-                    paddingBottom: 6,
-                    marginHorizontal: 20,
+                    paddingTop: desktop ? 8 : 4,
+                    paddingBottom: 4,
+                    marginHorizontal: desktop ? 20 : 12,
                   }
                 : {
                     // Floats over the page, which scrolls underneath, like Meta Muse.
@@ -635,157 +666,260 @@ function WorkspaceShell({
                 </Svg>
               </View>
             )}
-            {/* Above the centered title, which spans the full header width and would take the tap. */}
-            <View
-              nativeID="menu-button"
-              style={{ position: "absolute", left: chat ? 0 : 20, top: 16, zIndex: 2 }}
-            >
-              <IconButton icon={Menu} label="Menu" onPress={() => setPanel("menu")} />
-            </View>
-            <View style={{ alignItems: "center", gap: 1, maxWidth: Math.min(width, 760) - 40 }}>
-              {/* Neddy and his name are two buttons side by side in the tree, stacked by the
-                  column: a button inside a button can't be reached by a screen reader. */}
-              <Pressable
-                accessibilityRole="button"
-                // Neddy at the top always takes you home, where what he's doing has its own card.
-                accessibilityLabel={`${agentName}${
-                  needYou || unread
-                    ? `: ${[
-                        needYou
-                          ? `${countWords(needYou).toLowerCase()} ${needYou === 1 ? "thing needs" : "things need"} you`
-                          : "",
-                        unread
-                          ? `${countWords(unread).toLowerCase()} new ${unread === 1 ? "update" : "updates"}`
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}`
-                    : mood === "idle" || mood === "attention"
-                      ? ""
-                      : `: ${status.replace(/…$/, "")}`
-                }. Opens Home`}
-                {...tipProps("Home")}
-                onPress={() => navigate("home")}
-                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-              >
-                <View>
-                  <AgentAvatar
-                    size={avatarSize}
-                    mood={mood}
-                    activity={mood === "working" ? activity?.kind : undefined}
-                    flying
-                  />
-                  {/* On his helmet: how many things need you, or a dot for something new. */}
-                  {needYou > 0 ? (
-                    <View
-                      pointerEvents="none"
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        right: Math.round(avatarSize * 0.16) - 8,
-                        minWidth: 22,
-                        height: 22,
-                        paddingHorizontal: 6,
-                        borderRadius: 11,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: colors.amber,
-                        borderWidth: 2,
-                        borderColor: colors.canvas,
-                      }}
-                    >
-                      {/* Dark ink on amber, in both themes: white fails contrast on it. */}
-                      <Text style={{ color: "#1B2430", fontSize: 12, fontWeight: "800" }}>
-                        {needYou > 9 ? "9+" : needYou}
-                      </Text>
-                    </View>
-                  ) : unread > 0 ? (
-                    <View
-                      pointerEvents="none"
-                      style={{
-                        position: "absolute",
-                        top: 2,
-                        right: Math.round(avatarSize * 0.16) - 4,
-                        width: 14,
-                        height: 14,
-                        borderRadius: 7,
-                        backgroundColor: colors.amber,
-                        borderWidth: 2,
-                        borderColor: colors.canvas,
-                      }}
-                    />
-                  ) : null}
+            {/* The chat's header is one slim row (owner, 2026-11-24: the answer was getting a third
+                of a phone's screen): a small Neddy that still shows what needs you and takes you
+                home, the chat's name, and the two buttons. */}
+            {chat && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, minHeight: 56 }}>
+                <View nativeID="menu-button">
+                  <IconButton icon={Menu} label="Menu" onPress={() => setPanel("menu")} />
                 </View>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`About ${agentName}. Opens About ${agentName} on Home`}
-                {...tipProps(`About ${agentName}`)}
-                onPress={() => {
-                  scrollToAnchor("about-neddy");
-                  navigate("home");
-                }}
-                style={({ pressed }) => ({
-                  // Under his feet and the flames he hovers on: the chip mustn't hide them.
-                  marginTop: 6,
-                  paddingHorizontal: 14,
-                  paddingVertical: 5,
-                  borderRadius: 18,
-                  backgroundColor: colors.subtle,
-                  borderWidth: 2,
-                  borderColor: colors.canvas,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Text
-                  numberOfLines={1}
+                <View
                   style={{
-                    fontSize: 15,
-                    fontWeight: "600",
-                    color: colors.text,
-                    letterSpacing: -0.3,
+                    flex: 1,
+                    minWidth: 0,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
                   }}
                 >
-                  {agentName}
-                </Text>
-              </Pressable>
-              <Text
-                numberOfLines={1}
-                style={{
-                  // Busy, it says what it's doing; idle or waiting on you (the count says that),
-                  // it's quiet. Kept mounted so nothing moves when a job starts.
-                  fontSize: mood === "working" ? 12 : 11,
-                  fontWeight: mood === "working" ? "600" : "400",
-                  color: mood === "working" ? colors.blueText : colors.muted,
-                  marginTop: 2,
-                  marginBottom: 2,
-                }}
-              >
-                {mood === "working" ? status : " "}
-              </Text>
-              {section === "chat" && (
-                // A little apart from the name chip above it, so the two pills read as two things.
-                <View style={{ marginTop: 4 }}>
-                  <ChatButton onPress={() => setPanel("chats")} />
+                  <Pressable
+                    accessibilityRole="button"
+                    // Neddy at the top always takes you home, where what he's doing has its own card.
+                    accessibilityLabel={avatarLabel}
+                    {...tipProps("Home")}
+                    onPress={() => navigate("home")}
+                    style={({ pressed }) => ({
+                      // A 44px target around the 40px picture.
+                      minWidth: 44,
+                      minHeight: 44,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      opacity: pressed ? 0.65 : 1,
+                    })}
+                  >
+                    <View>
+                      <AgentAvatar
+                        size={avatarSize}
+                        mood={mood}
+                        activity={mood === "working" ? activity?.kind : undefined}
+                        flying
+                      />
+                      {needYou > 0 ? (
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            position: "absolute",
+                            top: -2,
+                            right: -6,
+                            minWidth: 20,
+                            height: 20,
+                            paddingHorizontal: 5,
+                            borderRadius: 10,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backgroundColor: colors.amber,
+                            borderWidth: 2,
+                            borderColor: colors.canvas,
+                          }}
+                        >
+                          <Text style={{ color: "#1B2430", fontSize: 11, fontWeight: "800" }}>
+                            {needYou > 9 ? "9+" : needYou}
+                          </Text>
+                        </View>
+                      ) : unread > 0 ? (
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            right: -2,
+                            width: 12,
+                            height: 12,
+                            borderRadius: 6,
+                            backgroundColor: colors.amber,
+                            borderWidth: 2,
+                            borderColor: colors.canvas,
+                          }}
+                        />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                  <View style={{ flexShrink: 1, minWidth: 0 }}>
+                    <ChatButton onPress={() => setPanel("chats")} />
+                  </View>
                 </View>
-              )}
-            </View>
-            <View
-              style={{
-                position: "absolute",
-                right: chat ? 0 : 20,
-                top: 16,
-                zIndex: 2,
-                flexDirection: "row",
-                gap: 4,
-              }}
-            >
-              <IconButton
-                icon={ClipboardPlus}
-                label={`New job for ${agentName}`}
-                onPress={() => open({ type: "delegate" })}
-              />
-            </View>
+                <IconButton
+                  icon={ClipboardPlus}
+                  label={`New job for ${agentName}`}
+                  onPress={() => open({ type: "delegate" })}
+                />
+                {/* What he is doing, for a screen reader: kept mounted and out of the way. */}
+                <Text
+                  role="status"
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    width: 1,
+                    height: 1,
+                    opacity: 0,
+                    overflow: "hidden",
+                  }}
+                >
+                  {mood === "working" ? status : ""}
+                </Text>
+              </View>
+            )}
+            {!chat && (
+              <>
+                {/* Above the centered title, which spans the full header width and would take the tap. */}
+                <View
+                  nativeID="menu-button"
+                  style={{ position: "absolute", left: chat ? 0 : 20, top: 16, zIndex: 2 }}
+                >
+                  <IconButton icon={Menu} label="Menu" onPress={() => setPanel("menu")} />
+                </View>
+                <View style={{ alignItems: "center", gap: 1, maxWidth: Math.min(width, 760) - 40 }}>
+                  {/* Neddy and his name are two buttons side by side in the tree, stacked by the
+                  column: a button inside a button can't be reached by a screen reader. */}
+                  <Pressable
+                    accessibilityRole="button"
+                    // Neddy at the top always takes you home, where what he's doing has its own card.
+                    accessibilityLabel={`${agentName}${
+                      needYou || unread
+                        ? `: ${[
+                            needYou
+                              ? `${countWords(needYou).toLowerCase()} ${needYou === 1 ? "thing needs" : "things need"} you`
+                              : "",
+                            unread
+                              ? `${countWords(unread).toLowerCase()} new ${unread === 1 ? "update" : "updates"}`
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}`
+                        : mood === "idle" || mood === "attention"
+                          ? ""
+                          : `: ${status.replace(/…$/, "")}`
+                    }. Opens Home`}
+                    {...tipProps("Home")}
+                    onPress={() => navigate("home")}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
+                  >
+                    <View>
+                      <AgentAvatar
+                        size={avatarSize}
+                        mood={mood}
+                        activity={mood === "working" ? activity?.kind : undefined}
+                        flying
+                      />
+                      {/* On his helmet: how many things need you, or a dot for something new. */}
+                      {needYou > 0 ? (
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            right: Math.round(avatarSize * 0.16) - 8,
+                            minWidth: 22,
+                            height: 22,
+                            paddingHorizontal: 6,
+                            borderRadius: 11,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backgroundColor: colors.amber,
+                            borderWidth: 2,
+                            borderColor: colors.canvas,
+                          }}
+                        >
+                          {/* Dark ink on amber, in both themes: white fails contrast on it. */}
+                          <Text style={{ color: "#1B2430", fontSize: 12, fontWeight: "800" }}>
+                            {needYou > 9 ? "9+" : needYou}
+                          </Text>
+                        </View>
+                      ) : unread > 0 ? (
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            position: "absolute",
+                            top: 2,
+                            right: Math.round(avatarSize * 0.16) - 4,
+                            width: 14,
+                            height: 14,
+                            borderRadius: 7,
+                            backgroundColor: colors.amber,
+                            borderWidth: 2,
+                            borderColor: colors.canvas,
+                          }}
+                        />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`About ${agentName}. Opens About ${agentName} on Home`}
+                    {...tipProps(`About ${agentName}`)}
+                    onPress={() => {
+                      scrollToAnchor("about-neddy");
+                      navigate("home");
+                    }}
+                    style={({ pressed }) => ({
+                      // Under his feet and the flames he hovers on: the chip mustn't hide them.
+                      marginTop: 6,
+                      paddingHorizontal: 14,
+                      paddingVertical: 5,
+                      borderRadius: 18,
+                      backgroundColor: colors.subtle,
+                      borderWidth: 2,
+                      borderColor: colors.canvas,
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "600",
+                        color: colors.text,
+                        letterSpacing: -0.3,
+                      }}
+                    >
+                      {agentName}
+                    </Text>
+                  </Pressable>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      // Busy, it says what it's doing; idle or waiting on you (the count says that),
+                      // it's quiet. Kept mounted so nothing moves when a job starts.
+                      fontSize: mood === "working" ? 12 : 11,
+                      fontWeight: mood === "working" ? "600" : "400",
+                      color: mood === "working" ? colors.blueText : colors.muted,
+                      marginTop: 2,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {mood === "working" ? status : " "}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    position: "absolute",
+                    right: chat ? 0 : 20,
+                    top: 16,
+                    zIndex: 2,
+                    flexDirection: "row",
+                    gap: 4,
+                  }}
+                >
+                  <IconButton
+                    icon={ClipboardPlus}
+                    label={`New job for ${agentName}`}
+                    onPress={() => open({ type: "delegate" })}
+                  />
+                </View>
+              </>
+            )}
           </View>
           <View style={{ flex: 1, minHeight: 0 }}>
             {section !== "chat" && (
@@ -847,6 +981,15 @@ function WorkspaceShell({
                 display: section === "chat" ? "flex" : "none",
                 flex: 1,
                 paddingHorizontal: desktop ? 42 : 17,
+                // The notice under the header takes its own room.
+                paddingTop: toastRoom,
+                // A message scrolled under the header or the notice fades instead of being cut.
+                ...(Platform.OS === "web"
+                  ? ({
+                      maskImage: "linear-gradient(to bottom, transparent, #000 14px)",
+                      WebkitMaskImage: "linear-gradient(to bottom, transparent, #000 14px)",
+                    } as object)
+                  : {}),
               }}
             >
               <AgentStatus />
@@ -886,106 +1029,122 @@ function WorkspaceShell({
           </View>
           {/* Talk or type, just above the bar, on the home screen. */}
           {home && <HomeTalkRow desktop={desktop} />}
-          <View
-            style={{
-              paddingHorizontal: width < 375 ? 8 : 22,
-              paddingTop: 10,
-              paddingBottom: desktop ? 18 : 8,
-              alignItems: "center",
-            }}
-          >
-            {/* Four doors (owner, 2026-11-07): plain icons, the one you're in lit in Neddy's teal. */}
+          {!hideBar && (
             <View
-              role="tablist"
-              aria-label="Sections"
-              style={[
-                {
-                  flexDirection: "row",
-                  width: "100%",
-                  maxWidth: desktop ? 520 : 400,
-                  paddingTop: 6,
-                  paddingBottom: 6,
-                  paddingHorizontal: 8,
-                  borderRadius: 28,
-                  backgroundColor: glass ? "rgba(30, 24, 44, 0.62)" : colors.surface,
-                  borderWidth: 1,
-                  borderColor: glass ? "rgba(255, 255, 255, 0.16)" : colors.line,
-                  shadowColor: glass ? "#0A0618" : "#132631",
-                  shadowOffset: { width: 0, height: glass ? 14 : 2 },
-                  shadowOpacity: glass ? 0.34 : 0.07,
-                  shadowRadius: glass ? 36 : 18,
-                  elevation: 3,
-                },
-                glassSurface,
-              ]}
+              style={{
+                paddingHorizontal: width < 375 ? 8 : 22,
+                paddingTop: chat && !desktop ? 4 : 10,
+                paddingBottom: desktop ? 18 : chat ? 4 : 8,
+                alignItems: "center",
+              }}
             >
-              {nav.map((item) => {
-                // Mail, Calendar and the browser belong to no tab: none lights up for them.
-                const active = section === item.id;
-                const ink = active
-                  ? glass
-                    ? "#FFFFFF"
-                    : colors.blueDark
-                  : glass
-                    ? "rgba(255, 255, 255, 0.78)"
-                    : colors.mutedStrong;
-                return (
-                  <Pressable
-                    key={item.id}
-                    // react-native-web reads role and aria-*, not accessibilityState.
-                    role="tab"
-                    aria-label={item.label}
-                    aria-selected={active}
-                    {...tipProps(item.tip.replace("{agent}", agentName))}
-                    onPress={() => navigate(item.id)}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      minWidth: 0,
-                      alignItems: "center",
-                      gap: 3,
-                      paddingVertical: 6,
-                      // Rounds the keyboard focus ring too.
-                      borderRadius: 18,
-                      transform: [{ scale: pressed ? 0.94 : 1 }],
-                    })}
-                  >
-                    {/* A soft pill behind the icon of the place you're in. */}
-                    <View
-                      style={{
-                        width: desktop ? 56 : 52,
-                        height: desktop ? 32 : 30,
-                        borderRadius: 16,
+              {/* Four doors (owner, 2026-11-07): plain icons, the one you're in lit in Neddy's teal. */}
+              <View
+                role="tablist"
+                aria-label="Sections"
+                style={[
+                  {
+                    flexDirection: "row",
+                    width: "100%",
+                    maxWidth: desktop ? 520 : 400,
+                    paddingTop: slimBar ? 0 : 6,
+                    paddingBottom: slimBar ? 0 : 6,
+                    paddingHorizontal: 8,
+                    borderRadius: 28,
+                    backgroundColor: glass ? "rgba(30, 24, 44, 0.62)" : colors.surface,
+                    borderWidth: 1,
+                    borderColor: glass ? "rgba(255, 255, 255, 0.16)" : colors.line,
+                    shadowColor: glass ? "#0A0618" : "#132631",
+                    shadowOffset: { width: 0, height: glass ? 14 : 2 },
+                    shadowOpacity: glass ? 0.34 : 0.07,
+                    shadowRadius: glass ? 36 : 18,
+                    elevation: 3,
+                  },
+                  glassSurface,
+                ]}
+              >
+                {nav.map((item) => {
+                  // Mail, Calendar and the browser belong to no tab: none lights up for them.
+                  const active = section === item.id;
+                  const ink = active
+                    ? glass
+                      ? "#FFFFFF"
+                      : colors.blueDark
+                    : glass
+                      ? "rgba(255, 255, 255, 0.78)"
+                      : colors.mutedStrong;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      // react-native-web reads role and aria-*, not accessibilityState.
+                      role="tab"
+                      aria-label={item.label}
+                      aria-selected={active}
+                      {...tipProps(item.tip.replace("{agent}", agentName))}
+                      onPress={() => navigate(item.id)}
+                      style={({ pressed }) => ({
+                        // Slim bar in a phone's chat: only the door you're in says its name.
+                        flex: slimBar && active ? 2 : 1,
+                        minWidth: 0,
                         alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: active
-                          ? glass
-                            ? "rgba(255, 255, 255, 0.2)"
-                            : colors.blue
-                          : "transparent",
-                      }}
+                        gap: 3,
+                        paddingVertical: slimBar ? 4 : 6,
+                        // Rounds the keyboard focus ring too.
+                        borderRadius: 18,
+                        transform: [{ scale: pressed ? 0.94 : 1 }],
+                      })}
                     >
-                      <item.icon
-                        size={desktop ? 24 : 22}
-                        strokeWidth={active ? 2.4 : 2}
-                        color={ink}
-                      />
-                    </View>
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        color: ink,
-                        fontSize: desktop ? 12 : 11,
-                        lineHeight: 14,
-                        fontWeight: active ? "800" : "600",
-                      }}
-                    >
-                      {item.short ?? item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+                      {/* A soft pill behind the icon of the place you're in. */}
+                      <View
+                        style={{
+                          ...(slimBar && active
+                            ? { paddingHorizontal: 16, gap: 6 }
+                            : { width: slimBar ? 44 : desktop ? 56 : 52 }),
+                          flexDirection: "row",
+                          height: slimBar ? 36 : desktop ? 32 : 30,
+                          borderRadius: slimBar ? 18 : 16,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: active
+                            ? glass
+                              ? "rgba(255, 255, 255, 0.2)"
+                              : colors.blue
+                            : "transparent",
+                        }}
+                      >
+                        <item.icon
+                          size={desktop ? 24 : 22}
+                          strokeWidth={active ? 2.4 : 2}
+                          color={ink}
+                        />
+                        {slimBar && active && (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: ink, fontSize: 13, lineHeight: 16, fontWeight: "800" }}
+                          >
+                            {item.short ?? item.label}
+                          </Text>
+                        )}
+                      </View>
+                      {!slimBar && (
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            color: ink,
+                            fontSize: desktop ? 12 : 11,
+                            lineHeight: 14,
+                            fontWeight: active ? "800" : "600",
+                          }}
+                        >
+                          {item.short ?? item.label}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+          )}
           {/* Background updates pop up under the bell; they wait while a sheet covers the page. */}
           <UpdateToasts hold={!!chatNow || !!detail || threadsOpen || call.shown} />
           {/* A backdrop switched on or off by voice or elsewhere: one tap to reopen and see it. */}
@@ -1127,6 +1286,7 @@ function NewVersion({
   desktop: boolean;
   chat: boolean;
 }) {
+  const toastRoom = useToastRoom();
   // Whether something was typed when it came out; a reload would lose it.
   const [ready, setReady] = useState<{ typed: boolean }>();
   const [later, setLater] = useState(false);
@@ -1156,7 +1316,11 @@ function NewVersion({
       style={{
         position: "absolute",
         // Clear of the name under the agent's picture on Chat, where the header is shorter.
-        top: chat ? (desktop ? 58 : 50) : desktop ? 92 : 70,
+        top: chat
+          ? (desktop ? CHAT_HEADER_DESKTOP - 6 : CHAT_HEADER_PHONE + 2) + toastRoom
+          : desktop
+            ? 92
+            : 70,
         left: 0,
         right: 0,
         alignItems: "center",

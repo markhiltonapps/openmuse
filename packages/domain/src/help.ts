@@ -218,10 +218,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Four tabs along the bottom: Home, Chat, Activity and You. The ☰ Menu has the rest.",
     shot: "home",
     steps: [
-      "**☰ Menu (top left):** Home, Chats, New job, Calendar, Feed, Spaces, Goals, Ideas, Files, {agent}’s browser, Backdrop, You and Help & how-to, each with a line saying what it’s for.",
-      "**{agent}’s picture:** what it’s working on now. A number on it is how many things need you (approvals and questions for you); a dot means something new under Recent on Home. Tap it to go back to Home; tap its name to jump to About {agent}. On the chat screen, the button under it says which chat you’re in and opens your chats.",
+      "**☰ Menu (top left):** Home, Chats, Activity, New job, Calendar, Feed, Spaces, Goals, Ideas, Files, {agent}’s browser, Backdrop, You and Help & how-to, each with a line saying what it’s for.",
+      "**{agent}’s picture:** what it’s working on now. A number on it is how many things need you (approvals and questions for you); a dot means something new under Recent on Home. Tap it to go back to Home; on Home and the other screens, tap its name to jump to About {agent}. On the chat screen the picture is smaller, to leave room for your answers, and the button beside it says which chat you’re in and opens your chats.",
       "**The clipboard button (top right):** hand {agent} a new job.",
-      "**The bottom bar:** Home, Chat, Activity and You (your apps, {agent}’s settings, About you, alerts, money and your account). Everything else is in the Menu, on Home, or a “take me to…” away.",
+      "**The bottom bar:** Home, Chat, Activity and You (your apps, {agent}’s settings, About you, alerts, money and your account). Everything else is in the Menu, on Home, or a “take me to…” away. In the chat on a phone the bar is slimmer, with just icons and the name of the place you’re in. It steps aside while you type, then comes back.",
     ],
     body: [
       "You don’t have to find anything: ask {agent} “Take me to my food log” or “Where are my reminders?” and it shows a button that takes you there.",
@@ -533,7 +533,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Keep a separate chat for a topic; your main chat is always there.",
     shot: "chats",
     steps: [
-      "On the chat screen, tap the button under {agent}’s name (it says which chat you’re in), or open **☰ Menu › Chats**.",
+      "On the chat screen, tap the button beside {agent}’s picture (it says which chat you’re in), or open **☰ Menu › Chats**.",
       "Tap **New chat** to start one, or tap a chat to open it. Each space has its own chat too.",
       "Tap a chat’s **⋯** to **Rename**, **Archive** or **Delete** it. **Archived chats** at the bottom has the ones you put away, to **Restore**.",
       "Tap **Hide** next to **Other chats** to hide them, and **Show** to bring them back.",
@@ -594,9 +594,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "copy-delete",
     group: "chat",
     title: "Copy, listen to or delete a message",
-    summary: "Under each message: Copy, Listen and a bin to delete it.",
+    summary: "Under each message: a copy icon, Listen and a bin to delete it.",
     steps: [
-      "**Copy** under a message copies its text (on a phone it may say **Share**).",
+      "The **copy icon** (two small squares) under a message copies its text. On some phones it opens your share options instead. It says **Copied** when done.",
       "**Listen** under a reply reads it out.",
       "The bin under a message deletes it: tap **Delete message** to confirm, or **Keep**.",
     ],
@@ -724,7 +724,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     group: "day",
     title: "Updates: what {agent} did",
     summary:
-      "Home’s Recent card has the newest updates; See all keeps the last week’s. Small cards pop up as things happen.",
+      "Home’s Recent card has the newest updates; See all keeps the last week’s. A small notice shows up as things happen.",
     place: "updates",
     steps: [
       "Open **Home** (tap {agent} at the top) and look under **Recent**: the newest updates, unread first. Tap one to open what it’s about.",
@@ -733,6 +733,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Choose where updates show under **You › Agent › Where updates show**.",
     ],
     body: [
+      "In the chat, a small notice (something needs you, or a job finished) is one slim line right under the top, never over your messages. Tap **See them** or **Open**, or **✕** to put it away: it stays in **Recent** on Home. It waits while you’re typing.",
       "Email only shows up here when you’ve asked to hear about it: an email rule, or **Every new email** under **Email alerts**.",
     ],
     say: ["Mark all my updates read."],
@@ -2934,7 +2935,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "Just say so: “No, I prefer morning meetings.” To fix something it remembers, open **You › About you**.",
       "If a reply didn’t finish (“I reached my step limit”), say “continue”.",
-      "If a reply didn’t go through, tap **Retry response**. If it keeps happening in one chat, start a new chat (the chat button under {agent}’s name › **New chat**) and tell the person who runs Neddy what the error said.",
+      "If a reply didn’t go through, tap **Retry response**. If it keeps happening in one chat, start a new chat (the chat button beside {agent}’s picture › **New chat**) and tell the person who runs Neddy what the error said.",
     ],
     keywords: [
       "wrong",

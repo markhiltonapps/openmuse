@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Mic,
   Newspaper,
+  PanelsTopLeft,
   SquareCheck,
   UserRound,
   UsersRound,
@@ -130,7 +131,16 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
   // The voice hints show on every row: the list scrolls now that it has thirteen rows.
   const say = true;
   const go = (
-    section: "home" | "calendar" | "feed" | "spaces" | "ideas" | "goals" | "files" | "apps",
+    section:
+      | "home"
+      | "activity"
+      | "calendar"
+      | "feed"
+      | "spaces"
+      | "ideas"
+      | "goals"
+      | "files"
+      | "apps",
   ) => {
     onClose();
     navigate(section);
@@ -157,6 +167,13 @@ export function MenuSheet({ onClose, onChats }: { onClose: () => void; onChats: 
           }
           say={say ? "open my main chat" : undefined}
           onPress={onChats}
+        />
+        <MenuRow
+          icon={PanelsTopLeft}
+          title="Activity"
+          detail={`The jobs ${agent} is working on, and anything waiting for your OK.`}
+          say={say ? "show me my activity" : undefined}
+          onPress={() => go("activity")}
         />
         <MenuRow
           icon={ClipboardPlus}

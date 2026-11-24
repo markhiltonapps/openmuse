@@ -8,6 +8,7 @@ import type {
   AgentTask,
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
+import { CHAT_HEADER_DESKTOP, CHAT_HEADER_PHONE, setToastRoom, useTyping } from "./chat-room";
 import { dark } from "./theme";
 import { tipProps } from "./tips";
 import { Button, colors, ErrorNotice, plainPreview, s } from "./ui";
@@ -100,6 +101,12 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
   const { open, api, section } = useWorkspace();
   const { width } = useWindowDimensions();
   const narrow = width < 760;
+  // On a phone in the chat the notice is one slim row in the page, right under the header, and
+  // the messages make room for it (App reads `setToastRoom`), so it never covers anything.
+  const inChat = section === "chat";
+  const wide = width >= 900;
+  // With the keyboard up there is little room: the notice waits (it is still counted on Neddy).
+  const typing = useTyping();
   const display = updatesDisplay(data?.identity);
   /** Updates already shown, put off, or waiting in the bell from before the app opened. */
   const seen = useRef<Set<string>>(undefined);
@@ -197,6 +204,11 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
     };
   }, [toast]);
   const laterRef = useRef<() => void>(undefined);
+  // The chat reserves the notice's height (set when it is measured below); no notice, no room.
+  useEffect(() => {
+    if (!toast || !inChat || display !== "popup" || typing) setToastRoom(0);
+  }, [toast, inChat, display, typing]);
+  useEffect(() => () => setToastRoom(0), []);
 
   // Read elsewhere (in the bell, on another device): it goes away here too.
   useEffect(() => {
@@ -284,12 +296,12 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
     const end = (text: string) => (/[?.!]$/.test(text) ? text : `${text}.`);
     const text = many
       ? kind === "update"
-        ? `${heading}: ${namesOf(toast.items)}. They're in the bell.`
+        ? `${heading}: ${namesOf(toast.items)}. They're in Recent on Home.`
         : `${heading}: ${namesOf(toast.items)}.`
       : kind === "update"
         ? toast.items.some(jobEnded)
           ? `${label}: ${end(heading)}`
-          : `Update: ${end(heading)} It's in the bell.`
+          : `Update: ${end(heading)} It's in Recent on Home.`
         : `${label}: ${end(heading)}`;
     setSaid({ text, urgent: kind === "reminder" && !many });
   }, [toast]);
@@ -305,7 +317,9 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
     </>
   );
   // The same shape either way, so the hidden regions stay mounted and are heard when they change.
-  if (!toast || !first) return <>{announcer}</>;
+  if (!toast || !first || (inChat && typing)) return <>{announcer}</>;
+  // One slim row in the chat on a phone (a reminder keeps its two buttons, so it keeps two rows).
+  const slim = inChat && kind !== "reminder";
 
   const later = () => {
     if (kind !== "update" || done) rememberPutOff(toast.items.map((n) => n.id));
@@ -368,9 +382,18 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
             { translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) },
           ],
           // On phones, a banner below the menu and bell (and the agent's name in chat).
-          ...(narrow
-            ? { top: section === "chat" ? 86 : 64, left: 12, right: 12 }
-            : { top: 68, right: 20, width: 300 }),
+          ...(inChat
+            ? {
+                top: (wide ? CHAT_HEADER_DESKTOP : CHAT_HEADER_PHONE) + 2,
+                left: wide ? 20 : 17,
+                right: wide ? 20 : 17,
+              }
+            : narrow
+              ? { top: 64, left: 12, right: 12 }
+              : { top: 68, right: 20, width: 300 }),
+        }}
+        onLayout={(event) => {
+          if (inChat) setToastRoom(event.nativeEvent.layout.height + 6);
         }}
       >
         <View
@@ -395,11 +418,11 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
           style={{
             // In the dark, the card is lighter than what it floats over and casts a deeper shadow.
             backgroundColor: dark ? colors.surface : colors.card,
-            borderRadius: 18,
+            borderRadius: slim ? 16 : 18,
             borderWidth: 1,
             borderColor: dark ? colors.subtle : colors.line,
-            padding: 14,
-            gap: 10,
+            padding: slim ? 10 : 14,
+            gap: slim ? 6 : 10,
             shadowColor: dark ? "#000" : "#11191C",
             shadowOpacity: dark ? 0.5 : 0.16,
             shadowRadius: 24,
@@ -407,108 +430,192 @@ export function UpdateToasts({ hold }: { hold: boolean }) {
             elevation: 8,
           }}
         >
-          <View style={[s.row, { gap: 10, alignItems: "flex-start", paddingRight: 18 }]}>
-            <View
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 10,
-                backgroundColor: failed
-                  ? colors.errorBg
-                  : doneLook
-                    ? colors.green
-                    : kind === "update"
-                      ? colors.sky
-                      : colors.lavender,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Icon
-                size={15}
-                color={failed ? colors.danger : doneLook ? colors.greenText : colors.blueDark}
-              />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text
-                style={[
-                  s.small,
-                  failed
-                    ? { color: colors.danger, fontWeight: "600" }
-                    : doneLook
-                      ? { color: colors.greenText, fontWeight: "600" }
-                      : null,
-                ]}
-              >
-                {label}
-              </Text>
-              <Text numberOfLines={2} style={[s.text, { fontWeight: "600" }]}>
-                {heading}
-              </Text>
-              {!!detail && (
-                <Text
-                  numberOfLines={narrow ? 1 : 2}
-                  style={[s.muted, { fontSize: 13, lineHeight: 19 }]}
+          {slim ? (
+            <>
+              <View style={[s.row, { gap: 10, alignItems: "center" }]}>
+                <View
+                  style={{
+                    // The room goes to the words on a very narrow phone.
+                    display: width < 380 ? "none" : "flex",
+                    width: 28,
+                    height: 28,
+                    borderRadius: 9,
+                    backgroundColor: failed
+                      ? colors.errorBg
+                      : doneLook
+                        ? colors.green
+                        : kind === "update"
+                          ? colors.sky
+                          : colors.lavender,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
                 >
-                  {detail}
-                </Text>
-              )}
-            </View>
-          </View>
-          <View style={[s.row, { gap: 8, flexWrap: "wrap", marginLeft: 40 }]}>
-            {many ? (
-              <Button small primary icon={ArrowRight} onPress={seeAll}>
-                {kind === "update" && !allDone ? "See updates" : "See them"}
-              </Button>
-            ) : kind === "reminder" ? (
-              <>
-                <Button
-                  small
-                  primary
-                  icon={Check}
-                  busy={working}
-                  onPress={() => void reminderDone()}
-                >
-                  Done
-                </Button>
-                <Button small disabled={working} onPress={() => void snooze()}>
-                  In 10 minutes
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  small
-                  primary
-                  icon={ArrowRight}
-                  busy={working}
-                  onPress={() => first.taskId && void openTask(first.taskId)}
-                >
-                  Open
-                </Button>
-                {kind === "decision" && (
-                  <Button small disabled={working} onPress={later}>
-                    Later
+                  <Icon
+                    size={14}
+                    color={failed ? colors.danger : doneLook ? colors.greenText : colors.blueDark}
+                  />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  {/* One line: "2 things need you" says it all; one thing says what it is. */}
+                  <Text
+                    numberOfLines={many ? 1 : 2}
+                    style={[
+                      s.text,
+                      { fontWeight: "600" },
+                      failed
+                        ? { color: colors.danger }
+                        : doneLook
+                          ? { color: colors.greenText }
+                          : null,
+                    ]}
+                  >
+                    {many ? heading : `${label}: ${heading}`}
+                  </Text>
+                </View>
+                {many ? (
+                  <Button small primary icon={ArrowRight} onPress={seeAll}>
+                    {kind === "update" && !allDone ? "See updates" : "See them"}
+                  </Button>
+                ) : (
+                  <Button
+                    small
+                    primary
+                    icon={ArrowRight}
+                    busy={working}
+                    onPress={() => first.taskId && void openTask(first.taskId)}
+                  >
+                    Open
                   </Button>
                 )}
-              </>
-            )}
-          </View>
-          {!!error && (
-            <View style={{ marginLeft: 40 }}>
-              <ErrorNotice error={error} />
-            </View>
+                {/* Closing is "later": it stays in Recent on Home. */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close. It stays in Recent on Home."
+                  {...tipProps("Close. It stays in Recent on Home.")}
+                  onPress={later}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    marginVertical: -8,
+                    marginRight: -8,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <X size={16} color={colors.muted} />
+                </Pressable>
+              </View>
+              {!!error && <ErrorNotice error={error} />}
+            </>
+          ) : (
+            <>
+              <View style={[s.row, { gap: 10, alignItems: "flex-start", paddingRight: 18 }]}>
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 10,
+                    backgroundColor: failed
+                      ? colors.errorBg
+                      : doneLook
+                        ? colors.green
+                        : kind === "update"
+                          ? colors.sky
+                          : colors.lavender,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon
+                    size={15}
+                    color={failed ? colors.danger : doneLook ? colors.greenText : colors.blueDark}
+                  />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text
+                    style={[
+                      s.small,
+                      failed
+                        ? { color: colors.danger, fontWeight: "600" }
+                        : doneLook
+                          ? { color: colors.greenText, fontWeight: "600" }
+                          : null,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                  <Text numberOfLines={2} style={[s.text, { fontWeight: "600" }]}>
+                    {heading}
+                  </Text>
+                  {!!detail && (
+                    <Text
+                      numberOfLines={narrow ? 1 : 2}
+                      style={[s.muted, { fontSize: 13, lineHeight: 19 }]}
+                    >
+                      {detail}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <View style={[s.row, { gap: 8, flexWrap: "wrap", marginLeft: 40 }]}>
+                {many ? (
+                  <Button small primary icon={ArrowRight} onPress={seeAll}>
+                    {kind === "update" && !allDone ? "See updates" : "See them"}
+                  </Button>
+                ) : kind === "reminder" ? (
+                  <>
+                    <Button
+                      small
+                      primary
+                      icon={Check}
+                      busy={working}
+                      onPress={() => void reminderDone()}
+                    >
+                      Done
+                    </Button>
+                    <Button small disabled={working} onPress={() => void snooze()}>
+                      In 10 minutes
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      small
+                      primary
+                      icon={ArrowRight}
+                      busy={working}
+                      onPress={() => first.taskId && void openTask(first.taskId)}
+                    >
+                      Open
+                    </Button>
+                    {kind === "decision" && (
+                      <Button small disabled={working} onPress={later}>
+                        Later
+                      </Button>
+                    )}
+                  </>
+                )}
+              </View>
+              {!!error && (
+                <View style={{ marginLeft: 40 }}>
+                  <ErrorNotice error={error} />
+                </View>
+              )}
+              {/* Last in the tab order, after the card's own actions; shown in the top corner. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  kind === "reminder" ? "Close" : "Close. It stays in Recent on Home."
+                }
+                {...tipProps(kind === "reminder" ? "Close" : "Close. It stays in Recent on Home.")}
+                onPress={later}
+                style={{ position: "absolute", top: 8, right: 8, padding: 14, margin: -10 }}
+              >
+                <X size={16} color={colors.muted} />
+              </Pressable>
+            </>
           )}
-          {/* Last in the tab order, after the card's own actions; shown in the top corner. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close. It stays under Updates."
-            {...tipProps("Close. It stays under Updates.")}
-            onPress={later}
-            style={{ position: "absolute", top: 8, right: 8, padding: 14, margin: -10 }}
-          >
-            <X size={16} color={colors.muted} />
-          </Pressable>
         </View>
       </Animated.View>
     </>
