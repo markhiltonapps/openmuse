@@ -1464,6 +1464,10 @@ export async function createApp(
     await next();
   });
   app.get("/api/session", (c) => c.json({ mode: config.mode }));
+  app.delete("/api/session", async (c) => {
+    await auth.revoke(c.req.header("authorization"));
+    return c.json({ ok: true });
+  });
   // The person's devices: pair one with the code on its screen, rename it, or turn it off.
   app.get("/api/devices", async (c) => {
     const list = await devices.list(c.get("owner"));
