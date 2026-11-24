@@ -67,3 +67,13 @@ Wear OS (needs the owner's Android Studio and watch), the watch battery retest (
 - Tests: tests/directions.test.ts (8, built on the real Paragon->Hilton route). Help: new topic "Directions to a place" (no picture: it's a chat answer; a mocked chat picture would
   show nothing the words don't). Site: location paragraph mentions directions with the no-floor-plans limit.
 - Cost: one strong-model call per directions request (about 1-2 cents), counted as background usage.
+
+## Upstream security fixes (merged locally, 4f0b7d2)
+- Ported by hand from CopilotKit/openmuse onto our fork (branch upstream-security-20261124, merged with no conflicts): #47 resource ids must be UUIDs + file name cleanup; #204 signed
+  links scoped to GET; #200 DELETE /api/session revokes the session; #206 PDF decompression limit + invisible characters stripped from drafts; #125 signing key shared across concurrent
+  first starts; Gmail parsing hardening #97 (with the UTF-8 fallback it needs), #203, #183; hono 4.13.13 in the lockfile (checksum verified against npm).
+- Checked before merging: file and browser-session ids are all randomUUID (no existing ones orphaned).
+- Skipped, needs the owner: #103 rate limit (120 requests/minute per address on /api/*; behind Railway's proxy without TRUST_PROXY=true that is one shared bucket and our 3-second
+  polling would trip it; patch saved in the scratchpad as upstream-103-rate-limit.patch). image-size CVE update (needs a pnpm override and a network install; pptxgenjs still wants 1.x).
+- Watch the first Railway build after the push: the lockfile entry for hono was written by hand (verified checksum).
+- Tests: 911/911 after the merge; tsc (server and app) and Biome clean.
