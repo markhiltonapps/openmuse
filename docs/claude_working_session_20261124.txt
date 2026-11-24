@@ -53,3 +53,17 @@ Wear OS (needs the owner's Android Studio and watch), the watch battery retest (
 - Upstream: added `upstream` remote (CopilotKit/openmuse, read-only). 92 commits since our last merge; the security/hardening ones are being ported on a scratch branch (see below).
 - Check-in scheduled for 2026-11-25 08:40 Chicago to read the first live daily check in Railway's logs.
 - Pictures are OFF on Railway: the api's start log says OPENROUTER_API_KEY isn't set. Owner to re-add it if that wasn't intended.
+
+## Directions (owner in Singapore: Neddy gave vague directions and mall names; the chat had sent a "how to fix it" prompt)
+- Evidence: Railway's logs for the exchange show four chat model calls (Haiku 4.5, 57k-token main chat) and no tool calls: it answered from memory.
+- New `get_directions` tool (apps/server/src/directions.ts): Nominatim (biased near the person), OSRM walking/driving route (routing.openstreetmap.de), Overpass for the road at each
+  crossing and the named malls/stations/hotels/shops along the way, then the strong model (modelForBuild) writes landmark-based steps from those facts; plain steps if no model or a bad
+  reply. Always a Google Maps link. Honest limits: street-level only, no floor plans; a unit number like #04-42 = level 4, unit 42. Starts from the phone's spot, or the building they name.
+- Chat rules (directionsInstructions): use get_directions and relay it with the link; never add turns/exits/levels; "where can I buy X" = search_web for shops that sell it (name, mall,
+  unit, phone) then show_places, not a list of malls; when corrected, say plainly what was missing and fix it with a tool, not more guesses.
+- Live check from the sandbox (Nominatim + router, Overpass blocked here): "Hilton Orchard" from "Paragon, Singapore" -> Hilton Singapore Orchard, 333 Orchard Road, 250 m, 3 min, Maps link.
+  The friendlier written version and the landmarks only run on Railway; to test after the push: ask "I'm at Uni-Glow in Paragon between Pandora and Estée Lauder. How do I get to
+  Hilton Orchard?"
+- Tests: tests/directions.test.ts (8, built on the real Paragon->Hilton route). Help: new topic "Directions to a place" (no picture: it's a chat answer; a mocked chat picture would
+  show nothing the words don't). Site: location paragraph mentions directions with the no-floor-plans limit.
+- Cost: one strong-model call per directions request (about 1-2 cents), counted as background usage.

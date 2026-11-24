@@ -34,6 +34,7 @@ import { hiddenMessages, withoutHidden } from "../data-controls.ts";
 import { calendarToolSpec } from "../day-tools.ts";
 import { showOnWatchToolSpec } from "../device-card-tools.ts";
 import { deviceToolSpecs } from "../devices.ts";
+import { directionsInstructions, directionsToolSpecs } from "../directions.ts";
 import { FamilyWeeks } from "../family-weeks.ts";
 import { shareToolSpecs } from "../file-shares.ts";
 import { fileToolInstructions, fileToolSpecs } from "../file-tools.ts";
@@ -1026,6 +1027,18 @@ export class ConversationAgent extends AbstractAgent {
           }),
         ),
       );
+    const directions = this.service.directions;
+    if (directions)
+      tools.push(
+        ...directionsToolSpecs(directions, whereabouts, this.owner).map((spec) =>
+          defineTool({
+            ...spec,
+            parameters: spec.parameters as z.ZodObject,
+            execute: async (args: unknown) =>
+              (spec.execute as (value: unknown) => Promise<unknown>)(args),
+          }),
+        ),
+      );
     const nearby = this.service.nearby;
     if (nearby && whereabouts)
       tools.push(
@@ -1489,6 +1502,7 @@ export class ConversationAgent extends AbstractAgent {
         personaInstructions +
         (this.service.commitments ? commitmentInstructions : "") +
         (this.service.proactive ? proactiveInstructions : "") +
+        (this.service.directions ? directionsInstructions : "") +
         restaurantInstructions +
         errandInstructions +
         browserToolInstructions +

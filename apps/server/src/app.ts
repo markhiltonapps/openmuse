@@ -54,6 +54,7 @@ import { idleInfo } from "./device-idle.ts";
 import { DeviceRecordings } from "./device-recordings.ts";
 import { DeviceBridge } from "./device-socket.ts";
 import { Devices, pairClaimSchema } from "./devices.ts";
+import { Directions, directionsWriterPrompt } from "./directions.ts";
 import { EmailViews } from "./email-views.ts";
 import { emojiPicture } from "./emoji.ts";
 import { hourIn } from "./engine/clock.ts";
@@ -881,6 +882,22 @@ export async function createApp(
   if (config.mode === "live")
     agent.nearby = new Nearby({
       userAgent: `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; places near me)`,
+    });
+  // Directions from real map data, written for a lost visitor by the strong model (owner, 2026-11-24).
+  if (config.mode === "live")
+    agent.directions = new Directions({
+      userAgent: `Neato_Muse/1.0 (+${config.publicUrl.replace(/\/+$/, "")}; directions)`,
+      write: async (owner, prompt) => {
+        const plan = agent.modelForBuild();
+        if (config.agentBackend !== "model" || !plan.model) return "";
+        return agent.complete({
+          ...plan,
+          maxTokens: 1200,
+          system: directionsWriterPrompt,
+          prompt,
+          onUsage: agent.usage?.sink(owner, "background"),
+        });
+      },
     });
   agent.areas = new Areas(
     db,

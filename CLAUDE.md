@@ -772,6 +772,18 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   titles and email subjects are anyone's words), and a plain "coming up" about something with its own notice is dropped in code (`keepChief`), not just in the prompt. The switches live at the
   bottom of Plans & bookings (`SpeaksFirst`, reusing Heads-ups' `SwitchRow`/`FINE`). Still not built: live flight status and traffic, promises found in sent mail, a scorecard.
 
+- **Directions come from map data, never memory (owner in Singapore, 2026-11-24):** Neddy answered "how do I get to the Hilton
+  from here" from the quick model's memory ("head to the nearest exit, turn left") and the owner got lost; "where can I buy a travel
+  pillow" got a list of malls. `get_directions` (directions.ts) finds both places near the person (Nominatim with a viewbox, so
+  "Hilton Orchard" isn't a Hilton elsewhere), routes on OSRM (routing.openstreetmap.de, foot or car, no key), names the road at each
+  crossing and the malls/stations/hotels along the way (Overpass), and has the strong model (`modelForBuild`) write steps a lost
+  visitor can follow from those facts, always with a Google Maps link. The router's tiny unnamed steps ("right 6 m, left 9 m") are a
+  crossing: keep it as its own step and name the road, never fold it into the next turn (it read as "turn right" across Orchard Road).
+  It can't see inside buildings and must say so. Shops that sell X are found with search_web (shop, mall, unit number), not by listing
+  malls. Public OSM services are shared: one request at a time, cached, polite user agent. Overpass is blocked in the sandbox
+  (Nominatim and the router answer): test landmarks with recorded answers. The chat's evidence was in Railway's logs: four chat calls
+  and no tool calls for the whole exchange.
+
 - **Wear OS watch app is a planned goal (owner, 2026-11-17):** the owner wants a Galaxy Watch (Wear OS) app like MetaMuse's (latest messages, type/dictate, approvals on the wrist) later. Plan and the
   reasons are in `docs/WEAR-OS-WATCH-PLAN.md`; nothing is built. Keep it in mind: cards, approvals and notifications should reach a *device* through the shared device path, not only the web app; every
   card needs a short plain-text form; a watch gets its own scoped token, never the account session; the server side must stay platform-neutral (Wear OS, Apple Watch and others, 2026-11-17). A phone app is not required first (the watch can pair with a code and use its own connection).

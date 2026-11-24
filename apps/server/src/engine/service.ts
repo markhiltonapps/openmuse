@@ -51,6 +51,7 @@ import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
 import type { Devices } from "../devices.ts";
+import type { Directions } from "../directions.ts";
 import type { EmailViews } from "../email-views.ts";
 import { AppError } from "../errors.ts";
 import { FileShares } from "../file-shares.ts";
@@ -1491,6 +1492,8 @@ export class AgentService {
   spacePosts?: ScheduledPosts;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
   commitments?: Commitments;
+  /** Walking and driving directions from map data (directions.ts); set on the live server. */
+  directions?: Directions;
   proactive?: Proactive;
   /** Alerts from connected apps beyond email, such as a new booking or message. */
   appEvents?: AppEvents;

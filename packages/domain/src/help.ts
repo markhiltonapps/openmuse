@@ -1490,6 +1490,43 @@ export const HELP_TOPICS: HelpTopic[] = [
     related: ["location"],
   },
   {
+    id: "directions",
+    group: "day",
+    title: "Directions to a place",
+    summary:
+      "Ask how to get somewhere and {agent} gives walking or driving steps with the streets, crossings and landmarks along the way, plus a Google Maps link.",
+    steps: [
+      "Ask in the chat or on a call: “How do I walk to the Hilton Orchard from here?” Say where you are as exactly as you can, like “I’m at Uni-Glow in Paragon, between Pandora and Estée Lauder.”",
+      "{agent} gives the distance and time, then numbered steps that name the streets you cross and the malls, stations and hotels you’ll pass.",
+      "Tap the **Google Maps** link under the steps for live turn-by-turn navigation.",
+    ],
+    body: [
+      "Directions start from where your phone is, when **Your location** is on and the app is open. If it isn’t, say the building or street you’re in, with the city.",
+      "The route comes from OpenStreetMap, a free map that people keep up to date. It sees streets and walkways, not the inside of buildings: it has no floor plans or store layouts. Inside a mall {agent} says so, and a unit number like #04-42 means level 4, unit 42; the mall’s directory board or information counter can point you to it.",
+      "Looking for something to buy? Ask “Where can I buy a travel pillow near here?” and {agent} searches for shops that sell it, with their mall and unit number, rather than listing malls. Call first when it matters: stock changes.",
+    ],
+    say: [
+      { text: "How do I walk to the Hilton Orchard from here?", send: true },
+      { text: "Where can I buy a travel pillow near here?", send: true },
+      { text: "How do I drive to the airport from here?", send: true },
+    ],
+    keywords: [
+      "directions",
+      "how do I get to",
+      "walk to",
+      "route",
+      "lost",
+      "landmarks",
+      "google maps",
+      "navigate",
+      "where can I buy",
+      "floor plan",
+      "unit number",
+      "mall",
+    ],
+    related: ["near-me", "location"],
+  },
+  {
     id: "near-me",
     group: "day",
     title: "What’s near you",
