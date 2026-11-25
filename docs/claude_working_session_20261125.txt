@@ -49,3 +49,12 @@ Commit: local only, waiting for "push it" (check Railway for a live call first).
 - Help: the "mic" line in the chat topic says the box turns blue and shows Listening…, and what you said lands in the box to check.
 - Checked at 390x844 and 1280x800: resting, typing a long sentence (all of it kept), listening, heard words. Tests 915/915, tsc clean,
   biome no errors.
+
+## Research: how Meta Muse feels so smart (owner asked for a deep research pass)
+- Report: docs/research/How Meta Muse feels so smart.md (notes from four researchers beside it). Headline: Muse runs a mid-tier
+  model (Muse Spark 1.3) inside a lot of machinery: a cloud computer per person, hourly memory and relationship passes, a
+  produce → verify → publish chain for unprompted notices (~1 a day), a "tracking" store for plans, a warm persona that owns mistakes,
+  and decision-first answers. The airport/gate example isn't published anywhere checkable; the likely mechanism is inferred.
+- Ten ranked builds for Neddy in the report (capture plans from chat, read emails and a 60-day backfill first; a chat-model bake-off
+  incl. Haiku 5.5 and Sonnet 5.5; fewer tools per turn; a blind side-by-side against Muse; saved lessons from corrections; ...).
+  Nothing built yet: waiting on the owner's pick.
