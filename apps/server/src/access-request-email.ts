@@ -26,7 +26,7 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue
 
 export function accessRequestEmail(input: AccessRequestEmail) {
   const name = oneLine(input.name);
-  const link = input.appUrl.replace(/\/$/, "");
+  const link = `${input.appUrl.replace(/\/$/, "")}/app`;
   const subject = `${name.slice(0, 60)} asked to join Neddy`;
   const others =
     input.waiting && input.waiting > 1

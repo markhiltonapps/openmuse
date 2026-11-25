@@ -13,6 +13,26 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Neddy" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <script>
+      // The bare address is the home page for visitors (owner, 2026-11-25). The app stays at "/"
+      // for anyone signed in on this device, the installed app, a tab already using it (reloads),
+      // and every link that carries something (?task=, #login=, ?request). "/app" always opens it.
+      (function () {
+        try {
+          var l = window.location;
+          var installed =
+            window.navigator.standalone === true ||
+            (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+          var used = window.sessionStorage.getItem("neddy.app") === "1";
+          var signedIn = !!window.localStorage.getItem("openmuse.session");
+          if (l.pathname === "/" && !l.search && !l.hash && !installed && !used && !signedIn) {
+            l.replace("/neddy.html");
+            return;
+          }
+          window.sessionStorage.setItem("neddy.app", "1");
+        } catch (e) {}
+      })();
+    </script>
     <style id="expo-reset">
       html,
       body {

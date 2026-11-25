@@ -10,7 +10,9 @@ const esc = (text: string) =>
 const html = (text: string) => esc(text).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 const plain = (text: string) => text.replace(/\*\*(.+?)\*\*/g, "$1");
 
-export function historyStepsEmail(agent: string, appUrl?: string) {
+export function historyStepsEmail(agent: string, home?: string) {
+  // The bare address is the home page for visitors; /app always opens the app.
+  const appUrl = home ? `${home.replace(/\/$/, "")}/app` : undefined;
   const topic = helpTopic("import-chatgpt");
   const steps = (topic?.steps ?? []).map((step) => helpText(step, agent));
   const intro = `Here are the steps for bringing your ChatGPT or Claude chats to ${agent}, so it can search them and pick up your preferences, your projects and the people you mention. It’s easiest from a computer.`;

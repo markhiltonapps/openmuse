@@ -92,7 +92,7 @@ test("the history email carries the Help topic's steps, in the agent's name", ()
   assert.doesNotMatch(email.text, /\*\*|\{agent\}/);
   assert.match(email.html, /<ol><li>/);
   assert.match(email.html, /<b>You › About you<\/b>/);
-  assert.match(email.html, /href="https:\/\/neddy\.example"/);
+  assert.match(email.html, /href="https:\/\/neddy\.example\/app"/);
   const plain = historyStepsEmail("Pip");
   assert.doesNotMatch(plain.text, /Open Pip:/);
 });

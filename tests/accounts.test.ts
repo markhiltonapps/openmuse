@@ -309,7 +309,7 @@ test("the admin's access-request email escapes what people typed, and a failing 
   assert.ok(!mail.html.includes("<img"), "the note can't add markup");
   assert.ok(!mail.html.includes("<b>"), "the name can't add markup");
   assert.match(mail.html, /&lt;img src=x/);
-  assert.match(mail.html, /href="https:\/\/app\.test"/);
+  assert.match(mail.html, /href="https:\/\/app\.test\/app"/);
   // A mailer that is down doesn't stop the request from being saved or answered.
   const { AccessRequests } = await import("../apps/server/src/access-requests.ts");
   const failing = new AccessRequests(

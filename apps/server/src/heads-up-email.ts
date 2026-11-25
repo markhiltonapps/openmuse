@@ -21,7 +21,7 @@ export function headsUpEmail(input: {
   agentName: string;
 }) {
   const title = oneLine(input.title).slice(0, 120);
-  const link = input.appUrl.replace(/\/$/, "");
+  const link = `${input.appUrl.replace(/\/$/, "")}/app`;
   const subject = `Heads-up: ${title}`;
   const text = [
     title,

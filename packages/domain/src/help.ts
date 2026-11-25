@@ -111,6 +111,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Sign in",
     summary: "There’s no password: you sign in with a code or link sent to your email.",
     steps: [
+      "On the website, tap **Sign in** at the top (or add **/app** to the address). The address on its own shows the website to anyone not signed in on that device.",
       "On the sign-in screen, type your email and tap **Email me a sign-in code**.",
       "Type the 6-digit code from the email, or tap the link in it on this device. It works once and lasts 15 minutes (an invite lasts 3 days).",
       "Each device stays signed in for 30 days after you last used it.",
@@ -139,6 +140,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Add the app to your home screen",
     summary: "Neddy installs like an app, so it opens full screen and can send notifications.",
     steps: [
+      "First open the app itself (the sign-in screen or the app, not the website’s home page), so the icon opens the app.",
       "**Android (Chrome):** tap ⋮ at the top right, then **Install app** or **Add to Home screen**.",
       "**iPhone (Safari):** tap **Share**, then **Add to Home Screen**, and open it from there. Notifications need this on iPhone.",
       "**Windows (Chrome or Edge):** click the install icon at the right of the address bar, or ⋮ › **Install Neddy**.",

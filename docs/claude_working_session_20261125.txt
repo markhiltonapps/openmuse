@@ -84,3 +84,17 @@ Now (apps/server/src/commitments.ts, engine/service.ts, email-views.ts, apps.ts,
 - Tests: tests/capture.test.ts (8) + a voice-live check; pnpm test 923/923; tsc clean; biome no errors.
 - Untested live: Composio's GMAIL_FETCH_EMAILS answer shape for the look back (parsed with the same emailsIn the chat uses);
   check Railway for "Looked back through 60 days of Gmail: N plan(s) tracked" and "Plans caught from what was said: N".
+
+## The bare address opens the home page (owner: "make the bare address open the home page")
+
+- `https://neddy.neatoventures.com/` now shows the home page (`/neddy.html`) to visitors. An inline script in
+  `apps/mobile/public/index.html` forwards with `location.replace` (Back doesn't loop) only when the path is `/` with no
+  `?…` or `#…`, nobody is signed in on that device (`openmuse.session`), it isn't the installed app (standalone), and this
+  tab hasn't already opened the app (sessionStorage `neddy.app`, so reloads and sign-out stay in the app).
+- `/app` always opens the app (Caddy's try_files already serves index.html for it). Every website Sign in link now goes
+  to `/app`, and so do the emails that linked to the bare address (heads-up, access request, ChatGPT history steps).
+  Sign-in links (`/#login=`) and job emails (`/?task=`) were already safe.
+- Checked in Chromium against a fresh export: fresh `/` → `/neddy.html`; `/app`, `/?task=x`, `/#login=x`, signed in, and
+  a tab that already used the app all stay; Sign in on the home page → `/app`; Back from the home page doesn't return to `/`.
+- Help: Sign in says to tap Sign in on the website (or add /app); Add to home screen says to add it from the app, not
+  the website. docs/DEPLOY.md notes the rule. Tests: accounts and onboarding email links updated; typecheck clean.
