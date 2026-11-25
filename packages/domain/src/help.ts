@@ -437,7 +437,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: "Dictate a message, or tap Listen to hear any reply read out.",
     steps: [
       "Tap **Listen** under any reply to hear it.",
-      "Where live talk isn’t on, tap the **mic** to speak a message instead of typing, or the **sound-wave** button to talk hands-free.",
+      "Where live talk isn’t on, tap the **mic** to speak a message instead of typing, or the **sound-wave** button to talk hands-free. While it listens the message box turns blue and says **Listening…**; what you said lands in the box for you to check and send.",
       "Choose the voice for replies read aloud on this device, and the microphone, under **You › Agent › Voice**. For live calls, see **Choose {agent}’s voice on calls**.",
     ],
     keywords: ["dictation", "mic", "read aloud", "listen", "voice", "spoken replies"],

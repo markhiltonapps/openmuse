@@ -1577,9 +1577,37 @@ export function ChatScreen({
   const canSend = !!draft.trim() && !onlyPrefix;
   const buttonsWide =
     44 * 2 + (showHeadset ? 44 : 0) + (showWaves ? 44 : 0) + (showMic ? 88 : 0) + 7 * 3;
-  const narrow = composerWidth > 0 && composerWidth < buttonsWide + 140;
+  const narrowRow = composerWidth > 0 && composerWidth < buttonsWide + 140;
+  /**
+   * The words ran past one line beside the buttons: the box takes its own row above them (as on a
+   * narrow phone), so a dictated answer isn't squeezed into a third of the width. It stays that
+   * way until the box is empty again, so it can't flip back and forth as the line refits.
+   */
+  const [stacked, setStacked] = useState(false);
+  useEffect(() => {
+    if (!draft) setStacked(false);
+  }, [draft]);
+  const narrow = narrowRow || stacked;
   // Its height was measured at the other width: start again from one line.
   useEffect(() => setInputHeight(44), [narrow]);
+  const attachButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Attach a document"
+      accessibilityState={{ expanded: picking }}
+      onPress={() => setPicking(!picking)}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 24,
+        backgroundColor: picking || pressed ? colors.sky : "transparent",
+      })}
+    >
+      <Text style={{ color: colors.text, fontSize: 29, fontWeight: "300", lineHeight: 32 }}>+</Text>
+    </Pressable>
+  );
   const messageBox = (
     <TextInput
       ref={input}
@@ -1591,9 +1619,11 @@ export function ChatScreen({
         // An empty box goes back to one line; typing grows it again.
         if (!text) setInputHeight(44);
       }}
-      onContentSizeChange={(event) =>
-        setInputHeight(Math.max(44, Math.min(140, event.nativeEvent.contentSize.height)))
-      }
+      onContentSizeChange={(event) => {
+        const height = event.nativeEvent.contentSize.height;
+        if (!narrow && height > 52 && draft) setStacked(true);
+        setInputHeight(Math.max(44, Math.min(140, height)));
+      }}
       placeholder={
         !isReady
           ? "Connecting…"
@@ -1601,7 +1631,9 @@ export function ChatScreen({
             ? historyError
               ? "Conversation unavailable"
               : "Loading conversation…"
-            : "Message…"
+            : listening && !voiceMode
+              ? "Listening…"
+              : "Message…"
       }
       placeholderTextColor={colors.muted}
       selectionColor={colors.blueDark}
@@ -1626,14 +1658,14 @@ export function ChatScreen({
         }, 250);
       }}
       style={{
-        ...(narrow ? { alignSelf: "stretch", paddingHorizontal: 10 } : { flex: 1 }),
+        alignSelf: "stretch",
+        paddingHorizontal: narrow ? 10 : 2,
         color: colors.text,
         height: inputHeight,
         minHeight: 44,
         maxHeight: 140,
         fontSize: 17,
         lineHeight: 24,
-        ...(narrow ? {} : { paddingHorizontal: 2 }),
         paddingTop: 10,
         paddingBottom: 10,
         // The composer around it shows focus, not a square ring inside it ("auto" outlines
@@ -2195,13 +2227,15 @@ export function ChatScreen({
           style={{
             backgroundColor: colors.surface,
             borderRadius: 32,
-            // Focus shows as a 2px border; the margin keeps the composer from shifting.
-            borderWidth: focused ? 2 : 1,
-            margin: focused ? -1 : 0,
-            borderColor: focused ? colors.blueDark : colors.line,
+            // Focus shows as a 2px border; the margin keeps the composer from shifting. Listening
+            // shows the same way, with a tint, so it's clear where the words are going.
+            borderWidth: focused || listening ? 2 : 1,
+            margin: focused || listening ? -1 : 0,
+            borderColor: focused || listening ? colors.blueDark : colors.line,
+            ...(listening && !voiceMode ? { backgroundColor: colors.sky } : {}),
             padding: 8,
             shadowColor: "#18384B",
-            shadowOpacity: focused ? 0.1 : 0.06,
+            shadowOpacity: focused || listening ? 0.1 : 0.06,
             shadowRadius: 20,
             shadowOffset: { width: 0, height: 4 },
             elevation: 4,
@@ -2309,146 +2343,139 @@ export function ChatScreen({
               ))}
             </View>
           )}
-          {/* On a narrow screen the message box gets its own line, above the buttons. */}
-          {narrow && messageBox}
+          {/* The message box keeps ONE place in the tree whichever way it's laid out (beside the
+              buttons, or on its own line above them on a narrow phone or once the words run past
+              one line); moving it to another parent rebuilt it mid-typing, losing focus and keys. */}
           <View
             onLayout={(event) => setComposerWidth(event.nativeEvent.layout.width)}
-            style={[s.row, { gap: 7, alignItems: "flex-end" }]}
+            style={narrow ? { gap: 7 } : [s.row, { gap: 7, alignItems: "flex-end" }]}
           >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Attach a document"
-              accessibilityState={{ expanded: picking }}
-              onPress={() => setPicking(!picking)}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 24,
-                backgroundColor: picking || pressed ? colors.sky : "transparent",
-              })}
-            >
-              <Text style={{ color: colors.text, fontSize: 29, fontWeight: "300", lineHeight: 32 }}>
-                +
-              </Text>
-            </Pressable>
-            {narrow && <View style={{ flex: 1 }} />}
-            {!narrow && messageBox}
-            {/* Shown to the owner before the key is added too: it says what to add. On a very
+            {!narrow && attachButton}
+            <View style={narrow ? { alignSelf: "stretch" } : { flex: 1 }}>{messageBox}</View>
+            <View style={[s.row, { gap: 7, alignItems: "flex-end" }]}>
+              {narrow && attachButton}
+              {narrow && <View style={{ flex: 1 }} />}
+              {/* Shown to the owner before the key is added too: it says what to add. On a very
                 narrow phone that would push out the voice button that does work, so only when on. */}
-            {showHeadset && (
-              <Pressable
-                nativeID="call-headset"
-                accessibilityRole="button"
-                accessibilityLabel={headsetLabel}
-                {...tipProps(headsetLabel)}
-                onPress={() => {
-                  foldNotice();
-                  // A call that just ended: talk again (the call screen starts one when idle).
-                  if (call.phase === "over") call.dismiss();
-                  call.expand();
-                }}
-                // Voice first: talking is the main thing to do here, so it's the filled button.
-                style={({ pressed }) => ({
-                  width: 44,
-                  height: 44,
-                  borderRadius: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor:
-                    live === "on" ? colors.blue : pressed ? colors.sky : "transparent",
-                  transform: [{ scale: pressed && live === "on" ? 0.94 : 1 }],
-                })}
-              >
-                <Headset size={22} color={live === "on" ? colors.text : colors.blueText} />
-              </Pressable>
-            )}
-            {/* Where live talk works, the headset is the one way to talk (owner's choice); the
-                older talk and mic buttons stay only where it can't run. */}
-            {showWaves && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={voiceMode ? "End voice conversation" : `Talk with ${agentName}`}
-                {...tipProps(
-                  voiceMode ? "End voice conversation" : `Talk with ${agentName}`,
-                  {},
-                  { hold: false },
-                )}
-                accessibilityState={{ selected: voiceMode }}
-                onPress={toggleVoiceMode}
-                style={({ pressed }) => ({
-                  width: 44,
-                  height: 44,
-                  borderRadius: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: voiceMode
-                    ? colors.lavender
-                    : pressed
-                      ? colors.sky
-                      : "transparent",
-                })}
-              >
-                <AudioLines size={22} color={voiceMode ? colors.text : colors.muted} />
-              </Pressable>
-            )}
-            {showMic && (
-              // The mic and its microphone choice sit together, like one control.
-              <View
-                style={{ flexDirection: "row", borderRadius: 22, backgroundColor: colors.subtle }}
-              >
+              {showHeadset && (
                 <Pressable
-                  ref={micButton}
+                  nativeID="call-headset"
                   accessibilityRole="button"
-                  accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
-                  {...tipProps(
-                    listening ? "Stop voice input" : "Speak a message",
-                    {},
-                    { hold: false },
-                  )}
-                  accessibilityState={{ selected: listening }}
-                  onPress={toggleDictation}
+                  accessibilityLabel={headsetLabel}
+                  {...tipProps(headsetLabel)}
+                  onPress={() => {
+                    foldNotice();
+                    // A call that just ended: talk again (the call screen starts one when idle).
+                    if (call.phase === "over") call.dismiss();
+                    call.expand();
+                  }}
+                  // Voice first: talking is the main thing to do here, so it's the filled button.
                   style={({ pressed }) => ({
                     width: 44,
                     height: 44,
                     borderRadius: 24,
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor: listening
+                    backgroundColor:
+                      live === "on" ? colors.blue : pressed ? colors.sky : "transparent",
+                    transform: [{ scale: pressed && live === "on" ? 0.94 : 1 }],
+                  })}
+                >
+                  <Headset size={22} color={live === "on" ? colors.text : colors.blueText} />
+                </Pressable>
+              )}
+              {/* Where live talk works, the headset is the one way to talk (owner's choice); the
+                older talk and mic buttons stay only where it can't run. */}
+              {showWaves && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    voiceMode ? "End voice conversation" : `Talk with ${agentName}`
+                  }
+                  {...tipProps(
+                    voiceMode ? "End voice conversation" : `Talk with ${agentName}`,
+                    {},
+                    { hold: false },
+                  )}
+                  accessibilityState={{ selected: voiceMode }}
+                  onPress={toggleVoiceMode}
+                  style={({ pressed }) => ({
+                    width: 44,
+                    height: 44,
+                    borderRadius: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: voiceMode
                       ? colors.lavender
                       : pressed
                         ? colors.sky
                         : "transparent",
                   })}
                 >
-                  <Mic size={22} color={listening ? colors.text : colors.muted} />
+                  <AudioLines size={22} color={voiceMode ? colors.text : colors.muted} />
                 </Pressable>
-                <MicChooserButton />
-              </View>
-            )}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={replying ? "Stop reply" : "Send message"}
-              {...tipProps(replying ? "Stop reply" : "Send message", {}, { hold: false })}
-              disabled={!replying && (!canSend || !loaded || !isReady || pasting > 0)}
-              onPress={replying ? () => void stop() : () => send()}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                borderRadius: 24,
-                backgroundColor: replying || canSend ? colors.blue : colors.subtle,
-                alignItems: "center",
-                justifyContent: "center",
-                transform: [{ scale: pressed ? 0.94 : 1 }],
-              })}
-            >
-              {replying ? (
-                <Square size={18} fill={colors.text} strokeWidth={0} />
-              ) : (
-                <ArrowUp size={25} strokeWidth={1.8} color={canSend ? colors.text : colors.muted} />
               )}
-            </Pressable>
+              {showMic && (
+                // The mic and its microphone choice sit together, like one control.
+                <View
+                  style={{ flexDirection: "row", borderRadius: 22, backgroundColor: colors.subtle }}
+                >
+                  <Pressable
+                    ref={micButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
+                    {...tipProps(
+                      listening ? "Stop voice input" : "Speak a message",
+                      {},
+                      { hold: false },
+                    )}
+                    accessibilityState={{ selected: listening }}
+                    onPress={toggleDictation}
+                    style={({ pressed }) => ({
+                      width: 44,
+                      height: 44,
+                      borderRadius: 24,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: listening
+                        ? colors.lavender
+                        : pressed
+                          ? colors.sky
+                          : "transparent",
+                    })}
+                  >
+                    <Mic size={22} color={listening ? colors.text : colors.muted} />
+                  </Pressable>
+                  <MicChooserButton />
+                </View>
+              )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={replying ? "Stop reply" : "Send message"}
+                {...tipProps(replying ? "Stop reply" : "Send message", {}, { hold: false })}
+                disabled={!replying && (!canSend || !loaded || !isReady || pasting > 0)}
+                onPress={replying ? () => void stop() : () => send()}
+                style={({ pressed }) => ({
+                  width: 44,
+                  height: 44,
+                  borderRadius: 24,
+                  backgroundColor: replying || canSend ? colors.blue : colors.subtle,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transform: [{ scale: pressed ? 0.94 : 1 }],
+                })}
+              >
+                {replying ? (
+                  <Square size={18} fill={colors.text} strokeWidth={0} />
+                ) : (
+                  <ArrowUp
+                    size={25}
+                    strokeWidth={1.8}
+                    color={canSend ? colors.text : colors.muted}
+                  />
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>

@@ -37,3 +37,15 @@ Help: "Ask me what I ate" topic rewritten around the line, with a new picture (m
 retaken (spacing). Website: nothing on neddy.html, pricing or compare shows the check-in or the notice, so no change.
 Tests: pnpm test 915/915; biome: no errors (63 warnings, same as before); mobile and server tsc clean.
 Commit: local only, waiting for "push it" (check Railway for a live call first).
+
+## Composer follow-ups (owner: "do the two composer follow-ups too")
+- Listening shows on the message box itself: a 2px blue border, a light blue tint and the placeholder "Listening…" while the mic
+  is on (not in voice mode, which has its own bar).
+- Once the words run past one line beside the buttons, the box takes its own row above them (as on a narrow phone) and stays there
+  until it's empty, so a dictated or long typed message isn't squeezed into a third of the width.
+- Found and fixed while testing: the box was rendered in a different parent when the layout switched, so React rebuilt it mid-typing
+  (focus lost, keys dropped: Playwright's typed sentence came out as "C"). The composer now keeps the box in one place in the tree
+  (container row/column switch, the + button rendered in either spot). This also fixes the same loss at the existing narrow-phone switch.
+- Help: the "mic" line in the chat topic says the box turns blue and shows Listening…, and what you said lands in the box to check.
+- Checked at 390x844 and 1280x800: resting, typing a long sentence (all of it kept), listening, heard words. Tests 915/915, tsc clean,
+  biome no errors.
