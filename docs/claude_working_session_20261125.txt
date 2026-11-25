@@ -1,0 +1,39 @@
+Working session 2026-11-25
+
+## Chat screen "jammed up" (owner screenshots: the lunch question card, "3 things need you", badge said 4)
+Reproduced locally: on a phone the conversation got about 35% of the screen. The lunch card had its own mic, its own text box and
+send, a "Same as yesterday" row, two buttons and a footnote, all above the real message box; the docked notice stayed until acted on.
+
+What changed (apps/mobile/src/meal-checkins-ui.tsx, chat.tsx, update-toasts.tsx, heads-ups-ui.tsx; apps/server/src/meal-checkins.ts):
+- The meal check-in is one 52px line: fork icon, the question (short form "What was lunch?" where room is tight), Answer, and a chevron.
+  Answer starts the message box's own dictation inside the tap with "Log my lunch: " already in the box (the keyboard stays down);
+  without speech input it puts the cursor there. One place to type or talk. While it listens, a "Listening for lunch…" line with Stop
+  takes the line's place; the strip comes back if the words are cleared, or once the reply to the sent answer is in (60 s fallback).
+  Send stays off while the box holds only "Log my lunch:". The untouched prefix is cleared on blur (not when focus only moved to the mic
+  or Stop) and when listening ends with no words. A refused microphone keeps the words, focuses the box, and says
+  "Allow microphone access… Or type your answer here." in its own notice (mic errors no longer show the reply's "Retry response").
+- Quick answers (Same again / Skipped / Later): on a phone they open ABOVE the line, so the line never moves under a thumb, one row,
+  44px; at 600px+ they sit in the line itself (one tap). Screen-reader names start with the visible words ("Later: ask again in an hour").
+  "Yesterday: …" line shows only on windows 760px+ tall. Beside a heads-up the line takes the card colour so the heads-up keeps the tint.
+- The "N things need you" / update notice in the chat folds on the person's next action instead of staying (or an 8 s timer, which was
+  tried and rejected: it moved the conversation under a thumb and could pull the notice away from a screen reader): sending, talking
+  (voice mode, a spoken send, the call button), Answer or the chevron, a finger lifted after dragging the list, or the wheel at rest
+  (only when the list can scroll). Reminders and a finished handed-off job still stay. Outside the chat, updates float and slide away as before.
+- Counts: the notice's number is the badge's (waitingOnYou), and "See them" goes to Home's Needs you list; "1 thing still needs you"
+  when several came in and one still waits. ✕ for these says "Close. They’re still under Needs you on Home." Curly apostrophes throughout.
+- New chat tool skip_meal_checkin (meal, skipped|later) so "I skipped lunch" / "ask me about lunch later" work by voice; Later is always
+  an hour and the time comes back already in the person's clock.
+- Heads-up stack lost its extra 12px bottom margin (gaps are an even 10).
+Measured (Playwright, mocked lunch + breakfast check-ins and 3 waiting jobs): 390x844 answer area ~35% before; ~58% with the notice,
+~65% after it folds; 1280x800 and 1100x640 checked, 1913x911 with a heads-up, dark mode, touch drag (notice stays while the finger is
+down, folds after), wheel, pretend microphone (listening, heard), refused microphone.
+
+Design division: visual, usability and copy reviewers, four rounds (visual 3 + a check of the listening line, usability 4, copy 3); all
+three signed off. Notes left for later (not blocking): the wave icon could follow the mic level; the composer could show a stronger
+listening state and move its buttons below long text (both are the existing composer, not this change).
+
+Help: "Ask me what I ate" topic rewritten around the line, with a new picture (mealcheckin, marks 1 Answer, 2 the arrow), and
+"I skipped lunch." / "Ask me about lunch later." as things to say; the "updates" topic's notice paragraph rewritten. headsups picture
+retaken (spacing). Website: nothing on neddy.html, pricing or compare shows the check-in or the notice, so no change.
+Tests: pnpm test 915/915; biome: no errors (63 warnings, same as before); mobile and server tsc clean.
+Commit: local only, waiting for "push it" (check Railway for a live call first).

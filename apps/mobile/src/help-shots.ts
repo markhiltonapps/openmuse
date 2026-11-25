@@ -26,6 +26,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   home: { width: 720, height: 1558 },
   job: { width: 720, height: 1558 },
   location: { width: 720, height: 2769 },
+  mealcheckin: { width: 720, height: 1558 },
   meetingmp3: { width: 720, height: 1558 },
   meetings: { width: 720, height: 1558 },
   meetingtranscript: { width: 720, height: 1558 },

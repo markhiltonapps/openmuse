@@ -936,7 +936,7 @@ export function HeadsUpCards({ replying, active }: { replying?: boolean; active?
     <>
       <StatusLine text={said} />
       {state && items.length > 0 && (
-        <View style={{ flexShrink: 1, minHeight: 0, marginBottom: 12 }}>
+        <View style={{ flexShrink: 1, minHeight: 0 }}>
           <View style={{ flexShrink: 1, minHeight: 0 }}>
             <ScrollView
               ref={scroller}

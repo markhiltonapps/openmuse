@@ -279,6 +279,22 @@ export class MealCheckIns {
     );
     return { remindAt };
   }
+  /** Today's check-in for a meal that's still waiting (asked, or put off), if there is one. */
+  async waiting(owner: string, meal: Meal) {
+    const today = localDay(this.now(), await this.timeZone(owner));
+    const checkIn = await this.db.get<CheckIn>(owner, "meal-checkins", `${today}:${meal}`);
+    return checkIn && (checkIn.status === "open" || checkIn.status === "snoozed")
+      ? checkIn
+      : undefined;
+  }
+  /** A time as the person's own clock shows it ("1:30 PM"), so the agent never converts one. */
+  async clock(owner: string, iso: string) {
+    return new Date(iso).toLocaleTimeString("en-US", {
+      timeZone: await this.timeZone(owner),
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
   /** Logs the same meal as the day before, as a new entry. */
   async sameAsYesterday(owner: string, id: string) {
     const checkIn = await this.get(owner, id);
@@ -316,7 +332,7 @@ export class MealCheckIns {
 }
 
 export const checkInInstructions =
-  " When the person wants to be asked what they ate (a few times a day, at meals), use set_meal_checkins, not a routine: the app asks at each meal time and they answer by voice or text from a card in chat. When a message says “Log my breakfast/lunch/dinner: …”, log it with log_meal and that meal type, then reply in one short line with the estimate.";
+  " When the person wants to be asked what they ate (a few times a day, at meals), use set_meal_checkins, not a routine: the app asks at each meal time and they answer by voice or text from a card in chat. When a message says “Log my breakfast/lunch/dinner: …”, log it with log_meal and that meal type, then reply in one short line with the estimate. When they say they skipped a meal or want to be asked about it later, use skip_meal_checkin.";
 
 export function checkInToolSpecs(checkIns: MealCheckIns, owner: string) {
   return [
@@ -347,6 +363,30 @@ export function checkInToolSpecs(checkIns: MealCheckIns, owner: string) {
           meals: settings.meals,
           days: settings.days,
           next: 'Confirm the times in plain words (for example 8:30 am, 12:30 pm and 6:30 pm). Tell them the questions show up as a notification and as a card just above the chat box, and everything they log is in Spaces › Health (Food log shows every meal; Overview has the charts), and they can change the meals and times in Spaces › Health › Playbook, under "Ask me what I ate".',
+        };
+      },
+    },
+    {
+      name: "skip_meal_checkin",
+      description:
+        "The person answers today's meal question without a meal to log: they skipped it (“I skipped lunch”, “no breakfast today”), or want to be asked again later (“ask me about lunch later”). Later is always one hour from now; it can't pick another time, so say the time it returns. Clears today's question for that meal. To log what they ate, use log_meal instead.",
+      parameters: z.object({
+        meal: z.enum(MEALS),
+        action: z.enum(["skipped", "later"]).describe("skipped, or ask again in an hour"),
+      }),
+      execute: async (input: { meal: Meal; action: "skipped" | "later" }) => {
+        const checkIn = await checkIns.waiting(owner, input.meal);
+        if (!checkIn)
+          return { done: false, note: `There's no ${input.meal} question waiting today.` };
+        if (input.action === "skipped") {
+          await checkIns.skip(owner, checkIn.id);
+          return { done: true, note: `No ${input.meal} logged today; the question is cleared.` };
+        }
+        const { remindAt } = await checkIns.snooze(owner, checkIn.id);
+        return {
+          done: true,
+          askAgainAt: await checkIns.clock(owner, remindAt),
+          note: "askAgainAt is already their own clock time; say it as is.",
         };
       },
     },

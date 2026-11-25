@@ -92,7 +92,7 @@ import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { tipProps } from "./tips";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
-import { noteTyping } from "./update-toasts";
+import { foldNotice, noteTyping } from "./update-toasts";
 import { chooseAndUpload, uploadToFiles } from "./upload";
 import {
   primeSpeech,
@@ -593,16 +593,28 @@ export function ChatScreen({
   const renderToolCall = useRenderToolCall();
   const [draft, setDraft] = useState(takeSharedText);
   const [listening, setListening] = useState(false);
+  /** What went wrong with the microphone: shown on its own, without the reply's Retry. */
+  const [micError, setMicError] = useState("");
+  const micButton = useRef<View>(null);
+  const dictating = useRef(false);
+  dictating.current = listening;
   const stopListening = useRef<() => void>(undefined);
   const toggleDictation = () => {
     if (listening) return stopListening.current?.();
     setListening(true);
+    setMicError("");
     clearSilence();
     stopListening.current = dictate(
       (text) => setDraft((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text)),
       (message) => {
         setListening(false);
-        if (message) setError(message);
+        const answeringMeal = !!answeringNow.current && !answeringNow.current.sent;
+        if (message) setMicError(answeringMeal ? `${message} Or type your answer here.` : message);
+        // Answering a meal question and the microphone isn't allowed: type it instead.
+        if (message && answeringMeal) {
+          keepAnswer.current = true;
+          setTimeout(() => input.current?.focus(), 0);
+        }
       },
       voiceSettings().microphone,
       reportSilence,
@@ -715,9 +727,23 @@ export function ChatScreen({
     stopListening.current?.();
     voiceModeRef.current = true;
     setVoiceMode(true);
+    foldNotice();
     listenForTurn();
   };
   const [focused, setFocused] = useState(false);
+  /**
+   * The meal question being answered in the message box ("Log my lunch: "), so its strip steps
+   * aside while they say or type it, and until the reply to what they sent is in.
+   */
+  const [answering, setAnswering] = useState<{ prefix: string; meal: string; sent?: boolean }>();
+  /** A drag on the message list (touch), and the wheel coming to rest: see the list's handlers. */
+  const dragged = useRef(false);
+  const wheelRest = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(wheelRest.current), []);
+  const answeringNow = useRef(answering);
+  answeringNow.current = answering;
+  /** Listening failed while answering: the words stay for typing. */
+  const keepAnswer = useRef(false);
   const [inputHeight, setInputHeight] = useState(44);
   const [composerWidth, setComposerWidth] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -1062,7 +1088,9 @@ export function ChatScreen({
     [queue, flush],
   );
   sendSpoken.current = (text) => {
-    if (loaded && isReady) enqueue(text);
+    if (!loaded || !isReady) return;
+    foldNotice();
+    enqueue(text);
   };
   // Live voice calls go into the main chat once they're over, so they stay with the rest of the
   // conversation (and the agent sees them next time). The server adds each one only once.
@@ -1191,6 +1219,8 @@ export function ChatScreen({
   /** Sends the draft, or a quick-action prompt that goes with the current attachments. */
   function send(prompt?: string) {
     const text = (prompt ?? draft).trim();
+    // Only "Log my lunch:", nothing said or typed yet: there's no answer to send.
+    if (answering && !answering.sent && text === answering.prefix.trim()) return;
     // A picture still being added would otherwise go without the message.
     if (!text || !isReady || !loaded || pasting > 0) return;
     primeSpeech();
@@ -1199,6 +1229,10 @@ export function ChatScreen({
     if (!busy && !agent.isRunning && !saveError && !queue.getSnapshot().pending.length)
       queue.resume();
     setShowResults(false);
+    setMicError("");
+    foldNotice();
+    if (answering && text.startsWith(answering.prefix.trim()))
+      setAnswering({ ...answering, sent: true });
     const files = w.files.filter((f) => attachments.includes(f.id));
     enqueue(
       text +
@@ -1221,6 +1255,60 @@ export function ChatScreen({
   // the replay doesn't count as the agent replying.
   const showingCopy = richThreads && selection.existing && !historyDone;
   const replying = busy || (agent.isRunning && !showingCopy);
+  // The meal question comes back if they cleared the words, or once the reply to their answer is
+  // in (the server closes it when the meal is logged; if it wasn't, it asks again).
+  const answerReplying = useRef(false);
+  useEffect(() => {
+    if (!answering) return;
+    if (answering.sent) {
+      if (answerReplying.current && !replying) setAnswering(undefined);
+      answerReplying.current = replying;
+      return;
+    }
+    if (!listening && !draft.startsWith(answering.prefix.trim())) setAnswering(undefined);
+  }, [answering, replying, listening, draft]);
+  // A sent answer whose reply never started (offline) doesn't hide the question for long.
+  useEffect(() => {
+    if (!answering?.sent) return;
+    const timer = setTimeout(() => setAnswering(undefined), 60_000);
+    return () => clearTimeout(timer);
+  }, [answering?.sent]);
+  // Listening ended without a word: the box doesn't keep only the "Log my lunch:" part.
+  const wasListening = useRef(false);
+  useEffect(() => {
+    const failed = keepAnswer.current;
+    keepAnswer.current = false;
+    if (wasListening.current && !listening && !failed && answering && !answering.sent && !focused)
+      setDraft((typed) => (typed.trim() === answering.prefix.trim() ? "" : typed));
+    wasListening.current = listening;
+  }, [listening, answering, focused]);
+  /** The meal question's Answer: say it into the message box (or type, without a microphone). */
+  const answerCheckIn = (prefix: string) => {
+    foldNotice();
+    setAnswering({ prefix, meal: /^Log my (\w+)/.exec(prefix)?.[1] ?? "meal" });
+    setDraft((typed) =>
+      !typed.trim()
+        ? prefix
+        : typed.includes(prefix.trim())
+          ? typed
+          : `${typed.trimEnd()}\n${prefix}`,
+    );
+    // Listening starts inside the tap (browsers want that); the keyboard stays down until they
+    // tap the box.
+    const meal = /^Log my (\w+)/.exec(prefix)?.[1] ?? "meal";
+    // Already listening: the words join what's being said, and the keyboard stays down.
+    if (listening) return;
+    if (dictationAvailable() && !voiceMode) {
+      toggleDictation();
+      // The Answer button goes with its line: focus moves to the mic, which now stops listening.
+      setAnnounce(`Listening. Say what you had for ${meal}, then tap send.`);
+      setTimeout(() => {
+        // Only while it's still listening: a refused microphone has already put them in the box.
+        if (dictating.current && typeof document !== "undefined")
+          document.getElementById("answer-stop")?.focus();
+      }, 60);
+    } else setTimeout(() => input.current?.focus(), 0);
+  };
   const receipts = useReceipts(api, threadId, richThreads && !showingCopy, replying);
   const isMainChat = richThreads && selection.id === mainId;
   const current = showingCopy ? cached : messages;
@@ -1478,8 +1566,15 @@ export function ChatScreen({
     speechAvailable() &&
     !draft.trim() &&
     (live === "off" || live === "setup" || voiceMode);
+  // While a meal question is being answered by voice the mic stays, to stop or try again (with
+  // live talk on, the headset usually takes its place).
   const showMic =
-    dictationAvailable() && !replying && !voiceMode && (live === "off" || live === "setup");
+    dictationAvailable() &&
+    !voiceMode &&
+    ((!replying && (live === "off" || live === "setup")) || listening || !!answering);
+  /** The box holds only "Log my lunch:" so far: Send waits for the answer itself. */
+  const onlyPrefix = !!answering && !answering.sent && draft.trim() === answering.prefix.trim();
+  const canSend = !!draft.trim() && !onlyPrefix;
   const buttonsWide =
     44 * 2 + (showHeadset ? 44 : 0) + (showWaves ? 44 : 0) + (showMic ? 88 : 0) + 7 * 3;
   const narrow = composerWidth > 0 && composerWidth < buttonsWide + 140;
@@ -1517,6 +1612,18 @@ export function ChatScreen({
       onBlur={() => {
         setFocused(false);
         setBoxFocused(false);
+        // Answer was tapped and then nothing was added: the words go, rather than wait to be glued
+        // onto their next message. Not when focus only moved to the mic (to say it after all).
+        if (!answering || answering.sent) return;
+        const prefix = answering.prefix.trim();
+        setTimeout(() => {
+          if (dictating.current || typeof document === "undefined") return;
+          const box = input.current as unknown as HTMLElement | null;
+          const mic = micButton.current as unknown as HTMLElement | null;
+          const stop = document.getElementById("answer-stop");
+          if ([box, mic, stop].includes(document.activeElement as HTMLElement | null)) return;
+          setDraft((typed) => (typed.trim() === prefix ? "" : typed));
+        }, 250);
       }}
       style={{
         ...(narrow ? { alignSelf: "stretch", paddingHorizontal: 10 } : { flex: 1 }),
@@ -1555,6 +1662,28 @@ export function ChatScreen({
     <View style={{ flex: 1 }}>
       <ScrollView
         ref={list}
+        // Scrolling the conversation is their own action: a notice under the header folds once
+        // it's over (a finger lifted after a drag, the wheel at rest), never under a finger that's
+        // still down. React Native Web passes on only touch and wheel events, not drag ones.
+        onTouchMove={() => {
+          dragged.current = true;
+        }}
+        onTouchEnd={() => {
+          if (dragged.current) foldNotice();
+          dragged.current = false;
+        }}
+        onScrollEndDrag={Platform.OS === "web" ? undefined : foldNotice}
+        {...(Platform.OS === "web"
+          ? {
+              onWheel: (event: { currentTarget: HTMLElement }) => {
+                // A conversation too short to scroll doesn't move: nothing to fold for.
+                const box = event.currentTarget;
+                if (box.scrollHeight <= box.clientHeight + 1) return;
+                clearTimeout(wheelRest.current);
+                wheelRest.current = setTimeout(foldNotice, 300);
+              },
+            }
+          : {})}
         showsVerticalScrollIndicator={false}
         // The messages give way first when the attach panel needs room on a short window.
         style={{ flexShrink: 100, minHeight: 0 }}
@@ -1902,6 +2031,50 @@ export function ChatScreen({
             of the window (a short window once lost the message box under the bottom bar to the
             dinner question and the attach panel together). The dinner question also waits while a
             heads-up shows on a short window. They come back when the panel closes or it's cleared. */}
+        {/* Where the meal question was, while its answer is being heard: they see it's listening. */}
+        {!!answering && !answering.sent && listening && !voiceMode && (
+          <View
+            style={[
+              s.row,
+              {
+                gap: 10,
+                minHeight: 52,
+                marginBottom: 10,
+                paddingLeft: 16,
+                paddingRight: 8,
+                borderRadius: 23,
+                backgroundColor: colors.sky,
+                borderWidth: 1,
+                borderColor: colors.blue,
+              },
+            ]}
+          >
+            <AudioLines size={17} color={colors.blueDark} />
+            <Text numberOfLines={1} style={[s.heading, { flex: 1, fontSize: 15 }]}>
+              {`Listening for ${answering.meal}…`}
+            </Text>
+            <Button
+              small
+              nativeID="answer-stop"
+              icon={Square}
+              style={{
+                minHeight: 44,
+                backgroundColor: colors.card,
+                borderWidth: 1.5,
+                borderColor: colors.blueDark,
+              }}
+              accessibilityLabel="Stop listening"
+              onPress={() => stopListening.current?.()}
+            >
+              Stop
+            </Button>
+          </View>
+        )}
+        {!!micError && (
+          <View style={{ marginBottom: 10 }}>
+            <ErrorNotice error={micError} />
+          </View>
+        )}
         {!voiceMode && !picking && <HeadsUpCards replying={replying} active={active} />}
         {!voiceMode && !picking && !(headsUpShowing && windowHeight < 900) && (
           <ScrollView
@@ -1913,7 +2086,14 @@ export function ChatScreen({
             }}
             keyboardShouldPersistTaps="handled"
           >
-            <MealCheckInCard replying={replying} active={active} />
+            <MealCheckInCard
+              replying={replying}
+              active={active}
+              hidden={!!answering}
+              quiet={headsUpShowing}
+              onAnswer={answerCheckIn}
+              onDone={() => input.current?.focus()}
+            />
           </ScrollView>
         )}
         {picking && (
@@ -2164,6 +2344,7 @@ export function ChatScreen({
                 accessibilityLabel={headsetLabel}
                 {...tipProps(headsetLabel)}
                 onPress={() => {
+                  foldNotice();
                   // A call that just ended: talk again (the call screen starts one when idle).
                   if (call.phase === "over") call.dismiss();
                   call.expand();
@@ -2218,6 +2399,7 @@ export function ChatScreen({
                 style={{ flexDirection: "row", borderRadius: 22, backgroundColor: colors.subtle }}
               >
                 <Pressable
+                  ref={micButton}
                   accessibilityRole="button"
                   accessibilityLabel={listening ? "Stop voice input" : "Speak a message"}
                   {...tipProps(
@@ -2249,13 +2431,13 @@ export function ChatScreen({
               accessibilityRole="button"
               accessibilityLabel={replying ? "Stop reply" : "Send message"}
               {...tipProps(replying ? "Stop reply" : "Send message", {}, { hold: false })}
-              disabled={!replying && (!draft.trim() || !loaded || !isReady || pasting > 0)}
+              disabled={!replying && (!canSend || !loaded || !isReady || pasting > 0)}
               onPress={replying ? () => void stop() : () => send()}
               style={({ pressed }) => ({
                 width: 44,
                 height: 44,
                 borderRadius: 24,
-                backgroundColor: replying || draft.trim() ? colors.blue : colors.subtle,
+                backgroundColor: replying || canSend ? colors.blue : colors.subtle,
                 alignItems: "center",
                 justifyContent: "center",
                 transform: [{ scale: pressed ? 0.94 : 1 }],
@@ -2264,11 +2446,7 @@ export function ChatScreen({
               {replying ? (
                 <Square size={18} fill={colors.text} strokeWidth={0} />
               ) : (
-                <ArrowUp
-                  size={25}
-                  strokeWidth={1.8}
-                  color={draft.trim() ? colors.text : colors.muted}
-                />
+                <ArrowUp size={25} strokeWidth={1.8} color={canSend ? colors.text : colors.muted} />
               )}
             </Pressable>
           </View>

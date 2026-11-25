@@ -809,3 +809,12 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   reminder is set for the return date: it fires days earlier and may not exist; build the sentence from the real `reminderAt`.
   Copy that promises a voice command ("say stop auto-filing") needs a tool action behind it. Review rounds found all of these: send the
   reviewers the code and the screenshots.
+
+- **Above the composer is one quiet line (owner, 2026-11-25: "the screen looks so damn jammed up"):** a question there (meal
+  check-in) is a 52px line whose Answer uses the real message box (its dictation starts inside the tap, with "Log my lunch: " in it),
+  never a second text box and mic. Extra choices open above the line so its buttons don't move, and sit inline on wide screens. A
+  notice docked under the chat header folds on the person's next action (send, talk, Answer, a finished drag, the wheel at rest), never
+  on a timer: the list moves when it goes, and a timer moves rows under a thumb and pulls text away from a screen reader. React Native
+  Web 0.21's ScrollView never calls onScrollBeginDrag/EndDrag; use onTouchMove + onTouchEnd and onWheel there. A count on a notice is
+  the same number as the badge and the list it opens (`waitingOnYou`). Screen-reader names start with the visible words, so voice
+  control ("tap Later") works. Microphone errors have their own state: the reply's error row comes with "Retry response".

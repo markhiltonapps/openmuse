@@ -2,6 +2,8 @@ import {
   ArrowUp,
   BellRing,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Mic,
   Minus,
@@ -13,7 +15,14 @@ import {
   Utensils,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useAgentWorkspace } from "./agent-workspace";
 import { Button, Card, CheckRow, colors, ErrorNotice, Field, Sheet, s } from "./ui";
 import { voiceSettings } from "./voice";
@@ -28,6 +37,7 @@ const changed = () => {
 
 import { showSpace } from "./space-view";
 import { tipProps } from "./tips";
+import { foldNotice } from "./update-toasts";
 import { useWorkspace } from "./workspace";
 
 type Meal = "breakfast" | "lunch" | "dinner";
@@ -332,14 +342,38 @@ export function SayOrType({
 }
 
 /**
- * "What did you have for lunch?" just above the chat box, ready to answer by voice or text, until
- * it's answered, skipped or put off.
+ * "What did you have for lunch?" as one slim line just above the chat box, until it's answered,
+ * skipped or put off. Answer starts listening in the message box with "Log my lunch: " already in
+ * it (or puts the cursor there, without a microphone), so there's only one place to type or talk;
+ * logging the meal in chat closes the check-in on the server. The quick answers (same as
+ * yesterday, skipped, later) sit in the line on a wide screen and open above it on a phone, so the
+ * line itself never moves under a thumb.
  */
-export function MealCheckInCard({ replying, active }: { replying?: boolean; active?: boolean }) {
-  const { api, ask, notify } = useWorkspace();
+export function MealCheckInCard({
+  replying,
+  active,
+  hidden,
+  quiet,
+  onAnswer,
+  onDone,
+}: {
+  replying?: boolean;
+  active?: boolean;
+  /** Being answered in the message box right now. */
+  hidden?: boolean;
+  /** A heads-up is showing above it: it keeps the colour, this steps back. */
+  quiet?: boolean;
+  onAnswer: (prefix: string) => void;
+  /** After a quick answer the line goes: keyboard focus goes back to the message box. */
+  onDone: () => void;
+}) {
+  const { height: windowHeight } = useWindowDimensions();
+  const { api, notify } = useWorkspace();
   const { state, load } = useCheckIns();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState("");
+  const [more, setMore] = useState(false);
+  const [width, setWidth] = useState(0);
   // A meal logged in chat (a photo, "had soup for lunch") answers its check-in on the server.
   const wasReplying = useRef(false);
   // Chats stay open in the background; one coming back into view checks again.
@@ -351,8 +385,14 @@ export function MealCheckInCard({ replying, active }: { replying?: boolean; acti
     wasReplying.current = !!replying;
   }, [replying, load]);
   const checkIn = state?.open[0];
-  if (!checkIn) return null;
-  const others = state.open.slice(1).map((c) => MEAL_NAMES[c.meal]?.toLowerCase());
+  // A different question starts folded.
+  const id = checkIn?.id;
+  useEffect(() => {
+    void id;
+    setMore(false);
+    setError("");
+  }, [id]);
+  if (!checkIn || hidden) return null;
   const meal = MEAL_NAMES[checkIn.meal]?.toLowerCase() ?? "meal";
   async function run(kind: string, path: string, done: (result: never) => string) {
     if (!checkIn) return;
@@ -363,129 +403,180 @@ export function MealCheckInCard({ replying, active }: { replying?: boolean; acti
       notify(done(result));
       changed();
       await load();
+      // The line goes away with the question: keyboard focus goes to the message box.
+      onDone();
     } catch (e) {
       setError(message(e));
     } finally {
       setBusy(undefined);
     }
   }
-  async function answer(text: string) {
-    if (!checkIn) return;
-    setError("");
-    // The words go to the agent first, so nothing said is lost; logging the meal also closes it.
-    ask(`Log my ${meal}: ${text}`);
-    await api
-      .request(`/api/meal-checkins/${checkIn.id}/answer`, {})
-      .catch(() => undefined)
-      .then(changed);
-  }
   const yesterday = checkIn.yesterday;
+  const yesterdayWords = yesterday
+    ? `${yesterday.title}${yesterday.calories === undefined ? "" : ` · ${kcal(yesterday.calories)}`}`
+    : "";
+  // Spoken names contain the visible words ("tap Later" by voice control works) and no "·".
+  const yesterdaySaid = yesterday
+    ? `${yesterday.title}${yesterday.calories === undefined ? "" : `, ${kcal(yesterday.calories)}`}`
+    : "";
+  // Measured, not the window: the chat column is capped at 760px.
+  const wide = width >= 600;
+  const tiny = width > 0 && width < 420;
+  const question =
+    // The short form where room is tight: a phone, or the line with its choices beside it.
+    (tiny || wide || quiet) && checkIn.question === `What did you have for ${meal}?`
+      ? `What was ${meal}?`
+      : checkIn.question;
+  const canSay = dictationAvailable();
+  const target = { minHeight: 44 } as const;
+  const chip = {
+    ...target,
+    backgroundColor: colors.card,
+    // An edge keeps each one a button, on the tint, on the card colour and in the dark alike.
+    borderWidth: 1,
+    borderColor: colors.edge,
+    ...(wide ? {} : { flex: 1, flexBasis: 0, paddingHorizontal: 8 }),
+  } as const;
+  const choices = [
+    yesterday && (
+      <Button
+        key="same"
+        small
+        icon={tiny ? undefined : Repeat}
+        busy={busy === "same"}
+        disabled={!!busy}
+        style={chip}
+        accessibilityLabel={`Same again: same as yesterday, ${yesterdaySaid}`}
+        {...tipProps(`Same again: same as yesterday, ${yesterdaySaid}`)}
+        onPress={() =>
+          void run("same", "same", () => `Logged ${yesterday.title} for ${meal} again.`)
+        }
+      >
+        Same again
+      </Button>
+    ),
+    <Button
+      key="skip"
+      small
+      icon={tiny ? undefined : SkipForward}
+      busy={busy === "skip"}
+      disabled={!!busy}
+      style={chip}
+      accessibilityLabel="Skipped"
+      onPress={() => void run("skip", "skip", () => `Okay, no ${meal} logged today.`)}
+    >
+      Skipped
+    </Button>,
+    <Button
+      key="later"
+      small
+      icon={tiny ? undefined : Clock}
+      busy={busy === "snooze"}
+      disabled={!!busy}
+      style={chip}
+      accessibilityLabel="Later: ask again in an hour"
+      {...tipProps("Later: ask again in an hour")}
+      onPress={() =>
+        void run(
+          "snooze",
+          "snooze",
+          (result: { remindAt: string }) =>
+            `I’ll ask again at ${new Date(result.remindAt).toLocaleTimeString(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+            })}.`,
+        )
+      }
+    >
+      Later
+    </Button>,
+  ].filter(Boolean);
+  const choiceNames = [yesterday && "Same again", "Skipped", "Later"].filter(Boolean).join(", ");
   return (
     <View
-      accessibilityRole="summary"
+      role="group"
+      aria-label={`${MEAL_NAMES[checkIn.meal] ?? "Meal"} check-in`}
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={{
-        gap: 12,
-        marginBottom: 12,
-        padding: 16,
+        marginBottom: 10,
         borderRadius: 23,
-        backgroundColor: colors.sky,
+        backgroundColor: quiet ? colors.card : colors.sky,
         borderWidth: 1,
         borderColor: colors.blue,
       }}
     >
-      <View style={[s.row, { gap: 10 }]}>
-        <Utensils size={18} color={colors.blueDark} />
-        <Text accessibilityRole="header" style={[s.heading, { flex: 1, fontSize: 17 }]}>
-          {checkIn.question}
-        </Text>
-      </View>
-      <SayOrType
-        inline
-        placeholder={`What you had for ${meal}`}
-        action={`Log ${meal}`}
-        onSubmit={(text) => void answer(text)}
-      />
-      {yesterday && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Same as yesterday: ${yesterday.title}`}
-          disabled={!!busy}
-          onPress={() =>
-            void run("same", "same", () => `Logged ${yesterday.title} for ${meal} again.`)
-          }
-          style={({ pressed }) => [
-            s.row,
-            {
-              gap: 10,
-              minHeight: 44,
-              paddingHorizontal: 14,
-              borderRadius: 22,
-              backgroundColor: pressed ? colors.blue : colors.card,
-              opacity: busy && busy !== "same" ? 0.5 : 1,
-            },
-          ]}
-        >
-          {busy === "same" ? (
-            <ActivityIndicator color={colors.text} size="small" />
-          ) : (
-            <Repeat size={15} color={colors.text} />
+      {/* Above the line, so opening them never moves the line's own buttons. */}
+      {more && !wide && (
+        <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: 10 }}>
+          {/* Only with room: the words are in Same again's own name and tip too. */}
+          {!!yesterday && windowHeight >= 760 && (
+            <Text style={{ color: colors.mutedStrong, fontSize: 12, lineHeight: 17 }}>
+              {`Yesterday: ${yesterdayWords}`}
+            </Text>
           )}
-          <View style={{ flex: 1, paddingVertical: 6 }}>
-            <Text style={[s.buttonText, { color: colors.text }]}>Same as yesterday</Text>
-            <View style={s.row}>
-              <Text
-                numberOfLines={1}
-                style={[s.small, { flexShrink: 1, color: colors.mutedStrong }]}
-              >
-                {yesterday.title}
-              </Text>
-              {yesterday.calories !== undefined && (
-                <Text style={[s.small, { flexShrink: 0, color: colors.mutedStrong }]}>
-                  {` · ${kcal(yesterday.calories)}`}
-                </Text>
-              )}
-            </View>
-          </View>
-        </Pressable>
+          <View style={[s.row, { gap: 6, flexWrap: "nowrap" }]}>{choices}</View>
+        </View>
       )}
-      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-        <Button
-          small
-          icon={SkipForward}
-          busy={busy === "skip"}
-          disabled={!!busy}
-          style={{ backgroundColor: colors.card }}
-          onPress={() => void run("skip", "skip", () => `Okay, no ${meal} logged today.`)}
-        >
-          Skipped it
-        </Button>
-        <Button
-          small
-          icon={Clock}
-          busy={busy === "snooze"}
-          disabled={!!busy}
-          style={{ backgroundColor: colors.card }}
-          onPress={() =>
-            void run(
-              "snooze",
-              "snooze",
-              (result: { remindAt: string }) =>
-                `I’ll ask again at ${new Date(result.remindAt).toLocaleTimeString(undefined, {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}.`,
-            )
-          }
-        >
-          Ask in an hour
-        </Button>
-      </View>
-      {others.length > 0 && (
-        <Text style={[s.small, { color: colors.mutedStrong }]}>
-          Then {others.join(" and ")}, which you haven’t logged yet.
+      <View style={[s.row, { gap: 10, minHeight: 52, paddingLeft: 16, paddingRight: 4 }]}>
+        <Utensils size={17} color={colors.blueDark} />
+        <Text numberOfLines={1} style={[s.heading, { flex: 1, fontSize: 15, lineHeight: 20 }]}>
+          {question}
         </Text>
+        {wide && <View style={[s.row, { gap: 6 }]}>{choices}</View>}
+        <Button
+          small
+          icon={canSay ? Mic : undefined}
+          style={{
+            ...target,
+            backgroundColor: colors.card,
+            // The main thing to do: a firmer outline than the quick answers beside it.
+            borderWidth: 1.5,
+            borderColor: colors.blueDark,
+          }}
+          accessibilityLabel={`${canSay ? "Answer by voice" : "Answer"} in the message box: ${
+            checkIn.question
+          }`}
+          onPress={() => {
+            setMore(false);
+            onAnswer(`Log my ${meal}: `);
+          }}
+        >
+          Answer
+        </Button>
+        {wide ? (
+          <View style={{ width: 6 }} />
+        ) : (
+          <Pressable
+            role="button"
+            aria-expanded={more}
+            aria-label={`More choices: ${choiceNames}`}
+            {...tipProps("More choices")}
+            onPress={() => {
+              foldNotice();
+              setMore(!more);
+            }}
+            style={({ pressed }) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? colors.blue : "transparent",
+            })}
+          >
+            {more ? (
+              <ChevronDown size={18} color={colors.mutedStrong} />
+            ) : (
+              <ChevronUp size={18} color={colors.mutedStrong} />
+            )}
+          </Pressable>
+        )}
+      </View>
+      {!!error && (
+        <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
+          <ErrorNotice error={error} />
+        </View>
       )}
-      <ErrorNotice error={error} />
     </View>
   );
 }

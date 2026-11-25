@@ -262,6 +262,12 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
       },
     });
   });
+  // Meal check-ins: whatever the sample has, except in the picture of one (state.mealCheckIns).
+  await page.route(/\/api\/meal-checkins$/, async (route) => {
+    if (!state.mealCheckIns || route.request().method() !== "GET") return route.fallback();
+    const real = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...real, open: state.mealCheckIns } });
+  });
   await page.route(/\/api\/weather/, (route) => route.fulfill({ json: weather() }));
   await page.route(/\/api\/voice\/live$/, (route) =>
     route.request().method() === "GET"
@@ -753,6 +759,34 @@ const SHOTS = [
       3: { find: (p) => button(p, /^Later$/), side: "top-right" },
       4: { find: (p) => button(p, "Ask for a later start"), side: "inside-right" },
       5: { find: (p) => button(p, "Stop these heads-ups"), side: "left" },
+    },
+  },
+  {
+    // Lunch asked and not answered yet, with its quick answers open above the line.
+    id: "mealcheckin",
+    go: async (p, state) => {
+      const at = (minutes) => new Date(Date.now() + minutes * 60_000).toISOString();
+      const day = new Date().toLocaleDateString("en-CA");
+      state.mealCheckIns = [
+        {
+          id: `${day}:lunch`,
+          day,
+          meal: "lunch",
+          askedAt: at(-20),
+          question: "What did you have for lunch?",
+          yesterday: { title: "Turkey sandwich and chips", calories: 620 },
+        },
+      ];
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await tab(p, "Chat").click();
+      await p.waitForTimeout(1800);
+      await button(p, /^More choices/).click();
+      await p.waitForTimeout(400);
+    },
+    marks: {
+      1: { find: (p) => button(p, /^Answer/), side: "top-right" },
+      2: { find: (p) => button(p, /^More choices/), side: "top-right" },
     },
   },
   {
