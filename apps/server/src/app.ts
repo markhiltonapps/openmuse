@@ -513,6 +513,8 @@ export async function createApp(
   };
   const emailViews = new EmailViews(db);
   agent.emailViews = emailViews;
+  // Capture everywhere: a booking, delivery, trip or bill in any email Neddy reads is tracked.
+  emailViews.onRead = (owner, emails) => agent.captureFromEmails(owner, emails);
   agent.persona.accountName = async (owner) => (await accounts.get(owner))?.name;
   // Live voice's brain: the same chat agent and tools answer what the voice hands over.
   const canLookUp = config.agentBackend !== "agui";
@@ -606,6 +608,7 @@ export async function createApp(
         agent.notify(owner, title, body, undefined, key, extra),
       onCallMinute: (owner) => urgentAlerts?.checkLeave(owner),
       coach,
+      heard: (owner, words) => agent.commitmentsFromWords(owner, words),
     },
   );
   // Our own voice (apps/voice, Pipecat), side by side with OpenAI's: the same call handling,
@@ -630,6 +633,7 @@ export async function createApp(
           agent.notify(owner, title, body, undefined, key, extra),
         onCallMinute: (owner) => urgentAlerts?.checkLeave(owner),
         coach,
+        heard: (owner, words) => agent.commitmentsFromWords(owner, words),
         socket: voiceComparison.socket(),
         // The audio relay, and the end of their month's minutes.
         extras: async (owner, rehearsing, device) => {

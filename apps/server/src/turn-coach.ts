@@ -9,12 +9,23 @@
  * tools the server really has.
  */
 
-export type Need = "directions" | "places" | "shopping" | "live" | "recommendation" | "correction";
+import { mentionsPlan } from "./commitments.ts";
+
+export type Need =
+  | "directions"
+  | "places"
+  | "shopping"
+  | "live"
+  | "recommendation"
+  | "correction"
+  | "plan";
 
 export interface CoachTools {
   search: boolean;
   directions: boolean;
   nearby: boolean;
+  /** Plans with a time can be tracked (track_commitment). */
+  track?: boolean;
 }
 
 const DIRECTIONS =
@@ -45,6 +56,9 @@ export function needsOf(text: string): Need[] {
   if (RECOMMEND.test(words)) needs.add("recommendation");
   if (LIVE.test(words) && !own) needs.add("live");
   if (CORRECTION.test(words)) needs.add("correction");
+  // A plan they state with a day or time ("I fly to Tokyo on the 3rd"): tracked, so Neddy can
+  // speak up before it (capture everywhere, owner 2026-11-25).
+  if (mentionsPlan(words)) needs.add("plan");
   return [...needs];
 }
 
@@ -89,6 +103,10 @@ export function coachNote(needs: Need[], tools: CoachTools) {
   if (needs.includes("live") && web)
     lines.push(
       "This depends on current, real-world facts (hours, prices, schedules, news): check with search_web or the matching tool before answering, and say what you checked.",
+    );
+  if (needs.includes("plan") && tools.track)
+    lines.push(
+      "They mentioned a plan with a day or time (a trip, booking, appointment, delivery, bill, or something they'll do or are waiting on): call track_commitment for it, in their local date and time, then say in a few words that you'll keep an eye on it. Skip it if it's already in what's coming up.",
     );
   if (needs.some((need) => CHECKED.includes(need)))
     lines.push(

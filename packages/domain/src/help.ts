@@ -712,14 +712,18 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Bookings, trips, deliveries, bills, and things you said you’d do or are waiting on, kept track of for you.",
     place: "plans",
     steps: [
-      "Tell {agent} about something coming up (“I’ll call the dentist Friday”, “the part should come Thursday”), or it notices booking emails when **Email alerts** are on.",
+      "Tell {agent} about something coming up (“I’ll call the dentist Friday”, “we fly to Denver on the 3rd”), in the chat or on a call. It also picks up bookings, deliveries and bills from any email it reads for you, from new mail when **Email alerts** are on, and once from the last 60 days of your Gmail.",
       "See them on the **Feed** and tap **See all plans & bookings**, upcoming and past.",
       "Mark one done or cancelled there, or just say so.",
     ],
     body: [
-      "{agent} tells you about each one by itself: the day before (or that morning), and shortly before for things with a time. A to-do is mentioned an hour before it’s due (8 am for a date alone), and something you’re waiting on is asked about the day after it was expected. For a flight it also tells you when it’s time to head to the airport: about two and a half hours before takeoff, which is the two hours airlines usually want plus your usual travel time. A later email about the same booking, such as the one with your gate, updates it, and the next notice includes the gate. See **When {agent} speaks first** to turn these up, down or off.",
+      "{agent} tells you about each one by itself: the day before (or that morning), and shortly before for things with a time. A to-do is mentioned an hour before it’s due (8 am for a date alone), and something you’re waiting on is asked about the day after it was expected. For a flight it also tells you when it’s time to head to the airport: about two and a half hours before takeoff, which is the two hours airlines usually want plus your usual travel time. A later email about the same booking, such as the one with your gate, updates it, and the next notice includes the gate; the same plan heard twice (said, then in its email) stays one plan. Old bookings that are already past aren’t added. Outlook mail is picked up when {agent} reads it or when Email alerts are on; the 60-day look back is Gmail only for now. See **When {agent} speaks first** to turn these up, down or off.",
     ],
-    say: ["Keep track of my flight on Friday.", "My dentist appointment is cancelled."],
+    say: [
+      "Keep track of my flight on Friday.",
+      "My dentist appointment is cancelled.",
+      { text: "What plans are you keeping an eye on?", send: true },
+    ],
     keywords: ["commitments", "bookings", "trips", "appointments", "deliveries", "coming up"],
     related: ["email-alerts", "feed", "speaks-first"],
   },

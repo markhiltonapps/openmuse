@@ -214,6 +214,8 @@ export function emailsIn(
 
 /** Emails read for the person, so a card in the chat can open one in full over the chat. */
 export class EmailViews {
+  /** Every batch of emails read (chat, jobs, calls): checked for bookings to track (app.ts). */
+  onRead?: (owner: string, emails: Omit<EmailView, "id" | "savedAt">[]) => unknown;
   constructor(
     private readonly db: Store,
     private readonly now: () => number = Date.now,
@@ -241,6 +243,11 @@ export class EmailViews {
       });
     }
     void this.prune(owner).catch(() => undefined);
+    try {
+      this.onRead?.(owner, emails);
+    } catch {
+      // Capturing plans never gets in the way of reading mail.
+    }
     return items;
   }
   async get(owner: string, id: string) {

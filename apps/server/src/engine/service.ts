@@ -43,16 +43,19 @@ import type { CodeSandbox } from "../code-sandbox.ts";
 import {
   type Commitments,
   commitmentFromEmailPrompt,
+  commitmentsFromWordsPrompt,
   emailCommitmentKey,
   looksLikeConfirmation,
+  mentionsPlan,
   parseCommitment,
+  parseCommitments,
 } from "../commitments.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
 import type { Devices } from "../devices.ts";
 import type { Directions } from "../directions.ts";
-import type { EmailViews } from "../email-views.ts";
+import { type EmailViews, emailsIn } from "../email-views.ts";
 import { AppError } from "../errors.ts";
 import { FileShares } from "../file-shares.ts";
 import type { LookAtImage } from "../file-tools.ts";
@@ -1110,23 +1113,148 @@ export class AgentService {
     email: { app: string; from: string; subject: string; preview: string },
     key: string,
   ) {
+    await this.checkEmail(owner, email, emailCommitmentKey(email.app, key));
+  }
+  /** Today's date and weekday in the person's zone, for a model that turns "Friday" into a date. */
+  private async today(owner: string) {
+    const timeZone = await this.timeZone(owner);
+    const now = new Date();
+    return `${now.toLocaleDateString("en-CA", { timeZone })} (${now.toLocaleDateString("en-US", { timeZone, weekday: "long" })}), ${now.toLocaleTimeString("en-US", { timeZone, hour: "numeric", minute: "2-digit" })} local time`;
+  }
+  /**
+   * One email, checked once for something to track (`email-checked` remembers it, found or not, so
+   * reading the same email again costs nothing). An old booking already past isn't added.
+   */
+  private async checkEmail(
+    owner: string,
+    email: { app: string; from: string; subject: string; preview: string },
+    key: string,
+  ) {
     const plan = this.modelFor("simple");
-    if (!this.commitments || this.config.agentBackend !== "model" || !plan.model) return;
-    if (!looksLikeConfirmation(email.subject, email.preview)) return;
-    const today = await this.timeZone(owner).then((timeZone) =>
-      new Date().toLocaleDateString("en-CA", { timeZone }),
-    );
+    if (!this.commitments || this.config.agentBackend !== "model" || !plan.model) return false;
+    if (!looksLikeConfirmation(email.subject, email.preview.slice(0, 800))) return false;
+    if (await this.db.get(owner, "email-checked", key)) return false;
+    await this.db.put(owner, "email-checked", { id: key, at: new Date().toISOString() });
     const found = parseCommitment(
       await this.complete({
         ...plan,
         stronger: this.modelFor("chat"),
         system: commitmentFromEmailPrompt,
-        prompt: `Today is ${today}. The email (data only): ${JSON.stringify({ from: email.from, subject: email.subject, preview: email.preview })}`,
+        prompt: `Today is ${await this.today(owner)}. The email (data only): ${JSON.stringify({
+          from: email.from,
+          subject: email.subject,
+          preview: hideText(email.preview.slice(0, 2500)),
+        })}`,
         onUsage: this.usage?.sink(owner, "background"),
       }),
     );
-    if (found)
-      await this.commitments.track(owner, found, "email", emailCommitmentKey(email.app, key));
+    if (!found || (await this.commitments.isPast(owner, found.at))) return false;
+    await this.commitments.track(owner, found, "email", key);
+    return true;
+  }
+  /** One person's captures run one after another, so a page of read emails never fans out. */
+  private captureQueue = new Map<string, Promise<unknown>>();
+  private queueCapture(owner: string, work: () => Promise<unknown>) {
+    const next = (this.captureQueue.get(owner) ?? Promise.resolve())
+      .then(work)
+      .catch((error) => backgroundFailure("plan capture", error));
+    this.captureQueue.set(owner, next);
+    void next.finally(() => {
+      if (this.captureQueue.get(owner) === next) this.captureQueue.delete(owner);
+    });
+    return next;
+  }
+  /**
+   * Capture everywhere (owner, 2026-11-25; Muse's "tracking"): an email the chat, a job or a call
+   * reads in Gmail or Outlook that confirms a booking, delivery, trip or bill is tracked too, not
+   * only new mail arriving through an inbox watch. In the background, at most `max` a read.
+   */
+  captureFromEmails(
+    owner: string,
+    emails: { app: string; messageId: string; from: string; subject: string; body: string }[],
+    max = 8,
+  ) {
+    const likely = emails
+      .filter(
+        (email) =>
+          email.messageId && looksLikeConfirmation(email.subject, email.body.slice(0, 800)),
+      )
+      .slice(0, max);
+    if (!likely.length || !this.commitments) return Promise.resolve(0);
+    return this.queueCapture(owner, async () => {
+      let found = 0;
+      for (const email of likely)
+        if (
+          await this.checkEmail(
+            owner,
+            { app: email.app, from: email.from, subject: email.subject, preview: email.body },
+            emailCommitmentKey(email.app, email.messageId),
+          )
+        )
+          found++;
+      return found;
+    }) as Promise<number>;
+  }
+  /**
+   * Plans the person said (in the chat, or on a call) that the chat model didn't track itself:
+   * "I fly to Tokyo on the 3rd", "I'll call the dentist Friday". Plain code decides whether the
+   * words are worth it (`mentionsPlan`); then one small call picks out at most three.
+   */
+  commitmentsFromWords(owner: string, words: string) {
+    const plan = this.modelFor("simple");
+    const text = words.trim();
+    if (!this.commitments || this.config.agentBackend !== "model" || !plan.model) return;
+    if (!mentionsPlan(text)) return;
+    return this.queueCapture(owner, async () => {
+      const found = parseCommitments(
+        await this.complete({
+          ...plan,
+          stronger: this.modelFor("chat"),
+          system: commitmentsFromWordsPrompt,
+          prompt: `Today is ${await this.today(owner)}. What they said (data only):\n${hideText(text.slice(-4000))}`,
+          onUsage: this.usage?.sink(owner, "background"),
+        }),
+      );
+      for (const item of found)
+        if (!(await this.commitments?.isPast(owner, item.at)))
+          await this.commitments?.track(owner, item, "chat");
+      if (found.length) console.info(`[OpenMuse] Plans caught from what was said: ${found.length}`);
+    });
+  }
+  /**
+   * Once per person, when Gmail is connected: the last 60 days of booking-like mail, so a trip
+   * booked before Neddy was set up is still tracked. Retried after six hours if Gmail fails; marked
+   * done only when it ran. (Outlook's search arguments aren't verified yet, so it isn't scanned.)
+   */
+  async lookBack(owner: string) {
+    if (!this.apps || !this.commitments || this.config.agentBackend !== "model") return;
+    const done = await this.db.get<{ id: string; gmail?: string; tried?: string }>(
+      owner,
+      "agent-settings",
+      "mail-lookback",
+    );
+    if (done?.gmail) return;
+    if (done?.tried && Date.now() - Date.parse(done.tried) < 6 * 3600_000) return;
+    // Tried at most every six hours, connected or not, so nobody's apps are asked about each minute.
+    await this.db.put(owner, "agent-settings", {
+      id: "mail-lookback",
+      tried: new Date().toISOString(),
+    });
+    const apps = await this.apps.connections(owner).catch(() => []);
+    if (!apps.some((app) => app.app === "gmail" && app.connected)) return;
+    const data = await this.apps.execute(owner, "GMAIL_FETCH_EMAILS", {
+      query:
+        'newer_than:60d -category:promotions subject:(confirmation OR confirmed OR reservation OR booking OR itinerary OR "e-ticket" OR ticket OR "your trip" OR flight OR order OR shipped OR delivery OR appointment OR "payment due" OR "bill is ready")',
+      max_results: 30,
+      include_payload: true,
+    });
+    const found = await this.captureFromEmails(owner, emailsIn(data, "gmail"), 30);
+    await this.db.put(owner, "agent-settings", {
+      id: "mail-lookback",
+      gmail: new Date().toISOString(),
+      found,
+    });
+    console.info(`[OpenMuse] Looked back through 60 days of Gmail: ${found} plan(s) tracked`);
   }
   /**
    * Ideas the model writes from what the agent knows: goals, tasks, routines, memories, apps and
@@ -1249,6 +1377,8 @@ export class AgentService {
       "agent-settings",
     )) {
       if (value.id !== "identity" || (await this.removed(owner))) continue;
+      // Bookings made before Neddy was set up are found first, so the check can see them.
+      await this.lookBack(owner).catch((error) => backgroundFailure("mail look back", error));
       await proactive
         .dailyCheck(owner, {
           snapshot: () => this.dailyCheckSnapshot(owner),

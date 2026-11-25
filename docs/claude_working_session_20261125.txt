@@ -58,3 +58,29 @@ Commit: local only, waiting for "push it" (check Railway for a live call first).
 - Ten ranked builds for Neddy in the report (capture plans from chat, read emails and a 60-day backfill first; a chat-model bake-off
   incl. Haiku 5.5 and Sonnet 5.5; fewer tools per turn; a blind side-by-side against Muse; saved lessons from corrections; ...).
   Nothing built yet: waiting on the owner's pick.
+
+## #1 from the research: capture everywhere (owner: "push it and start #1")
+Pushed e8744ce + aa436c2 first (no live call in Railway's logs).
+Before: plans were only picked up from NEW mail arriving through an inbox watch, or when the chat model chose to call
+track_commitment. An email the person asked about in chat, a plan said in passing or on a call, and bookings made before
+Neddy was set up were never tracked, so nothing could speak up before them (the owner's trip).
+Now (apps/server/src/commitments.ts, engine/service.ts, email-views.ts, apps.ts, engine/conversation.ts, voice-live.ts, turn-coach.ts):
+- Every Gmail/Outlook email the chat, a job or a call hand-off reads goes through EmailViews.onRead → captureFromEmails: only
+  booking-like ones (looksLikeConfirmation), at most 8 a read, one person at a time in a queue, each email checked ONCE
+  (`email-checked`), with the full body (up to 2,500 chars, redacted), so gate and terminal get through. Past bookings aren't added.
+  The tool result tells the agent these are tracked on their own, so it doesn't add them twice.
+- Plans the person says: plain code (`mentionsPlan`: a plan word + a day/time; questions and requests like "schedule…",
+  "can you…" don't count) adds a turn-coach note asking for track_commitment; if the turn ends without track/update_commitment,
+  one small call (`commitmentsFromWordsPrompt`, at most 3 plans) tracks them in the background. Call hand-offs are skipped:
+  at the end of every call (not rehearsals) the person's own words go through the same check.
+- Once per person with Gmail connected: a 60-day look back (GMAIL_FETCH_EMAILS, booking words in the subject, 30 emails),
+  run from the daily-check loop, tried at most every 6 hours, marked done only when it ran. Outlook's look back isn't built
+  (its search arguments aren't verified); Outlook mail is still caught when read or when inbox alerts are on.
+- The same plan caught twice (said, then its email; different titles like "Flight to Tokyo" / "Flight to Tokyo (JAL 61)")
+  is one plan: same kind, same day, one title inside the other. The email's time replaces a date alone.
+- Cost: one small background call per new booking-like email or per plan-like message the model didn't track (< 0.5¢ each).
+- Help: Plans & bookings topic (how plans are picked up, the 60-day Gmail look back, Outlook's limit, a "what are you keeping
+  an eye on" phrase). Website: the bookings paragraph on neddy.html; looked at 390 and 1280.
+- Tests: tests/capture.test.ts (8) + a voice-live check; pnpm test 923/923; tsc clean; biome no errors.
+- Untested live: Composio's GMAIL_FETCH_EMAILS answer shape for the look back (parsed with the same emailsIn the chat uses);
+  check Railway for "Looked back through 60 days of Gmail: N plan(s) tracked" and "Plans caught from what was said: N".

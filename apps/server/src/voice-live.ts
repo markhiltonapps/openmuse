@@ -29,6 +29,8 @@ import type { CallEar } from "./voice-approval.ts";
 const QUIET_FOR_SIGN_IN = 5 * 60_000;
 
 export interface LiveVoiceOptions {
+  /** What the person said on a finished call (not a rehearsal), for plans worth tracking. */
+  heard?: (owner: string, words: string) => unknown;
   /**
    * Coaching for a rehearsal, from the transcript (one small model call); undefined when no model
    * is set up. The numbers on the scorecard don't need it.
@@ -887,6 +889,18 @@ export class LiveVoice {
     // before it goes into the chat.
     const pending = live.inFlight > 0 && !live.stopAnswers.signal.aborted;
     await write(pending);
+    // Plans they mentioned out loud ("we fly out Friday at 7") are caught like typed ones.
+    if (!live.rehearsal)
+      try {
+        const said = live.turns
+          .filter((turn) => turn.role === "user")
+          .map((turn) => turn.text.trim())
+          .filter(Boolean)
+          .join("\n");
+        if (said) this.options.heard?.(live.owner, said);
+      } catch {
+        // Never in the way of saving the call.
+      }
     if (pending) void live.queue.then(() => write(false));
     if (record?.state === "scoring" && live.rehearsal) {
       const transcript = live.turns

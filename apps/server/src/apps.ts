@@ -4,6 +4,7 @@ import { hiddenNames, redactDeep } from "../../../packages/domain/src/redact.ts"
 import { destructiveAction } from "./approval-rules.ts";
 import { ADMIN_OWNER } from "./auth.ts";
 import { fileLinks } from "./cloud-import.ts";
+import { looksLikeConfirmation } from "./commitments.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import {
@@ -885,8 +886,17 @@ export function appToolSpecs(
           const emails = read.length
             ? await emailViews?.save(owner, read).catch(() => undefined)
             : undefined;
+          // Bookings, deliveries, trips and bills among them are tracked on their own (email-views onRead).
+          const bookings = read.filter((email) =>
+            looksLikeConfirmation(email.subject, email.body.slice(0, 800)),
+          ).length;
           return {
             result: bounded(data),
+            ...(bookings
+              ? {
+                  plans: `${bookings === 1 ? "One of these looks" : `${bookings} of these look`} like a booking, delivery, trip or bill; they're added to the person's Plans & bookings on their own (with nudges before them), so don't call track_commitment for them. If the person cares about one, you can say you'll keep an eye on it.`,
+                }
+              : {}),
             ...(emails?.length
               ? {
                   emails,

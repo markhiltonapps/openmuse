@@ -1586,15 +1586,16 @@ export class ConversationAgent extends AbstractAgent {
           const driving = await this.service.whereabouts?.driving(this.owner).catch(() => false);
           // What this message needs (turn-coach.ts): a note in the turn itself, and a log line when a
           // message that needed checking was answered without a single tool.
-          const needs = needsOf(
-            latestWords(compacted.messages as { role?: string; content?: unknown }[]),
-          );
+          const words = latestWords(compacted.messages as { role?: string; content?: unknown }[]);
+          const needs = needsOf(words);
           const coach = coachNote(needs, {
             search: Boolean(this.service.search),
             directions: Boolean(this.service.directions),
             nearby: Boolean(this.service.nearby && this.service.whereabouts),
+            track: Boolean(this.service.commitments),
           });
           let toolCalls = 0;
+          let tracked = false;
           subscription = agent
             .run({
               ...input,
@@ -1689,7 +1690,15 @@ export class ConversationAgent extends AbstractAgent {
             })
             .subscribe({
               next: (event) => {
-                if (event.type === EventType.TOOL_CALL_START) toolCalls++;
+                if (event.type === EventType.TOOL_CALL_START) {
+                  toolCalls++;
+                  if (
+                    /^(track|update)_commitment$/.test(
+                      String((event as { toolCallName?: unknown }).toolCallName ?? ""),
+                    )
+                  )
+                    tracked = true;
+                }
                 subscriber.next(event);
               },
               error: (error) => subscriber.error(error),
@@ -1699,6 +1708,10 @@ export class ConversationAgent extends AbstractAgent {
                   console.info(
                     `[OpenMuse] Answered without checking: ${checked.join(", ")} (no tool calls in the turn)`,
                   );
+                // A plan they mentioned that the model didn't track: caught anyway, in the
+                // background (call hand-offs are caught from the whole call when it ends).
+                if (needs.includes("plan") && !tracked && !lookup)
+                  void this.service.commitmentsFromWords(this.owner, words);
                 subscriber.complete();
               },
             });

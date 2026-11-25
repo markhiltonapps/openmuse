@@ -47,6 +47,7 @@ async function setup(
     answerSeconds?: number;
     tell?: (owner: string, title: string, body: string, key: string) => Promise<unknown>;
     coach?: LiveVoiceOptions["coach"];
+    heard?: LiveVoiceOptions["heard"];
   } = {},
 ) {
   const db = await createStore();
@@ -67,6 +68,7 @@ async function setup(
       answerSeconds: options.answerSeconds,
       tell: options.tell,
       coach: options.coach,
+      heard: options.heard,
       fetcher: (async (url: string, init: RequestInit) => {
         requests.push({ url, init });
         if (options.status)
@@ -128,7 +130,10 @@ test("live voice starts a gpt-live-1 session with the agent's instructions and k
 });
 
 test("what was said is kept, minutes are counted, and look-ups get a polite not-yet", async () => {
-  const { voice, sockets, db, usage } = await setup();
+  const heard: string[] = [];
+  const { voice, sockets, db, usage } = await setup({
+    heard: (_owner, words) => heard.push(words),
+  });
   await voice.start("owner", "offer");
   const socket = sockets[0] as FakeSocket;
   socket.emit({ type: "session.input_transcript.delta", delta: "What's on " });
@@ -152,6 +157,8 @@ test("what was said is kept, minutes are counted, and look-ups get a polite not-
   ]);
   assert.equal(saved?.seconds, 120);
   assert.equal(saved?.reason, "remote_hangup");
+  // Only the person's own words are passed on, for plans worth tracking.
+  assert.deepEqual(heard, ["What's on my calendar?"]);
   const month = await usage.month("owner");
   assert.equal(month.voiceMinutes, 2);
   // One conversation, priced by the minute: 2 minutes at 5¢.

@@ -818,3 +818,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   Web 0.21's ScrollView never calls onScrollBeginDrag/EndDrag; use onTouchMove + onTouchEnd and onWheel there. A count on a notice is
   the same number as the badge and the list it opens (`waitingOnYou`). Screen-reader names start with the visible words, so voice
   control ("tap Later") works. Microphone errors have their own state: the reply's error row comes with "Retry response".
+- **Capture everywhere (owner, 2026-11-25; research #1):** a plan only Neddy can speak up about is a plan it tracked, so tracking
+  never depends on the model's choice alone: every email any path reads (EmailViews.onRead), every chat turn that mentions a dated
+  plan the model didn't track (`mentionsPlan` + a post-turn call), every call's own words at the end, and once a 60-day Gmail look
+  back. Each source is checked once (`email-checked`), runs in one queue per person, and drops past bookings; the same plan from two
+  sources merges by kind + day + one title inside the other. Plain-code gates (looksLikeConfirmation, mentionsPlan) keep the model
+  calls rare; requests ("schedule…", "can you…") are the agent's job, not a plan statement (an old turn-coach test caught that).
+
