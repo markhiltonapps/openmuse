@@ -32,7 +32,11 @@ export type UsageKind =
   /** Meetings recorded in the app, transcribed by the minute. */
   | "meetings"
   /** The coaching after a rehearsed conversation. */
-  | "rehearsal";
+  | "rehearsal"
+  /** Neddy's once-a-day look for anything worth mentioning (proactive.ts). */
+  | "daily-check"
+  /** Walking and driving directions written from map data (directions.ts). */
+  | "directions";
 
 /** Dollars per million tokens. */
 export interface Price {

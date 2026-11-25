@@ -895,7 +895,7 @@ export async function createApp(
           maxTokens: 1200,
           system: directionsWriterPrompt,
           prompt,
-          onUsage: agent.usage?.sink(owner, "background"),
+          onUsage: agent.usage?.sink(owner, "directions"),
         });
       },
     });

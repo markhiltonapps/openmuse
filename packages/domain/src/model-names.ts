@@ -38,6 +38,8 @@ export const USAGE_KINDS: Record<string, string> = {
   voice: "Live voice",
   meetings: "Recorded meetings",
   rehearsal: "Rehearsal coaching",
+  "daily-check": "Daily check",
+  directions: "Directions",
 };
 
 /** How hard a model thinks, as the Models card and the agent call it. */

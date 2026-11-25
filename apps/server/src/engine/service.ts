@@ -1258,7 +1258,7 @@ export class AgentService {
               stronger: this.modelFor("chat"),
               system: chiefSystemPrompt(value.name || "Neddy"),
               prompt,
-              onUsage: this.usage?.sink(owner, "background"),
+              onUsage: this.usage?.sink(owner, "daily-check"),
             }),
         })
         .catch((error) => backgroundFailure("daily check", error));

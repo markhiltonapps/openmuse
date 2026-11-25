@@ -91,3 +91,8 @@ Wear OS (needs the owner's Android Studio and watch), the watch battery retest (
   the miss line logs). Full suite 915/915.
 - Morning check-in (2026-11-25 08:40 Chicago) now also counts "Answered without checking" lines.
 - Next, if the owner wants it: a replay set of 20-30 real questions run against the live model (a few cents a run) to measure tool use before/after each prompt change.
+
+## 2026-11-25 follow-up (owner: "make it")
+- Morning check-in on the live logs: no failures; no chat since the deploy, so no "Answered without checking" lines yet; the daily check's model call couldn't be told apart from
+  other background work. Fix: its own usage kind "daily-check" (log line "Model call: daily-check", "Daily check" on the Usage card), and the directions writer gets "directions"
+  ("Directions") the same way, so both can be counted and priced. Help's Usage topic already speaks of "kinds of work" in general; no wording change needed. Tests 915/915.
