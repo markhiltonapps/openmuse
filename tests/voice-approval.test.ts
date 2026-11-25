@@ -4,6 +4,7 @@ import { createStore, type Store } from "../apps/server/src/db.ts";
 import {
   type CallEar,
   needsTap,
+  saysNo,
   saysYes,
   voiceApprovalTools,
 } from "../apps/server/src/voice-approval.ts";
@@ -109,6 +110,14 @@ test("money needs a tap; everything else can be approved by voice", () => {
   assert.equal(needsTap(action("x", "email.send", { to: ["a@b.co"] })), false);
   assert.equal(saysYes("Yes, go ahead"), true);
   assert.equal(saysYes("hmm, what was that"), false);
+  // A hedge is never a yes: "I'm not sure" with one thing read back must not approve it.
+  for (const words of ["I'm not sure", "not okay", "maybe, sure", "I don't know, ok"])
+    assert.equal(saysYes(words) && !saysNo(words), false, words);
+  assert.equal(
+    saysNo("approve the email, not the calendar"),
+    true,
+    "choosing some still reads as a no for the rest",
+  );
 });
 
 test("Neddy reads back what's waiting, and money stays a tap", async () => {
@@ -136,7 +145,7 @@ test("nothing is approved without the person's own yes after the read-back", asy
   assert.match(String((await approve({ approve: ["a1"] })).error), /haven't answered/);
   // Something unclear isn't a yes.
   ear.say("hmm, what was the second one?");
-  assert.match(String((await approve({ approve: ["a1"] })).error), /wasn't a clear yes/);
+  assert.match(String((await approve({ approve: ["a1"] })).error), /unsure|wasn't a clear yes/);
   // The purchase wasn't read back for voice, so it can't be approved this way.
   ear.say("yes approve all");
   assert.match(String((await approve({ approve: ["a3"] })).error), /Only what was just read back/);
@@ -169,4 +178,14 @@ test("a plain yes to several needs “all”; choosing some and not others works
     ["a2", "deny"],
   ]);
   assert.equal((result.declined as string[]).length, 1);
+});
+
+test("a hedge approves nothing, even while choosing some of what was read back", async () => {
+  for (const words of ["I'm not sure, okay", "maybe, sure"]) {
+    const { read, approve, ear, decided } = await setUp(`voice-hedge-${words.length}`);
+    await read();
+    ear.say(words);
+    assert.match(String((await approve({ approve: ["a1"] })).error), /unsure/, words);
+    assert.deepEqual(decided, [], words);
+  }
 });

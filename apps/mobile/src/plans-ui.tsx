@@ -230,7 +230,8 @@ function SpeaksFirst({ agent }: { agent: string }) {
       <Text style={FINE}>
         Notices under Recent on Home, and on your phone if notifications are on: before what’s
         tracked here is due, and the day after something you’re waiting on was expected. {agent}{" "}
-        only suggests. Nothing is sent or booked because of a notice.
+        only suggests. Nothing is sent or booked because of a notice, and {agent} never messages you
+        just to get you to open the app.
       </Text>
       <ErrorNotice error={loadError} />
       {!state ? (
@@ -290,11 +291,15 @@ function SpeaksFirst({ agent }: { agent: string }) {
                       key={area.id}
                       label={area.name}
                       detail={
-                        !area.paused
-                          ? undefined
-                          : area.until
-                            ? `Paused until ${shortDate(area.until)}.`
-                            : "Paused because you asked for fewer."
+                        area.id === "weekly"
+                          ? area.paused
+                            ? "Off until you turn it back on."
+                            : `${agent}’s one regular note: Sunday evening, what it did that week, only when it did something.`
+                          : !area.paused
+                            ? undefined
+                            : area.until
+                              ? `Paused until ${shortDate(area.until)}.`
+                              : "Paused because you asked for fewer."
                       }
                       checked={!area.paused}
                       onPress={() =>
@@ -302,7 +307,9 @@ function SpeaksFirst({ agent }: { agent: string }) {
                           area.paused ? { resume: area.id } : { pause: area.id },
                           area.paused
                             ? `${area.name}: back on.`
-                            : `${area.name}: paused for 30 days.`,
+                            : area.id === "weekly"
+                              ? `${area.name}: off.`
+                              : `${area.name}: paused for 30 days.`,
                         )
                       }
                     />

@@ -133,6 +133,10 @@ export class Areas {
   async get(owner: string) {
     return (await this.db.get<Area>(owner, "agent-settings", "area")) ?? undefined;
   }
+  /** The town and country at a spot (rounded to about a kilometer); undefined without a place lookup. */
+  placeAt(lat: number, lng: number) {
+    return this.find?.({ lat, lng });
+  }
   /** Saves the person's area from a place they typed or the location their device shared. */
   async set(owner: string, raw: unknown) {
     const input = areaInputSchema.parse(raw);

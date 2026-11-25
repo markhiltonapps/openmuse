@@ -76,7 +76,9 @@ import { Persona } from "../persona.ts";
 import type { Pictures } from "../pictures.ts";
 import type { PlaceReminders } from "../place-reminders.ts";
 import type { Plans } from "../plans.ts";
+import type { Forgetting } from "../privacy.ts";
 import { chiefSystemPrompt, type Proactive } from "../proactive.ts";
+import type { WeeklyRecap } from "../recap.ts";
 import type { ReceiptBox } from "../receipt-box.ts";
 import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
@@ -86,6 +88,7 @@ import type { ReminderService } from "../reminders.ts";
 import type { Geocoder } from "../rich-cards.ts";
 import type { Logins } from "../sign-in.ts";
 import type { ScheduledPosts } from "../space-posts.ts";
+import type { Travel } from "../travel.ts";
 import type { UrgentAlerts } from "../urgent-alerts.ts";
 import type { UsageMeter, UsageTotals } from "../usage.ts";
 import type { CallEar } from "../voice-approval.ts";
@@ -291,6 +294,7 @@ export class AgentService {
         ?.nudgeDue((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("commitments", error));
       await this.runDailyChecks().catch((error) => backgroundFailure("daily check", error));
+      await this.weeklyRecap?.due().catch((error) => backgroundFailure("weekly recap", error));
       await this.checkIns
         ?.due((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("meal check-ins", error));
@@ -1622,6 +1626,12 @@ export class AgentService {
   spacePosts?: ScheduledPosts;
   /** Reservations, deliveries, trips, appointments and bills, tracked until they're done. */
   commitments?: Commitments;
+  /** "Forget everything about X" (privacy.ts). */
+  forgetting?: Forgetting;
+  /** Travel mode: abroad, with what a visitor needs (travel.ts). */
+  travel?: Travel;
+  /** Once a week, what Neddy did for the person (recap.ts). */
+  weeklyRecap?: WeeklyRecap;
   /** Walking and driving directions from map data (directions.ts); set on the live server. */
   directions?: Directions;
   proactive?: Proactive;

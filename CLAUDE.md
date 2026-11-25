@@ -825,3 +825,15 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   sources merges by kind + day + one title inside the other. Plain-code gates (looksLikeConfirmation, mentionsPlan) keep the model
   calls rare; requests ("schedule…", "can you…") are the agent's job, not a plan statement (an old turn-coach test caught that).
 
+- **A yes in words must be a clear yes (2026-11-25):** anything that deletes or sends on the person's spoken or typed answer
+  (`forgetAnswer`, `approve_by_voice`) refuses hedges ("I'm not sure", "maybe", "hmm", "I don't know") and negations ("not
+  ok", "don't delete it") in every case, including while they choose some. "sure" and "ok" are inside "not sure" and "not
+  ok": test the no-words first. A list the agent reads back carries a server-made confirmId, and the yes must be a new
+  message (chat) or their own heard words after the read-back (call); a call hand-off with no ear never deletes.
+- **Promises on screen must match the code (2026-11-25):** "hidden before any AI sees them" wasn't true on calls, "without
+  your OK" ignored always-allow rules, and "the AI services don't train on it" wasn't enforced for every provider. Write the
+  limit into the promise, or leave the promise out.
+- **The bare address is the website for visitors (2026-11-25):** index.html forwards `/` to `/neddy.html` unless the device is
+  signed in, the app is installed, the tab has used the app, or the link has `?`/`#`; `/app` always opens the app. Local
+  Playwright scripts set `sessionStorage["neddy.app"]="1"` before `goto("/")` (help-shots.mjs does), or they land on the website.
+

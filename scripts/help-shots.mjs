@@ -98,6 +98,8 @@ async function open(context, state, height = HEIGHT, backdrop = "none", start = 
   // The pictures show each screen on the plain page, light and dark; only the Backdrop topic's
   // shows a scene (its still frame: this Chromium can't play the clips).
   await page.addInitScript((scene) => localStorage.setItem("openmuse.backdrop", scene), backdrop);
+  // The bare address shows the website to visitors (index.html); a tab that has used the app stays.
+  await page.addInitScript(() => sessionStorage.setItem("neddy.app", "1"));
   await page.route(/\/api\/backdrop$/, (route) =>
     route.request().method() === "GET"
       ? route.fulfill({ json: { scene: backdrop, still: false } })
@@ -1337,6 +1339,97 @@ const SHOTS = [
     },
   },
   {
+    // Forget something: the privacy card's promises, a name found everywhere, and the first step.
+    id: "forget",
+    height: 1500,
+    go: async (p) => {
+      await p.route(/\/api\/privacy\/forget\/find$/, (route) =>
+        route.fulfill({
+          json: {
+            topic: "Jordan",
+            items: [
+              {
+                key: "memories:m1",
+                kind: "memories",
+                label: "Memory",
+                name: "Broke up with Jordan in October",
+              },
+              { key: "people:p1", kind: "people", label: "Person", name: "Jordan Lee (ex)" },
+              {
+                key: "commitments:c1",
+                kind: "commitments",
+                label: "Plan",
+                name: "Return Jordan’s guitar",
+              },
+            ],
+            messages: 7,
+          },
+        }),
+      );
+      await appsTab(p, /Account/);
+      await reveal(p.getByText("Privacy and your data", { exact: true }).first(), 200);
+      const box = p.getByRole("textbox", { name: /Who or what should/ }).first();
+      await box.click();
+      await box.pressSequentially("Jordan");
+      await button(p, /^Find$/).click();
+      await p.waitForTimeout(900);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByText(/^Card numbers, passwords and ID numbers/).first(),
+        side: "top-right",
+        tight: true,
+      },
+      2: (p) => button(p, /^Find$/),
+      3: (p) => button(p, /^Forget these/),
+    },
+  },
+  {
+    // Travel mode: Home while the phone is in another country than home.
+    id: "travel",
+    start: "home",
+    height: 1500,
+    go: async (p) => {
+      await p.route(/\/api\/travel$/, (route) =>
+        route.fulfill({
+          json: {
+            travelling: true,
+            here: "Singapore",
+            country: "SG",
+            countryName: "Singapore",
+            home: { label: "Houston, TX", country: "US" },
+            localTime: "Wed 9:00 PM",
+            homeTime: "Wed 7:00 AM",
+            currency: { code: "SGD", name: "Singapore dollar", homeCode: "USD", rate: 1.2934 },
+            emergency: [
+              { for: "Police", number: "999" },
+              { for: "Ambulance and fire", number: "995" },
+            ],
+            language: "English",
+            embassy: {
+              finder: "https://www.usembassy.gov/",
+              label: "US embassies and consulates",
+              line: "+1 202-501-4444 (US citizens’ emergency line, from abroad)",
+              lineName: "US citizens’ line",
+            },
+          },
+        }),
+      );
+      await p.reload();
+      await p.waitForTimeout(3500);
+      await reveal(p.getByText("Travelling in Singapore", { exact: true }).first(), 200);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByText("Travelling in Singapore", { exact: true }).first(),
+        side: "top-right",
+        tight: true,
+      },
+      2: { find: (p) => p.getByRole("link", { name: /^Call Police/ }).first(), tight: true },
+      3: { find: (p) => p.getByRole("link", { name: /^Call US citizens/ }).first(), tight: true },
+    },
+  },
+  {
     // Driving mode: Home while the phone is moving at car speed.
     id: "driving-mode",
     start: "home",
@@ -1402,6 +1495,7 @@ const SHOTS = [
                 dailyLimit: 8,
                 dailyCheck: true,
                 areas: [
+                  ["weekly", "Your weekly recap"],
                   ["travel", "Travel"],
                   ["deliveries", "Deliveries"],
                   ["bills", "Bills"],

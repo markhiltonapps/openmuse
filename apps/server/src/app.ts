@@ -100,8 +100,10 @@ import { PastChats } from "./past-chats.ts";
 import { Pictures } from "./pictures.ts";
 import { PlaceReminders } from "./place-reminders.ts";
 import { nextMonthDay, Plans } from "./plans.ts";
+import { Forgetting, forgetTopic } from "./privacy.ts";
 import { Proactive, proactiveChange } from "./proactive.ts";
 import { PushService } from "./push.ts";
+import { WeeklyRecap } from "./recap.ts";
 import { ReceiptBox } from "./receipt-box.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
 import { hideText } from "./redaction.ts";
@@ -121,6 +123,7 @@ import { ScheduledPosts } from "./space-posts.ts";
 import { spaceRoutes } from "./space-routes.ts";
 import { Spaces } from "./spaces.ts";
 import { isPurchase, SpendingService } from "./spending.ts";
+import { Travel } from "./travel.ts";
 import { jsonUnlessUnchanged } from "./unchanged.ts";
 import { UrgentAlerts } from "./urgent-alerts.ts";
 import { UsageMeter } from "./usage.ts";
@@ -550,7 +553,7 @@ export async function createApp(
   let urgentAlerts: UrgentAlerts | undefined;
   // Who the voice is and what it knows: the same for OpenAI's voice and our own.
   const liveContext = async (owner: string) => {
-    const [identity, timeZone, about, memories, today] = await Promise.all([
+    const [identity, timeZone, about, memories, today, travel] = await Promise.all([
       db
         .get<{ name?: string; tone?: string }>(owner, "agent-settings", "identity")
         .catch(() => null),
@@ -558,6 +561,7 @@ export async function createApp(
       agent.persona.context(owner).catch(() => ""),
       agent.memoryContext(owner).catch(() => [] as string[]),
       voiceToday(voiceBrain, owner).catch(() => ""),
+      agent.travel?.contextLine(owner).catch(() => "") ?? Promise.resolve(""),
     ]);
     return {
       instructions: liveInstructions({
@@ -569,6 +573,7 @@ export async function createApp(
         today,
         canLookUp,
         hello: pickHello(hourIn(timeZone)),
+        travel,
       }),
     };
   };
@@ -912,6 +917,8 @@ export async function createApp(
       : undefined,
   );
   feed.where = (owner) => agent.searchPlace(owner);
+  // Travel mode: abroad, the local time, money, emergency numbers, language and embassy.
+  agent.travel = new Travel(db, agent.areas, whereabouts, (owner) => agent.timeZone(owner));
   // A new area means new local news: look it up now rather than tomorrow morning.
   agent.areaChanged = (owner) => void feed.refresh(owner).catch(() => undefined);
   agent.isAdmin = (owner) => accounts.isAdmin(owner);
@@ -1192,6 +1199,17 @@ export async function createApp(
         ?.travelBuffer ?? 30,
   );
   agent.commitments = commitments;
+  // Calm by design: once a week, what Neddy did, counted from its records (recap.ts).
+  agent.weeklyRecap = new WeeklyRecap(
+    db,
+    proactive,
+    (owner, note) => agent.notify(owner, note.title, note.body, undefined, note.key),
+    (owner) => agent.timeZone(owner),
+    async () =>
+      (await db.scan<{ id: string }>("agent-settings"))
+        .filter(({ value }) => value.id === "identity")
+        .map(({ owner }) => owner),
+  );
   const approvals = new ApprovalRules(db);
   agent.approvals = approvals;
   agent.logins = logins;
@@ -2153,6 +2171,11 @@ export async function createApp(
   app.get("/api/weather", async (c) =>
     c.json(agent.weather ? await agent.weather.forOwner(c.get("owner")) : { unavailable: "off" }),
   );
+  app.get("/api/travel", async (c) =>
+    c.json(
+      (await agent.travel?.status(c.get("owner")).catch(() => undefined)) ?? { travelling: false },
+    ),
+  );
   app.get("/api/area", async (c) =>
     c.json({ area: (await agent.areas?.get(c.get("owner"))) ?? null }),
   );
@@ -2375,7 +2398,29 @@ export async function createApp(
     await mainPages.clear(owner, old?.pages);
     return c.json({ ok: true });
   });
-  const data = new DataControls(db, files, threads);
+  const data = new DataControls(db, files, threads, async (owner) => {
+    for (const meeting of await meetings.list(owner))
+      await meetings.remove(owner, meeting.id).catch(() => undefined);
+  });
+  // "Forget everything about X": found, shown, then deleted exactly as confirmed (privacy.ts).
+  const forgetting = new Forgetting(db, threads, (owner, id) => meetings.remove(owner, id));
+  agent.forgetting = forgetting;
+  app.post("/api/privacy/forget/find", async (c) => {
+    const { topic } = z.object({ topic: forgetTopic }).parse(await c.req.json());
+    return c.json(await forgetting.find(c.get("owner"), topic));
+  });
+  app.post("/api/privacy/forget", async (c) => {
+    const body = z
+      .object({
+        topic: forgetTopic,
+        keys: z.array(z.string().max(200)).max(500),
+        messages: z.boolean().optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(
+      await forgetting.forget(c.get("owner"), body.topic, body.keys, body.messages ?? false),
+    );
+  });
   const archive = new ChatArchive(db);
   const mainPages = new MainPages(db, threads, agent.chats, (owner, threadId) =>
     archive.messages(owner, threadId),

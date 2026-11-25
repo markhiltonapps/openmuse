@@ -144,7 +144,7 @@ export function Button({
   nativeID?: string;
   icon?: LucideIcon;
   primary?: boolean;
-  /** The one thing to do on a card: dark, like the send button. */
+  /** The one thing to do on a card: dark, like the send button (filled red with `danger`). */
   strong?: boolean;
   disabled?: boolean;
   busy?: boolean;
@@ -169,7 +169,7 @@ export function Button({
       style={({ pressed }) => [
         s.button,
         primary ? s.primary : s.secondary,
-        strong && { backgroundColor: colors.inverse },
+        strong && { backgroundColor: danger ? colors.danger : colors.inverse },
         small && { minHeight: 38, paddingVertical: 7, paddingHorizontal: 13 },
         (disabled || busy) && { opacity: 0.5 },
         pressed && { transform: [{ scale: 0.98 }] },

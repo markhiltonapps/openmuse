@@ -82,10 +82,15 @@ export function spokenWhat(action: ActionProposal) {
 
 const YES =
   /\b(yes|yeah|yep|yup|sure|ok(ay)?|approve[ds]?|approving|go ahead|go for it|do it|do them|send (it|them|both)|confirm(ed)?|sounds good|please do|that'?s (fine|right|correct)|correct)\b/i;
+// A hedge or any negation is a no: "I'm not sure", "not okay", "maybe" must never approve or
+// delete (usability review, 2026-11-25). Choosing some and not others still works where allowed.
 const NO =
-  /\b(no|nope|nah|don'?t|do not|wait|hold on|hang on|stop|cancel|not yet|never ?mind|skip|leave|reject|deny)\b/i;
+  /\b(no|nope|nah|not|don'?t|do not|wait|hold on|hang on|stop|cancel|never ?mind|skip|leave|reject|deny|unsure|maybe|perhaps|hmm+|i (don'?t|do not) know)\b|n['’]t\b/i;
 const ALL = /\b(all|both|everything|every one|them all|all of them|the lot)\b/i;
 /** Their words say yes, and (unless they're choosing some and not others) nothing says no. */
+/** Unsure, whatever else they said: never a yes, even while choosing some. */
+const HEDGE = /\b(unsure|maybe|perhaps|hmm+|not sure|i (don'?t|do not) know)\b/i;
+export const saysHedge = (words: string) => HEDGE.test(words);
 export const saysYes = (words: string) => YES.test(words);
 export const saysNo = (words: string) => NO.test(words);
 export const saysAll = (words: string) => ALL.test(words);
@@ -177,6 +182,12 @@ export function voiceApprovalTools(
           return {
             error:
               "Only what was just read back can be approved by voice. Read the others back first.",
+          };
+        if (approve.length && saysHedge(words))
+          return {
+            error:
+              "They sound unsure, so nothing was approved. Ask them to say “yes, approve” or “no”.",
+            heard: words,
           };
         const yes = saysYes(words);
         const no = saysNo(words);

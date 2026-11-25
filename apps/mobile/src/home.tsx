@@ -15,12 +15,14 @@ import {
   type LucideIcon,
   Mail,
   Mic,
+  Phone,
+  Plane,
   Receipt,
   UserPlus,
   X,
 } from "lucide-react-native";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Linking, Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { ActionProposal } from "../../../packages/domain/src";
 import type { AgentTask } from "../../../packages/domain/src/agent";
 import type { Weather } from "../../../packages/domain/src/weather";
@@ -478,6 +480,7 @@ export function HomeScreen({ desktop }: { desktop: boolean }) {
               )}
             </HomeCard>
           </View>
+          <TravelCard agent={agent} />
           {weather && "weather" in weather ? (
             <WeatherCard weather={weather.weather} onPress={() => navigate("feed")} />
           ) : (
@@ -626,6 +629,251 @@ function Row({
       </View>
       <ChevronRight size={18} color={soft()} />
     </Pressable>
+  );
+}
+
+interface TravelStatus {
+  travelling: boolean;
+  here?: string;
+  countryName?: string;
+  localTime?: string;
+  homeTime?: string;
+  home?: { label?: string };
+  currency?: { code: string; name: string; homeCode?: string; rate?: number };
+  emergency?: { for: string; number: string }[];
+  language?: string;
+  embassy?: { finder: string; label: string; line?: string; lineName?: string };
+}
+/** "1.29", "155.1", "25,433": a rate people can read at a glance. */
+const rateWords = (rate: number) =>
+  rate >= 1000
+    ? Math.round(rate).toLocaleString()
+    : rate >= 10
+      ? String(Math.round(rate * 10) / 10)
+      : String(Math.round(rate * 100) / 100);
+/** Digits for a tel: link: "999 (or 112)" calls 999; "+1 202-501-4444 (…)" keeps the plus. */
+const dialable = (number: string) =>
+  (number.match(/^\+?[\d\s-]+/)?.[0] ?? "").replace(/[\s-]/g, "");
+/** The number part to show: "+1 202 501 4444". */
+const shownNumber = (number: string) =>
+  (number.match(/^\+?[\d\s-]+/)?.[0] ?? number).trim().replace(/-/g, " ");
+/** How people say their home money in a question: "40 dollars", "40 pounds". */
+const HOME_MONEY: Record<string, string> = {
+  USD: "dollars",
+  GBP: "pounds",
+  EUR: "euros",
+  CAD: "Canadian dollars",
+  AUD: "Australian dollars",
+  NZD: "New Zealand dollars",
+  SGD: "Singapore dollars",
+  INR: "rupees",
+  JPY: "yen",
+  MXN: "pesos",
+};
+const TRAVEL_KEY = "openmuse.travel";
+/** The last answer, so the card is drawn at once and doesn't push Weather down on every open. */
+function rememberedTravel(): TravelStatus | undefined {
+  try {
+    const saved = globalThis.localStorage?.getItem(TRAVEL_KEY);
+    if (!saved) return undefined;
+    // Clock times from when it was saved would be wrong: the Time row waits for a fresh answer.
+    const { localTime: _local, homeTime: _home, ...rest } = JSON.parse(saved) as TravelStatus;
+    return rest;
+  } catch {
+    return undefined;
+  }
+}
+/** "Wed 9:00 PM" → "9:00 PM", unless the two days differ. */
+function twoClocks(here: string, home?: string) {
+  const [hereDay, ...hereTime] = here.split(" ");
+  const [homeDay, ...homeTime] = (home ?? "").split(" ");
+  const sameDay = !home || hereDay === homeDay;
+  return {
+    here: sameDay ? hereTime.join(" ") : here,
+    home: home ? (sameDay ? homeTime.join(" ") : home) : undefined,
+  };
+}
+
+/**
+ * Travel mode (owner, 2026-11-25): abroad, what a visitor needs at a glance. Shown only while the
+ * phone (location on, app open) is in another country than their home area; checked every ten
+ * minutes while Home is open, and remembered so it doesn't jump in and out.
+ */
+function TravelCard({ agent }: { agent: string }) {
+  const { api } = useWorkspace();
+  const [status, setStatus] = useState<TravelStatus | undefined>(rememberedTravel);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      api
+        .request<TravelStatus>("/api/travel")
+        .then((next) => {
+          if (!live) return;
+          setStatus(next);
+          try {
+            if (next.travelling) globalThis.localStorage?.setItem(TRAVEL_KEY, JSON.stringify(next));
+            else globalThis.localStorage?.removeItem(TRAVEL_KEY);
+          } catch {}
+        })
+        .catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 10 * 60_000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [api]);
+  if (!status?.travelling) return null;
+  const where = status.here ?? status.countryName ?? "another country";
+  const money = status.currency;
+  const pill = {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: glass ? "rgba(255,255,255,0.32)" : colors.edge,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: glass ? "rgba(255,255,255,0.14)" : colors.subtle,
+  } as const;
+  const row = (label: string, first: string, second?: string) => (
+    <View style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
+      <Text style={{ width: 76, color: soft(), fontSize: 13, lineHeight: 20 }}>{label}</Text>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ color: ink(), fontSize: 15, lineHeight: 20, fontWeight: "600" }}>
+          {first}
+        </Text>
+        {second ? (
+          <Text style={{ color: soft(), fontSize: 13, lineHeight: 19 }} numberOfLines={1}>
+            {second}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+  const call = (label: string, number: string, shown = number) => {
+    const digits = dialable(number);
+    return (
+      <Pressable
+        key={`${label}${number}`}
+        accessibilityRole="link"
+        accessibilityLabel={`Call ${label}: ${shown}`}
+        disabled={!digits}
+        onPress={() => void Linking.openURL(`tel:${digits}`)}
+        style={({ pressed }) => [pill, { opacity: pressed ? 0.7 : 1 }]}
+      >
+        <Phone size={14} color={glass ? "#FFFFFF" : colors.blueDark} />
+        <Text style={{ color: ink(), fontSize: 14, fontWeight: "600" }}>
+          {label} <Text style={{ fontVariant: ["tabular-nums"] }}>{shown}</Text>
+        </Text>
+      </Pressable>
+    );
+  };
+  const clocks = status.localTime ? twoClocks(status.localTime, status.homeTime) : undefined;
+  const homeMoney = money?.homeCode ? (HOME_MONEY[money.homeCode] ?? money.homeCode) : undefined;
+  return (
+    <HomeCard title={`Travelling in ${where}`} icon={Plane}>
+      <View style={{ gap: 12 }}>
+        {clocks &&
+          row("Time", `${clocks.here} here`, clocks.home ? `${clocks.home} at home` : undefined)}
+        {money &&
+          row(
+            "Money",
+            `${money.name.charAt(0).toUpperCase()}${money.name.slice(1)} (${money.code})`,
+            money.rate && money.homeCode && money.homeCode !== money.code
+              ? `1 ${money.homeCode} ≈ ${rateWords(money.rate)} ${money.code}`
+              : undefined,
+          )}
+        {status.language && row("Language", status.language)}
+        <View style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
+          <Text
+            style={{ width: 76, color: soft(), fontSize: 13, lineHeight: 44 }}
+            numberOfLines={1}
+          >
+            Emergency
+          </Text>
+          <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+            {status.emergency?.length ? (
+              <>
+                <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+                  {status.emergency.map((e) => call(e.for, e.number))}
+                </View>
+                <Text style={{ color: soft(), fontSize: 12, lineHeight: 17 }}>
+                  Numbers can differ by city.
+                </Text>
+              </>
+            ) : (
+              <Text style={{ color: ink(), fontSize: 14, lineHeight: 20, paddingTop: 12 }}>
+                {`These aren’t in ${agent}’s list yet. Check with your hotel or a local.`}
+              </Text>
+            )}
+          </View>
+        </View>
+        {status.embassy && (
+          <View style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
+            <Text
+              style={{ width: 76, color: soft(), fontSize: 13, lineHeight: 44 }}
+              numberOfLines={1}
+            >
+              Embassy
+            </Text>
+            <View
+              style={[
+                s.row,
+                { flex: 1, minWidth: 0, gap: 8, flexWrap: "wrap", alignItems: "center" },
+              ]}
+            >
+              {status.embassy.line && (
+                <View style={{ gap: 2 }}>
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={`Call ${status.embassy.lineName ?? "the help line"}: ${shownNumber(status.embassy.line)}`}
+                    onPress={() =>
+                      void Linking.openURL(`tel:${dialable(status.embassy?.line ?? "")}`)
+                    }
+                    style={({ pressed }) => [pill, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Phone size={14} color={glass ? "#FFFFFF" : colors.blueDark} />
+                    <Text style={{ color: ink(), fontSize: 14, fontWeight: "600" }}>
+                      {status.embassy.lineName ?? "Help line"}
+                    </Text>
+                  </Pressable>
+                  {/* The number itself, to read out or dial from another phone. */}
+                  <Text
+                    style={{
+                      color: soft(),
+                      fontSize: 12,
+                      lineHeight: 17,
+                      paddingLeft: 4,
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {shownNumber(status.embassy.line)}
+                  </Text>
+                </View>
+              )}
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => void Linking.openURL(status.embassy?.finder ?? "")}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 4,
+                }}
+              >
+                <Text style={{ color: ink(), fontSize: 14, textDecorationLine: "underline" }}>
+                  {status.embassy.label}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+        <Text style={{ color: soft(), fontSize: 13, lineHeight: 19 }}>
+          {`Ask “How do I say thank you here?”${homeMoney ? ` or “What’s 40 ${homeMoney} in local money?”` : ""}`}
+        </Text>
+      </View>
+    </HomeCard>
   );
 }
 

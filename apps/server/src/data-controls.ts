@@ -70,6 +70,8 @@ export class DataControls {
     private readonly db: Store,
     private readonly files: Files,
     private readonly threads: ThreadStore = {},
+    /** Recordings with their audio (meetings.ts): a reset leaves nothing of them in storage. */
+    private readonly eraseRecordings?: (owner: string) => Promise<unknown>,
   ) {}
   hidden(owner: string, threadId: string) {
     return hiddenMessages(this.db, owner, threadId);
@@ -183,6 +185,8 @@ export class DataControls {
         .catch(() => undefined);
     for (const file of await this.db.list<Artifact>(owner, "files"))
       await this.files.erase(file).catch(() => undefined);
+    // Meeting and brain-dump audio lives in storage, not in the records: it goes too.
+    await this.eraseRecordings?.(owner).catch(() => undefined);
     const preferences = await this.db.get<{ id: string }>(owner, "agent-settings", "preferences");
     await this.db.removeAll(owner, KEEP_ON_RESET);
     if (preferences) await this.db.put(owner, "agent-settings", preferences);

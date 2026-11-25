@@ -20,6 +20,7 @@ export const AREAS = [
   "waiting",
   "calendar",
   "chief",
+  "weekly",
 ] as const;
 export type Area = (typeof AREAS)[number];
 export const AREA_NAMES: Record<Area, string> = {
@@ -31,6 +32,7 @@ export const AREA_NAMES: Record<Area, string> = {
   waiting: "Things you’re waiting on",
   calendar: "Calendar heads-ups",
   chief: "The daily check",
+  weekly: "Your weekly recap",
 };
 
 export interface Moment {
@@ -392,6 +394,7 @@ export interface ProactiveDeps {
 }
 /** The kinds of notice the Plans & bookings screen lists (heads-ups have their own settings, the daily check its own switch). */
 export const SCREEN_AREAS = [
+  "weekly",
   "travel",
   "deliveries",
   "bills",
@@ -445,7 +448,10 @@ export class Proactive {
   ) {
     const current = await this.settings(owner);
     const muted = { ...current.muted };
-    if (patch.mute) muted[patch.mute] = this.now() + (patch.muteDays ?? 30) * DAY;
+    // A kind paused from the screen or by voice comes back in 30 days; the weekly recap is a
+    // regular note people choose, so "off" stays off until they turn it back on.
+    if (patch.mute)
+      muted[patch.mute] = this.now() + (patch.muteDays ?? (patch.mute === "weekly" ? 3650 : 30)) * DAY;
     if (patch.unmute) delete muted[patch.unmute];
     const next: ProactiveSettings = {
       ...current,

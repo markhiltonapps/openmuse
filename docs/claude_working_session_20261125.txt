@@ -98,3 +98,50 @@ Now (apps/server/src/commitments.ts, engine/service.ts, email-views.ts, apps.ts,
   a tab that already used the app all stay; Sign in on the home page → `/app`; Back from the home page doesn't return to `/`.
 - Help: Sign in says to tap Sign in on the website (or add /app); Add to home screen says to add it from the app, not
   the website. docs/DEPLOY.md notes the rule. Tests: accounts and onboarding email links updated; typecheck clean.
+
+## 1, 2 and 9: privacy you can prove, travel mode, calm by design (owner: "do 1, 2 and 9")
+
+### 1. Privacy you can prove (apps/server/src/privacy.ts, apps/mobile/src/data-ui.tsx)
+- "Forget everything about X": `Forgetting.find` looks through memories, About you facts, people, plans, saved emails,
+  saved calls, recordings and every chat (the main chat's older parts too) for a whole-word match. `forget` deletes only
+  the confirmed keys (refusing any that aren't in a fresh find), drops chat summaries that name it, hides the chat
+  messages (a tool result goes with the reply that called it) and takes them out of stored main-chat parts. Recordings
+  go through meetings.remove, so their audio goes too. "Delete everything" now erases recordings' audio as well.
+- By voice or chat (`forget_about`): the list comes with a server-written `say` and a confirmId (10 minutes, in memory).
+  Deleting needs that id plus the person's own words: in the chat a NEW message from them, on a call what the ear heard
+  after the read-back; a call hand-off without an ear never deletes. `forgetAnswer`: a forget word counts as yes only
+  without a "don't" before it; any no, keep, nothing/anything, hedge (not sure, maybe, hmm, I don't know) or another
+  topic ("about Sam") refuses; everything at once needs "all". The hedge fix also went into approve_by_voice
+  (voice-approval.ts `HEDGE`/`saysHedge`, NO now includes not and n't), where "I'm not sure" could approve an email.
+- The card ("Privacy and your data", You › Account): four promises, each true with its limits (redaction by shape, a
+  call's voice hears speech; always-allow rules; never sold or used for ads; what Neddy keeps). The AI-training sentence
+  was removed: OpenRouter isn't pinned to no-training providers, and Soniox/Inworld terms aren't checked. Forget asks
+  once more in the same spot ("Keep them" first, "Yes, forget" ignores presses for 600 ms), announces the question and
+  puts focus on Keep. Delete everything… is an outline; only the final step is filled red (`Button danger strong`).
+### 2. Travel mode (apps/server/src/travel.ts, packages/domain/src/travel.ts, home.tsx TravelCard)
+- Abroad = the phone's country (reverse geocode, cached per ~10 km for 6 h) differs from the home area's. Facts for 44
+  countries (money, emergency numbers, language), today's rate from open.er-api.com (12 h cache, none if it fails),
+  US/UK citizens' lines and embassy finders (CA, AU links). The last country abroad holds 12 h in memory if the signal
+  drops; only home turns it off. Nothing about where they've been is stored.
+- Chat context line "Travelling right now" (volatile), and calls get the same line with "give only the emergency
+  numbers in this line" (liveInstructions `travel`). The card remembers its last answer (without clock times).
+### 9. Calm by design (apps/server/src/recap.ts)
+- Weekly recap counted from records (no model): Sunday from 5 pm local, or Monday morning if quiet hours held it,
+  through the proactive judge; nothing in an empty week; repeats grouped ("Morning brief (3 times)"). Its switch
+  ("Your weekly recap", Plans & bookings) stays off until turned back on (3650-day mute). `weekly_recap` tool answers
+  "what did you do for me this week?". The plans screen says Neddy never messages just to bring you back.
+### Reviews (Design division, 3–5 rounds)
+- Visual, usability and copy all signed off. They caught: promises that said more than the code; a forget that could
+  run with no list, on the model's say-so, on "no, don't forget anything", or on "I'm not sure"; a double tap landing
+  on Yes; a travel card that vanished and pushed Weather; calls answering emergency numbers from memory; a recap held
+  Sunday night that never went; two filled red buttons; values wrapping mid-phrase.
+### Help
+- "Forget, download or delete your data" (new picture `forget`), "Travel mode" (new topic and picture `travel`), the
+  weekly recap in "When Neddy speaks first" (picture retaken with the new row), privacy and privacy-hidden updated.
+### Tests
+- tests/privacy.test.ts (10), tests/travel.test.ts (6), tests/recap.test.ts (5), voice-approval hedge cases;
+  pnpm test 944/944; typecheck clean; biome: only older warnings elsewhere.
+### Known limits / pending
+- Forget doesn't search jobs, files, goals or routines (said on screen and in Help). The chat store keeps its own copy
+  of a hidden message until the chat is deleted. Travel works only with the app open and location on.
+- Untested live: open.er-api.com from Railway, reverse geocoding abroad, the travel line on a real call.

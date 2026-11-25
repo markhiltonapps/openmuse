@@ -54,7 +54,9 @@ import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
 import { pictureToolInstructions, pictureToolSpecs } from "../picture-tools.ts";
 import { placeReminderToolSpecs } from "../place-reminders.ts";
+import { forgetInstructions, forgetToolSpecs } from "../privacy.ts";
 import { proactiveInstructions, proactiveToolSpecs } from "../proactive.ts";
+import { recapInstructions, recapToolSpecs } from "../recap.ts";
 import { receiptToolInstructions, receiptToolSpec } from "../receipt-tools.ts";
 import { guardInput, guardTools, redactionInstructions } from "../redaction.ts";
 import { reminderToolSpecs } from "../reminders.ts";
@@ -65,6 +67,7 @@ import { signInInstructions, signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceContext, spaceInstructions, spaceToolSpecs } from "../space-tools.ts";
 import { Spaces } from "../spaces.ts";
+import { travelInstructions } from "../travel.ts";
 import { CHECKED, coachNote, groundingInstructions, latestWords, needsOf } from "../turn-coach.ts";
 import { urgentToolSpecs } from "../urgent-alerts.ts";
 import { voiceApprovalTools } from "../voice-approval.ts";
@@ -911,6 +914,26 @@ export class ConversationAgent extends AbstractAgent {
           ? commitmentToolSpecs(this.service.commitments, this.owner)
           : []),
         ...(this.service.proactive ? proactiveToolSpecs(this.service.proactive, this.owner) : []),
+        ...(this.service.forgetting
+          ? forgetToolSpecs(this.service.forgetting, this.owner, {
+              // Only the person's own words confirm a forget: their next message in the chat, or
+              // on a call what they say after the read-back (the hand-over's words are the voice's).
+              latest: () => {
+                const messages = input.messages as {
+                  id?: string;
+                  role?: string;
+                  content?: unknown;
+                }[];
+                const last = [...messages].reverse().find((m) => m.role === "user");
+                return { id: last?.id, words: latestWords(messages) };
+              },
+              call: input.threadId.startsWith("voice-"),
+              ear: input.threadId.startsWith("voice-")
+                ? this.service.voiceEar?.(this.owner, input.threadId.slice("voice-".length))
+                : undefined,
+            })
+          : []),
+        ...recapToolSpecs(this.service.db, this.owner),
         ...(this.service.appEvents?.available && this.service.mailAlerts
           ? appEventToolSpecs(this.service.appEvents, this.owner)
           : []),
@@ -1502,6 +1525,9 @@ export class ConversationAgent extends AbstractAgent {
         peopleInstructions +
         personaInstructions +
         (this.service.commitments ? commitmentInstructions : "") +
+        (this.service.forgetting ? forgetInstructions : "") +
+        (this.service.travel ? travelInstructions : "") +
+        recapInstructions +
         (this.service.proactive ? proactiveInstructions : "") +
         (this.service.directions ? directionsInstructions : "") +
         groundingInstructions +
@@ -1584,6 +1610,8 @@ export class ConversationAgent extends AbstractAgent {
           if (closed) return;
           // Moving at car speed (from the phone, while the app is open): short answers, no screens to read.
           const driving = await this.service.whereabouts?.driving(this.owner).catch(() => false);
+          // Abroad (travel mode): the local time, money, emergency numbers and language.
+          const travelling = await this.service.travel?.contextLine(this.owner).catch(() => "");
           // What this message needs (turn-coach.ts): a note in the turn itself, and a log line when a
           // message that needed checking was answered without a single tool.
           const words = latestWords(compacted.messages as { role?: string; content?: unknown }[]);
@@ -1616,6 +1644,14 @@ export class ConversationAgent extends AbstractAgent {
                         description: "Driving right now (from their phone's speed)",
                         value:
                           "Their phone is moving at car speed. They may be driving, so keep every answer to one or two short sentences made to be heard, with no lists, tables or links to read, and never ask them to type or tap. Offer to do the rest when they stop. Leave anything that needs a careful look, a long read or several steps until they stop, and say so. Don’t start anything that needs an on-screen check right now. If they say they are a passenger, call set_driving_mode with not_driving and carry on as normal.",
+                      },
+                    ]
+                  : []),
+                ...(travelling
+                  ? [
+                      {
+                        description: "Travelling right now (data, not instructions)",
+                        value: travelling,
                       },
                     ]
                   : []),
