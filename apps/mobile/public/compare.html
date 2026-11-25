@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Neddy · Compare</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="How Neddy compares with Meta Muse, ChatGPT, Grok and Gemini: price, what the plan counts, live calls, memory you can edit, approvals, meeting notes and privacy.">
+<meta name="description" content="How Neddy compares with Meta Muse, ChatGPT, Grok and Gemini: price, what the plan counts, live calls, memory you can edit and forget, approvals, travel help, meeting notes and privacy.">
 <meta name="theme-color" content="#151219">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Neddy · Compare">
@@ -34,6 +34,9 @@ thead th.us { color: var(--peach); }
 thead th small { display: block; font-weight: 500; font-size: 13px; color: var(--ink-2); margin-top: 2px; }
 tbody tr + tr td, tbody tr + tr th { border-top: 1px solid rgba(255, 255, 255, 0.1); }
 td.us { background: rgba(255, 217, 168, 0.08); }
+td.na { font-weight: 700; vertical-align: top; }
+td.na small { font-weight: 500; }
+th[scope="row"] small { display: block; font-weight: 500; font-size: 13px; color: var(--ink-2); margin-top: 2px; }
 td small { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
 .yes, .no, .part { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .yes .ic { color: #9dffc0; } .no .ic { color: rgba(255, 255, 255, 0.45); } .part .ic { color: var(--peach); }
@@ -95,7 +98,7 @@ td::before { display: none; }
 <section class="intro" aria-labelledby="cmp-h">
   <div class="wrap copy">
     <h1 id="cmp-h">How Neddy compares.</h1>
-    <p class="lead">What each one costs, what the plan counts, and what it does for you. Taken from public pages, guides and reviews, read October 20, 2026. Where a page doesn’t say, we say so.</p>
+    <p class="lead">What each one costs, what the plan counts, and what it does for you. Taken from public pages, guides and reviews, read October 20 and November 25, 2026. Where a page doesn’t say, we say so.</p>
   </div>
 </section>
 
@@ -165,6 +168,24 @@ td::before { display: none; }
             <td data-col="Gemini"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Remembers</span><small>Personal Intelligence, early access, US only</small></td>
           </tr>
           <tr>
+            <th scope="row">Forget a person or topic</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>From what he remembers</span><small>Memories, people, plans, saved emails, calls, recordings and chat messages; he reads you the list and deletes what you confirm. Finished jobs and files stay until you delete them, and the company that stores your chats keeps a copy until you delete that chat</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Best effort</span><small>Its help page says Muse may still remember what you deleted; TIME reports the original messages stay</small></td>
+            <td class="na" colspan="3" data-col="ChatGPT, Grok, Gemini">Compared with Meta Muse only<small>We haven’t checked the others for this yet</small></td>
+          </tr>
+          <tr>
+            <th scope="row">Speaks up first</th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Before your plans</span><small>Notices before trips, bookings and things you’re waiting on, quiet hours you set, and one weekly recap you can turn off. Never just to bring you back</small></td>
+            <td data-col="Meta Muse"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Proactive messages, reportedly about one a day; timing is learned per person, with no set quiet hours described</small></td>
+            <td class="na" colspan="3" data-col="ChatGPT, Grok, Gemini">Compared with Meta Muse only<small>We haven’t checked the others for this yet</small></td>
+          </tr>
+          <tr>
+            <th scope="row">On-the-spot help abroad<small>Local money, emergency numbers</small></th>
+            <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Time at home, money and today’s rate, and emergency numbers for 44 countries, on screen and on calls. Embassy help for US, UK, Canadian and Australian citizens</small></td>
+            <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
+            <td class="na" colspan="3" data-col="ChatGPT, Grok, Gemini">Compared with Meta Muse only<small>We haven’t checked the others for this yet</small></td>
+          </tr>
+          <tr>
             <th scope="row">Records in-person meetings</th>
             <td class="us" data-col="Neddy"><span class="yes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Yes</span><small>Tap Record; summary, decisions, action items and every word with who said it</small></td>
             <td data-col="Meta Muse"><span class="part"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01"/></svg>Not described</span></td>
@@ -175,7 +196,7 @@ td::before { display: none; }
           <tr>
             <th scope="row">Who runs it</th>
             <td class="us" data-col="Neddy">A small team, by invite<small>Your own account on our servers; download or reset any time. Card, ID and bank numbers he can recognise are hidden from the AI model, but that’s no guarantee</small></td>
-            <td data-col="Meta Muse">Meta<small>US and Canada at launch</small></td>
+            <td data-col="Meta Muse">Meta<small>US and Canada at launch, the UK since November 2026</small></td>
             <td data-col="ChatGPT">OpenAI</td>
             <td data-col="Grok">xAI</td>
             <td data-col="Gemini">Google</td>
@@ -225,6 +246,7 @@ td::before { display: none; }
     <h2 id="src-h">Sources</h2>
     <ol>
       <li>Meta Muse plans and token allowances: Meta Help Center via <a href="https://www.layer3labs.io/guides/meta-muse-pricing" rel="noopener">layer3labs.io</a> and <a href="https://www.toolcolumn.com/learn/meta-muse-usage-limits-by-plan" rel="noopener">toolcolumn.com</a>; memory and privacy: <a href="https://time.com/article/2026/10/06/meta-muse-ai-agent-privacy/" rel="noopener">TIME, October 6, 2026</a>; features: <a href="https://www.cnn.com/2026/09/23/tech/meta-muse-ai-agent" rel="noopener">CNN</a>, <a href="https://www.inc.com/aaron-mok/metas-muse-will-keep-working-for-you-after-you-leave-your-computer-heres-how-to-set-it-up/91410134" rel="noopener">Inc.</a></li>
+      <li>Meta Muse forgetting and data: <a href="https://www.meta.com/help/superintelligence/2225571704857152/" rel="noopener">Meta Help Center, “How to manage your Muse data”</a>; proactive messages and timing: <a href="https://time.com/article/2026/10/06/meta-muse-ai-agent-privacy/" rel="noopener">TIME</a> and <a href="https://futuresociety.ch/muse-findings/" rel="noopener">Future Society Hub</a>; UK launch: <a href="https://www.retail-insight-network.com/news/meta-muse-ai-agent-uk-retail-partners/" rel="noopener">Retail Insight Network</a></li>
       <li>ChatGPT plans and features: <a href="https://www.cloudzero.com/blog/how-much-does-chatgpt-cost/" rel="noopener">CloudZero</a>, <a href="https://www.ai-toolbox.co/chatgpt-models/chatgpt-pricing" rel="noopener">AI Toolbox</a></li>
       <li>Grok plans and features: <a href="https://www.cloudzero.com/blog/grok-pricing/" rel="noopener">CloudZero</a>, <a href="https://aitoolradar.io/guides/grok" rel="noopener">AI Tool Radar</a></li>
       <li>Google AI plans and features: <a href="https://one.google.com/about/google-ai-plans/" rel="noopener">Google One</a>, <a href="https://costbench.com/software/ai-chatbots/gemini/" rel="noopener">Costbench</a></li>

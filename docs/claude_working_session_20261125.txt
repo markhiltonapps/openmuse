@@ -145,3 +145,20 @@ Now (apps/server/src/commitments.ts, engine/service.ts, email-views.ts, apps.ts,
 - Forget doesn't search jobs, files, goals or routines (said on screen and in Help). The chat store keeps its own copy
   of a hidden message until the chat is deleted. Travel works only with the app open and location on.
 - Untested live: open.er-api.com from Railway, reverse geocoding abroad, the travel line on a real call.
+
+## Website: Neddy's advantages (neddy.html, neddy.css, compare.html)
+- Home page: a new "He travels with you." section with a phone mockup of the travel card (real app wording: Police 999,
+  Ambulance and fire 995, US citizens' line, "Good evening, Mark."); a "What only Neddy does." strip right after it (Help
+  when you travel, Deletes what you choose, Calm by design) linking to the comparison; two privacy rules ("Forgetting you
+  can check." with what stays, "Never sold or used for ads."); delete-everything includes recordings; the weekly-recap
+  sentence closes the heads-up note; a Travel link in the nav (section links now hide below 1160px, so the full nav
+  never runs off the edge).
+- Sign in shows in the top bar on phones too (owner, 2026-11-25), on all three pages: 44px buttons, the brand text hides
+  below 370px. Checked 320–1280: no sideways scroll.
+- Compare: three rows (Forget a person or topic, Speaks up first, On-the-spot help abroad) against Meta Muse only, with
+  sources (Meta Help, TIME, Future Society Hub, Retail Insight Network for the UK launch); the other three columns say
+  "Compared with Meta Muse only" instead of claims we haven't checked. Muse's note adds the UK. Read date updated.
+- Reviews: visual (3 rounds), usability (3), copy (3) signed off. They caught a claim that forget reaches "everywhere",
+  "not described" cells for products we hadn't researched (ChatGPT does describe forgetting and speaking first), a nav
+  that overflowed at 1081–1120px, 40px phone buttons, and a mockup whose words weren't the app's.
+- Screenshots: scratchpad shots/site3 and shots/bar2 (390×844, 1280×800, bar at 320–430).

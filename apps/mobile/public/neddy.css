@@ -1646,12 +1646,38 @@ footer a:hover {
 }
 
 @media (max-width: 960px) {
-  .bar nav,
-  .bar .soft {
+  .bar nav {
     display: none;
   }
 }
-@media (max-width: 1080px) {
+/* Phones: Sign in stays at the top (the bare address shows this page to people not signed in). */
+@media (max-width: 440px) {
+  .bar > div {
+    gap: 6px;
+  }
+  .bar .soft,
+  .bar .cta {
+    height: 44px;
+    border-radius: 22px;
+  }
+  .bar .soft {
+    padding: 0 12px;
+  }
+  .bar .cta {
+    padding: 0 14px;
+  }
+}
+@media (max-width: 370px) {
+  .brand {
+    font-size: 0;
+    padding-right: 2px;
+  }
+  .bar .soft,
+  .bar .cta {
+    font-size: 14px;
+  }
+}
+@media (max-width: 1160px) {
   .bar nav a[href^="#"] {
     display: none;
   }
@@ -1784,5 +1810,106 @@ footer a:hover {
   }
   .hero .art .phone {
     margin-left: 30%;
+  }
+}
+
+/* Travel card in the phone mockup */
+.trows {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 10px 10px;
+  margin: 0;
+  align-items: baseline;
+}
+.trows dt {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 20px;
+}
+.trows dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  min-width: 0;
+}
+.trows dd small {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.trows .calls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.trows .calls span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.trows .calls .ic {
+  color: #5fc6bb;
+}
+
+/* What only Neddy does */
+.only {
+  padding-bottom: 56px;
+}
+.only .wrap {
+  display: grid;
+  gap: 28px;
+}
+.only .copy {
+  max-width: 680px;
+}
+.only .tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.only .tiles li {
+  border-radius: 26px;
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.only .tile-ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: #5fc6bb;
+  background: rgba(95, 198, 187, 0.16);
+  margin-bottom: 4px;
+}
+.only .tiles b {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.only .tiles li > span:last-child {
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.only .after {
+  margin: 0;
+}
+@media (max-width: 940px) {
+  .only .tiles {
+    grid-template-columns: 1fr;
   }
 }
