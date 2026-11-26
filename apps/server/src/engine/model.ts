@@ -33,6 +33,7 @@ import { PastChats, pastChatToolSpecs } from "../past-chats.ts";
 import { peopleInstructions, peopleToolSpecs } from "../people.ts";
 import { personaInstructions, personaToolSpecs } from "../persona.ts";
 import { reminderToolSpecs } from "../reminders.ts";
+import { draftOnlyToThem, onlyToThem, SELF_SEND_RULE } from "../self-send.ts";
 import { signInToolSpecs } from "../sign-in-tools.ts";
 import { SocialWeeks } from "../social-weeks.ts";
 import { spaceToolSpecs } from "../space-tools.ts";
@@ -164,6 +165,8 @@ export async function executeModelTask(
   // The built-in Google mailbox and calendar (read_workspace and the rest), separate from the Gmail,
   // Outlook or Google Calendar app connected under Apps; see mailboxes.ts.
   const builtIn = () => service.workspace.connected(owner);
+  // A routine's run (or a one-time job set up for later): its emails to the person go without review.
+  const routineJob = typeof task.input?.routineId === "string";
   const apps = Boolean(service.apps);
   const builtInNow = await builtIn();
   const tools = [
@@ -321,7 +324,14 @@ export async function executeModelTask(
         // It would send from the built-in mailbox; their own mail app sends with use_app.
         if (!(await builtIn())) return { error: builtInOff(apps) };
         const key = createHash("sha256").update(JSON.stringify(data)).digest("hex");
-        const action = await service.prepare(owner, task, { kind: "email.send", data }, key, ctx);
+        let action = await service.prepare(owner, task, { kind: "email.send", data }, key, ctx);
+        // A routine's email only to the person themselves never asks (owner, 2026-11-26).
+        if (
+          action.status === "awaiting_review" &&
+          routineJob &&
+          draftOnlyToThem(data, await service.ownAddresses(owner))
+        )
+          action = await service.actions.decide(owner, action.id, action.hash, "approve");
         if (action.status === "succeeded") {
           task = await ctx.checkpoint({
             state: { ...task.state, approvalResult: action.result },
@@ -592,11 +602,19 @@ export async function executeModelTask(
         },
         service.spending,
         service.approvals && {
-          allowed: async (tool) =>
+          allowed: async (tool, args) => {
+            // A routine's email only to the person themselves never asks (owner, 2026-11-26).
+            if (
+              routineJob &&
+              !tool.destructive &&
+              onlyToThem(tool.slug, args, await service.ownAddresses(owner))
+            )
+              return SELF_SEND_RULE;
             // "The rest of this job in <app>", chosen when approving an earlier step of it.
-            !tool.destructive && (await service.actions.jobAllows(owner, task.id, tool.app))
+            return !tool.destructive && (await service.actions.jobAllows(owner, task.id, tool.app))
               ? `the rest of this job in ${appLabel(tool.app)}`
-              : (service.approvals?.allows(owner, tool) ?? undefined),
+              : (service.approvals?.allows(owner, tool) ?? undefined);
+          },
           blocked: (tool) => service.approvals?.blocked(owner, tool) ?? Promise.resolve(undefined),
           approve: async (proposal) => {
             const done = await service.actions.decide(owner, proposal.id, proposal.hash, "approve");

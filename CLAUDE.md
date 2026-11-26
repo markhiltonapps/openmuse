@@ -836,4 +836,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **The bare address is the website for visitors (2026-11-25):** index.html forwards `/` to `/neddy.html` unless the device is
   signed in, the app is installed, the tab has used the app, or the link has `?`/`#`; `/app` always opens the app. Local
   Playwright scripts set `sessionStorage["neddy.app"]="1"` before `goto("/")` (help-shots.mjs does), or they land on the website.
+- **Routines don't ask the person every day (owner, 2026-11-26):** a routine's result comes back in the app on its own; its
+  email only to the person's own addresses runs without review (`self-send.ts`, routine jobs only; anyone else on to/cc/bcc
+  still asks), and a new run puts away that routine's older runs still waiting. Recurring work that stops for the same OK
+  every day is friction, not safety: decide once where a rule can, and keep only one card per routine.
 

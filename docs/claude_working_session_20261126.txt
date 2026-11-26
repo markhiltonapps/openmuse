@@ -1,0 +1,23 @@
+# Claude working session — 2026-11-26
+
+## Pushed: privacy, travel mode, weekly recap and the website (3c2883a, 2193c51)
+- Owner said "push it". No live call in the api's logs; both deployments SUCCESS, the api started cleanly.
+- "Pictures off: OPENROUTER_API_KEY isn't set" was already in the previous deployment's log (not from this push).
+
+## Routine runs that wait on the owner every day (owner screenshot: four "Needs your answer" cards)
+- Cause in the code: every routine run's instructions ended "Anything that sends, creates, changes or deletes still
+  needs the person's review", so a daily brief that emails its result stopped each day, and the model sometimes asked
+  "shall I send it?" with ask_user. Old runs never stepped aside, so each day added a card.
+- The four live jobs' own questions couldn't be read: Railway keeps only the current deployment's logs, and reading the
+  bucket's backup was blocked by the permission check (not worked around). The fix is built from the code.
+- Owner's choice (asked): "Sending to me never asks". apps/server/src/self-send.ts: a routine's (or one-time job's)
+  GMAIL/OUTLOOK *_SEND_EMAIL or built-in prepare_email whose every to/cc/bcc address is the person's own (sign-in email,
+  About you comms.email / comms.workEmail) runs without review ("Done without review, because the person allowed a
+  routine’s emails sent only to themselves"). Anyone else on it, no readable recipient, replies, drafts and Slack still ask.
+  Jobs the person hands off themselves keep asking (the owner's choice was about routines).
+- routinePrompt: the result comes back in the app on its own; never ask whether to send it; ask_user only when truly stuck.
+- A new run of a routine stops and archives that routine's older runs still waiting (waiting_input / waiting_approval;
+  a waiting OK is turned down), with state.supersededBy. It doesn't touch the "last tidy" Undo batch.
+- Help: Routines topic says both. Tests: tests/self-send.test.ts (3: address shapes, a routine run to self vs someone
+  else vs a handed-off job, superseding). pnpm test 947/947, typecheck clean.
+- The four cards already on Home go when each routine next runs; saying "let go of the jobs waiting on me" clears them now.

@@ -1639,6 +1639,20 @@ export class AgentService {
   appEvents?: AppEvents;
   /** Connected-app actions the person always allows. */
   approvals?: ApprovalRules;
+  /** The person's own email addresses (their sign-in and About you), for "sending to yourself never asks". */
+  async ownAddresses(owner: string): Promise<string[]> {
+    const facts = await Promise.all(
+      ["comms.email", "comms.workEmail"].map((key) =>
+        this.persona.get(owner, key).catch(() => undefined),
+      ),
+    );
+    const account = await this.accountEmail?.(owner).catch(() => undefined);
+    return [account, ...facts.map((fact) => fact?.value)]
+      .filter((value): value is string => typeof value === "string" && value.includes("@"))
+      .map((value) => value.trim().toLowerCase());
+  }
+  /** The email the person signs in with (accounts.ts). */
+  accountEmail?: (owner: string) => Promise<string | undefined>;
   /** Finds places on the map for show_places; set when the server can reach a geocoder. */
   geocode: Geocoder = async () => undefined;
   /** Every connected calendar app's events in a stretch of time (as the Feed reads them). */
@@ -2007,7 +2021,33 @@ export class AgentService {
       {},
       { lastRunAt: occurrence, lastTaskId: task.id },
     );
+    await this.supersede(owner, routine, task.id).catch((error) =>
+      backgroundFailure("putting away older routine runs", error),
+    );
     return task;
+  }
+  /**
+   * A new run of a routine replaces older ones still waiting on the person (owner, 2026-11-26: a
+   * card a day for each routine was "a ton of friction"). They're stopped (a waiting OK is turned
+   * down: today's run makes a fresh one) and put away under Archived, where they can be opened.
+   */
+  private async supersede(owner: string, routine: Routine, newest: string) {
+    for (const task of await this.db.list<AgentTask>(owner, "tasks")) {
+      if (task.id === newest || task.archivedAt) continue;
+      if (task.input?.routineId !== routine.id) continue;
+      if (task.status !== "waiting_input" && task.status !== "waiting_approval") continue;
+      await this.control(owner, task.id, "cancel").catch(() => undefined);
+      await this.db.compareAndSwap(
+        owner,
+        "tasks",
+        task.id,
+        {},
+        {
+          archivedAt: date(),
+          state: { ...task.state, supersededBy: newest },
+        },
+      );
+    }
   }
   /** Claims each due occurrence once (compare-and-swap on nextRunAt), then starts its run. */
   async runDueRoutines(now = Date.now()) {

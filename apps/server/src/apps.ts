@@ -759,7 +759,7 @@ export function appToolSpecs(
   spending?: { check(owner: string, amount?: number): Promise<string | undefined> },
   /** Runs actions the person always allows straight away instead of waiting for review. */
   auto?: {
-    allowed(tool: AppTool): Promise<string | undefined>;
+    allowed(tool: AppTool, args?: Record<string, unknown>): Promise<string | undefined>;
     /** Why a change can't run in this app (it's read-only), or undefined. */
     blocked?(tool: AppTool): Promise<string | undefined>;
     approve(proposal: { id: string; hash: string }): Promise<{
@@ -941,7 +941,10 @@ export function appToolSpecs(
               "This was already done (the person approved it earlier). Don't do it again; carry on from its result.",
           };
         // Purchases always wait for the person, whatever they allow.
-        const rule = !isPurchase(tool.slug) && !amountUsd ? await auto?.allowed(tool) : undefined;
+        const rule =
+          !isPurchase(tool.slug) && !amountUsd
+            ? await auto?.allowed(tool, request.arguments)
+            : undefined;
         if (rule && auto && proposal.hash) {
           const done = await auto.approve({ id: proposal.id, hash: proposal.hash });
           return done.status === "succeeded"

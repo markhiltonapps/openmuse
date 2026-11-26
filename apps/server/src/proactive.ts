@@ -451,7 +451,8 @@ export class Proactive {
     // A kind paused from the screen or by voice comes back in 30 days; the weekly recap is a
     // regular note people choose, so "off" stays off until they turn it back on.
     if (patch.mute)
-      muted[patch.mute] = this.now() + (patch.muteDays ?? (patch.mute === "weekly" ? 3650 : 30)) * DAY;
+      muted[patch.mute] =
+        this.now() + (patch.muteDays ?? (patch.mute === "weekly" ? 3650 : 30)) * DAY;
     if (patch.unmute) delete muted[patch.unmute];
     const next: ProactiveSettings = {
       ...current,

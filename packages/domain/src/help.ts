@@ -972,6 +972,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       "**One-time jobs:** ask for something to happen once, later: “Check with the dentist office on Monday morning,” or, when a place is closed, “Do it when they open.” {agent} asks for all the details it needs in one go, saves lasting ones (like your mobile number) to **About you**, and, once you say yes, sets a one-time job for that day and time. It shows under **Goals › Tracking** as **Once on …**, runs by itself, then pauses. Its result comes back as an update.",
       "Email rules work the same way: “When Dana at Acme emails me about an invoice, save the PDF and tell me the total.”",
+      "**No daily approvals for your own copy:** a routine’s result comes back to you in the app on its own. If it emails the result, an email only to you (the address you sign in with, or your email on **About you**) goes without asking. Anything sent to someone else, even with you on it, still waits for your OK.",
+      "**One card per routine:** when a new run starts, older runs of the same routine that were still waiting on you are stopped and put under **Archived** in **Activity**, where you can still open them. A waiting OK on an older run is turned down; the new run makes a fresh one if it needs to.",
     ],
     say: [
       "Every Friday at 4, check my inbox for anything I haven’t answered.",
@@ -2689,7 +2691,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       "**What it can’t reach:** finished jobs and files that mention it stay until you delete them. The company that stores your chats keeps its own copy of a removed message until you delete that chat. Backup copies are kept for two weeks, then deleted.",
       "Your chats keep exactly what you typed. {agent} hides card numbers and passwords from the AI, but a number you typed is still in your chat until you delete that message (tap the bin under it) or forget it here.",
     ],
-    say: ["Forget everything about Jordan.", { text: "What do you remember about me?", send: true }],
+    say: [
+      "Forget everything about Jordan.",
+      { text: "What do you remember about me?", send: true },
+    ],
     keywords: [
       "forget",
       "forget everything",

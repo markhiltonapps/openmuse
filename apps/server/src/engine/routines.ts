@@ -68,7 +68,7 @@ export function nextRun(
 
 export function routinePrompt(routine: Routine) {
   const kind = routine.date ? "one-time job" : "routine";
-  return `${routine.prompt}\n\nThis is the scheduled ${kind} “${routine.title}”. Work from current data: mail, calendar, connected apps, goals and tasks as relevant. Keep the result short and skimmable, then call finish_task with it. Anything that sends, creates, changes or deletes still needs the person's review.`;
+  return `${routine.prompt}\n\nThis is the scheduled ${kind} “${routine.title}”. Work from current data: mail, calendar, connected apps, goals and tasks as relevant. Keep the result short and skimmable, then call finish_task with it: the result comes back to the person in the app on its own, so never ask whether to send it to them or whether they want it. If the routine says to email the result to them, send it to their own address with use_app; an email only to their own address goes without review. Anything that sends to someone else, creates, changes or deletes still needs the person's review. Use ask_user only when you truly can't do the job without them (a missing connection or detail), never to confirm.`;
 }
 
 export const routineTemplates = [

@@ -274,6 +274,7 @@ export async function createApp(
       to: async (owner) => (await accounts.get(owner))?.email,
     };
   agent.spending = spending;
+  agent.accountEmail = async (owner) => (await accounts.get(owner))?.email;
   // Direct Claude calls for pictures and for reading imported history.
   const claude =
     config.agentBackend === "model" && config.anthropicApiKey
