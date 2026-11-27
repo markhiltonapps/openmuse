@@ -259,7 +259,22 @@ static const char *const STEP_NAMES[] = {
   "screen", "settings", "audio port", "chip bus", "speaker chip", "mic chip", "play buffer", "play task", "touch", "recorder",
   "main loop", "recording", "sleep check", "Wi-Fi", "pairing", "connect", "connection", "touch read", "battery", "status",
   "PWR button", "motion chip", "recorder tick", "buttons", "drawing", "mic power",
+  "Wi-Fi screen", "Wi-Fi radio", "CPU speed", "Wi-Fi join",
 };
+// The crash's own reason ("LoadProhibited", "Stack canary watchpoint triggered (loopTask)"...), saved by Arduino's panic hook
+// as whole words, and the address it happened at.
+static RTC_NOINIT_ATTR uint32_t panicMagic;
+static RTC_NOINIT_ATTR uint32_t panicPc;
+static RTC_NOINIT_ATTR uint32_t panicWords[10];   // up to 39 characters, 4 to a word
+static String lastPanic;                           // "LoadProhibited at 4200ABCD" when the last start ended in a crash
+static void IRAM_ATTR onPanic(arduino_panic_info_t *info, void *) {   // (in IRAM: it may run while flash is busy)
+  uint32_t w[10] = { 0 };
+  const char *r = info && info->reason ? info->reason : "";
+  for (int i = 0; i < 39 && r[i]; i++) w[i / 4] |= (uint32_t)(uint8_t)r[i] << (8 * (i % 4));
+  for (int i = 0; i < 10; i++) panicWords[i] = w[i];
+  panicPc = info ? (uint32_t)(uintptr_t)info->pc : 0;
+  panicMagic = STEP_MAGIC;
+}
 static uint32_t stepHash(const char *t) {   // FNV-1a: the same name always gives the same number
   uint32_t h = 2166136261u;
   while (*t) { h ^= (uint8_t)*t++; h *= 16777619u; }
@@ -276,8 +291,18 @@ static void readLastStop(int why) {
     for (const char *n : STEP_NAMES) if (stepHash(n) == stepCode) name = n;
     const char *what = why == ESP_RST_PANIC ? "Crashed" : (why == ESP_RST_BROWNOUT ? "Lost power" : "Froze");
     lastStop = String(what) + " at: " + name;
+    if (why == ESP_RST_PANIC && panicMagic == STEP_MAGIC) {
+      char t[41];
+      for (int i = 0; i < 40; i++) { char c = (char)((panicWords[i / 4] >> (8 * (i % 4))) & 0xFF); t[i] = (c >= 32 && c <= 126) ? c : 0; if (!c) break; }
+      t[40] = 0;
+      char pc[12];
+      snprintf(pc, sizeof(pc), "%08lX", (unsigned long)panicPc);
+      lastPanic = String(t) + " " + pc;
+    }
   }
   stepMagic = 0;
+  panicMagic = 0;
+  set_arduino_panic_handler(onPanic, NULL);
 }
 static unsigned long slowRead = 0, slowSend = 0;
 static String micChip = "mic chip: not checked";
@@ -633,6 +658,7 @@ static void screenBoot(const String &line) {
   uiTextCentered(NFONT_TITLE, UI_CY - 90, "Neddy", uiAcc());
   uiTextCentered(NFONT_BODY, UI_CY + 40, line.c_str(), UI_GREY);
   if (lastStop.length()) uiTextCentered(NFONT_MID, UI_CY + 100, lastStop.c_str(), UI_AMBER);   // why the last start ended (a crash): see step()
+  if (lastPanic.length()) { char t[48]; uiFit(t, sizeof(t), NFONT_MID, lastPanic.c_str(), NEDDY_ROUND ? 360 : 380); uiTextCentered(NFONT_MID, UI_CY + 140, t, UI_AMBER); }
   uiTextCentered(NFONT_MID, UI_H - (NEDDY_ROUND ? 70 : 52), (String("version ") + FIRMWARE_VERSION).c_str(), UI_GREY);
 }
 
@@ -1973,10 +1999,14 @@ static void wifiSetupRun() {
 
 static bool joinWifi() {
   if (recState == RS_SEND) { recShowSending("Joining Wi-Fi, please wait"); }   // (the recording's screen stays; the usual "Joining Wi-Fi" screen would cover it)
+  step("Wi-Fi screen");
   setMode(M_WIFI);
+  step("Wi-Fi radio");
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(batterySaver);  // saver on: the radio sleeps between messages; off: faster answers
+  step("CPU speed");
   setCpuFrequencyMhz(batterySaver ? 160 : 240);
+  step("Wi-Fi join");
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   unsigned long began = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - began < 30000) delay(250);
