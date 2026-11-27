@@ -154,6 +154,6 @@ What happened, in order:
 - The crash: "Crashed at: Wi-Fi / StoreProhibited 42101D8F". addr2line on the owner's PC (tool and .elf paths from the IDE's own log) gave
   BLEServer::setCallbacks: Bluetooth Wi-Fi setup ran, BLEDevice::createServer() returned nothing on this board, and the code used it.
   Fix: if the Bluetooth server or service isn't created, fall to the temporary Wi-Fi (QR) setup instead of crashing.
-Open: why the Bluetooth server isn't created on the 1.75C (memory or the BLE library in core 3.3.11); why the watch went to Wi-Fi setup at all
-when settings.h has a Wi-Fi name (check settings.h for NEDDY_FORCE_QR_SETUP / NEDDY_USE_SETTINGS_WIFI). The six checks on the round watch are
+Open: why the Bluetooth server isn't created on the 1.75C (memory or the BLE library in core 3.3.11); the watch went to Wi-Fi setup because the owner's
+settings.h has no Wi-Fi in it (he confirmed), which is the shipping flow: Bluetooth setup first, now falling to the QR hotspot setup. The six checks on the round watch are
 still to do. Help unchanged: no screen people see changed (only the crash note on the start screen, which is for building the watch).
