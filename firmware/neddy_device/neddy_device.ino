@@ -259,7 +259,7 @@ static const char *const STEP_NAMES[] = {
   "screen", "settings", "audio port", "chip bus", "speaker chip", "mic chip", "play buffer", "play task", "touch", "recorder",
   "main loop", "recording", "sleep check", "Wi-Fi", "pairing", "connect", "connection", "touch read", "battery", "status",
   "PWR button", "motion chip", "recorder tick", "buttons", "drawing", "mic power",
-  "Wi-Fi screen", "Wi-Fi radio", "CPU speed", "Wi-Fi join",
+  "Wi-Fi screen", "Wi-Fi radio", "CPU speed", "Wi-Fi join", "Bluetooth setup", "hotspot setup",
 };
 // The crash's own reason ("LoadProhibited", "Stack canary watchpoint triggered (loopTask)"...), saved by Arduino's panic hook
 // as whole words, and the address it happened at.
@@ -1912,8 +1912,14 @@ static int wifiSetupBluetooth() {
   bleConnected = false;
   BLEDevice::init(name);
   BLEServer *server = BLEDevice::createServer();
+  BLEService *svc = nullptr;
+  if (server) svc = server->createService(NEDDY_BLE_SERVICE);
+  if (!server || !svc) {                                    // Bluetooth didn't start (seen on a 1.75C): use the temporary Wi-Fi setup instead of crashing
+    LOGLN("[setup] Bluetooth didn't start: using the Wi-Fi hotspot setup");
+    bleMemoryReleased = true;                               // (never tried again until a restart)
+    return SETUP_SWITCH;
+  }
   server->setCallbacks(new NeddyBleServerCb());
-  BLEService *svc = server->createService(NEDDY_BLE_SERVICE);
   BLECharacteristic *netsChar = svc->createCharacteristic(NEDDY_BLE_NETWORKS, BLECharacteristic::PROPERTY_READ);
   BLECharacteristic *credChar = svc->createCharacteristic(NEDDY_BLE_CREDENTIALS, BLECharacteristic::PROPERTY_WRITE);
   bleStatusChar = svc->createCharacteristic(NEDDY_BLE_STATUS, BLECharacteristic::PROPERTY_READ);
@@ -1991,6 +1997,7 @@ static void wifiSetupRun() {
   int m = NEDDY_BLE_FIRST ? 0 : 1;
   for (;;) {
     if (m == 0 && bleMemoryReleased) m = 1;
+    step(m == 0 ? "Bluetooth setup" : "hotspot setup");
     int r = (m == 0) ? wifiSetupBluetooth() : wifiSetupHotspot();
     if (r == SETUP_DONE) return;
     m ^= 1;

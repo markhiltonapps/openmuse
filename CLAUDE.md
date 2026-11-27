@@ -852,3 +852,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   only after Neddy's answer has finished playing (recording turns Wi-Fi off and would cut the reply), and the tool says plainly
   when the watch isn't connected instead of promising. A launcher icon needs its own touch test (`icon(UI_L_…)`).
 
+- **A watch that crashes before it can talk (2026-11-27, round 1.75C):** USB serial showed only the ROM's "Rebooting..." lines, never the
+  panic text. The start screen now says where and why the last start died ("Crashed at: Wi-Fi", "StoreProhibited 42101D8F"), kept in RTC
+  memory with whole 32-bit writes (volatile), and the owner turns the address into a line on his own PC with the toolchain's
+  `xtensa-esp32s3-elf-addr2line -pfiaC -e <sketch>.elf 0x…` (paths from the IDE's build log; before any new upload). A `#define` the owner's
+  own settings.h lacks falls back to a default silently: "Using library board_config" in the build log means a 2.06 build. A library call that
+  can return nothing (BLEDevice::createServer) must be checked, with a fallback, not used blind. Rule out the board with the maker's own example
+  (firmware/screen_test) before chasing our code.

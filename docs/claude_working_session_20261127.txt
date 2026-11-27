@@ -138,3 +138,22 @@ Taken: the patterns. Left out: their robot art, brand and exact look; a language
 - Committed locally, not pushed: waiting for "push it".
 - Firmware zip for the owner. Their settings.h needs `#define NEDDY_BOARD 175` and FIRMWARE_VERSION "0.2.0".
 - Unchecked on the real 1.75C: PWR on GPIO3, the CST9217 read, the IMU axes, the BOOT double-click timing (400 ms).
+
+--- Round watch (1.75C) first flash, evening ---
+What happened, in order:
+- The first build for the 1.75C was really a 2.06 build: the owner's own settings.h (kept from the 2.06) had no NEDDY_BOARD line, so
+  neddy_board.h fell back to 206. Tell-tale: the build log said "Using library board_config" (only a 206 build includes pin_config.h).
+  Screen black on USB and battery. Fixed by adding `#define NEDDY_BOARD 175` to settings.h.
+- The 175 build then restarted every few seconds on "Starting". The USB serial showed only the ROM's "Rebooting..." lines, never the panic text.
+- Added start-up step notes: each step's name (as a 32-bit hash, whole-word writes only) goes into RTC memory that a crash doesn't
+  clear, and the next "Starting" screen shows "Crashed at: <step>" in orange. Arduino's panic hook (set_arduino_panic_handler) also saves
+  the crash's own reason and address ("StoreProhibited 42101D8F"). ESP_ERROR_CHECK in codecInit became ESP_RETURN_ON_ERROR (a silent speaker
+  chip now shows "Audio didn't start" instead of restarting forever). The step variables are volatile so the compiler can't move them.
+- A black-screen detour: the owner's screen went black even with Waveshare's own Hello World (firmware/screen_test, which also prints the
+  power chip's outputs). It came back once the watch started without upload mode (likely BOOT held/pressed at power-up). Battery read 4178 mV.
+- The crash: "Crashed at: Wi-Fi / StoreProhibited 42101D8F". addr2line on the owner's PC (tool and .elf paths from the IDE's own log) gave
+  BLEServer::setCallbacks: Bluetooth Wi-Fi setup ran, BLEDevice::createServer() returned nothing on this board, and the code used it.
+  Fix: if the Bluetooth server or service isn't created, fall to the temporary Wi-Fi (QR) setup instead of crashing.
+Open: why the Bluetooth server isn't created on the 1.75C (memory or the BLE library in core 3.3.11); why the watch went to Wi-Fi setup at all
+when settings.h has a Wi-Fi name (check settings.h for NEDDY_FORCE_QR_SETUP / NEDDY_USE_SETTINGS_WIFI). The six checks on the round watch are
+still to do. Help unchanged: no screen people see changed (only the crash note on the start screen, which is for building the watch).
