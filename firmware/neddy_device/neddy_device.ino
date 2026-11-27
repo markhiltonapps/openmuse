@@ -248,6 +248,27 @@ static const char *resetName(int r) {
     default: return "other";
   }
 }
+// Where the watch last was (start-up step or part of the main loop), kept in memory that a crash or watchdog restart doesn't clear.
+// The next "Starting" screen says it, so a board that crashes before it can say anything over USB still shows where (a photo is enough).
+#define STEP_MAGIC 0x4E454444u
+static RTC_NOINIT_ATTR uint32_t stepMagic;
+static RTC_NOINIT_ATTR char stepAt[24];
+static String lastStop;   // "CRASH at speaker chip" when the last start ended in a crash; "" otherwise
+static inline void step(const char *where) {
+  strncpy(stepAt, where, sizeof(stepAt) - 1);
+  stepAt[sizeof(stepAt) - 1] = 0;
+  stepMagic = STEP_MAGIC;
+}
+static void readLastStop(int why) {
+  bool crashed = why == ESP_RST_PANIC || why == ESP_RST_INT_WDT || why == ESP_RST_TASK_WDT || why == ESP_RST_WDT || why == ESP_RST_BROWNOUT;
+  if (crashed && stepMagic == STEP_MAGIC) {
+    stepAt[sizeof(stepAt) - 1] = 0;
+    for (size_t i = 0; stepAt[i]; i++) if (stepAt[i] < 32 || stepAt[i] > 126) stepAt[i] = '?';
+    const char *what = why == ESP_RST_PANIC ? "Crashed" : (why == ESP_RST_BROWNOUT ? "Lost power" : "Froze");
+    lastStop = String(what) + " at: " + stepAt;
+  }
+  stepMagic = 0;
+}
 static unsigned long slowRead = 0, slowSend = 0;
 static String micChip = "mic chip: not checked";
 static bool waitingFirstSound = false;
@@ -601,6 +622,7 @@ static void screenBoot(const String &line) {
   clearScreen();
   uiTextCentered(NFONT_TITLE, UI_CY - 90, "Neddy", uiAcc());
   uiTextCentered(NFONT_BODY, UI_CY + 40, line.c_str(), UI_GREY);
+  if (lastStop.length()) uiTextCentered(NFONT_MID, UI_CY + 100, lastStop.c_str(), UI_AMBER);   // why the last start ended (a crash): see step()
   uiTextCentered(NFONT_MID, UI_H - (NEDDY_ROUND ? 70 : 52), (String("version ") + FIRMWARE_VERSION).c_str(), UI_GREY);
 }
 
@@ -722,7 +744,7 @@ static esp_err_t codecInit() {
     .mclk_frequency = SAMPLE_RATE * 256,
     .sample_frequency = SAMPLE_RATE
   };
-  ESP_ERROR_CHECK(es8311_init(handle, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16));
+  ESP_RETURN_ON_ERROR(es8311_init(handle, &clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16), "codec", "init failed");   // (not ESP_ERROR_CHECK: a chip that doesn't answer shows "Audio didn't start" instead of restarting forever)
   ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(handle, clk.mclk_frequency, clk.sample_frequency),
                       "codec", "sample rate failed");
   ESP_RETURN_ON_ERROR(es8311_microphone_config(handle, false), "codec", "microphone failed");
@@ -832,12 +854,14 @@ static void micWake() {
 }
 
 static bool audioInit() {
+  step("audio port");
   i2s.setPins(PIN_I2S_BCLK, PIN_I2S_WS, PIN_I2S_DOUT, PIN_I2S_DIN, PIN_I2S_MCLK);  // bclk, ws, data out, data in, mclk (Waveshare's examples)
   if (!i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) {
     LOGLN("[audio] I2S failed to start");
     return false;
   }
   i2s.setTimeout(100);  // a read that finds no sound gives up quickly instead of freezing everything
+  step("chip bus");
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
 #if DEBUG_SERIAL
   // Which chips answer on the I2C bus (for finding out what a board really has): printed once.
@@ -849,11 +873,14 @@ static bool audioInit() {
   pinMode(PIN_SPEAKER_AMP, OUTPUT);
   digitalWrite(PIN_SPEAKER_AMP, (PLAY_ANSWERS && !batterySaver) ? HIGH : LOW);  // speaker amplifier (with the saver on it wakes when there is sound: see paTick)
   paState = PLAY_ANSWERS && !batterySaver;
+  step("speaker chip");
   if (codecInit() != ESP_OK) {
     LOGLN("[audio] audio chip setup failed");
     return false;
   }
+  step("mic chip");
   es7210Init();  // the microphone chip; a problem is shown on screen, not fatal
+  step("play buffer");
   playBuffer = xStreamBufferCreate(48 * 1024, 2);
   return playBuffer != NULL;
 }
@@ -2015,6 +2042,9 @@ void setup() {
   bootCount++;
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
   LOGLN(resetWhy);
+  readLastStop((int)esp_reset_reason());
+  if (lastStop.length()) LOGLN(String("[start] the last start ended: ") + lastStop);
+  step("screen");
   pinMode(BUTTON, INPUT_PULLUP);
   pinMode(PIN_PWR_KEY, INPUT);   // PWR button: high while pressed
 
@@ -2058,6 +2088,7 @@ void setup() {
   uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0 || NEDDY_RAISE_DEBUG != 0;
   screenBoot("Starting");
 
+  step("settings");
   prefs.begin("neddy", false);
   // Hold BOOT while plugging in to forget the pairing and start over.
   if (digitalRead(BUTTON) == LOW) {
@@ -2089,9 +2120,13 @@ void setup() {
     screenProblem("Audio didn't start", "The microphone or speaker chip didn't answer. Unplug and replug the board. If it keeps happening, tell Mark and send the text from the Serial Monitor.");
     for (;;) delay(1000);
   }
+  step("play task");
   xTaskCreatePinnedToCore(playTask, "play", 6144, NULL, 3, NULL, 1);
+  step("touch");
   touchInit();
+  step("recorder");
   recInit();
+  step("main loop");
 }
 
 // What Settings > Info shows: the Wi-Fi's name and free memory, looked at every few seconds (cheap; no radio work).
@@ -2192,6 +2227,7 @@ static bool linkTurn() {
   // 1. Wi-Fi
   if (WiFi.status() != WL_CONNECTED) {
     wsUp = false;
+    step("Wi-Fi");
     if (wifiSsid.length() == 0) {              // none saved yet (a new watch, or it was forgotten): the QR code setup
       wifiSetupRun();
       mode = M_BOOT;
@@ -2218,6 +2254,7 @@ static bool linkTurn() {
 
   // 2. Pairing (only until it works once; it's remembered after that)
   if (deviceToken.length() == 0) {
+    step("pairing");
     setMode(M_PAIR);
     if (!pairWithNeddy()) return false;
     socketStarted = false;  // the connection below starts with the new key
@@ -2227,11 +2264,13 @@ static bool linkTurn() {
   // 3. The connection to Neddy
   const bool uploading = recState == RS_SEND;                    // the upload gets the memory to itself: no connection to Neddy until it is done
   if (!socketStarted && !uploading) {
+    step("connect");
     setMode(M_LINK);
     startSocket();
     socketStarted = true;
   }
   unsigned long wsAt = millis();
+  step("connection");
   if (socketStarted) ws.loop();
   if (millis() - wsAt > maxWs) maxWs = millis() - wsAt;
 
@@ -2259,20 +2298,28 @@ void loop() {
   if (loopPrev && turnAt - loopPrev > maxLoop) maxLoop = turnAt - loopPrev;
   loopPrev = turnAt;
   // 0. Recording: the recorder has the loop to itself (no Wi-Fi, no talking) until Stop
-  if (recState == RS_REC) { recLoop(); return; }
+  if (recState == RS_REC) { step("recording"); recLoop(); return; }
   // 1-3. Wi-Fi, pairing and the connection to Neddy (skipped while the watch sleeps with Wi-Fi off)
+  step("sleep check");
   napCheck();
   if (!napWifiOff && !linkTurn()) return;
 
   // 4. The touch screen and the button: holding Neddy (or a double tap) counts as holding the button
+  step("touch read");
   touchLoop();
+  step("battery");
   batteryLoop();
+  step("status");
   statusLoop();
   infoLoop();
+  step("PWR button");
   pwrLoop();
   doLoop();
+  step("motion chip");
   raiseLoop();
+  step("recorder tick");
   recTick();
+  step("buttons");
   bool boot = uiBoot(millis(), buttonDown());       // held a quarter second: talk; double-clicked: the launcher
   bool down = (boot || uiTouchTalk) && uiRec.state == UI_RECS_OFF;
   if (down && !held) {
@@ -2305,6 +2352,7 @@ void loop() {
   }
 
   // Neddy's screen: draws only what changed (and the moving parts if motion is on).
+  step("drawing");
   if (uiActive) {
     if (mode == M_READY && millis() - lastDiag > 5000) {   // Wi-Fi strength and the like
       lastDiag = millis();
@@ -2313,6 +2361,7 @@ void loop() {
     uiTick(millis());
   }
   // With the battery saver on the processor rests between turns of the loop instead of spinning: nothing here needs more than ~250 turns a second (not while talking).
+  step("mic power");
   micPowerLoop();
   if (napSleep()) return;
   if (batterySaver && !held && uiRec.state == UI_RECS_OFF) delay(4);
