@@ -41,12 +41,27 @@ void setup() {
   }
 }
 
+// Once a second over USB (Tools > Serial Monitor, 115200): the power chip's status and which of its outputs are on.
+// AXP2101: 0x00/0x01 status, 0x80 DC-DC on/off, 0x90/0x91 LDO on/off (ALDO1-4, BLDO1-2, CPUSLDO, DLDO1 / DLDO2),
+// 0x82 DCDC1 volts, 0x92-0x9A each LDO's volts. Only read, never written.
+static void pmuReport(int n) {
+  const uint8_t regs[] = { 0x00, 0x01, 0x10, 0x27, 0x80, 0x82, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A };
+  Serial.printf("alive %d | power chip:", n);
+  for (uint8_t r : regs) {
+    int v = pmu(r);
+    if (v < 0) { Serial.printf(" %02X=--", r); } else { Serial.printf(" %02X=%02X", r, v); }
+  }
+  int hi = pmu(0x34), lo = pmu(0x35);
+  if (hi >= 0 && lo >= 0) Serial.printf(" | battery %d mV", ((hi & 0x3F) << 8) | lo);
+  Serial.println();
+}
+
 void loop() {
   static int n = 0;
+  pmuReport(n);
   gfx->fillRect(150, 320, 170, 30, RGB565_BLACK);
   gfx->setCursor(150, 320);
   gfx->setTextColor(RGB565_YELLOW);
   gfx->printf("alive %d", n++);
-  Serial.printf("alive %d\n", n);
   delay(1000);
 }
