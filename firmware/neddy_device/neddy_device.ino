@@ -252,8 +252,8 @@ static const char *resetName(int r) {
 // The next "Starting" screen says it, so a board that crashes before it can say anything over USB still shows where (a photo is enough).
 #define STEP_MAGIC 0x4E454444u
 // Only whole 32-bit words go into this memory (a number for the step, not its text), so writing it is always safe on this chip.
-static RTC_NOINIT_ATTR uint32_t stepMagic;
-static RTC_NOINIT_ATTR uint32_t stepCode;
+static volatile RTC_NOINIT_ATTR uint32_t stepMagic;   // (volatile: each step is written when it happens, not moved by the compiler)
+static volatile RTC_NOINIT_ATTR uint32_t stepCode;
 static String lastStop;   // "Crashed at: speaker chip" when the last start ended in a crash; "" otherwise
 static const char *const STEP_NAMES[] = {
   "screen", "settings", "audio port", "chip bus", "speaker chip", "mic chip", "play buffer", "play task", "touch", "recorder",
