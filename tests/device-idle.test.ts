@@ -94,6 +94,10 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     vol: 85,
     bs: 1,
     nap: 1,
+    br: 100,
+    oa: 0,
+    ac: 0,
+    dp: 0,
     wt: 72,
     ws: "Partly cloudy",
     wi: "partly",
@@ -268,6 +272,37 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   const muted = (await tool.execute({ do: "settings" })) as { message?: string };
   assert.match(muted.message ?? "", /the speaker is muted/);
   await devices.setSettings("o", fourth.id, { volume: 85 });
+  // Brightness, colour, screen off and the double press: by voice, reaching the watch, held to what it can do.
+  const looks = (await tool.execute({
+    do: "settings",
+    brightness: 60,
+    color: "blue",
+    screen_off_after_seconds: 300,
+    double_press: "talk",
+  })) as { message?: string };
+  assert.match(
+    looks.message ?? "",
+    /brightness is 60 percent; the colour is blue; the screen goes dark after 5 minutes of quiet; a double press of PWR starts hands-free talk/,
+  );
+  const fifth = (await devices.list("o"))[0];
+  assert.ok(fifth);
+  const facts = await idleInfo(deps, "o", fifth);
+  assert.deepEqual([facts.br, facts.ac, facts.oa, facts.dp], [60, 1, 300, 1], "the watch is told");
+  assert.equal(
+    (await devices.setSettings("o", fourth.id, { brightness: 2 })).brightness,
+    10,
+    "never darker than 10%",
+  );
+  assert.equal(
+    (await devices.setSettings("o", fourth.id, { accent: "plaid" as never })).accent,
+    "amber",
+  );
+  await devices.setSettings("o", fourth.id, {
+    brightness: 100,
+    accent: "amber",
+    screenOffAfter: 0,
+    doublePress: "record",
+  });
   // Turning the idle screen off still reports it.
   const idleOff = (await tool.execute({ do: "settings", idle_after_seconds: 0 })) as {
     message?: string;
@@ -353,6 +388,10 @@ test("the chat changes a device's idle screen by what's said", async () => {
     volume: 85,
     batterySaver: true,
     sleepWhenIdle: true,
+    brightness: 100,
+    screenOffAfter: 0,
+    accent: "amber",
+    doublePress: "record",
   });
   assert.equal(seen.length, 1);
   // Asking without changing anything just says how it is; 0 turns the idle screen off; silly numbers are held to the limits.
@@ -386,6 +425,9 @@ test("a device is sent its idle facts when it connects and when its settings cha
         fps: animation === "saver" ? 0 : animation === "smooth" ? 2 : 1,
         face: settingsOf(device).face === "analog" ? 1 : settingsOf(device).face === "neon" ? 2 : 0,
         vol: settingsOf(device).volume,
+        dim: settingsOf(device).dim ? 1 : 0,
+        ac: ["amber", "blue", "green", "pink"].indexOf(settingsOf(device).accent),
+        dp: ["record", "talk", "none"].indexOf(settingsOf(device).doublePress),
         t: 1,
       };
     },
@@ -449,6 +491,41 @@ test("a device is sent its idle facts when it connects and when its settings cha
   await until(
     () => text.filter((event) => event.type === "idle").some((event) => event.vol === 100),
     "an out-of-range volume is held to 100",
+  );
+  // The watch's own Settings pages: brightness, dim after (0 = never), screen off, colour, saver, raise, double press.
+  for (const [key, value] of [
+    ["brightness", 70],
+    ["dimAfter", 120],
+    ["screenOffAfter", 300],
+    ["accent", 3],
+    ["raiseToWake", 1],
+    ["doublePress", 2],
+  ] as const)
+    ws.send(JSON.stringify({ type: "device.setting", key, value }));
+  await until(
+    () =>
+      text
+        .filter((event) => event.type === "idle")
+        .some((event) => event.dp === 2 && event.ac === 3),
+    "the watch's settings kept and said back",
+  );
+  const kept = settingsOf((await devices.list("o"))[0] as never);
+  assert.deepEqual(
+    [
+      kept.brightness,
+      kept.dim,
+      kept.dimAfter,
+      kept.screenOffAfter,
+      kept.accent,
+      kept.raiseToWake,
+      kept.doublePress,
+    ],
+    [70, true, 120, 300, "pink", true, "none"],
+  );
+  ws.send(JSON.stringify({ type: "device.setting", key: "dimAfter", value: 0 }));
+  await until(
+    () => text.filter((event) => event.type === "idle").some((event) => event.dim === 0),
+    "Never on the watch turns dimming off",
   );
   ws.close();
   bridge.stop();
@@ -562,6 +639,72 @@ test("a watch's status report over its socket is kept and logged (bad numbers ar
   ws.send(JSON.stringify({ type: "device.status", battery: 900, mv: "x", rssi: 50, up: -4 }));
   await until(() => devices.statusOf(id)?.battery === null, "a nonsense battery is dropped");
   assert.equal(devices.statusOf(id)?.wifiDbm, null);
+  ws.close();
+  bridge.stop();
+  server.close();
+  await db.close();
+});
+
+test("by voice, the watch starts a recording or turns its screen off; a watch that isn't connected says so", async () => {
+  const db = await createStore();
+  const devices = new Devices(db);
+  const server = createServer();
+  const bridge = new DeviceBridge(
+    devices,
+    () => undefined,
+    () => undefined,
+  );
+  bridge.attach(server);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const started = await devices.start("Waveshare", "1.2.3.4");
+  await devices.claim("o", pairClaimSchema.parse({ code: started.code, name: "Desk" }));
+  const token = ((await devices.poll(started.pollToken)) as { token: string }).token;
+  const [tool] = deviceToolSpecs(devices, "o");
+  const run = (input: Record<string, unknown>) =>
+    (tool as { execute: (input: never) => Promise<Record<string, unknown>> }).execute(
+      input as never,
+    );
+
+  // Not connected yet: nothing is promised, and they're told how to start it on the watch.
+  const offline = await run({ do: "record", mode: "meeting" });
+  assert.match(String(offline.error), /isn't connected/);
+  assert.match(String(offline.error), /PWR, then Record/);
+
+  const ws = new WebSocket(
+    `ws://127.0.0.1:${(server.address() as AddressInfo).port}/api/device/audio`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const text: Record<string, unknown>[] = [];
+  ws.on("message", (data: Buffer, isBinary: boolean) => {
+    if (!isBinary) text.push(JSON.parse(data.toString()));
+  });
+  await once(ws, "open");
+  await until(() => text.some((event) => event.type === "hello"), "the hello");
+
+  const meeting = await run({ do: "record", mode: "meeting", name: "my watch" });
+  assert.equal(meeting.asked, true);
+  assert.match(String(meeting.message), /meeting recording in a moment/);
+  await until(() => text.some((event) => event.type === "device.do"), "the recording request");
+  assert.deepEqual(
+    text.find((event) => event.type === "device.do"),
+    { type: "device.do", do: "record", mode: "meeting" },
+  );
+  // No mode said: a voice note, written down word for word.
+  const note = await run({ do: "record" });
+  assert.match(String(note.message), /voice note/);
+  await until(
+    () => text.filter((event) => event.type === "device.do").length === 2,
+    "the second request",
+  );
+  assert.equal(text.filter((event) => event.type === "device.do")[1]?.mode, "note");
+
+  const dark = await run({ do: "screen_off" });
+  assert.equal(dark.asked, true);
+  await until(
+    () => text.some((event) => event.type === "device.do" && event.do === "screen_off"),
+    "the screen-off request",
+  );
   ws.close();
   bridge.stop();
   server.close();

@@ -4,7 +4,7 @@ import {
   weatherIconFor,
 } from "../../../packages/domain/src/device-card.ts";
 import type { TodayCalendar } from "./calendar-today.ts";
-import { type Device, settingsOf } from "./devices.ts";
+import { type Device, DOUBLE_PRESS, settingsOf, WATCH_ACCENTS } from "./devices.ts";
 import type { WeatherService } from "./weather.ts";
 
 export interface IdleDeps {
@@ -65,6 +65,10 @@ export async function idleInfo(deps: IdleDeps, owner: string, device: Device) {
     vol: settings.volume,
     bs: settings.batterySaver ? 1 : 0,
     nap: settings.sleepWhenIdle ? 1 : 0,
+    br: settings.brightness,
+    oa: settings.screenOffAfter,
+    ac: Math.max(0, WATCH_ACCENTS.indexOf(settings.accent)),
+    dp: Math.max(0, DOUBLE_PRESS.indexOf(settings.doublePress)),
   };
   const [forecast, calendar] = await Promise.all([
     settings.idleAfter && settings.showWeather

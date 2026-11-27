@@ -34,7 +34,30 @@ export interface DeviceSettings {
   batterySaver: boolean;
   /** With the saver on and the screen dark for a minute, the watch turns its Wi-Fi off and sleeps; a button press, a touch-and-hold or a recording to send wakes it and it reconnects in a few seconds. Neddy can't reach it while it sleeps. */
   sleepWhenIdle: boolean;
+  /** How bright the screen is when it is on, 10 to 100 percent (dimming then goes lower still). */
+  brightness: number;
+  /** Seconds of quiet before the screen goes dark by itself; 0 = never (the battery saver still darkens it 45 s after dimming). */
+  screenOffAfter: number;
+  /** The watch's accent colour (icons, numbers, switches). */
+  accent: WatchAccent;
+  /** What two quick presses of the watch's PWR button do: start a recording (in the mode used last), talk hands-free, or nothing. */
+  doublePress: "record" | "talk" | "none";
 }
+export const WATCH_ACCENTS = ["amber", "blue", "green", "pink"] as const;
+export type WatchAccent = (typeof WATCH_ACCENTS)[number];
+export const DOUBLE_PRESS = ["record", "talk", "none"] as const;
+/** The kinds of recording a watch can make (its Record page): a voice note, an idea, a meeting, a dream. */
+export const WATCH_RECORD_MODES = ["note", "idea", "meeting", "dream"] as const;
+const RECORD_WORDS: Record<(typeof WATCH_RECORD_MODES)[number], string> = {
+  note: "voice note",
+  idea: "brain dump",
+  meeting: "meeting",
+  dream: "dream",
+};
+/** Something a watch is asked to do now, by voice or chat. */
+export type WatchAction =
+  | { do: "record"; mode: (typeof WATCH_RECORD_MODES)[number] }
+  | { do: "screen_off" };
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   idleAfter: 10,
   dim: true,
@@ -48,6 +71,10 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   volume: 85,
   batterySaver: true,
   sleepWhenIdle: true,
+  brightness: 100,
+  screenOffAfter: 0,
+  accent: "amber",
+  doublePress: "record",
 };
 export const settingsOf = (device: Pick<Device, "settings">): DeviceSettings => ({
   ...DEFAULT_DEVICE_SETTINGS,
@@ -137,6 +164,7 @@ export class Devices {
   private readonly statuses = new Map<string, DeviceStatus>();
   private readonly removedHooks: ((deviceId: string) => void)[] = [];
   private readonly settingsHooks: ((deviceId: string) => void)[] = [];
+  private actionHook?: (deviceId: string, action: WatchAction) => boolean;
   constructor(
     private readonly db: Store,
     private readonly now: () => number = Date.now,
@@ -305,6 +333,15 @@ export class Devices {
     this.settingsHooks.push(hook);
   }
 
+  /** Set by whatever holds the devices' connections: sends one an action now, true if it was connected. */
+  onAction(hook: (deviceId: string, action: WatchAction) => boolean) {
+    this.actionHook = hook;
+  }
+  /** Asks a connected watch to do something now (start a recording, turn its screen off). False when it isn't connected. */
+  act(deviceId: string, action: WatchAction) {
+    return this.actionHook?.(deviceId, action) ?? false;
+  }
+
   list(owner: string) {
     return this.db.list<Device>(owner, "devices");
   }
@@ -314,13 +351,30 @@ export class Devices {
   }
 
   /** Changes some of a device's idle-screen settings (the rest stay as they were). */
-  async setSettings(owner: string, id: string, patch: Partial<DeviceSettings>) {
+  /** One settings change at a time per device: the watch can send several at once (after a reconnect), and each reads the last. */
+  private readonly settingsQueue = new Map<string, Promise<unknown>>();
+  setSettings(owner: string, id: string, patch: Partial<DeviceSettings>): Promise<DeviceSettings> {
+    const before = this.settingsQueue.get(id) ?? Promise.resolve();
+    const run = before.catch(() => undefined).then(() => this.setSettingsNow(owner, id, patch));
+    this.settingsQueue.set(id, run);
+    void run
+      .finally(() => {
+        if (this.settingsQueue.get(id) === run) this.settingsQueue.delete(id);
+      })
+      .catch(() => undefined);
+    return run;
+  }
+  private async setSettingsNow(owner: string, id: string, patch: Partial<DeviceSettings>) {
     const device = await this.db.get<Device>(owner, "devices", id);
     if (!device) throw new AppError("That device isn’t on your list.", 404);
     const next = { ...settingsOf(device), ...patch };
     next.idleAfter = Math.max(0, Math.min(600, Math.round(next.idleAfter)));
     next.dimAfter = Math.max(0, Math.min(3600, Math.round(next.dimAfter)));
     next.volume = Math.max(0, Math.min(100, Math.round(next.volume)));
+    next.brightness = Math.max(10, Math.min(100, Math.round(next.brightness)));
+    next.screenOffAfter = Math.max(0, Math.min(3600, Math.round(next.screenOffAfter)));
+    if (!WATCH_ACCENTS.includes(next.accent)) next.accent = "amber";
+    if (!DOUBLE_PRESS.includes(next.doublePress)) next.doublePress = "record";
     await this.db.put(owner, "devices", { ...device, settings: next });
     for (const hook of this.settingsHooks) hook(id);
     return next;
@@ -367,9 +421,17 @@ export function describeSettings(settings: DeviceSettings) {
     settings.volume === 0
       ? "the speaker is muted"
       : `the speaker volume is ${settings.volume} percent`;
+  const look = `the screen's brightness is ${settings.brightness} percent; the colour is ${settings.accent}; ${settings.screenOffAfter > 0 ? `the screen goes dark after ${spokenSeconds(settings.screenOffAfter)} of quiet` : "the screen doesn't go dark by itself"}; a double press of PWR ${settings.doublePress === "record" ? "starts a recording" : settings.doublePress === "talk" ? "starts hands-free talk" : "does nothing"}`;
   return settings.idleAfter === 0
-    ? `the idle screen is off; ${sound}; ${saver}; ${raise}`
-    : `${sound}; ${saver}; after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? (settings.dimAfter > 0 ? `dims after ${settings.dimAfter} seconds of quiet` : "dims after a minute") : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}`;
+    ? `the idle screen is off; ${sound}; ${saver}; ${raise}; ${look}`
+    : `${sound}; ${saver}; after ${settings.idleAfter} seconds of quiet it shows ${shows.join(", ")}, and ${settings.dim ? (settings.dimAfter > 0 ? `dims after ${spokenSeconds(settings.dimAfter)} of quiet` : "dims after a minute") : "stays bright"}; Neddy's animation is ${settings.animation}; the watch face is ${settings.face}; ${raise}; ${look}`;
+}
+function spokenSeconds(s: number) {
+  return s < 60
+    ? `${s} seconds`
+    : s % 60 === 0
+      ? `${s / 60} minute${s === 60 ? "" : "s"}`
+      : `${s} seconds`;
 }
 
 /** The chat's one tool for devices: pair one with the code on its screen, list, rename or remove. */
@@ -414,9 +476,15 @@ export function deviceToolSpecs(
     {
       name: "manage_devices",
       description:
-        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them, their idle-screen settings and the watch's last report of itself (battery percentage and whether it is charging, Wi-Fi strength, how long it has been on): use it for “how’s my watch’s battery?” and never guess; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), dim (dim the screen; there is no brightness level to set, so for “turn the screen down” use dim and say so), dim_after_seconds (how many seconds of quiet before it dims, for “dim it after 5 seconds”; 0 goes back to the usual minute after the idle screen comes on; it only dims once the idle screen is on, so idle_after_seconds must be on too and a small number like 5 is best), battery_saver (the Wi-Fi radio sleeps between messages and the processor runs slower, to make the battery last longer; Neddy’s first word can come a moment later; “my battery drains fast” means turn it on), sleep_when_idle (with the battery saver on, after the screen has been dark for a minute the watch turns its Wi-Fi off and sleeps, so it lasts all day; after a press it takes 2 to 4 seconds to reconnect, and Neddy can’t reach it while it sleeps; on by default; turn it off if they want it always ready), volume (how loud the speaker is, 0 to 100; “it’s too loud” or “turn it down” means a lower number, and there is no louder-than-100), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
+        "The person's Neddy watch or watches (also called a device, wearable or gadget: a small watch-style board with a screen they hold a button on to talk). When they say “my watch”, “the watch screen”, “the idle screen” or “turn the screen down”, this is the tool, and with one watch you need no name. Actions (do): 'pair' adds one, using the six-digit code on the device's screen (say “code”, not “PIN”) and an optional name; 'list' shows them, their idle-screen settings and the watch's last report of itself (battery percentage and whether it is charging, Wi-Fi strength, how long it has been on): use it for “how’s my watch’s battery?” and never guess; 'rename' needs name (which one) and new_name; 'settings' changes the idle screen (its home screen: the clock, weather, next meeting and battery level it shows after a quiet spell, 10 seconds by default, and again after every answer): idle_after_seconds (0 turns the idle screen off), brightness (how bright the screen is while on, 10 to 100 percent; “turn the screen down” or “it’s too bright” means a lower number, “brighter” a higher one), dim (dim the screen after a quiet spell), dim_after_seconds (how many seconds of quiet before it dims, for “dim it after 5 seconds”; 0 goes back to the usual minute after the idle screen comes on; it only dims once the idle screen is on, so idle_after_seconds must be on too and a small number like 5 is best), battery_saver (the Wi-Fi radio sleeps between messages and the processor runs slower, to make the battery last longer; Neddy’s first word can come a moment later; “my battery drains fast” means turn it on), sleep_when_idle (with the battery saver on, after the screen has been dark for a minute the watch turns its Wi-Fi off and sleeps, so it lasts all day; after a press it takes 2 to 4 seconds to reconnect, and Neddy can’t reach it while it sleeps; on by default; turn it off if they want it always ready), volume (how loud the speaker is, 0 to 100; “it’s too loud” or “turn it down” means a lower number, and there is no louder-than-100), show_weather, show_meeting, show_battery, animation (how smoothly Neddy moves: saver, normal or smooth), face (the watch face: info, analog or neon), screen_off_after_seconds (the screen goes dark by itself after this much quiet; 0 never; a touch, a press or a raised wrist wakes it), color (the watch's accent colour: amber, blue, green or pink), double_press (what two quick presses of the watch's PWR button do: record (start a recording in the mode used last), talk (hands-free talk) or none), raise_to_wake (raising their wrist brightens the screen once it has dimmed, like a normal watch; it needs dim on, it is off until they ask for it, and it uses a little battery), for the device named in name; 'record' starts a recording on the watch itself now (mode: note for a voice note written down word for word, idea for a brain dump sorted into a list, meeting for a meeting written up with its summary, dream for a dream kept with a title; “record this meeting on my watch”, “start a voice note”), once its answer has finished playing; Wi-Fi is off while it records, so Neddy can't hear or talk until they stop it with a hold on the watch's stop button or a press of PWR, and it is sent when they stop; 'screen_off' turns the watch's screen dark now (once its answer has finished; a touch or a press wakes it); both need the watch switched on and connected; 'remove' needs name and turns one off for good: first say which device you mean and ask them to confirm, then call again with confirm true. Nothing is drawn on their screen by this.",
       parameters: z.object({
-        do: z.enum(["pair", "list", "rename", "remove", "settings"]),
+        do: z.enum(["pair", "list", "rename", "remove", "settings", "record", "screen_off"]),
+        mode: z
+          .enum(WATCH_RECORD_MODES)
+          .optional()
+          .describe(
+            "record: note (word for word), idea (brain dump, sorted), meeting (written up), dream (title and a line); if they don't say which and it isn't clear (they may be in a meeting), ask before starting",
+          ),
         code: z.string().max(20).optional().describe("The six digits on the device's screen"),
         name: z.string().max(40).optional().describe("The device's name, or how they described it"),
         new_name: z.string().max(40).optional(),
@@ -451,6 +519,29 @@ export function deviceToolSpecs(
           .boolean()
           .optional()
           .describe("settings: save battery (Wi-Fi sleeps between messages, slower processor)"),
+        brightness: z
+          .number()
+          .int()
+          .min(10)
+          .max(100)
+          .optional()
+          .describe(
+            "settings: how bright the watch's screen is while on, 10 to 100 percent (100 until changed; read the current one with do list first for “brighter” or “dimmer”)",
+          ),
+        screen_off_after_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(3600)
+          .optional()
+          .describe("settings: seconds of quiet before the screen goes dark by itself; 0 never"),
+        color: z.enum(WATCH_ACCENTS).optional().describe("settings: the watch's accent colour"),
+        double_press: z
+          .enum(DOUBLE_PRESS)
+          .optional()
+          .describe(
+            "settings: what two quick presses of PWR do: record (start a recording in the mode used last), talk (hands-free), none",
+          ),
         sleep_when_idle: z
           .boolean()
           .optional()
@@ -483,13 +574,18 @@ export function deviceToolSpecs(
           ),
       }),
       execute: async (input: {
-        do: "pair" | "list" | "rename" | "remove" | "settings";
+        do: "pair" | "list" | "rename" | "remove" | "settings" | "record" | "screen_off";
+        mode?: (typeof WATCH_RECORD_MODES)[number];
         idle_after_seconds?: number;
         dim?: boolean;
         dim_after_seconds?: number;
         volume?: number;
         battery_saver?: boolean;
         sleep_when_idle?: boolean;
+        brightness?: number;
+        screen_off_after_seconds?: number;
+        color?: WatchAccent;
+        double_press?: (typeof DOUBLE_PRESS)[number];
         show_weather?: boolean;
         show_meeting?: boolean;
         show_battery?: boolean;
@@ -565,6 +661,12 @@ export function deviceToolSpecs(
               ...(input.animation !== undefined ? { animation: input.animation } : {}),
               ...(input.face !== undefined ? { face: input.face } : {}),
               ...(input.raise_to_wake !== undefined ? { raiseToWake: input.raise_to_wake } : {}),
+              ...(input.brightness !== undefined ? { brightness: input.brightness } : {}),
+              ...(input.screen_off_after_seconds !== undefined
+                ? { screenOffAfter: input.screen_off_after_seconds }
+                : {}),
+              ...(input.color !== undefined ? { accent: input.color } : {}),
+              ...(input.double_press !== undefined ? { doublePress: input.double_press } : {}),
             };
             if (!Object.keys(patch).length)
               return {
@@ -576,6 +678,25 @@ export function deviceToolSpecs(
               changed: true,
               message: `Done. ${device.name}'s idle screen: ${describeSettings(next)}. The device gets it within a few seconds.`,
             };
+          }
+          if (input.do === "record" || input.do === "screen_off") {
+            const action: WatchAction =
+              input.do === "record"
+                ? { do: "record", mode: input.mode ?? "note" }
+                : { do: "screen_off" };
+            if (!devices.act(device.id, action))
+              return {
+                error: `${device.name} isn't connected right now (it may be off, asleep with its Wi-Fi off, or out of Wi-Fi range), so it can't be asked. Tell them to press a button on it to wake it, then ask again${input.do === "record" ? ", or to start the recording on the watch: PWR, then Record" : ""}.`,
+              };
+            return input.do === "record"
+              ? {
+                  asked: true,
+                  message: `${device.name} starts a ${RECORD_WORDS[input.mode ?? "note"]} recording in a moment (right after any answer it's playing). Say so in one short sentence, including how to stop it (hold the stop button or press PWR). While it records, the watch's Wi-Fi is off, so it can't talk to Neddy until they stop it; then it's sent.`,
+                }
+              : {
+                  asked: true,
+                  message: `${device.name}'s screen goes dark in a moment. A touch or a press wakes it.`,
+                };
           }
           if (input.do === "rename") {
             if (!input.new_name?.trim()) return { error: "What should it be called?" };

@@ -82,8 +82,9 @@ export interface DumpItem {
 }
 export interface Meeting {
   id: string;
-  /** A brain dump: one person talking to themselves, sorted into things to add, not minuted. */
-  kind?: "meeting" | "dump";
+  /** A brain dump: one person talking to themselves, sorted into things to add, not minuted. A voice note (from the watch): kept
+   * as its words, named from them. A dream (from the watch): its words, a short title and one line about it. */
+  kind?: "meeting" | "dump" | "note" | "dream";
   /** What a brain dump was sorted into. */
   dump?: DumpItem[];
   title: string;
@@ -456,6 +457,11 @@ export interface MeetingsOptions {
   writeNotes?: (owner: string, transcript: string) => Promise<MeetingNotes | undefined>;
   /** A brain dump sorted into things to add; undefined when no model is set up. */
   sortDump?: (owner: string, transcript: string, at: number) => Promise<DumpResult | undefined>;
+  /** A dream's short title and one line about it; undefined when no model is set up (it keeps its time as a title). */
+  nameDream?: (
+    owner: string,
+    transcript: string,
+  ) => Promise<{ title?: string; summary?: string } | undefined>;
   /** Whether a model is set up to sort one; a brain dump isn't started without it. */
   dumpAvailable?: () => boolean;
   /** Adds one sorted thing for real (a reminder, a note, a job, a fact); throws with the reason. */
@@ -703,7 +709,12 @@ export class Meetings {
    */
   async importRecording(
     owner: string,
-    input: { startedAt: number; seconds: number; chunks: Uint8Array[] },
+    input: {
+      startedAt: number;
+      seconds: number;
+      chunks: Uint8Array[];
+      kind?: "meeting" | "dump" | "note" | "dream";
+    },
   ) {
     if (!this.options.soniox)
       throw new AppError("Recording meetings isn’t set up on this server yet.", 503);
@@ -736,9 +747,16 @@ export class Meetings {
         throw new AppError(STORAGE_DOWN_PIECE, 503);
       }
     }
+    // An idea needs the model that sorts it; without one it is kept as a voice note (its words), never lost.
+    const kind =
+      input.kind === "dump" && this.options.dumpAvailable?.() === false
+        ? "note"
+        : (input.kind ?? "meeting");
+    const label = { meeting: "Meeting", dump: "Idea", note: "Voice note", dream: "Dream" }[kind];
     const meeting: Meeting = {
       id,
-      title: await this.defaultTitle(owner, input.startedAt),
+      ...(kind !== "meeting" ? { kind } : {}),
+      title: (await this.defaultTitle(owner, input.startedAt)).replace(/^Meeting/, label),
       status: "transcribing",
       mime: "audio/mpeg",
       startedAt: this.iso(input.startedAt),
@@ -1275,10 +1293,45 @@ export class Meetings {
     }
     return this.view(meeting);
   }
+  /**
+   * A voice note keeps its words and takes its first few as a title (no model call). A dream also gets a short title and one line
+   * from the model when there is one. Neither has decisions or action items.
+   */
+  private async keepWords(owner: string, meeting: Meeting, text: string) {
+    // Just the words: no "Speaker 1:" labels, no "[Recording paused here…]" lines.
+    const said = text
+      .split("\n")
+      .filter((line) => !line.startsWith("["))
+      .map((line) => line.replace(/^[^:\n]{1,40}:\s*/, ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    let title: string | undefined;
+    let summary = "";
+    if (meeting.kind === "dream" && said) {
+      const named = await this.options
+        .nameDream?.(owner, hideText(said.slice(0, 40_000)))
+        .catch(() => undefined);
+      title = named?.title?.trim().slice(0, 80) || undefined;
+      summary = named?.summary?.trim().slice(0, 300) ?? "";
+    } else if (said) title = firstWords(said);
+    const next: Meeting = {
+      ...meeting,
+      status: "done",
+      ...(title && !meeting.named ? { title } : {}),
+      summary,
+      decisions: [],
+      actionItems: [],
+    };
+    await this.save(owner, next);
+    await this.options.notify?.(owner, next);
+  }
   private async writeNotes(owner: string, meeting: Meeting) {
     const transcript = await this.db.get<Transcript>(owner, "meeting-transcripts", meeting.id);
     const text = transcript ? transcriptText(meeting, transcript.segments, transcript.gaps) : "";
     if (meeting.kind === "dump") return this.sortDump(owner, meeting, text);
+    if (meeting.kind === "note" || meeting.kind === "dream")
+      return this.keepWords(owner, meeting, text);
     // About 250,000 letters is several hours of talk; anything past it is left out of the notes.
     const notes = text
       ? await this.options.writeNotes?.(owner, hideText(text.slice(0, 250_000)))
@@ -1350,4 +1403,12 @@ export function meetingJobToolSpecs(meetings: Meetings | undefined, owner: strin
       },
     },
   ];
+}
+
+/** A voice note's title: its first words, up to about 50 letters, ending at a word. */
+export function firstWords(said: string) {
+  const first = said.split(/(?<=[.!?])\s/)[0] ?? said;
+  if (first.length <= 50) return first.replace(/[.!?]+$/, "");
+  const cut = first.slice(0, 50);
+  return `${cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : 50).trim()}…`;
 }

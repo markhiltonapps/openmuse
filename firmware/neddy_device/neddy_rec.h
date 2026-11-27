@@ -3,7 +3,8 @@
 // (see firmware/tools/rec_test.cpp): flash is reached through three small functions the sketch (or the test) provides.
 //
 // What is stored:
-//   sector 0 (4096 bytes): a header: "NRC1", version, when it started (UTC seconds), an id; later an end mark ("END!", length in ms,
+//   sector 0 (4096 bytes): a header: "NRC1", version, when it started (UTC seconds), an id, the mode ("MD" + 0 voice note, 1 idea,
+//                          2 meeting, 3 dream; a header without it is a meeting); later an end mark ("END!", length in ms,
 //                          slots written) and, once the server has everything, "SENT". Bits are only ever cleared, never rewritten.
 //   from byte 4096: 512-byte slots, one after another:  2 bytes 0xA7 0x5C, 2 bytes recording id, 4 bytes: the sample (at 8 kHz) it starts at,
 //                          then one IMA ADPCM block of 504 bytes (4-byte block header + 500 bytes = 1,001 samples = 125 ms).
@@ -103,13 +104,15 @@ static void recPut32(uint8_t *p, uint32_t v) { p[0] = v; p[1] = v >> 8; p[2] = v
 static uint32_t recGet32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
 
 // Starts a recording: clears the header sector, writes the header. `id` makes this recording's slots recognisable (old ones aren't).
-static bool recStart(Rec &r, const RecIO &io, uint32_t id, uint32_t utc) {
+#define REC_MODE_MAGIC 0x444D0000u                 // "MD" in the top half of the mode word
+static bool recStart(Rec &r, const RecIO &io, uint32_t id, uint32_t utc, int mode = 2) {
   memset(&r, 0, sizeof(r));
   r.io = io; r.id = id ? id : 1; r.startedUtc = utc;
   if (!io.erase(0, REC_SECTOR)) { r.failed = true; return false; }
-  uint8_t head[16];
+  uint8_t head[20];
   recPut32(head, REC_HEADER_MAGIC); recPut32(head + 4, 1); recPut32(head + 8, utc); recPut32(head + 12, r.id);
-  if (!io.write(0, head, 16)) { r.failed = true; return false; }
+  recPut32(head + 16, REC_MODE_MAGIC | (uint32_t)(mode & 3));
+  if (!io.write(0, head, 20)) { r.failed = true; return false; }
   r.erasedTo = REC_SECTOR; r.nextOff = REC_SECTOR; r.running = true;
   return true;
 }
@@ -180,6 +183,7 @@ struct RecFound {
   bool sent;                                  // the server already has it
   uint32_t id, startedUtc, slots, ms;         // ms: its length
   uint32_t bytes;                             // slot bytes stored (slots * 512)
+  int mode;                                   // 0 voice note, 1 idea, 2 meeting, 3 dream
 };
 
 static bool recSlotValid(const RecIO &io, uint32_t slot, uint32_t id) {
@@ -190,9 +194,11 @@ static bool recSlotValid(const RecIO &io, uint32_t slot, uint32_t id) {
 
 static RecFound recLook(const RecIO &io) {
   RecFound f; memset(&f, 0, sizeof(f));
-  uint8_t h[16], end[12], sent[4];
-  if (!io.read(0, h, 16) || recGet32(h) != REC_HEADER_MAGIC) return f;
+  uint8_t h[20], end[12], sent[4];
+  f.mode = 2;
+  if (!io.read(0, h, 20) || recGet32(h) != REC_HEADER_MAGIC) return f;
   f.present = true; f.startedUtc = recGet32(h + 8); f.id = recGet32(h + 12);
+  if ((recGet32(h + 16) & 0xFFFF0000u) == REC_MODE_MAGIC) f.mode = (int)(recGet32(h + 16) & 3);
   if (io.read(128, sent, 4) && recGet32(sent) == REC_SENT_MAGIC) f.sent = true;
   if (io.read(64, end, 12) && recGet32(end) == REC_END_MAGIC) { f.ms = recGet32(end + 4); f.slots = recGet32(end + 8); }
   else {                                                         // no end mark (the power went): find where the slots stop

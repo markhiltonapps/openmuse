@@ -846,4 +846,9 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   new notice key (the bell keeps one entry per key). Emailed receipts are chosen by the sender's real address, never by what the
   email says, and read with `hideText` first. A button that has to fit beside another at 390 px: measure the row (card
   padding included) before choosing the label; "Snap the receipt" + "No receipt" didn't fit by 10 px.
+- **Watch buttons and actions by voice (owner, 2026-11-27):** BOOT held ~0.25 s talks, a tap does nothing, a double-click opens
+  the launcher; PWR opens it too. Anything that can end or lose something on the watch (Stop, Restart) is a hold with a filling
+  ring, and a slider drags only from its knob so a swipe still turns the page. A voice action for the watch (`device.do`) is done
+  only after Neddy's answer has finished playing (recording turns Wi-Fi off and would cut the reply), and the tool says plainly
+  when the watch isn't connected instead of promising. A launcher icon needs its own touch test (`icon(UI_L_…)`).
 

@@ -1,4 +1,5 @@
-// Neddy on the Waveshare ESP32-S3-Touch-AMOLED-2.06 board. Version 0.1 (early testing).
+// Neddy on a Waveshare watch board: the ESP32-S3-Touch-AMOLED-2.06 (a rectangle) or the ESP32-S3-Touch-AMOLED-1.75C (round).
+// Pick the board in settings.h (NEDDY_BOARD); its pins are in neddy_board.h. Version 0.2 (early testing).
 //
 // What it does: joins your Wi-Fi, shows a six-digit code so you can pair it with your Neddy account,
 // then lets you hold the BOOT button to talk to Neddy and hear her answer.
@@ -28,7 +29,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/stream_buffer.h"
 #include "Arduino_GFX_Library.h"
-#include "pin_config.h"
+#include "settings.h"
+#include "neddy_board.h"
+#if NEDDY_BOARD != 175
+#include "pin_config.h"                // the 2.06's own pins, from Waveshare's library
+#endif
 #include "esp_check.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
@@ -36,7 +41,6 @@
 #include "esp_timer.h"
 #include "soc/usb_serial_jtag_reg.h"
 #include "es8311.h"
-#include "settings.h"
 
 // Messages out of the USB cable are OFF by default. With no computer reading them, every message waits about
 // two seconds before giving up, which froze the board for 2 to 8 seconds around each button press. Set to 1
@@ -62,9 +66,9 @@
 
 // ---------------------------------------------------------------- screen
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
-  LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
-Arduino_GFX *gfx = new Arduino_CO5300(bus, LCD_RESET, 0 /* rotation */, LCD_WIDTH, LCD_HEIGHT,
-                                      22 /* col_offset1 */, 0, 0, 0);
+  PIN_LCD_CS, PIN_LCD_SCLK, PIN_LCD_D0, PIN_LCD_D1, PIN_LCD_D2, PIN_LCD_D3);
+Arduino_GFX *gfx = new Arduino_CO5300(bus, PIN_LCD_RESET, 0 /* rotation */, BOARD_W, BOARD_H,
+                                      LCD_COL_OFFSET /* col_offset1 */, 0, 0, 0);
 
 // ---------------------------------------------------------------- the screen (the drawing is in neddy_ui.h)
 #include "neddy_ui.h"
@@ -157,7 +161,26 @@ static int napSleeps = 0, napWakes = 0;
 static bool napHw = false;                                // the I2S port is stopped and the processor slowed
 static unsigned long long napAsleepUs = 0, napSinceUs = 0;   // how long it really slept since Wi-Fi went off (reported so a failed sleep can be seen)
 static int napRefused = 0, lastNapPct = -1, lastNapRefused = 0;
-static int pendAnim = -1, pendFace = -1, pendVol = -1;   // menu changes made while Wi-Fi was off: sent to Neddy once it is back
+// Settings changed on the watch while Wi-Fi was off: sent to Neddy once it is back (or the next idle push would undo them).
+#define PEND_NONE (-32768)
+static int pendSetting[11] = { PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE };
+static unsigned long settingLocalAt = 0;   // when the person last changed a setting on the watch (an older echo from the server is ignored for a few seconds)
+static bool settingsPending() { for (int k = 1; k <= 10; k++) if (pendSetting[k] != PEND_NONE) return true; return false; }
+static const char *settingKey(int which) {
+  switch (which) {
+    case UI_SET_ANIM: return "animation";
+    case UI_SET_FACE: return "face";
+    case UI_SET_VOLUME: return "volume";
+    case UI_SET_BRIGHT: return "brightness";
+    case UI_SET_DIM: return "dimAfter";
+    case UI_SET_OFF: return "screenOffAfter";
+    case UI_SET_ACCENT: return "accent";
+    case UI_SET_SAVER: return "batterySaver";
+    case UI_SET_RAISE: return "raiseToWake";
+    case UI_SET_DOUBLE: return "doublePress";
+  }
+  return nullptr;
+}
 // The speaker amplifier (pin 46) draws current all the time it is on. With the battery saver on, it is switched on only while there is sound to play
 // (and for 4 seconds after), instead of all day. Without the saver it stays on, as before.
 static volatile unsigned long paOnUntil = 0;
@@ -165,10 +188,10 @@ static bool paState = false;
 static void paTick(bool soundNow) {
   if (!PLAY_ANSWERS) return;
   unsigned long now = millis();
-  if (!batterySaver) { if (!paState) { digitalWrite(46, HIGH); paState = true; } return; }
+  if (!batterySaver) { if (!paState) { digitalWrite(PIN_SPEAKER_AMP, HIGH); paState = true; } return; }
   if (soundNow) paOnUntil = now + 4000UL;
   bool want = soundNow || now < paOnUntil;
-  if (want != paState) { digitalWrite(46, want ? HIGH : LOW); paState = want; }
+  if (want != paState) { digitalWrite(PIN_SPEAKER_AMP, want ? HIGH : LOW); paState = want; }
 }
 static bool micAsleep = false;
 static void micWake();
@@ -230,6 +253,10 @@ static String micChip = "mic chip: not checked";
 static bool waitingFirstSound = false;
 static String problem;
 static unsigned long problemUntil = 0;
+// Something Neddy asked the watch to do (by voice or chat): done once its answer has finished playing.
+enum { DO_NONE, DO_RECORD, DO_SCREEN_OFF };
+static int pendingDo = DO_NONE, pendingDoMode = 0;
+static unsigned long pendingDoAt = 0;
 static bool socketStarted = false;
 
 // ---------------------------------------------------------------- tiny helpers
@@ -305,7 +332,7 @@ static void pmuWrite(uint8_t reg, uint8_t value);   // (just below)
 // What a short press of PWR does.
 static void pwrShortPress() {
   if (uiRec.state != UI_RECS_OFF) recPwr();   // on a recording screen the button leaves it (never while recording or sending)
-  else uiMenuOpen(millis());
+  else uiPwrPress(millis());                  // the launcher, a step back, a recording, or (pressed twice) the double-press action
 }
 // On some units the PWR button reaches only the power chip (AXP2101), not GPIO10. The chip keeps a note of each press in its second
 // interrupt-status byte (0x49: bit 3 short press, bit 2 long press, bit 1 released, bit 0 pressed; writing a 1 clears a bit), once those
@@ -336,13 +363,13 @@ static void pwrLoop() {
   static unsigned long beat = 0;
   if (millis() - beat > 5000) {   // proof that these messages reach the Serial Monitor
     beat = millis();
-    LOGF("[dbg] alive, GPIO10=%d\n", digitalRead(10));
+    LOGF("[dbg] alive, PWR pin=%d\n", digitalRead(PIN_PWR_KEY));
   }
 #endif
   if (pmuKeyShort()) pwrShortPress();
-  bool raw = digitalRead(10) == HIGH;
+  bool raw = digitalRead(PIN_PWR_KEY) == HIGH;
   if (raw != was && millis() - changed > 30) {
-    LOGF("[pwr] GPIO10 is now %d\n", raw ? 1 : 0);
+    LOGF("[pwr] PWR pin is now %d\n", raw ? 1 : 0);
     changed = millis();
     if (raw) downAt = millis();
     else if (millis() - downAt < 1200) pwrShortPress();
@@ -572,30 +599,41 @@ static long dSentMs = 0, dPeak = 0;
 static void screenBoot(const String &line) {
   uiActive = false;
   clearScreen();
-  uiTextCentered(NFONT_TITLE, 160, "Neddy", UI_TEAL);
-  uiTextCentered(NFONT_BODY, 300, line.c_str(), UI_GREY);
-  uiTextCentered(NFONT_MID, 450, (String("version ") + FIRMWARE_VERSION).c_str(), UI_GREY);
+  uiTextCentered(NFONT_TITLE, UI_CY - 90, "Neddy", uiAcc());
+  uiTextCentered(NFONT_BODY, UI_CY + 40, line.c_str(), UI_GREY);
+  uiTextCentered(NFONT_MID, UI_H - (NEDDY_ROUND ? 70 : 52), (String("version ") + FIRMWARE_VERSION).c_str(), UI_GREY);
 }
 
 static void screenProblem(const String &title, const String &detail) {
   uiActive = false;
   clearScreen();
-  uiTextCentered(NFONT_TITLE, 100, title.c_str(), UI_AMBER);
-  uiParagraph(NFONT_BODY, 170, detail.c_str(), UI_WHITE, 340, 11, 26);
+  uiTextCentered(NFONT_TITLE, NEDDY_ROUND ? 70 : 100, title.c_str(), UI_AMBER);
+  uiParagraph(NFONT_BODY, NEDDY_ROUND ? 130 : 170, detail.c_str(), UI_WHITE, NEDDY_ROUND ? 300 : 340, NEDDY_ROUND ? 9 : 11, 26);
   if (uiRec.state != UI_RECS_OFF) uiRec.full = true;   // a recording screen was under this: draw it again afterwards
 }
 
 static void screenPair(const String &code, int secondsLeft) {
   uiActive = false;
   clearScreen();
+#if NEDDY_ROUND
+  uiTextCentered(NFONT_MID, 64, "Pair me with Neddy", UI_WHITE);
+  String shown = code.substring(0, 3) + " " + code.substring(3);
+  uiTextCentered(NFONT_HUGE, 104, shown.c_str(), uiAcc());
+  uiParagraph(NFONT_MID, 206, "In the Neddy app, go to You > Account > Your devices and type this code. Or say: pair my device.",
+              UI_WHITE, 320, 6, 30);
+  char buf[32];
+  snprintf(buf, sizeof(buf), "Works for %d:%02d", secondsLeft / 60, secondsLeft % 60);
+  uiTextCentered(NFONT_MID, UI_H - 76, buf, UI_GREY);
+#else
   uiTextCentered(NFONT_TITLE, 50, "Pair me with Neddy", UI_WHITE);
   String shown = code.substring(0, 3) + " " + code.substring(3);
-  uiTextCentered(NFONT_HUGE, 110, shown.c_str(), UI_TEAL);
+  uiTextCentered(NFONT_HUGE, 110, shown.c_str(), uiAcc());
   uiParagraph(NFONT_BODY, 220, "On your phone open Neddy, then You > Account > Your devices, and type this code. Or say to Neddy: pair my device.",
               UI_WHITE, 340, 8, 26);
   char buf[32];
   snprintf(buf, sizeof(buf), "Works for %d:%02d", secondsLeft / 60, secondsLeft % 60);
   uiTextCentered(NFONT_MID, 440, buf, UI_GREY);
+#endif
 }
 
 // The two small lines at the bottom: link, microphone, and how the last press went.
@@ -623,8 +661,8 @@ static void screenState() {
       uiActive = false;
       uiClearCard();
       clearScreen();
-      uiTextCentered(NFONT_TITLE, 150, "Joining Wi-Fi", UI_WHITE);
-      { char nm[48]; uiFit(nm, sizeof(nm), NFONT_BODY, wifiSsid.c_str(), 360); uiTextCentered(NFONT_BODY, 230, nm, UI_GREY); }
+      uiTextCentered(NFONT_TITLE, UI_CY - 100, "Joining Wi-Fi", UI_WHITE);
+      { char nm[48]; uiFit(nm, sizeof(nm), NFONT_BODY, wifiSsid.c_str(), NEDDY_ROUND ? 340 : 360); uiTextCentered(NFONT_BODY, UI_CY - 20, nm, UI_GREY); }
       break;
     case M_LINK:
     case M_READY:
@@ -794,13 +832,13 @@ static void micWake() {
 }
 
 static bool audioInit() {
-  i2s.setPins(41, 45, 40, 42, 16);  // mclk, bclk, ws, data out, data in (Waveshare's example)
+  i2s.setPins(PIN_I2S_BCLK, PIN_I2S_WS, PIN_I2S_DOUT, PIN_I2S_DIN, PIN_I2S_MCLK);  // bclk, ws, data out, data in, mclk (Waveshare's examples)
   if (!i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) {
     LOGLN("[audio] I2S failed to start");
     return false;
   }
   i2s.setTimeout(100);  // a read that finds no sound gives up quickly instead of freezing everything
-  Wire.begin(IIC_SDA, IIC_SCL);
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
 #if DEBUG_SERIAL
   // Which chips answer on the I2C bus (for finding out what a board really has): printed once.
   for (uint8_t a = 1; a < 127; a++) {
@@ -808,8 +846,8 @@ static bool audioInit() {
     if (Wire.endTransmission() == 0) LOGF("[i2c] a chip answers at 0x%02X\n", a);
   }
 #endif
-  pinMode(46, OUTPUT);
-  digitalWrite(46, (PLAY_ANSWERS && !batterySaver) ? HIGH : LOW);  // speaker amplifier (with the saver on it wakes when there is sound: see paTick)
+  pinMode(PIN_SPEAKER_AMP, OUTPUT);
+  digitalWrite(PIN_SPEAKER_AMP, (PLAY_ANSWERS && !batterySaver) ? HIGH : LOW);  // speaker amplifier (with the saver on it wakes when there is sound: see paTick)
   paState = PLAY_ANSWERS && !batterySaver;
   if (codecInit() != ESP_OK) {
     LOGLN("[audio] audio chip setup failed");
@@ -919,8 +957,8 @@ static bool buttonDown() {
 #ifndef TOUCH_FLIP_Y
 #define TOUCH_FLIP_Y 0
 #endif
-static const int TP_RESET_PIN = 9;
-static const uint8_t TP_ADDR = 0x38;
+static const int TP_RESET_PIN = PIN_TP_RESET;
+static const uint8_t TP_ADDR = TP_I2C_ADDR;
 static bool touchOk = false;
 static bool touchWasDown = false;
 static unsigned long touchAt = 0;
@@ -933,16 +971,44 @@ static void touchInit() {
   delay(20);
   digitalWrite(TP_RESET_PIN, HIGH);
   delay(60);
+#if TOUCH_CST9217
+  Wire.beginTransmission(TP_ADDR);                 // the CST9217 only needs to answer; it reports touches from start
+  touchOk = Wire.endTransmission() == 0;
+#else
   Wire.beginTransmission(TP_ADDR);
   Wire.write(0xA5);  // power mode
   Wire.write(0x00);  // active
   touchOk = Wire.endTransmission() == 0;
+#endif
   Wire.setClock(400000);
   LOGF("[touch] %s\n", touchOk ? "ready" : "the touch chip didn't answer");
 }
 
 // 1 = a finger (x, y set), 0 = none, -1 = couldn't read this time.
 static int touchRead(int *x, int *y) {
+#if TOUCH_CST9217
+  // CST9217 (the 1.75C): send the 16-bit command D0 00, read 15 bytes, then acknowledge with D0 00 AB. Byte 6 is 0xAB when the
+  // reading is good; byte 5 (low 7 bits) is how many fingers; the first finger is pressed when byte 0's low half is 6, and its
+  // position is 12 bits each: x = byte1 << 4 | byte3 >> 4, y = byte2 << 4 | byte3 & 15 (SensorLib's TouchDrvCST92xx).
+  uint8_t b[15];
+  Wire.beginTransmission(TP_ADDR);
+  Wire.write(0xD0); Wire.write(0x00);
+  if (Wire.endTransmission(false) != 0) return -1;
+  if (Wire.requestFrom((int)TP_ADDR, 15) != 15) return -1;
+  for (int i = 0; i < 15; i++) b[i] = Wire.read();
+  Wire.beginTransmission(TP_ADDR);
+  Wire.write(0xD0); Wire.write(0x00); Wire.write(0xAB);
+  Wire.endTransmission();
+  if (b[6] != 0xAB) return 0;                       // nothing new to report (the chip answers like this between touches)
+  int fingers = b[5] & 0x7F;
+  if (fingers == 0 || fingers > 2 || (b[0] & 0x0F) != 0x06) return 0;
+  int px = (b[1] << 4) | (b[3] >> 4), py = (b[2] << 4) | (b[3] & 0x0F);
+#if TOUCH_MIRROR
+  px = UI_W - 1 - px; py = UI_H - 1 - py;           // Waveshare's example mirrors both on this board
+#endif
+  if (px < 0) px = 0;
+  if (py < 0) py = 0;
+#else
   Wire.beginTransmission(TP_ADDR);
   Wire.write(0x02);
   if (Wire.endTransmission(false) != 0) return -1;
@@ -951,6 +1017,7 @@ static int touchRead(int *x, int *y) {
   int xh = Wire.read(), xl = Wire.read(), yh = Wire.read(), yl = Wire.read();
   if (fingers == 0 || fingers > 2) return 0;
   int px = ((xh & 0x0F) << 8) | xl, py = ((yh & 0x0F) << 8) | yl;
+#endif
   if (TOUCH_SWAP_XY) { int t = px; px = py; py = t; }
   if (px >= UI_W) px = UI_W - 1;
   if (py >= UI_H) py = UI_H - 1;
@@ -1096,7 +1163,7 @@ static void idleMic() {
 // ---------------------------------------------------------------- the recorder
 // Record from the menu: the microphone's sound is squeezed (neddy_rec.h) and written straight into the flash partition "rec" as it
 // is heard, so nothing is only in memory. Wi-Fi is off while it records (battery). After Stop the watch joins Wi-Fi again and sends the
-// recording to the server in 64 KB pieces (PUT /api/device/recording/<id>); the server writes it up as a meeting in the Muse app. The
+// recording to the server in 64 KB pieces (PUT /api/device/recording/<id>); the server files it in the Neddy app by its mode (a note, an idea, a meeting or a dream). The
 // copy on the watch is only marked "sent" once the server says it has everything, and a recording found at start-up (power lost, or
 // no Wi-Fi at the time) is sent when the watch is next idle.
 #include "esp_partition.h"
@@ -1124,7 +1191,7 @@ static void recMinutesText(char *dst, size_t cap, uint32_t ms) { unsigned m = (u
 static void recRefreshSub() {
   if (recPending()) { snprintf(uiRecSub, sizeof(uiRecSub), "Waiting to send"); return; }
   uint32_t s = recPart ? recCapacitySeconds(recIO) : 0;
-  snprintf(uiRecSub, sizeof(uiRecSub), "Up to %u h %02u", (unsigned)(s / 3600), (unsigned)((s % 3600) / 60));
+  snprintf(uiRecSub, sizeof(uiRecSub), "Up to %u h %02u min", (unsigned)(s / 3600), (unsigned)((s % 3600) / 60));
 }
 static void recInit() {
   recPart = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, (esp_partition_subtype_t)0x40, "rec");
@@ -1141,7 +1208,7 @@ static void recInit() {
 // seconds to a minute or more with the screen unable to redraw: without this it sat on the old screen and looked frozen.
 static void recShowSending(const char *small) {
   char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
-  uiRecInfo(millis(), "Sending to your phone", big, small, recLastPct < 0 ? 0 : recLastPct, "");
+  uiRecInfo(millis(), "Sending to Neddy", big, small, recLastPct < 0 ? 0 : recLastPct, "");
   uiTick(millis());
 }
 static void recShowSendingPct() {
@@ -1167,8 +1234,8 @@ static void recBegin() {
   if (recPending()) { recShowWaiting(); return; }
   if (!uiIdle.have) { uiRecInfo(millis(), "Not ready yet", "", "Waiting for the time.", -1, "OK"); return; }
   uint32_t utc = uiIdle.baseUtc + (millis() - uiIdle.baseMs) / 1000;
-  if (!recStart(rec, recIO, (uint32_t)esp_random(), utc)) {
-    uiRecInfo(millis(), "Can't record", "", "The storage didn't answer.", -1, "OK");
+  if (!recStart(rec, recIO, (uint32_t)esp_random(), utc, uiRecMode)) {
+    uiRecInfo(millis(), "Can't record", "", "Its memory didn't answer. Restart the watch and try again.", -1, "OK");
     return;
   }
   ws.disconnect(); wsUp = false; socketStarted = false;
@@ -1194,7 +1261,7 @@ static void recFinish(const char *why) {
   recLastPct = 0; recSent = 0; recStatusKnown = false; recFailures = 0; recNextTry = 0;
   recState = RS_SEND;
   char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
-  const char *title = rec.full ? "Storage is full: sending" : rec.failed ? "Saved with a fault: sending" : "Sending to your phone";
+  const char *title = rec.full ? "Storage is full: sending" : rec.failed ? "Saved with a fault: sending" : "Sending to Neddy";
   recSendShown = false;
   uiRecInfo(millis(), title, big, "Joining Wi-Fi, please wait", 0, "");
   uiTick(millis());                                    // show it NOW: joining Wi-Fi next takes several seconds
@@ -1277,7 +1344,9 @@ static void recSendStep() {
     bool last = recSent + len >= recFound.bytes;
     if (last) recShowSending("Finishing up... please wait");
     http.setTimeout(last ? 180000 : 25000);          // the last piece makes the whole recording ready, which takes the server a while
-    String url = serverUrl + "/api/device/recording/" + rid + "?offset=" + recSent + "&final=" + (last ? 1 : 0) + "&started=" + recFound.startedUtc;
+    static const char *const modes[4] = { "note", "idea", "meeting", "dream" };
+    String url = serverUrl + "/api/device/recording/" + rid + "?offset=" + recSent + "&final=" + (last ? 1 : 0) + "&started=" + recFound.startedUtc +
+                 "&mode=" + modes[recFound.mode & 3];
     if (!http.begin(recClient, url)) { free(buf); recSendFail("begin"); return; }
     http.addHeader("Authorization", String("Bearer ") + deviceToken);
     http.addHeader("Content-Type", "application/octet-stream");
@@ -1301,7 +1370,8 @@ static void recSendStep() {
     recFound = recLook(recIO);
     recState = RS_IDLE; recRefreshSub();
     char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
-    uiRecInfo(millis(), "Sent", big, "It's in the Muse app now", -1, "OK");
+    static const char *const where[4] = { "Your voice note is in Neddy", "Your idea is in Neddy", "Your meeting is in Neddy", "Your dream is in Neddy" };
+    uiRecInfo(millis(), "Sent", big, where[recFound.mode & 3], -1, "OK");
     LOGLN("[rec] sent");
     return;
   }
@@ -1348,9 +1418,11 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       wsFailures = 0;
       static String info = String("{\"type\":\"device.info\",\"firmware\":\"") + FIRMWARE_VERSION + "\"}";
       ws.sendTXT(info.c_str());
-      if (pendAnim >= 0) { String m = String("{\"type\":\"device.setting\",\"key\":\"animation\",\"value\":") + pendAnim + "}"; ws.sendTXT(m.c_str()); pendAnim = -1; }
-      if (pendFace >= 0) { String m = String("{\"type\":\"device.setting\",\"key\":\"face\",\"value\":") + pendFace + "}"; ws.sendTXT(m.c_str()); pendFace = -1; }
-      if (pendVol >= 0) { String m = String("{\"type\":\"device.setting\",\"key\":\"volume\",\"value\":") + pendVol + "}"; ws.sendTXT(m.c_str()); pendVol = -1; }
+      for (int k = 1; k <= 10; k++) {
+        if (pendSetting[k] == PEND_NONE || !settingKey(k)) continue;
+        String m = String("{\"type\":\"device.setting\",\"key\":\"") + settingKey(k) + "\",\"value\":" + pendSetting[k] + "}";
+        ws.sendTXT(m.c_str()); pendSetting[k] = PEND_NONE;
+      }
       setMode(M_READY);
       break;
     case WStype_DISCONNECTED:
@@ -1429,17 +1501,26 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         uiIdle.baseMs = millis();
         uiIdle.off = jsonInt(text, "off", 0);
         uiIdle.after = jsonInt(text, "after", 10);
-        uiIdle.dim = jsonInt(text, "dim", 1) != 0;
         uiIdle.showW = jsonInt(text, "sw", 1) != 0;
         uiIdle.showM = jsonInt(text, "sm", 1) != 0;
         uiIdle.showB = jsonInt(text, "sb", 1) != 0;
-        uiIdle.raise = jsonInt(text, "rw", 0) != 0;
-        uiIdle.dimAfter = jsonInt(text, "da", 0);
-        { int b = jsonInt(text, "bs", -1); if (b >= 0 && (b != 0) != batterySaver) applySaver(b != 0); }
+        bool fresh = settingLocalAt == 0 || millis() - settingLocalAt > 4000;   // just changed on the watch: an older echo doesn't undo it
+        if (fresh) {
+          uiIdle.dim = jsonInt(text, "dim", 1) != 0;
+          uiIdle.raise = jsonInt(text, "rw", 0) != 0;
+          uiIdle.dimAfter = jsonInt(text, "da", 0);
+          uiIdle.offAfter = jsonInt(text, "oa", uiIdle.offAfter);
+          { int b = jsonInt(text, "br", -1); if (b >= 10 && b <= 100 && b != uiBright) { uiBright = b; if (!uiDimmed && !uiScreenOff && uiOut.brightness) uiOut.brightness(uiFullLevel()); } }
+          { int a = jsonInt(text, "ac", -1); if (a >= 0 && a <= 3 && a != uiAccentIdx) { uiAccentIdx = a; uiAll = true; } }
+          { int d = jsonInt(text, "dp", -1); if (d >= 0 && d <= 2) uiDoublePress = d; }
+          { int b = jsonInt(text, "bs", -1); if (b >= 0 && (b != 0) != batterySaver) applySaver(b != 0); }
+        }
         { int n = jsonInt(text, "nap", -1); if (n >= 0) napEnabled = n != 0; }
         { int v = jsonInt(text, "vol", -1); if (v >= 0 && v <= 100 && (volLocalAt == 0 || millis() - volLocalAt > 4000)) applyVolume(v); }
-        { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
-        { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
+        if (fresh) {
+          { int f = jsonInt(text, "fps", 1); uiFpsLevel = f < 0 ? 0 : f > 2 ? 2 : f; }
+          { int f = jsonInt(text, "face", 0); uiFace = f < 0 ? 0 : f > 2 ? 2 : f; }
+        }
         uiIdle.haveW = jsonInt(text, "wt", UI_NONE) != UI_NONE;
         if (uiIdle.haveW) {
           uiIdle.wt = jsonInt(text, "wt", 0);
@@ -1468,6 +1549,13 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
           mode = M_PROBLEM;
           problemUntil = millis() + 5000;  // the loop puts the normal screen back
         }
+      } else if (kind == "device.do") {
+        String what = jsonString(text, "do"), m = jsonString(text, "mode");
+        if (what == "record") {
+          pendingDo = DO_RECORD;
+          pendingDoMode = m == "idea" ? 1 : m == "meeting" ? 2 : m == "dream" ? 3 : 0;   // the Record page's order
+        } else if (what == "screen_off") pendingDo = DO_SCREEN_OFF;
+        pendingDoAt = millis();
       } else if (kind == "session.closed") {
         LOGLN("[neddy] the call ended");
         if (!held && mode != M_LISTEN) setMode(M_READY);
@@ -1485,6 +1573,27 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
     default:
       break;
   }
+}
+
+// Waits for Neddy's answer to finish (its words played, nothing thinking or speaking), then does what was asked; never
+// while the button is held, and at most 20 seconds late (an answer that never comes doesn't hold it up for ever).
+static void doLoop() {
+  if (pendingDo == DO_NONE) return;
+  unsigned long waited = millis() - pendingDoAt;
+  if (held || uiTouchTalk) { pendingDoAt = millis(); return; }
+  bool quiet = mode != M_SPEAK && mode != M_THINK && mode != M_LISTEN && (!playBuffer || xStreamBufferIsEmpty(playBuffer));
+  if (waited < 1500 || (!quiet && waited < 20000)) return;
+  int what = pendingDo;
+  pendingDo = DO_NONE;
+  if (what == DO_SCREEN_OFF) { uiScreenOffSoon(millis()); return; }
+  if (uiRec.state != UI_RECS_OFF) return;                         // already recording
+  if (!uiRecAvailable) {
+    screenProblem("Can't record", "This watch's software has no room for recordings. Install it again over USB.");
+    mode = M_PROBLEM;
+    problemUntil = millis() + 5000;
+    return;
+  }
+  uiStartRecording(pendingDoMode);
 }
 
 static void startSocket() {
@@ -1907,7 +2016,7 @@ void setup() {
   resetWhy = String("start ") + bootCount + ": " + resetName((int)esp_reset_reason());
   LOGLN(resetWhy);
   pinMode(BUTTON, INPUT_PULLUP);
-  pinMode(10, INPUT);   // PWR button: high while pressed
+  pinMode(PIN_PWR_KEY, INPUT);   // PWR button: high while pressed
 
   if (!gfx->begin()) LOGLN("[screen] gfx->begin() failed");
   uiOut.blit = outBlit;
@@ -1931,14 +2040,19 @@ void setup() {
   };
   // A setting changed on the watch itself (the menu): tell the server so it keeps it and says it back after a restart.
   uiOut.setting = [](int which, int value) {
+    settingLocalAt = millis();
     if (which == UI_SET_VOLUME) { volLocalAt = millis(); applyVolume(value); playBeep(); }   // the audio chip first, then a short note at the new volume
-    if (wsUp && (which == UI_SET_ANIM || which == UI_SET_FACE || which == UI_SET_VOLUME)) {
-      String m = String("{\"type\":\"device.setting\",\"key\":\"") + (which == UI_SET_ANIM ? "animation" : which == UI_SET_VOLUME ? "volume" : "face") + "\",\"value\":" + value + "}";
+    if (which == UI_SET_SAVER) applySaver(value != 0);
+    const char *key = settingKey(which);
+    if (!key) return;
+    if (wsUp) {
+      String m = String("{\"type\":\"device.setting\",\"key\":\"") + key + "\",\"value\":" + value + "}";
       ws.sendTXT(m.c_str());
-    } else if (which == UI_SET_ANIM) pendAnim = value;      // not connected (asleep with Wi-Fi off): kept and sent once Neddy is back, or the next idle push would undo it
-    else if (which == UI_SET_FACE) pendFace = value;
-    else if (which == UI_SET_VOLUME) pendVol = value;
+    } else if (which >= 1 && which <= 10) pendSetting[which] = value;   // not connected (asleep with Wi-Fi off): kept and sent once Neddy is back
   };
+  uiOut.action = [](int what) { if (what == UI_ACT_RESTART) { screenBoot("Restarting"); delay(400); ESP.restart(); } };
+  strncpy(uiInfo.fw, FIRMWARE_VERSION, sizeof(uiInfo.fw) - 1);
+  uiInfo.board = BOARD_LABEL;
   uiOut.record = recAction;
   uiMotion = NEDDY_MOTION != 0;
   uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0 || NEDDY_RAISE_DEBUG != 0;
@@ -1978,6 +2092,18 @@ void setup() {
   xTaskCreatePinnedToCore(playTask, "play", 6144, NULL, 3, NULL, 1);
   touchInit();
   recInit();
+}
+
+// What Settings > Info shows: the Wi-Fi's name and free memory, looked at every few seconds (cheap; no radio work).
+static void infoLoop() {
+  static unsigned long last = 0;
+  if (millis() - last < 3000) return;
+  last = millis();
+  if (WiFi.status() == WL_CONNECTED) { String n = WiFi.SSID(); strncpy(uiInfo.wifi, n.c_str(), sizeof(uiInfo.wifi) - 1); uiInfo.wifi[sizeof(uiInfo.wifi) - 1] = 0; }
+  else uiInfo.wifi[0] = 0;
+  uiInfo.rssi = WiFi.status() == WL_CONNECTED ? (int)WiFi.RSSI() : 0;
+  uiInfo.heapKb = (int)(ESP.getFreeHeap() / 1024);
+  uiInfo.psramKb = (int)(ESP.getFreePsram() / 1024);
 }
 
 static void micPowerLoop() {
@@ -2037,11 +2163,11 @@ static void napCheck() {
     else if (recState == RS_SEND) napWake("a recording to send");
     else if (!batterySaver || !napEnabled) napWake("setting changed");
     else if (plugged) napWake("USB power");
-    else if (pendAnim >= 0 || pendFace >= 0 || pendVol >= 0) napWake("a setting to tell Neddy");
+    else if (settingsPending()) napWake("a setting to tell Neddy");
     return;
   }
   if (uiScreenOff) { if (!napDarkSince) napDarkSince = now; } else napDarkSince = 0;
-  bool idle = !held && recState == RS_IDLE && uiRec.state == UI_RECS_OFF && mode == M_READY && wsUp && !plugged && batterySaver && napEnabled && !uiTouchTalk && problemUntil == 0;
+  bool idle = !held && recState == RS_IDLE && uiRec.state == UI_RECS_OFF && mode == M_READY && wsUp && !plugged && batterySaver && napEnabled && !uiTouchTalk && problemUntil == 0 && pendingDo == DO_NONE;
   if (napDarkSince && idle && now - napDarkSince >= NAP_WIFI_OFF_AFTER_MS) napSleepWifi();
 }
 // With Wi-Fi off and the screen dark the processor sleeps between 100 ms naps (a BOOT press wakes it at once). Returns true if it slept.
@@ -2142,10 +2268,13 @@ void loop() {
   touchLoop();
   batteryLoop();
   statusLoop();
+  infoLoop();
   pwrLoop();
+  doLoop();
   raiseLoop();
   recTick();
-  bool down = (buttonDown() || uiTouchTalk) && uiRec.state == UI_RECS_OFF;
+  bool boot = uiBoot(millis(), buttonDown());       // held a quarter second: talk; double-clicked: the launcher
+  bool down = (boot || uiTouchTalk) && uiRec.state == UI_RECS_OFF;
   if (down && !held) {
     if (wsUp && mode != M_PROBLEM) {
       unsigned long startAt = millis();

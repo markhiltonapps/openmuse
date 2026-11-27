@@ -185,8 +185,20 @@ interface RecordingState {
 export interface MeetingImport {
   importRecording(
     owner: string,
-    input: { startedAt: number; seconds: number; chunks: Uint8Array[] },
+    input: { startedAt: number; seconds: number; chunks: Uint8Array[]; kind?: RecordingKind },
   ): Promise<{ id: string }>;
+}
+/** What the watch recorded: a voice note, an idea (sorted like a brain dump), a meeting (written up) or a dream (a journal entry). */
+export type RecordingKind = "note" | "dump" | "meeting" | "dream";
+/** The watch says the mode in the upload's address; anything else (an older watch) is a meeting. */
+export function recordingKind(mode: string | undefined): RecordingKind {
+  return mode === "note"
+    ? "note"
+    : mode === "idea"
+      ? "dump"
+      : mode === "dream"
+        ? "dream"
+        : "meeting";
 }
 
 const RID = /^[0-9a-f]{8}$/;
@@ -230,6 +242,7 @@ export class DeviceRecordings {
   /**
    * A piece of the recording at its byte offset. The piece must begin where the last one ended (sending the same piece again is
    * fine). `final` says it is the last: then the whole recording is written up. `startedAt` is when it began (UTC seconds).
+   * `kind` is what the person chose on the watch (sent with the last piece).
    */
   async receive(
     owner: string,
@@ -237,7 +250,7 @@ export class DeviceRecordings {
     rid: string,
     offset: number,
     bytes: Uint8Array,
-    options: { final: boolean; startedAt: number },
+    options: { final: boolean; startedAt: number; kind?: RecordingKind },
   ) {
     this.check(rid);
     const id = this.key(device, rid);
@@ -260,7 +273,7 @@ export class DeviceRecordings {
     rid: string,
     offset: number,
     bytes: Uint8Array,
-    options: { final: boolean; startedAt: number },
+    options: { final: boolean; startedAt: number; kind?: RecordingKind },
   ) {
     const id = this.key(device, rid);
     let state = await this.db.get<RecordingState>(owner, "device-recordings", id);
@@ -299,11 +312,17 @@ export class DeviceRecordings {
     state.updatedAt = new Date(this.options.now?.() ?? Date.now()).toISOString();
     await this.db.put(owner, "device-recordings", state);
     if (!options.final) return { received: state.received, done: false };
-    return this.finish(owner, device, state, options.startedAt);
+    return this.finish(owner, device, state, options.startedAt, options.kind);
   }
 
   /** Every piece is here: decode, make the MP3, hand it to the recorder. */
-  private async finish(owner: string, device: Device, state: RecordingState, startedAt: number) {
+  private async finish(
+    owner: string,
+    device: Device,
+    state: RecordingState,
+    startedAt: number,
+    kind: RecordingKind = "meeting",
+  ) {
     const keys = (await this.blobs.list(`device-recordings/${device.id}/${state.rid}/`)).sort();
     const parts: Uint8Array[] = [];
     let expected = 0;
@@ -361,6 +380,7 @@ export class DeviceRecordings {
         startedAt > 0 ? startedAt * 1000 : (this.options.now?.() ?? Date.now()) - seconds * 1000,
       seconds,
       chunks,
+      kind,
     });
     state.status = "done";
     state.meetingId = meeting.id;

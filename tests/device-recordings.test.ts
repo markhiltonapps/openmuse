@@ -13,6 +13,7 @@ import {
   decodeRecording,
   decodeSlot,
   RATE,
+  recordingKind,
   SLOT,
   SLOT_SAMPLES,
   slotInfo,
@@ -137,13 +138,15 @@ async function setup() {
     seconds: number;
     bytes: number;
     chunks: number;
+    kind?: string;
   }[] = [];
   const meetings = {
     importRecording: async (
       owner: string,
-      input: { startedAt: number; seconds: number; chunks: Uint8Array[] },
+      input: { startedAt: number; seconds: number; chunks: Uint8Array[]; kind?: string },
     ) => {
       imports.push({
+        kind: input.kind,
         owner,
         startedAt: input.startedAt,
         seconds: input.seconds,
@@ -207,6 +210,11 @@ test("pieces arrive in order, a repeat is harmless, a gap is refused, and the la
   assert.equal(imports[0]?.startedAt, 1794262500 * 1000);
   assert.ok((imports[0]?.seconds ?? 0) > 9.9 && (imports[0]?.seconds ?? 0) < 10.2);
   assert.equal(imports[0]?.bytes, 1000);
+  assert.equal(
+    imports[0]?.kind,
+    "meeting",
+    "an upload without a mode (an older watch) is a meeting",
+  );
   assert.ok(converted() > 9.9 * RATE * 2); // the whole ten seconds, quiet stretch included, went to the encoder
   // Done once: asking again, or sending the last piece again, doesn't make a second meeting.
   assert.deepEqual(await recordings.status("o", device, rid), {
@@ -286,4 +294,22 @@ test("the routes: a watch signs in with its own token, nothing else is let in", 
     server.deviceBridge.stop();
     await db.close();
   }
+});
+
+test("the watch's recording mode decides how it is filed", async () => {
+  assert.equal(recordingKind("note"), "note");
+  assert.equal(recordingKind("idea"), "dump");
+  assert.equal(recordingKind("meeting"), "meeting");
+  assert.equal(recordingKind("dream"), "dream");
+  assert.equal(recordingKind(undefined), "meeting");
+  assert.equal(recordingKind("something else"), "meeting");
+  const { db, recordings, imports } = await setup();
+  const slots = slotsOf(await fixture());
+  await recordings.receive("o", deviceOf("dev-mode"), "cafe0001", 0, slots, {
+    final: true,
+    startedAt: 1794262500,
+    kind: recordingKind("dream"),
+  });
+  assert.equal(imports[0]?.kind, "dream");
+  await db.close();
 });

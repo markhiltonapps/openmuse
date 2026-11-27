@@ -97,6 +97,7 @@ async function setup(
     dumpOff?: boolean;
     dumpBad?: { on: boolean };
     mp3?: Mp3Encoder;
+    dream?: boolean;
   } = {},
 ) {
   const db = await createStore();
@@ -167,6 +168,17 @@ async function setup(
               if (item.text.includes("hotels")) throw new Error("no jobs today");
               added.push(item.id);
               return "Done";
+            },
+          }
+        : {}),
+      ...(options.dream
+        ? {
+            nameDream: async (_owner: string, transcript: string) => {
+              sentToNotes.push(`dream: ${transcript}`);
+              return {
+                title: "Flying over the old school",
+                summary: "I was flying over my old school.",
+              };
             },
           }
         : {}),
@@ -943,4 +955,69 @@ test("the MP3 routes: make it, then download it with the signed link", async (t)
     await server.agent.stop();
     await db.close();
   }
+});
+
+test("from the watch: a voice note keeps its words and takes its first ones as the title, with no notes written", async () => {
+  const { meetings, told, sentToNotes } = await setup(
+    [words("1", "Buy milk and call Dana about the trip. Also the car.", 0)],
+    { dream: true },
+  );
+  const { id } = await meetings.importRecording("p1", {
+    startedAt: Date.parse("2026-10-17T14:00:00Z"),
+    seconds: 20,
+    chunks: [new Uint8Array([1, 2, 3])],
+    kind: "note",
+  });
+  await meetings.process("p1", id);
+  const read = await meetings.read("p1", id);
+  assert.equal(read.kind, "note");
+  assert.equal(read.status, "done");
+  assert.equal(read.title, "Buy milk and call Dana about the trip");
+  assert.equal(read.summary, "");
+  assert.deepEqual(read.actionItems, []);
+  assert.equal(sentToNotes.length, 0, "no model call for a voice note");
+  assert.equal(told.length, 1);
+});
+
+test("from the watch: a dream gets a short title and one line; an idea with no model to sort it is kept as a voice note", async () => {
+  const { meetings, sentToNotes } = await setup(
+    [words("1", "I was flying over my old school.", 0)],
+    {
+      dream: true,
+      dump: true,
+      dumpOff: true,
+    },
+  );
+  const dream = await meetings.importRecording("p1", {
+    startedAt: Date.parse("2026-10-17T11:00:00Z"),
+    seconds: 15,
+    chunks: [new Uint8Array([1])],
+    kind: "dream",
+  });
+  assert.match(
+    (await meetings.read("p1", dream.id)).title,
+    /^Dream at /,
+    "named by its time until it is written down",
+  );
+  await meetings.process("p1", dream.id);
+  const read = await meetings.read("p1", dream.id);
+  assert.equal(read.kind, "dream");
+  assert.equal(read.title, "Flying over the old school");
+  assert.equal(read.summary, "I was flying over my old school.");
+  assert.deepEqual(
+    sentToNotes,
+    ["dream: I was flying over my old school."],
+    "only the words, no speaker labels",
+  );
+  const idea = await meetings.importRecording("p1", {
+    startedAt: Date.parse("2026-10-17T12:00:00Z"),
+    seconds: 15,
+    chunks: [new Uint8Array([1])],
+    kind: "dump",
+  });
+  assert.equal(
+    (await meetings.read("p1", idea.id)).kind,
+    "note",
+    "an idea is never lost for want of a model",
+  );
 });

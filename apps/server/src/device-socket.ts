@@ -2,7 +2,13 @@ import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import { type DeviceCard, deviceWire } from "../../../packages/domain/src/device-card.ts";
-import type { Device, Devices } from "./devices.ts";
+import {
+  type Device,
+  type DeviceSettings,
+  type Devices,
+  DOUBLE_PRESS,
+  WATCH_ACCENTS,
+} from "./devices.ts";
 import { AppError } from "./errors.ts";
 import type { SocketLike } from "./voice-live.ts";
 
@@ -106,6 +112,15 @@ export class DeviceBridge {
     devices.onSettingsChanged((deviceId) => {
       const connection = this.connections.get(deviceId);
       if (connection) void this.pushIdle(connection);
+    });
+    devices.onAction((deviceId, action) => {
+      const connection = this.connections.get(deviceId);
+      if (connection?.ws.readyState !== 1) return false;
+      this.sendText(connection, { type: "device.do", ...action });
+      this.log(
+        `Asked a device to ${action.do}${action.do === "record" ? ` (${action.mode})` : ""}`,
+      );
+      return true;
     });
     devices.onRemoved((deviceId) => {
       const connection = this.connections.get(deviceId);
@@ -291,6 +306,27 @@ export class DeviceBridge {
             volume: Math.max(0, Math.min(100, Math.round(event.value))),
           })
           .catch(() => undefined);
+      }
+      const save = (patch: Partial<DeviceSettings>) =>
+        void this.devices
+          .setSettings(connection.owner, connection.device.id, patch)
+          .catch(() => undefined);
+      const value =
+        typeof event.value === "number" && Number.isFinite(event.value)
+          ? Math.round(event.value)
+          : undefined;
+      if (value !== undefined) {
+        if (event.key === "brightness") save({ brightness: Math.max(10, Math.min(100, value)) });
+        // Dim after: seconds of quiet, or 0 for never (the watch's "Never" turns dimming off).
+        if (event.key === "dimAfter")
+          save(value > 0 ? { dim: true, dimAfter: Math.min(3600, value) } : { dim: false });
+        if (event.key === "screenOffAfter")
+          save({ screenOffAfter: Math.max(0, Math.min(3600, value)) });
+        if (event.key === "accent" && WATCH_ACCENTS[value]) save({ accent: WATCH_ACCENTS[value] });
+        if (event.key === "batterySaver") save({ batterySaver: value !== 0 });
+        if (event.key === "raiseToWake") save({ raiseToWake: value !== 0 });
+        if (event.key === "doublePress" && DOUBLE_PRESS[value])
+          save({ doublePress: DOUBLE_PRESS[value] });
       }
       if (event.key === "face" && typeof event.value === "number") {
         const face = FACES[Math.max(0, Math.min(2, Math.round(event.value)))];

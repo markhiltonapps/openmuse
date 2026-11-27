@@ -54,4 +54,87 @@ own), for every restaurant. Built in apps/server/src/receipt-nudges.ts; committe
 ## Known limits / pending
 - Brex and Gmail sweeps are untested live (no real accounts in the sandbox; Overpass is blocked here too).
 - A visit can be wrong (waiting nearby, a café meeting) and is missed with the app closed.
-- Not pushed: waiting for "push it".
+- Pushed as 6adef7a after "push it"; api and web deployed (worker and voice skipped, nothing of theirs changed).
+
+
+# Watch redesign: the competitor's round-watch ideas, on the round 1.75C and the 2.06 (owner, 2026-11-27)
+
+The owner sent photos of a competitor's round watch UI and asked to take its ideas into Neddy's watch. Answers to the
+questions: all four parts (round-screen look, settings one per page, launcher around Neddy, recording modes + info),
+"let people choose" the colour (amber default), all at once, support BOTH boards starting with the round one (the owner
+has a Waveshare ESP32-S3-Touch-AMOLED-1.75C), and the recording modes filed as proposed (note / idea / meeting / dream).
+Taken: the patterns. Left out: their robot art, brand and exact look; a language switch (English only); Do not disturb
+(the watch gets no notifications yet); "Check for updates" (the watch has no over-the-air update: no OTA partitions).
+
+## Firmware (firmware/neddy_device)
+- neddy_board.h (new): NEDDY_BOARD 206 or 175 (settings.h); pins, display column offset, touch chip, PWR pin per board.
+  1.75C facts from Waveshare's own repo/schematic/BSP (researched 2026-11-27): same CO5300, AXP2101, QMI8658, ES8311,
+  ES7210; touch CST9217 at 0x5A (read D0 00 -> 15 bytes, ack D0 00 AB, mirrored x and y), column offset 6, touch reset
+  GPIO2, PWR read on GPIO3 (GPIO10 is the mic line there), I2S 9/45/8/10/16. Unchecked on a real 1.75C: PWR level on
+  GPIO3, the IMU's axes (raise to wake), and the CST9217 read (written from SensorLib's driver).
+- neddy_draw.h (new): soft-edged shapes painted in strips, text along a circle (curved titles), tracked capitals,
+  line icons, page dots (arc on round, row/column on the rectangle), the screen's shape (uiHalfAt, uiEdgePoint).
+- neddy_shell.h (new): the launcher (PWR), Record pages, Settings pages (9), Info pages (3), the double press of PWR.
+- neddy_ui.h: screen size from NEDDY_ROUND; accent colour (amber/blue/green/pink) replaces teal; brightness setting;
+  screen off after N seconds; round layouts (Neddy's sizes, words, idle faces, cards on a centred 410-wide canvas without
+  panels, setup QR screens); new recording screens. Old tile menu and volume screen removed.
+- neddy_rec.h: the recording's mode in the header ("MD" + mode; older headers read as meeting). Upload adds &mode=.
+- neddy_device.ino: board pins, CST9217 read, PWR on the board's pin through uiPwrPress (double press), all settings sent
+  to and read from the server (a 4 s guard so an older echo doesn't undo a change made on the watch), Restart, Info's
+  live values. Version 0.2.0.
+- Tests: touch_test 130 checks pass on BOTH shapes (launcher, settings drag/steppers/choices, record modes, double press,
+  info/restart, face, weather, screen off, hold to talk, timeouts); rec_test 19 (mode kept); raise_test, qr_test pass;
+  ui_sim draws every screen for both shapes with 0 odd windows. The sketch passes g++ -fsyntax-only for both boards with
+  stand-in Arduino headers (scratchpad/stub): names and types only, not the real core (not downloadable here). The check
+  found one real bug (the sleep code still used the old pending-setting names), fixed.
+
+## Server and app
+- Device settings: brightness (10..100), screenOffAfter, accent, doublePress; in idle facts (br, oa, ac, dp), from the
+  watch (device.setting keys brightness, dimAfter (0 = never), screenOffAfter, accent, batterySaver, raiseToWake,
+  doublePress), by voice (manage_devices: brightness, color, screen_off_after_seconds, double_press). The tool no longer
+  says there is no brightness level. Call instructions (DEVICE_SCREEN) and the voice service's DEVICE_RULES list them.
+- Found by a test: several settings from the watch at once raced (each save read the old record). setSettings now runs
+  one at a time per device.
+- Recordings: the upload's mode decides the kind: note (its words, titled by its first words, no model call), idea =
+  brain dump (kept as a note if no model can sort it), meeting, dream (short title + one line from the simple model).
+  The app's recordings list/detail know "voice note" and "dream" (icon, labels, delete text).
+
+## Help
+- New topic "watch-screens" with a picture made from the firmware's own drawing (firmware/tools/watch_help_shot.py
+  from ui_sim's round renders); "devices" topic's Volume paragraph and menu mentions updated.
+- Website: unchanged; it doesn't mention the watch (not released).
+
+## Review round 1 and the owner's button choices (same day)
+- Owner: "Double clicking, not the power button but the other one brings up the menu with the 7 icons at the bottom".
+  Answers: BOOT held about a quarter second talks (a quick tap does nothing, so a bump can't start a call); a double-click
+  of BOOT opens the launcher (not while recording); PWR opens it too; the launcher is the battery at the top plus 7 icons on
+  the bottom arc: Weather, Watch face, Next meeting (new), Record, Settings, Info, Screen off.
+- Reviewers' round 1 fixed: Stop is a 0.8 s hold with a filling ring (PWR still stops); Restart a 1 s hold; sliders drag
+  only from the knob (a swipe across the arc turns the page); Screen off says so for a second first; a new face is named
+  for 1.2 s; lighter page dots and off switches; analog hands no longer wipe the date window (painted in small squares
+  along each hand); neon's blank leading digit draws nothing; the double-press note on two lines; Info's "1 h 40 min".
+- Voice actions (usability blocker): manage_devices do "record" (mode note/idea/meeting/dream) and "screen_off". The
+  server sends {type:"device.do"} over the watch's socket (Devices.act → DeviceBridge); the watch does it once Neddy's
+  answer has finished playing (1.5 s at least, 20 s at most, never while held; a pending action keeps it from napping).
+  Not connected → the tool says so and offers "PWR, then Record". Both voices' instructions list them.
+- Tests: touch_test 145 checks on both shapes (BOOT tap/hold/double-click, holds, both Info icons, Next meeting, drag
+  from the knob); new device-idle test for the actions; full suite 963/963; typecheck clean; Biome clean on changed files
+  (two older warnings in app.ts and device-idle.ts). Syntax check of the sketch passes for both boards (stand-ins).
+- Help: watch-screens rewritten for BOOT, the 7 icons, the holds, voice phrases and limits; devices topic says "hold
+  BOOT" to talk. Picture retaken (720×720).
+
+## Design division rounds 2-3: all three signed off
+- Usability signed off in round 2. Taken from its ideas: the record answer says how to stop; the agent asks which kind when
+  it isn't clear (they may be in a meeting); a launcher tap picks the nearest icon. Not done: a tone on the watch when a
+  recording starts from the phone (later).
+- Visual blocker: the neon face was off-centre with a blank first digit (now shifted by half a cell; AM/PM in the date line
+  on both shapes, which also fixed the rect's "Nov 9M"). "Hold to stop" raised on round; Restart glows evenly while held.
+  ui_sim now draws the Stop and Restart holds at 50% and 100%.
+- Copy blocker: the record answer claimed "you can't hear them" even from the chat; now "in a moment … the watch can't talk
+  to Neddy until they stop it". "press a button on it", clearer "Can't record" lines, "PWR opens the menu / a moment later".
+- Left as is: the Screen off icon (a moon is Dream's), "· or press PWR" under Stop (no room on round).
+
+## Pending
+- Committed locally, not pushed: waiting for "push it".
+- Firmware zip for the owner. Their settings.h needs `#define NEDDY_BOARD 175` and FIRMWARE_VERSION "0.2.0".
+- Unchecked on the real 1.75C: PWR on GPIO3, the CST9217 read, the IMU axes, the BOOT double-click timing (400 ms).

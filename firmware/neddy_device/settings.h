@@ -8,6 +8,13 @@
 // ===========================================================================
 #pragma once
 
+// Which board this is (the pins and the screen's shape follow from it, see neddy_board.h):
+//   206 = Waveshare ESP32-S3-Touch-AMOLED-2.06 (rectangle)     175 = Waveshare ESP32-S3-Touch-AMOLED-1.75C (round, aluminium case)
+// For the 1.75C also install Waveshare's libraries for that board (Arduino_GFX, its board files) as its guide says.
+#ifndef NEDDY_BOARD
+#define NEDDY_BOARD 206
+#endif
+
 #define WIFI_NAME "your Wi-Fi name"
 #define WIFI_PASSWORD "your Wi-Fi password"
 
@@ -18,7 +25,7 @@
 #define DEVICE_MODEL "Waveshare watch board"
 
 // The software version the board reports.
-#define FIRMWARE_VERSION "0.1.0"
+#define FIRMWARE_VERSION "0.2.0"
 
 // How loud the speaker is (0 to 100).
 #define SPEAKER_VOLUME 85

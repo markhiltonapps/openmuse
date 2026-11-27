@@ -92,8 +92,14 @@ int main() {
   uiShowWeather(now, "Houston", 72, UI_NONE, "Sunny", UI_ICON_SUN, 80, 65, 0, "");
   frame();
   CHECK(uiCard.on, "card is up");
+#if NEDDY_ROUND
+  finger(UI_CX, UI_H - 60, 50);
+  CHECK(!uiCard.on, "(round) a card fills the circle, so a tap anywhere closes it");
+  uiShowFromHistory(now, uiHistN - 1); frame();               // (the same card back, without remembering it twice)
+#else
   finger(30, 480, 50);
   CHECK(uiCard.on, "a touch outside the card and Neddy does nothing");
+#endif
   finger(205, 150, 60);
   CHECK(!uiCard.on, "tap on the card dismisses it");
   pause(300);
@@ -243,82 +249,181 @@ int main() {
   CHECK(!uiCard.on, "and goes after a minute");
   uiIdle.after = 10;
 
-  // The menu: the PWR button (uiMenuOpen) or a swipe up from the bottom edge opens big tiles; tap one.
-  static int setKey = -1, setVal = -1;
+  // The launcher (the PWR button, or a swipe up from the bottom edge): Neddy in the middle, icons round him; tap one.
+  static int setKey = -1, setVal = -1, recAsked = 0, actAsked = 0;
   uiOut.setting = [](int k, int v) { setKey = k; setVal = v; };
   uiOut.brightness = [](int l) { level = l; };
+  uiOut.record = [](int a) { if (a == UI_REC_START) recAsked++; };
+  uiOut.action = [](int a) { actAsked = a; };
+  auto icon = [](int i, int *x, int *y) { float fx, fy; uiLauncherPos(i, &fx, &fy); *x = (int)fx; *y = (int)fy; };
+  auto arcPoint = [](float deg, int *x, int *y) { *x = (int)(UI_CX + UI_ARC_R * cosf(deg * 0.0174533f)); *y = (int)(uiArcCY() + UI_ARC_R * sinf(deg * 0.0174533f)); };
+  int tx, ty;
   uiIdle.have = false; uiIdleOn = false; uiDimmed = false; uiClearCard(); uiSetMode(UI_READY); uiSetWords(""); uiSetHeard(""); uiMotion = true; uiActivity(now); pause(300);
-  uiMenuOpen(now);
-  CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "the PWR button opens the menu");
-  uiMenuOpen(now);
+  uiDoublePress = 2;                                               // (no double-press action: a single press acts at once)
+  uiPwrPress(now);
+  CHECK(uiMenuOn() && uiShl == UI_SHL_HOME, "the PWR button opens the launcher");
+  uiPwrPress(now);
   CHECK(!uiCard.on, "the PWR button again closes it");
   uiClearCard(); uiHistN = 0;
-  finger(200, 460, 200, 200, 330);                                   // a swipe up from the bottom edge
-  CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "a swipe up from the bottom edge opens the menu");
-  auto tileOf = [](int id) { for (int i = 0; i < uiMenuN; i++) if (uiMenuIds[i] == id) return i; return -1; };
-  int tx, ty; uiMenuTileRect(tileOf(UI_MENU_ANIM), &tx, &ty);
-  finger(tx + 88, ty + 74, 60);
-  CHECK(uiFpsLevel == 2 && setKey == UI_SET_ANIM && setVal == 2 && uiCard.on, "tapping Animation goes normal -> smooth and tells the server");
-  finger(tx + 88, ty + 74, 60); finger(tx + 88, ty + 74, 60);
-  CHECK(uiFpsLevel == 1 && setVal == 1, "and round again to normal");
-  // The volume screen: the Volume tile opens it; plus and minus move by one bar; a tap on a bar jumps there; Done closes the menu.
-  uiClearCard(); uiMenuOpen(now); uiVolume = 85; setKey = 0; setVal = -1;
-  uiMenuTileRect(tileOf(UI_MENU_VOLUME), &tx, &ty);
-  finger(tx + 88, ty + 74, 60);
-  CHECK(uiMenuVol && uiCard.on && setKey == 0, "tapping Volume shows the volume screen and changes nothing yet");
-  finger(UI_VOL_PLUS_X + 88, UI_VOL_BTN_Y + 60, 60);
-  CHECK(uiVolume == 90 && setKey == UI_SET_VOLUME && setVal == 90, "plus goes up one bar (85 -> 90) and tells the sketch");
-  finger(UI_VOL_MINUS_X + 88, UI_VOL_BTN_Y + 60, 60); finger(UI_VOL_MINUS_X + 88, UI_VOL_BTN_Y + 60, 60);
-  CHECK(uiVolume == 70, "minus goes down a bar each time (90 -> 80 -> 70)");
-  finger(UI_VOL_BARS_X + 2 * UI_VOL_BAR_PITCH + 10, UI_VOL_BARS_Y + 60, 60);
-  CHECK(uiVolume == 30, "tapping the third bar jumps to 30");
-  for (int i = 0; i < 5; i++) finger(UI_VOL_MINUS_X + 88, UI_VOL_BTN_Y + 60, 60);
-  CHECK(uiVolume == 0, "minus stops at 0 (muted)");
-  finger(UI_VOL_PLUS_X + 88, UI_VOL_BTN_Y + 60, 60);
-  CHECK(uiVolume == 10, "plus from muted goes to the first bar");
-  for (int i = 0; i < 12; i++) finger(UI_VOL_PLUS_X + 88, UI_VOL_BTN_Y + 60, 60);
-  CHECK(uiVolume == 100, "plus stops at 100");
-  finger(205, 40, 60);
-  CHECK(uiCard.on && uiMenuVol, "a tap on the title does nothing (it doesn't close by accident)");
-  finger(UI_VOL_DONE_X + 180, UI_VOL_DONE_Y + 30, 60);
-  CHECK(!uiCard.on && !uiMenuVol, "Done closes the menu");
-  uiMenuOpen(now);
-  CHECK(!uiMenuVol && uiCard.on, "the next time the menu opens it shows the tiles again");
-  uiMenuTileRect(tileOf(UI_MENU_VOLUME), &tx, &ty);
-  finger(tx + 88, ty + 74, 60);
-  uiMenuOpen(now);                                                  // the PWR button closes it from the volume screen too
-  CHECK(!uiCard.on, "PWR closes the menu from the volume screen");
-  uiMenuOpen(now);
-  CHECK(!uiMenuVol, "and it opens on the tiles");
+  finger(UI_CX, UI_H - 40, 200, UI_CX, UI_H - 180);                // a swipe up from the bottom edge
+  CHECK(uiMenuOn(), "a swipe up from the bottom edge opens the launcher");
+  finger(UI_CX, UI_CY, 60);
+  CHECK(!uiCard.on, "tapping Neddy in the middle closes it");
+  // Settings: the sliders icon; one setting a page, swiped sideways.
+  uiMenuOpen(now); icon(UI_L_SETTINGS, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiMenuOn() && uiShl == UI_SHL_SET && uiShlPage == UI_PG_BRIGHT, "the sliders icon opens Settings on Brightness");
+  setKey = -1; int ax, ay, bx, by;
+  uiBright = 100; arcPoint(90, &ax, &ay); arcPoint(100, &bx, &by);
+  finger(ax, ay, 300, bx, by);
+  CHECK(uiBright == 100 && setKey == -1 && uiShlPage == UI_PG_BRIGHT, "a finger that starts away from the knob doesn't move it");
+  arcPoint(30, &ax, &ay); arcPoint(90, &bx, &by);                  // the knob at 100% sits at the arc's right end
+  finger(ax, ay, 300, bx, by);
+  CHECK(uiBright >= 45 && uiBright <= 55 && setKey == UI_SET_BRIGHT && setVal == uiBright, "dragging along the arc to its bottom sets about half brightness, told once on lifting");
+  CHECK(level == uiFullLevel(), "and the screen follows as it moves");
+  finger(UI_CX + 100, UI_CY - 60, 200, UI_CX - 100, UI_CY - 60);   // swipe left: the next page
+  CHECK(uiShl == UI_SHL_SET && uiShlPage == UI_PG_VOLUME, "a swipe to the left shows the next setting (Volume)");
+  uiVolume = 50; arcPoint(90, &ax, &ay); arcPoint(30, &bx, &by);   // the knob at 50% is at the bottom
+  finger(ax, ay, 400, bx, by);
+  CHECK(uiVolume == 100 && setKey == UI_SET_VOLUME && setVal == 100, "dragging to the end of the arc: volume 100");
+  finger(UI_CX - 100, UI_CY - 60, 200, UI_CX + 100, UI_CY - 60);   // swipe right: back
+  CHECK(uiShlPage == UI_PG_BRIGHT, "a swipe to the right goes back");
+  finger(UI_CX - 100, UI_CY - 60, 200, UI_CX + 100, UI_CY - 60);
+  CHECK(uiShlPage == UI_PG_BRIGHT, "and stops at the first page");
+  uiShellGo(UI_SHL_SET, UI_PG_DIM); uiIdle.dim = true; uiIdle.dimAfter = 30;
+  finger(UI_CX + 150, UI_CY, 60);
+  CHECK(uiIdle.dimAfter == 60 && setKey == UI_SET_DIM && setVal == 60, "Dim after: plus goes 30 s -> 1 min");
+  for (int i = 0; i < 6; i++) finger(UI_CX - 150, UI_CY, 60);
+  CHECK(!uiIdle.dim && setVal == 0, "minus down to Never turns dimming off");
+  uiShellGo(UI_SHL_SET, UI_PG_OFF); uiIdle.offAfter = 0;
+  finger(UI_CX + 150, UI_CY, 60);
+  CHECK(uiIdle.offAfter == 60 && setKey == UI_SET_OFF && setVal == 60, "Screen off after: plus goes Never -> 1 min");
+  uiShellGo(UI_SHL_SET, UI_PG_COLOUR); uiAccentIdx = 0;
+  finger(UI_CX + 48, UI_CY + 66, 60);
+  CHECK(uiAccentIdx == 2 && setKey == UI_SET_ACCENT && setVal == 2, "Colour: tapping the third dot picks green");
+  uiAccentIdx = 0;
+  uiShellGo(UI_SHL_SET, UI_PG_SAVER); bool was = uiSaver;
+  finger(UI_CX, UI_CY + 10, 60);
+  CHECK(uiSaver != was && setKey == UI_SET_SAVER && setVal == (uiSaver ? 1 : 0), "Battery saver: a tap on the switch turns it over");
+  finger(UI_CX, UI_CY + 10, 60);
+  CHECK(uiSaver == was, "and back");
+  uiShellGo(UI_SHL_SET, UI_PG_ANIM); uiFpsLevel = 1;
+  finger(UI_CX + 120, UI_CY + 66, 60);
+  CHECK(uiFpsLevel == 2 && setKey == UI_SET_ANIM && setVal == 2, "Animation: the right-hand choice is Smooth");
+  uiShellGo(UI_SHL_SET, UI_PG_DOUBLE); uiDoublePress = 2;
+  finger(UI_CX, UI_CY + 66, 60);
+  CHECK(uiDoublePress == 1 && setKey == UI_SET_DOUBLE && setVal == 1, "Double press: the middle choice is Talk");
+  uiDoublePress = 2;
+  finger(UI_CX + 100, UI_CY - 60, 200, UI_CX - 100, UI_CY - 60);
+  CHECK(uiShlPage == UI_PG_DOUBLE, "the last page stays the last");
+  uiPwrPress(now);
+  CHECK(uiMenuOn() && uiShl == UI_SHL_HOME, "PWR on a settings page goes back to the launcher");
+  uiPwrPress(now);
+  CHECK(!uiCard.on, "and again closes it");
+  // Record: the microphone icon; swipe between the four modes; tap the circle (or press PWR) to start.
+  uiRecAvailable = true; uiRecMode = 2; recAsked = 0;
+  uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiShl == UI_SHL_REC && uiShlPage == 2, "the microphone opens Record on the mode used last (Meeting)");
+  finger(UI_CX + 100, UI_CY - 160, 200, UI_CX - 100, UI_CY - 160);
+  CHECK(uiShlPage == 3, "a swipe shows Dream");
+  finger(UI_CX, uiRecCircleY(), 60);
+  CHECK(recAsked == 1 && uiRecMode == 3 && !uiCard.on, "a tap on the circle starts a Dream recording");
+  uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiShlPage == 3, "Record opens on the mode used last");
+  finger(UI_CX - 100, UI_CY - 160, 200, UI_CX + 100, UI_CY - 160); finger(UI_CX - 100, UI_CY - 160, 200, UI_CX + 100, UI_CY - 160);
+  uiPwrPress(now);
+  CHECK(recAsked == 2 && uiRecMode == 1, "PWR on the Idea page starts an Idea recording");
+  uiRecAvailable = false; recAsked = 0;
+  uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60); finger(UI_CX, uiRecCircleY(), 60);
+  CHECK(recAsked == 0, "without recording storage nothing starts");
   uiClearCard();
-  uiShowFact(now, "Fact", "1", "", "", 0); uiMenuOpen(now);       // a card behind: swiping must not flip it away
-  uiMenuOpen(now);
-  CHECK(uiCard.kind == UI_CARD_FACT || uiCard.kind == UI_CARD_MENU, "a card and the menu don't mix up");
-  uiClearCard(); uiMenuOpen(now);
-  finger(300, 200, 200, 80, 330);
-  finger(100, 200, 330, 200, 330);
-  CHECK(uiCard.on && uiCard.kind == UI_CARD_MENU, "swiping sideways doesn't flip through cards while the menu is open");
-  finger(200, 60, 60);
-  CHECK(!uiCard.on, "tapping beside the tiles closes the menu");
-  uiMenuOpen(now);
-  pause(14000);
-  CHECK(uiCard.on, "the menu is still there at 14 s");
-  pause(1500);
-  CHECK(!uiCard.on, "and goes after 15 s of quiet");
-  // The Watch face tile goes info -> analog -> neon -> info and tells the server each time; the menu closes and the new face is on screen at once.
-  uiIdle.have = true; uiIdle.after = 10; uiIdle.baseUtc = 1800000000; uiIdle.baseMs = now; uiSetMode(UI_READY);
-  uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_FACE), &tx, &ty);
-  finger(tx + 88, ty + 74, 60);
-  CHECK(uiFace == 1 && setKey == UI_SET_FACE && setVal == 1, "tapping Watch face goes info -> analog");
-  CHECK(!uiCard.on && uiIdleOn, "the menu closes and the new face shows straight away");
-  for (int i = 0; i < 2; i++) { uiMenuOpen(now); finger(tx + 88, ty + 74, 60); }
+  // A double press of PWR: the chosen action; a single press waits to see whether a second comes.
+  uiRecAvailable = true; uiDoublePress = 0; recAsked = 0; uiRecMode = 0;
+  uiPwrPress(now); now += 150; uiPwrPress(now); pause(500);
+  CHECK(recAsked == 1 && !uiMenuOn(), "two quick presses start a recording in the mode used last");
+  uiPwrPress(now); pause(200);
+  CHECK(!uiMenuOn(), "one press waits a moment");
+  pause(300);
+  CHECK(uiMenuOn() && recAsked == 1, "then opens the launcher");
+  uiClearCard(); uiDoublePress = 1;
+  uiPwrPress(now); now += 150; uiPwrPress(now); pause(50);
+  CHECK(uiTouchTalk, "with Talk chosen, two quick presses start hands-free talk");
+  finger(UI_CX, 60, 60); uiTouchTalkEnded();
+  uiDoublePress = 2; uiRecAvailable = false; uiClearCard();
+  // Info: the battery at the top and the i icon both open it; pages up and down; Restart on the last.
+  uiMenuOpen(now); icon(UI_L_INFO, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiShl == UI_SHL_INFO && uiShlPage == 0, "the i icon opens Info");
+  uiClearCard(); uiMenuOpen(now); icon(UI_L_BATTERY, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiShl == UI_SHL_INFO && uiShlPage == 0, "the battery at the top opens Info too");
+  finger(UI_CX, UI_CY + 100, 200, UI_CX, UI_CY - 60);
+  CHECK(uiShlPage == 1, "a swipe up shows the next Info page");
+  finger(UI_CX, UI_CY + 100, 200, UI_CX, UI_CY - 60);
+  actAsked = 0; finger(UI_CX, UI_CY + 10, 60);
+  CHECK(uiShlPage == 2 && actAsked == 0, "a tap on Restart does nothing (it's a hold)");
+  finger(UI_CX, UI_CY + 10, 500);
+  CHECK(actAsked == 0, "let go after half a second: still nothing");
+  finger(UI_CX, UI_CY + 10, 1100);
+  CHECK(uiShlPage == 2 && actAsked == UI_ACT_RESTART, "holding Restart a full second asks the watch to restart");
+  uiClearCard();
+  // The Watch face icon goes info -> analog -> neon -> info and tells the server; the launcher closes and the new face shows at once.
+  uiIdle.have = true; uiIdle.after = 10; uiIdle.baseUtc = 1800000000; uiIdle.baseMs = now; uiSetMode(UI_READY); uiFace = 0;
+  uiMenuOpen(now); icon(UI_L_FACE, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiFace == 1 && setKey == UI_SET_FACE && setVal == 1, "the clock icon goes info -> analog");
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_FACT && !strcmp(uiCard.sky, "Analog"), "the launcher closes and names the new face for a moment");
+  pause(1400);
+  CHECK(!uiCard.on && uiIdleOn, "then the new face itself shows");
+  for (int i = 0; i < 2; i++) { uiMenuOpen(now); finger(tx, ty, 60); }
   CHECK(uiFace == 0 && setVal == 0, "and round again to info");
   uiClearCard();
-  uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_SCREEN_OFF), &tx, &ty);
-  finger(tx + 88, ty + 74, 60);
-  CHECK(!uiCard.on && uiScreenOff && level == 0, "Screen off darkens the screen");
-  finger(200, 200, 60);
-  CHECK(!uiScreenOff && level == 255, "a touch wakes it at full brightness");
+  // The sun shows today's weather from the face's facts (or says to ask).
+  uiIdle.haveW = true; uiIdle.wt = 71; uiIdle.wi = UI_ICON_SUN; strcpy(uiIdle.ws, "Sunny");
+  uiMenuOpen(now); icon(UI_L_WEATHER, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_WEATHER && uiCard.temp == 71, "the sun shows today's weather card");
+  uiClearCard(); uiIdle.haveW = false;
+  uiMenuOpen(now); finger(tx, ty, 60);
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_FACT, "with no weather yet it says to ask");
+  uiClearCard();
+  // The calendar shows the next meeting from the face's facts (or says to ask).
+  uiIdle.haveM = false; uiIdle.mc = 0;
+  uiMenuOpen(now); icon(UI_L_MEETING, &tx, &ty); finger(tx, ty, 60);
+  CHECK(uiCard.on && uiCard.kind == UI_CARD_FACT && !strcmp(uiCard.place, "Next meeting"), "the calendar shows the next meeting (here: ask me)");
+  uiClearCard();
+  // Screen off: dark at once; a touch wakes it at the person's brightness.
+  uiBright = 70;
+  uiMenuOpen(now); icon(UI_L_OFF, &tx, &ty); finger(tx, ty, 60);
+  CHECK(!uiCard.on && !uiScreenOff, "Screen off first says so (and how to wake it) for a second");
+  pause(1100);
+  CHECK(uiScreenOff && level == 0, "then the screen goes dark");
+  finger(UI_CX, UI_CY, 60);
+  CHECK(!uiScreenOff && level == uiFullLevel() && level < 255, "a touch wakes it at the chosen brightness (70%)");
+  uiBright = 100;
+  // The BOOT button: a quarter-second hold talks, a tap doesn't, a double-click opens the launcher (not while recording).
+  uiClearCard();
+  auto boot = [](uint32_t ms) { bool talked = false; for (uint32_t t = 0; t <= ms; t += 16) { talked |= uiBoot(now, true); frame(); now += 16; } uiBoot(now, false); frame(); now += 16; return talked; };
+  CHECK(!boot(120), "a short press of BOOT doesn't talk");
+  pause(500);
+  CHECK(!uiMenuOn(), "and one press on its own opens nothing");
+  CHECK(boot(400), "holding BOOT a little talks");
+  pause(500);
+  boot(80); now += 100; boot(80);
+  CHECK(uiMenuOn() && uiShl == UI_SHL_HOME, "a double-click of BOOT opens the launcher");
+  boot(80); now += 100; boot(80);
+  CHECK(!uiCard.on, "and again closes it");
+  pause(500);
+  boot(80); pause(600); boot(80);
+  CHECK(!uiMenuOn(), "two presses far apart are two single presses");
+  pause(500);
+  // Holding Neddy in the launcher talks, as on his own screen.
+  uiClearCard(); uiMenuOpen(now);
+  for (int i = 0; i < 40; i++) { uiTouch(now, true, UI_CX, UI_CY); frame(); now += 16; }
+  CHECK(uiTouchTalk && !uiMenuOn(), "holding Neddy in the launcher talks (and the launcher steps aside)");
+  uiTouch(now, false, 0, 0); frame(); now += 16;
+  CHECK(!uiTouchTalk, "letting go stops");
+  uiMenuOpen(now);
+  pause(19000);
+  CHECK(uiCard.on, "the launcher is still there at 19 s");
+  pause(1500);
+  CHECK(!uiCard.on, "and goes after 20 s of quiet");
+  uiIdle.have = false; uiIdleOn = false;
   // The animation level sets how often Neddy is drawn (the test loop runs about 60 times a second).
   uiClearCard(); uiIdle.have = false; uiMotion = true; uiNextBlink = 999999; uiNextGlance = 999999;
   for (int lv = 0; lv < 3; lv++) {
@@ -348,14 +453,13 @@ int main() {
   uiSetMode(UI_READY); uiMotion = true;
 
   // Recording: the Record tile asks to start; the recording screen shows the time and a Stop; it dims, wakes, and the info screen has a button.
-  static int recAsked = 0;
-  uiOut.record = [](int a) { recAsked = a; };
+  static int recWhat = 0;
+  uiOut.record = [](int a) { recWhat = a; };
   uiOut.brightness = [](int l) { level = l; };
   uiIdle.have = true; uiIdle.after = 10; uiClearCard(); uiSetMode(UI_READY); uiActivity(now); pause(300);
   uiRecAvailable = true;
-  uiMenuOpen(now); uiMenuTileRect(tileOf(UI_MENU_REC), &tx, &ty);
-  finger(tx + 88, ty + 74, 60);
-  CHECK(recAsked == UI_REC_START && !uiCard.on, "the Record tile asks the sketch to start recording");
+  uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60); finger(UI_CX, uiRecCircleY(), 60);
+  CHECK(recWhat == UI_REC_START && !uiCard.on, "Record asks the sketch to start recording");
   uiRecRun(now, 1, 6000, 3); pause(100);
   CHECK(uiRec.state == UI_RECS_RUN, "the recording screen is up");
   pause(12000);
@@ -364,23 +468,27 @@ int main() {
   uiRecRun(now, 14, 5990, 3);
   pause(9000);
   CHECK(uiRec.dimmed && level == 40, "the screen dims after 20 s without a touch");
-  recAsked = 0;
-  finger(200, 390, 60);
-  CHECK(!uiRec.dimmed && level == 255 && recAsked == 0, "the touch that wakes the screen only wakes it (it doesn't stop the recording)");
+  recWhat = 0;
+  finger(UI_CX, uiStopY(), 60);
+  CHECK(!uiRec.dimmed && level == uiFullLevel() && recWhat == 0, "the touch that wakes the screen only wakes it (it doesn't stop the recording)");
   pause(21000);
   CHECK(uiRec.dimmed && level == 40 && uiWantsRaise(), "(raise) the recording screen dims again and wants a raise");
-  recAsked = 0; uiRaise(now);
-  CHECK(!uiRec.dimmed && level == 255 && uiRec.state == UI_RECS_RUN && recAsked == 0, "a raise brightens the recording screen and the recording carries on");
-  finger(200, 390, 60);
-  CHECK(recAsked == UI_REC_STOP, "a tap on Stop asks to stop");
-  recAsked = 0; finger(200, 150, 60);
-  CHECK(recAsked == 0, "a tap anywhere else does nothing");
+  recWhat = 0; uiRaise(now);
+  CHECK(!uiRec.dimmed && level == uiFullLevel() && uiRec.state == UI_RECS_RUN && recWhat == 0, "a raise brightens the recording screen and the recording carries on");
+  finger(UI_CX, uiStopY(), 60);
+  CHECK(recWhat == 0, "a quick tap on Stop doesn't stop (a pocket can't end a recording)");
+  finger(UI_CX, uiStopY(), 400);
+  CHECK(recWhat == 0, "nor does letting go half way");
+  finger(UI_CX, uiStopY(), 900);
+  CHECK(recWhat == UI_REC_STOP, "holding Stop asks to stop");
+  recWhat = 0; finger(UI_CX, UI_CY - 160, 60);
+  CHECK(recWhat == 0, "a tap anywhere else does nothing");
   uiRecInfo(now, "Saved on the watch", "42 min", "Sending to your phone...", 60, "");
   pause(100);
   CHECK(uiRec.state == UI_RECS_INFO && uiRec.pct == 60, "the sending screen shows its progress");
   uiRecInfo(now, "Not sent", "", "No Wi-Fi. It will send later.", -1, "OK");
-  pause(100); recAsked = 0; finger(200, 420, 60);
-  CHECK(recAsked == UI_REC_OK, "its button answers OK");
+  pause(100); recWhat = 0; finger(UI_CX, uiRecBtnY(), 60);
+  CHECK(recWhat == UI_REC_OK, "its button answers OK");
   uiRecEnd(); pause(100);
   CHECK(uiRec.state == UI_RECS_OFF && !uiScreenOff, "ending the recorder gives the screen back");
   uiRecAvailable = false; uiIdle.have = false;

@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
   CHECK(f.present && !f.sent && f.slots == r.slots, "after stopping, the partition says what it holds");
   CHECK(f.ms >= 9900 && f.ms <= 10100, "and how long it was");
   CHECK(f.id == 0xBEEF1234u && f.startedUtc == 1794262500u, "and who it is");
+  CHECK(f.mode == 2, "a recording started without a mode is a meeting");
   CHECK(violations == 0, "no bit was ever set back to 1 (real flash can't)");
 
   // 2. The sound survives: decode every stored slot and compare with the same sound taken down to 8 kHz directly.
@@ -118,10 +119,11 @@ int main(int argc, char **argv) {
   Rec a; recStart(a, io3, 0x1111u, 1);
   for (int block = 0; block < 500; block++) { for (int i = 0; i < 320; i++) chunk[i] = speech(block * 320 + i); recFeed16k(a, chunk.data(), 320); }
   recStop(a);
-  Rec b; recStart(b, io3, 0x2222u, 2);
+  Rec b; recStart(b, io3, 0x2222u, 2, 3);
   for (int block = 0; block < 100; block++) { for (int i = 0; i < 320; i++) chunk[i] = speech(block * 320 + i); recFeed16k(b, chunk.data(), 320); }
   RecFound second = recLook(io3);
   CHECK(second.id == 0x2222u && second.slots == b.slots && second.slots < a.slots, "a newer recording isn't mixed up with an older one's leftovers");
+  CHECK(second.mode == 3, "the recording's mode (here a dream) is kept on the watch with it");
 
   // 4. A full partition stops cleanly.
   RecIO small = makeIO(REC_SECTOR + 40 * REC_SLOT + 100);

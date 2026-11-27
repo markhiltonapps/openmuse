@@ -160,11 +160,23 @@ int main(int argc, char **argv) {
   uiSmall = false; UiPose big; uiBasePose(&big); int bx, by, bw, bh; uiStageRect(big, &bx, &by, &bw, &bh);
   t0 = now(); for (int i = 0; i < 20; i++) uiRenderStage(big, bx, by, bw, bh);
   printf("big-layout stage %dx%d: %.2f ms per frame on this computer\n", bw, bh, (now() - t0) / 20);
-  // 12. the menu (the PWR button): Animation and Screen off
-  uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiFpsLevel = 1;
-  uiMenuOpen(500000); uiTick(500100); save(dir, "m1_menu");
-  uiFpsLevel = 2; uiAll = true; uiTick(500200); save(dir, "m2_menu_smooth");
-  uiClearCard();
+  // 12. the launcher (the PWR button): Neddy in the middle, icons round him
+  uiIdleOn = false; uiClearCard(); uiSetMode(UI_READY); uiAll = true; uiFpsLevel = 1; uiRecAvailable = true; uiSetBattery(72, false, 0x28, 0x01);
+  uiMotion = false;
+  uiMenuOpen(500000); uiTick(500100); save(dir, "m1_launcher");
+  // the Record pages: Voice note, Idea, Meeting, Dream
+  for (int m = 0; m < 4; m++) { uiShellGo(UI_SHL_REC, m); uiTick(500200 + m); char nm[40]; snprintf(nm, sizeof nm, "n%d_record_%d", m, m); save(dir, nm); }
+  // Settings, one a page
+  uiBright = 70; uiVolume = 90; uiIdle.dim = true; uiIdle.dimAfter = 120; uiIdle.offAfter = 300;
+  for (int pg = 0; pg < UI_PG_N; pg++) { uiShellGo(UI_SHL_SET, pg); uiTick(500300 + pg); char nm[40]; snprintf(nm, sizeof nm, "p%d_setting", pg); save(dir, nm); }
+  uiAccentIdx = 1; uiShellGo(UI_SHL_SET, UI_PG_COLOUR); uiTick(500400); save(dir, "p4b_colour_blue");
+  uiShellGo(UI_SHL_HOME, 0); uiTick(500410); save(dir, "m1b_launcher_blue");
+  uiAccentIdx = 0;
+  // Info, three pages
+  strcpy(uiInfo.fw, "0.2.0"); strcpy(uiInfo.wifi, "Home Wi-Fi"); uiInfo.heapKb = 172; uiInfo.board = "1.75C round";
+  for (int pg = 0; pg < 3; pg++) { uiShellGo(UI_SHL_INFO, pg); uiTick(500500 + pg); char nm[40]; snprintf(nm, sizeof nm, "q%d_info", pg); save(dir, nm); }
+  for (int k = 1; k <= 2; k++) { uiDrawRestart(k * 0.5f); char nm[40]; snprintf(nm, sizeof nm, "q3_restart_hold_%d", k * 50); save(dir, nm); }
+  uiClearCard(); uiRecAvailable = false; uiMotion = true;
   // 13. looking something up: Neddy reads his book, flames flicker (thinking, no words yet)
   uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetWords(""); uiSetHeard(""); uiSetMode(UI_THINK); uiMotion = true; uiNextBlink = 999999; uiNextGlance = 999999; uiAll = true;
   uiLookup(600000, true); uiTick(600050); save(dir, "l1_lookup");
@@ -180,22 +192,16 @@ int main(int argc, char **argv) {
     save(dir, face == 1 ? "f1_face_analog" : "f2_face_neon");
   }
   uiFace = 0; uiIdleOn = false; uiIdle.have = false;
-  // 15. the recording screens and the 4-tile menu
-  uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiRecAvailable = true; uiFace = 1;
-  uiMenuOpen(800000); uiTick(800100); save(dir, "m3_menu_four");
-  // the volume screen (menu tile, then the screen at 60% and muted)
-  uiClearCard(); uiVolume = 60; uiAll = true; uiMenuOpen(800050); uiTick(800060); save(dir, "m4_menu_five");
-  uiMenuVol = true; uiAll = true; uiTick(800070); save(dir, "m5_volume_60");
-  uiVolume = 0; uiAll = true; uiTick(800080); save(dir, "m6_volume_muted");
-  uiVolume = 100; uiAll = true; uiTick(800090); save(dir, "m7_volume_100");
-  uiMenuVol = false; uiVolume = 85;
-  uiClearCard(); uiFace = 0; uiAll = true;
+  // 15. the recording screens
+  uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiRecAvailable = true; uiFace = 0; uiRecMode = 3;
   uiRecRun(800200, 2530, 4680, 35); uiTick(800300); save(dir, "r1_recording");
   uiRecRun(800400, 2531, 4679, 35); uiTick(800500); save(dir, "r1b_recording_next_second");
-  uiRecInfo(800500, "Sending to your phone", "42 minutes", "Joining Wi-Fi, please wait", 0, ""); uiTick(800550); save(dir, "r2a_joining_wifi");
-  uiRecInfo(800600, "Sending to your phone", "42 minutes", "Please wait... 60%", 60, ""); uiTick(800700); save(dir, "r2_sending");
-  uiRecInfo(800650, "Sending to your phone", "42 minutes", "Finishing up... please wait", 100, ""); uiTick(800700); save(dir, "r2b_finishing");
-  uiRecInfo(800800, "Sent", "42 minutes", "It's in the Muse app now", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
+  for (int k = 1; k <= 2; k++) { uiDrawStop(k * 0.5f); char nm[40]; snprintf(nm, sizeof nm, "r1c_stop_hold_%d", k * 50); save(dir, nm); }   // the hold's ring
+  uiDrawStop(0);
+  uiRecInfo(800500, "Sending to Neddy", "42 minutes", "Joining Wi-Fi, please wait", 0, ""); uiTick(800550); save(dir, "r2a_joining_wifi");
+  uiRecInfo(800600, "Sending to Neddy", "42 minutes", "Please wait... 60%", 60, ""); uiTick(800700); save(dir, "r2_sending");
+  uiRecInfo(800650, "Sending to Neddy", "42 minutes", "Finishing up... please wait", 100, ""); uiTick(800700); save(dir, "r2b_finishing");
+  uiRecInfo(800800, "Sent", "42 minutes", "Your meeting is in Neddy", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
   uiRecEnd(); uiRecAvailable = false;
   // Wi-Fi setup screens
   uiSetupScreen(UI_SETUP_JOIN, "Neddy-1A2B", "WIFI:T:WPA;S:Neddy-1A2B;P:k7m2q9xd;;", "192.168.4.1"); save(dir, "w1_setup_join");

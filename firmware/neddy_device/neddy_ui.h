@@ -12,8 +12,18 @@
 #include "neddy_font.h"
 #include "neddy_qr.h"
 
+// The screen: the 2.06's rectangle (410 x 502, rounded corners) or the 1.75C's circle (466 x 466). neddy_board.h (the watch) or
+// the PC test's -DNEDDY_ROUND=1 picks it.
+#ifndef NEDDY_ROUND
+#define NEDDY_ROUND 0
+#endif
+#if NEDDY_ROUND
+#define UI_W 466
+#define UI_H 466
+#else
 #define UI_W 410
 #define UI_H 502
+#endif
 
 // Where pixels go (set by the sketch, or by the PC test).
 struct UiOut {
@@ -22,6 +32,7 @@ struct UiOut {
   void (*brightness)(int level);   // optional: 0..255
   void (*setting)(int which, int value);   // optional: the person changed a setting on the watch (1 = animation speed, 2 = face)
   void (*record)(int action);              // optional: the recording screen or menu asked for something (UI_REC_* below)
+  void (*action)(int what);                // optional: Info > Actions (UI_ACT_* in neddy_shell.h)
 };
 static UiOut uiOut;
 
@@ -92,9 +103,10 @@ static void uiText(const NeddyFont &f, int x, int y, const char *s, uint16_t fg)
   }
 }
 
+static int uiCentreW = UI_W;        // the width text is centred in (a card on the round screen uses a 410-wide canvas)
 static void uiTextCentered(const NeddyFont &f, int y, const char *s, uint16_t fg) {
   int w = uiTextWidth(f, s);
-  uiText(f, (UI_W - w) / 2, y, s, fg);
+  uiText(f, (uiCentreW - w) / 2, y, s, fg);
 }
 
 // Breaks text into lines no wider than maxw (at spaces). Returns how many lines (at most maxLines).
@@ -136,6 +148,8 @@ static int uiParagraph(const NeddyFont &f, int y, const char *s, uint16_t fg, in
   }
   return y;
 }
+
+#include "neddy_draw.h"
 
 // ------------------------------------------------------------------ the robot
 struct UiPose {
@@ -370,6 +384,8 @@ struct UiCard {
   int tone;                                // 0 plain, 1 good, 2 bad
   int rows;                                // a list: up to five rows
   char rowLabel[5][30], rowValue[5][16];
+  uint32_t until;                          // shown only this many ms (0 = the usual time)
+  bool thenFace;                           // when it goes, the watch face comes at once (after naming a new face)
 };
 static UiCard uiCard;
 static uint16_t uiIconBuf[UI_ICON * UI_ICON];
@@ -390,6 +406,7 @@ struct UiIdle {
   int mv; bool vbus;              // battery millivolts (0 = not read) and whether USB power is present
   bool raise;                     // raise-to-wake is on (the person's setting; the sketch reads the accelerometer only when it is)
   int dimAfter;                   // seconds of quiet before the idle face dims; 0 = the usual (a minute after the idle face came)
+  int offAfter;                   // seconds of quiet before the screen goes dark by itself; 0 = never (the battery saver's own 45 s still apply)
 };
 static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false, 0, false };
 static uint8_t uiBatRaw[2] = { 0, 0 };   // the power chip's two status bytes, for the test line
@@ -397,7 +414,7 @@ static bool uiIdleOn = false, uiDimmed = false;
 static uint32_t uiLastActive = 0, uiIdleSince = 0;
 static int uiIdleMinute = -1;
 // How long a card stays: as long as the idle wait (10 s by default, never under 10), so the face comes back right after it; a minute when the idle face is off.
-static uint32_t uiCardMs() { if (uiCard.on && uiCard.kind == UI_CARD_MENU) return 15000UL; return (uiIdle.have && uiIdle.after > 0) ? (uint32_t)(uiIdle.after < 10 ? 10 : uiIdle.after) * 1000UL : (uint32_t)UI_CARD_MS; }
+static uint32_t uiCardMs() { if (uiCard.on && uiCard.until) return uiCard.until; if (uiCard.on && uiCard.kind == UI_CARD_MENU) return 20000UL; return (uiIdle.have && uiIdle.after > 0) ? (uint32_t)(uiIdle.after < 10 ? 10 : uiIdle.after) * 1000UL : (uint32_t)UI_CARD_MS; }
 // The battery level, read by the sketch every so often; the face redraws when it changes.
 static void uiSetBattery(int pct, bool charging, uint8_t s1, uint8_t s2, int mv = 0, bool vbus = false) {
   if (pct != uiIdle.bat || charging != uiIdle.chg || vbus != uiIdle.vbus) uiIdleMinute = -1;
@@ -425,16 +442,18 @@ static uint32_t uiRand() { uiRng = uiRng * 1664525u + 1013904223u; return uiRng 
 static void uiLookup(uint32_t ms, bool on) { if (on != uiLookupOn) { uiLookupOn = on; uiLookupSince = ms; } }
 static void uiClearCard() { if (uiCard.on) { uiCard.on = false; uiAll = true; } }
 // Anything happening (a touch, a press, words, a card) wakes the idle face and restarts the wait for it.
+static int uiBright = 100;                       // the screen's brightness when it is on, 10..100 % (Settings > Brightness, or by voice)
+static int uiFullLevel() { return (uiBright < 10 ? 10 : uiBright > 100 ? 100 : uiBright) * 255 / 100; }
 static bool uiScreenOff = false;                 // the menu's Screen off: dark and not drawing until any touch, press or words
 static bool uiScreenOffAuto = false;             // the screen went dark by itself (battery saver): unlike the menu's Screen off, a raise of the wrist wakes it too
 static bool uiSaver = false;                     // the battery saver is on (the sketch sets this; off here so the tests of the old behaviour still hold)
 static uint32_t uiDimmedAt = 0;                  // when the idle face dimmed
 static void uiActivity(uint32_t ms) {
   uiLastActive = ms;
-  if (uiScreenOff) { uiScreenOff = false; uiScreenOffAuto = false; uiAll = true; if (uiOut.brightness) uiOut.brightness(255); }
+  if (uiScreenOff) { uiScreenOff = false; uiScreenOffAuto = false; uiAll = true; if (uiOut.brightness) uiOut.brightness(uiFullLevel()); }
   if (uiIdleOn) {
     uiIdleOn = false; uiAll = true;
-    if (uiDimmed) { uiDimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
+    if (uiDimmed) { uiDimmed = false; if (uiOut.brightness) uiOut.brightness(uiFullLevel()); }
   }
 }
 static void uiSetMode(int m) {
@@ -473,7 +492,7 @@ static uint16_t uiModeColour() {
     case UI_THINK: return UI_AMBER;
     case UI_SPEAK: return UI_CYAN;
     case UI_LINK: return UI_GREY;
-    default: return UI_TEAL;
+    default: return uiAcc();
   }
 }
 static const char *uiModeLabel() {
@@ -650,15 +669,15 @@ static void uiNumDeg(char *out, int v) { snprintf(out, 12, "%d%c", v, (char)127)
 
 static void uiDrawWeather() {
   const int PX = 14, PY = 10, PW = 382, PH = 336;
-  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
-  uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
+  const uint16_t panel = NEDDY_ROUND ? UI_BLACK : uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
+  if (!NEDDY_ROUND) uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
   uiBg = panel;
   char buf[48];
   // the place, in capitals
   int n = 0;
   for (const char *p = uiCard.place; *p && n < 30; p++) buf[n++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : *p;
   buf[n] = 0;
-  uiTextCentered(NFONT_MID, 16, buf, UI_TEAL);
+  uiTextCentered(NFONT_MID, 16, buf, uiAcc());
   // the picture on the left, the temperature on the right
   uiRenderIcon(uiCard.icon, panel);
   uiOut.blit(34, 48, UI_ICON, UI_ICON, uiIconBuf);
@@ -689,7 +708,7 @@ static void uiDrawWeather() {
   int count = 0;
   if (uiCard.high != UI_NONE) { tiles[count].label = "High"; uiNumDeg(tiles[count].value, uiCard.high); tiles[count].colour = UI_AMBER; count++; }
   if (uiCard.low != UI_NONE) { tiles[count].label = "Low"; uiNumDeg(tiles[count].value, uiCard.low); tiles[count].colour = UI_CYAN; count++; }
-  if (uiCard.rain > 0) { tiles[count].label = "Rain"; snprintf(tiles[count].value, 12, "%d%%", uiCard.rain); tiles[count].colour = UI_TEAL; count++; }
+  if (uiCard.rain > 0) { tiles[count].label = "Rain"; snprintf(tiles[count].value, 12, "%d%%", uiCard.rain); tiles[count].colour = uiAcc(); count++; }
   if (count) {
     uiOut.fill(PX + 28, 262, PW - 56, 2, border);
     for (int i = 0; i < count; i++) {
@@ -719,16 +738,21 @@ static void uiFit(char *dst, size_t cap, const NeddyFont &f, const char *src, in
   size_t n = strlen(src);
   if (n >= cap) n = cap - 1;
   memcpy(dst, src, n); dst[n] = 0;
-  while (n > 1 && uiTextWidth(f, dst) > maxw) {
-    n--; dst[n - 1] = '.'; dst[n] = 0;
-    while (n > 2 && dst[n - 2] == ' ') { dst[n - 2] = '.'; dst[n - 1] = 0; n--; }   // no space before the dot
+  if (uiTextWidth(f, dst) <= maxw) return;
+  // Too wide: as much as fits, then "..." (one dot read like an abbreviation: "Design review wi.").
+  for (size_t len = n; len-- > 0;) {
+    size_t m = len;
+    while (m > 0 && src[m - 1] == ' ') m--;                  // no space before the dots
+    if (m + 4 > cap) continue;
+    memcpy(dst, src, m); memcpy(dst + m, "...", 4);
+    if (uiTextWidth(f, dst) <= maxw || m == 0) return;
   }
 }
 static void uiCardHeader(const char *text) {
   if (!text[0]) return;
   char buf[32];
   uiUpper(buf, sizeof(buf), text);
-  uiTextCentered(NFONT_MID, 16, buf, UI_TEAL);
+  uiTextCentered(NFONT_MID, 16, buf, uiAcc());
 }
 
 static void uiDrawScore() {
@@ -748,7 +772,7 @@ static void uiDrawScore() {
       uiText(NFONT_TEMP, 376 - uiTextWidth(NFONT_TEMP, buf), y0, buf, col);
     }
     uiOut.fill(PX + 28, 160, PW - 56, 2, border);
-    if (uiCard.status[0]) uiTextCentered(NFONT_BODY, 284, uiCard.status, UI_TEAL);
+    if (uiCard.status[0]) uiTextCentered(NFONT_BODY, 284, uiCard.status, uiAcc());
   } else {
     // Not started: the two names, "at", and when.
     uiFit(buf, sizeof(buf), NFONT_TITLE, uiCard.away, 340);
@@ -756,7 +780,7 @@ static void uiDrawScore() {
     uiTextCentered(NFONT_MID, 126, "at", UI_GREY);
     uiFit(buf, sizeof(buf), NFONT_TITLE, uiCard.home, 340);
     uiTextCentered(NFONT_TITLE, 160, buf, UI_WHITE);
-    if (uiCard.status[0]) uiTextCentered(NFONT_BODY, 250, uiCard.status, UI_TEAL);
+    if (uiCard.status[0]) uiTextCentered(NFONT_BODY, 250, uiCard.status, uiAcc());
   }
 }
 
@@ -828,39 +852,11 @@ static void uiDrawList() {
   }
 }
 
-// ---- the menu: the PWR side button (or a swipe up from the bottom edge) opens big tiles; tap one. Tiles are 176 x 148 px.
-enum { UI_MENU_ANIM = 1, UI_MENU_SCREEN_OFF = 2, UI_MENU_FACE = 3, UI_MENU_REC = 4, UI_MENU_VOLUME = 5 };
-enum { UI_SET_ANIM = 1, UI_SET_FACE = 2, UI_SET_VOLUME = 3 };
+// ---- what the menu (neddy_shell.h) and the sketch share
 enum { UI_REC_START = 1, UI_REC_STOP = 2, UI_REC_OK = 3, UI_REC_RETRY = 4 };   // what the recording screens ask the sketch for
 static int uiFpsLevel = 1;                       // animation speed: 0 saver, 1 normal, 2 smooth
 static int uiFace = 0;                           // the watch face: 0 info (clock, weather, meeting), 1 analog, 2 neon digital
-static const int uiMenuIds[] = { UI_MENU_REC, UI_MENU_VOLUME, UI_MENU_FACE, UI_MENU_ANIM, UI_MENU_SCREEN_OFF };
-static const int uiMenuN = 5;
 static int uiVolume = 85;                        // the speaker volume, 0 to 100 (the sketch keeps it in step with the audio chip and the server)
-static bool uiMenuVol = false;                   // the menu is showing the volume screen (big minus and plus, a row of bars) instead of the tiles
-// The volume screen's parts (all on even pixels): the bars you can tap, the minus and plus tiles, and Done.
-static const int UI_VOL_BARS_X = 28, UI_VOL_BARS_Y = 150, UI_VOL_BAR_PITCH = 36, UI_VOL_BARS_BOTTOM = 270;
-static const int UI_VOL_BTN_Y = 290, UI_VOL_BTN_W = 176, UI_VOL_BTN_H = 120, UI_VOL_MINUS_X = 22, UI_VOL_PLUS_X = 212;
-static const int UI_VOL_DONE_X = 22, UI_VOL_DONE_Y = 424, UI_VOL_DONE_W = 366, UI_VOL_DONE_H = 60;
-static bool uiRecAvailable = false;              // the sketch found the recording storage: the Record tile does something
-static char uiRecSub[28] = "Up to 1 h 40";       // the Record tile's small line (how long it can record, or that one is waiting to be sent)
-static void uiMenuTileRect(int i, int *x, int *y) {
-  const int W = 176, H = 148, GAP = 14, X0 = 22;
-  int row = i / 2, col = i % 2;
-  int rows = (uiMenuN + 1) / 2;
-  int Y0 = rows == 1 ? 104 : 20;                 // a single row sits in the middle
-  *x = X0 + col * (W + GAP); *y = Y0 + row * (H + GAP);
-}
-// Which tile a point is on, or -1.
-static int uiMenuHit(int px, int py) {
-  for (int i = 0; i < uiMenuN; i++) {
-    int x, y; uiMenuTileRect(i, &x, &y);
-    if (px >= x && px < x + 176 && py >= y && py < y + 148) return i;
-  }
-  return -1;
-}
-static const char *uiFaceName() { return uiFace == 1 ? "Analog" : uiFace == 2 ? "Neon" : "Info"; }
-static const char *uiFpsName() { return uiFpsLevel == 0 ? "Saver" : uiFpsLevel == 2 ? "Smooth" : "Normal"; }
 // A ring made of even-aligned spans (the screen wants even windows).
 static void uiRing(int cx, int cy, int r, int t, uint16_t col) {
   for (int dy = -r; dy < r; dy += 2) {
@@ -874,90 +870,36 @@ static void uiRing(int cx, int cy, int r, int t, uint16_t col) {
     }
   }
 }
-static char uiVolSub[12] = "";
-static void uiVolText(char *out, size_t n) {
-  if (uiVolume <= 0) snprintf(out, n, "Muted"); else snprintf(out, n, "%d%%", uiVolume);
-}
-static int uiVolLevel() { return (uiVolume + 5) / 10; }   // 0 to 10 bars
-// The volume screen: the level in big digits, ten bars (tap one to jump there), a big minus and a big plus, and Done.
-static void uiDrawVolume() {
-  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88), lit = UI_TEAL;
-  uiText(NFONT_BODY, (205 - uiTextWidth(NFONT_BODY, "Volume") / 2) & ~1, 20, "Volume", UI_WHITE);
-  char num[12];
-  if (uiVolume <= 0) snprintf(num, sizeof(num), "Muted"); else snprintf(num, sizeof(num), "%d%%", uiVolume);
-  if (uiVolume <= 0) uiText(NFONT_BODY, (205 - uiTextWidth(NFONT_BODY, num) / 2) & ~1, 78, num, UI_GREY);
-  else uiText(NFONT_BIG, (205 - uiTextWidth(NFONT_BIG, num) / 2) & ~1, 66, num, UI_WHITE);
-  for (int b = 0; b < 10; b++) {
-    int h = 20 + b * 6, bx = UI_VOL_BARS_X + b * UI_VOL_BAR_PITCH;
-    uiOut.fill(bx, (UI_VOL_BARS_BOTTOM - h) & ~1, 28, h & ~1, b < uiVolLevel() ? lit : UI_DIM);
-  }
-  uiRoundPanel(UI_VOL_MINUS_X, UI_VOL_BTN_Y, UI_VOL_BTN_W, UI_VOL_BTN_H, 22, border, panel);
-  uiRoundPanel(UI_VOL_PLUS_X, UI_VOL_BTN_Y, UI_VOL_BTN_W, UI_VOL_BTN_H, 22, border, panel);
-  int my = UI_VOL_BTN_Y + UI_VOL_BTN_H / 2;
-  uiOut.fill(UI_VOL_MINUS_X + 60, my - 4, 56, 8, lit);                       // a minus
-  uiOut.fill(UI_VOL_PLUS_X + 60, my - 4, 56, 8, lit);                        // a plus: a bar across and a bar up
-  uiOut.fill(UI_VOL_PLUS_X + 84, my - 28, 8, 56, lit);
-  uiRoundPanel(UI_VOL_DONE_X, UI_VOL_DONE_Y, UI_VOL_DONE_W, UI_VOL_DONE_H, 20, border, panel);
-  uiBg = panel;
-  uiText(NFONT_BODY, (UI_VOL_DONE_X + UI_VOL_DONE_W / 2 - uiTextWidth(NFONT_BODY, "Done") / 2) & ~1, UI_VOL_DONE_Y + 12, "Done", UI_WHITE);
-  uiBg = UI_BLACK;
-}
-static void uiDrawMenu() {
-  if (uiMenuVol) { uiDrawVolume(); return; }
-  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88), lit = UI_TEAL;
-  for (int i = 0; i < uiMenuN; i++) {
-    int x, y; uiMenuTileRect(i, &x, &y);
-    uiRoundPanel(x, y, 176, 148, 22, border, panel);
-    uiBg = panel;
-    const char *label = "", *sub = "";
-    int cx = x + 88;
-    if (uiMenuIds[i] == UI_MENU_REC) {
-      label = "Record"; sub = uiRecAvailable ? uiRecSub : "Not available";
-      uint16_t red = uiRecAvailable ? uiRgb(255, 84, 72) : UI_DIM;          // a microphone: a rounded body, a cup, a stem
-      uiOut.fill((cx - 10) & ~1, y + 18, 20, 30, red); uiOut.fill((cx - 6) & ~1, y + 20, 12, 26, panel);
-      uiOut.fill((cx - 18) & ~1, y + 34, 4, 12, red); uiOut.fill((cx + 14) & ~1, y + 34, 4, 12, red); uiOut.fill((cx - 14) & ~1, y + 46, 28, 4, red);
-      uiOut.fill((cx - 2) & ~1, y + 50, 4, 10, red); uiOut.fill((cx - 10) & ~1, y + 58, 20, 4, red);
-    } else if (uiMenuIds[i] == UI_MENU_VOLUME) {
-      label = "Volume"; sub = uiVolSub;
-      uiVolText(uiVolSub, sizeof(uiVolSub));
-      uiOut.fill((cx - 26) & ~1, y + 32, 14, 22, lit);                       // a speaker: a box, a cone and two sound waves
-      uiOut.fill((cx - 12) & ~1, y + 26, 8, 34, lit);
-      uiOut.fill((cx - 4) & ~1, y + 20, 8, 46, lit);
-      uiOut.fill((cx + 12) & ~1, y + 30, 4, 26, uiVolume > 0 ? lit : UI_DIM);
-      uiOut.fill((cx + 22) & ~1, y + 22, 4, 42, uiVolume > 50 ? lit : UI_DIM);
-    } else if (uiMenuIds[i] == UI_MENU_FACE) {
-      label = "Watch face"; sub = uiFaceName();
-      uiRing(cx, y + 44, 22, 4, lit);                // a little clock: a ring and two hands
-      uiOut.fill(cx - 2, y + 28, 4, 18, lit);
-      uiOut.fill(cx - 2, y + 42, 14, 4, lit);
-    } else if (uiMenuIds[i] == UI_MENU_ANIM) {
-      label = "Animation"; sub = uiFpsName();
-      for (int b = 0; b < 3; b++) {                // three bars; the more are lit, the smoother
-        int bh = 16 + b * 14, bx = (cx - 30 + b * 22) & ~1;
-        uiOut.fill(bx, (y + 66 - bh) & ~1, 16, bh & ~1, b <= uiFpsLevel ? lit : UI_DIM);
-      }
-    } else {
-      label = "Screen off"; sub = "Tap to wake";
-      uiRing(cx, y + 44, 22, 4, lit);              // a power ring with a notch and a stroke
-      uiOut.fill(cx - 8, y + 20, 16, 14, panel);
-      uiOut.fill(cx - 2, y + 18, 4, 26, lit);
-    }
-    uiText(NFONT_BODY, (cx - uiTextWidth(NFONT_BODY, label) / 2) & ~1, y + 76, label, UI_WHITE);
-    uiText(NFONT_SMALL, (cx - uiTextWidth(NFONT_SMALL, sub) / 2) & ~1, y + 76 + NFONT_BODY.h + 2, sub, UI_GREY);
-    uiBg = UI_BLACK;
-  }
-}
+static void uiShellDraw();
+// On the round screen a card is laid out on the 2.06's 410-wide canvas, moved into the middle of the circle, without its panel.
+#if NEDDY_ROUND
+#define UI_CANVAS_X 28
+#define UI_CANVAS_Y 50
+static void (*uiRawFill)(int, int, int, int, uint16_t) = nullptr;
+static void (*uiRawBlit)(int, int, int, int, uint16_t *) = nullptr;
+static void uiCanvasFill(int x, int y, int w, int h, uint16_t c) { uiRawFill(x + UI_CANVAS_X, y + UI_CANVAS_Y, w, h, c); }
+static void uiCanvasBlit(int x, int y, int w, int h, uint16_t *p) { uiRawBlit(x + UI_CANVAS_X, y + UI_CANVAS_Y, w, h, p); }
+static void uiCanvasBegin() { uiRawFill = uiOut.fill; uiRawBlit = uiOut.blit; uiOut.fill = uiCanvasFill; uiOut.blit = uiCanvasBlit; uiCentreW = 410; }
+static void uiCanvasEnd() { uiOut.fill = uiRawFill; uiOut.blit = uiRawBlit; uiCentreW = UI_W; }
+#else
+static void uiCanvasBegin() {}
+static void uiCanvasEnd() {}
+#endif
 static void uiDrawCard() {
   const int PX = 14, PY = 10, PW = 382, PH = 336;
-  if (uiCard.kind == UI_CARD_MENU) { uiDrawMenu(); return; }
-  if (uiCard.kind == UI_CARD_WEATHER) { uiDrawWeather(); return; }
-  const uint16_t panel = uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
-  uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
-  uiBg = panel;
-  if (uiCard.kind == UI_CARD_SCORE) uiDrawScore();
-  else if (uiCard.kind == UI_CARD_FACT) uiDrawFact();
-  else uiDrawList();
-  uiBg = UI_BLACK;
+  if (uiCard.kind == UI_CARD_MENU) { uiShellDraw(); return; }
+  uiCanvasBegin();
+  if (uiCard.kind == UI_CARD_WEATHER) uiDrawWeather();
+  else {
+    const uint16_t panel = NEDDY_ROUND ? UI_BLACK : uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
+    if (!NEDDY_ROUND) uiRoundPanel(PX, PY, PW, PH, 24, border, panel);
+    uiBg = panel;
+    if (uiCard.kind == UI_CARD_SCORE) uiDrawScore();
+    else if (uiCard.kind == UI_CARD_FACT) uiDrawFact();
+    else uiDrawList();
+    uiBg = UI_BLACK;
+  }
+  uiCanvasEnd();
 }
 
 // The last few cards are remembered, so a swipe can bring one back.
@@ -1001,60 +943,6 @@ static void uiShowWeather(uint32_t ms, const char *place, int temp, int feels, c
 }
 
 static void uiStartCard(uint32_t ms, int kind) { uiActivity(ms); memset(&uiCard, 0, sizeof(uiCard)); uiCard.kind = kind; uiCard.since = ms; uiCard.on = true; uiAll = true; }
-static void uiMenuOpen(uint32_t ms) {
-  if (uiCard.on && uiCard.kind == UI_CARD_MENU) { uiClearCard(); return; }   // the button again closes it
-  uiMenuVol = false;
-  uiStartCard(ms, UI_CARD_MENU);
-}
-// A change to the volume from the watch's own screen: held to 0..100, the sketch is told (it sets the audio chip, beeps, and tells the server).
-static void uiVolChange(int v) {
-  if (v < 0) v = 0;
-  if (v > 100) v = 100;
-  uiVolume = v;
-  if (uiOut.setting) uiOut.setting(UI_SET_VOLUME, uiVolume);
-  uiAll = true;
-}
-static void uiVolTap(uint32_t ms, int px, int py) {
-  uiCard.since = ms;
-  if (py >= UI_VOL_BTN_Y && py < UI_VOL_BTN_Y + UI_VOL_BTN_H) {
-    if (px >= UI_VOL_MINUS_X && px < UI_VOL_MINUS_X + UI_VOL_BTN_W) uiVolChange(((uiVolume - 1) / 10) * 10);          // down to the bar below
-    else if (px >= UI_VOL_PLUS_X && px < UI_VOL_PLUS_X + UI_VOL_BTN_W) uiVolChange(((uiVolume / 10) + 1) * 10);        // up to the bar above
-  } else if (py >= UI_VOL_BARS_Y && py < UI_VOL_BARS_BOTTOM + 10 && px >= UI_VOL_BARS_X - 4 && px < UI_VOL_BARS_X + 10 * UI_VOL_BAR_PITCH) {
-    int b = (px - UI_VOL_BARS_X + 4) / UI_VOL_BAR_PITCH;                                                               // tap a bar: that level
-    uiVolChange((b < 0 ? 0 : b > 9 ? 9 : b) * 10 + 10);
-  } else if (px >= UI_VOL_DONE_X && px < UI_VOL_DONE_X + UI_VOL_DONE_W && py >= UI_VOL_DONE_Y && py < UI_VOL_DONE_Y + UI_VOL_DONE_H) {
-    uiMenuVol = false; uiClearCard();                                  // Done closes the menu
-  }
-}
-static void uiMenuTap(uint32_t ms, int px, int py) {
-  if (uiMenuVol) { uiVolTap(ms, px, py); return; }
-  uiCard.since = ms;
-  int i = uiMenuHit(px, py);
-  if (i < 0) { uiClearCard(); return; }
-  if (uiMenuIds[i] == UI_MENU_REC) {
-    uiClearCard();
-    if (uiRecAvailable && uiOut.record) uiOut.record(UI_REC_START);
-  } else if (uiMenuIds[i] == UI_MENU_VOLUME) {
-    uiMenuVol = true; uiAll = true;                                    // the volume screen
-  } else if (uiMenuIds[i] == UI_MENU_FACE) {
-    uiFace = (uiFace + 1) % 3;
-    if (uiOut.setting) uiOut.setting(UI_SET_FACE, uiFace);
-    uiClearCard();                                                  // close the menu and show the new face at once (not after ten quiet seconds)
-    if (uiIdle.have && uiIdle.after > 0 && uiMode == UI_READY) {
-      uiIdleOn = true; uiIdleSince = ms; uiDimmed = false; uiIdleMinute = -1; uiWords[0] = 0; uiHeard[0] = 0;
-    }
-    uiAll = true;
-  } else if (uiMenuIds[i] == UI_MENU_ANIM) {
-    uiFpsLevel = (uiFpsLevel + 1) % 3;
-    if (uiOut.setting) uiOut.setting(UI_SET_ANIM, uiFpsLevel);
-    uiAll = true;
-  } else if (uiMenuIds[i] == UI_MENU_SCREEN_OFF) {
-    uiClearCard();
-    uiScreenOff = true; uiScreenOffAuto = false;   // dark, and nothing is drawn (saves battery); any touch, press or words wake it (a raise of the wrist does not)
-    if (uiOut.brightness) uiOut.brightness(0);
-  }
-}
-
 // A game. Scores the server didn't send are UI_NONE (a game still to come).
 static void uiShowScore(uint32_t ms, const char *league, const char *status, const char *away, int awayScore, const char *home, int homeScore) {
   uiStartCard(ms, UI_CARD_SCORE);
@@ -1106,6 +994,7 @@ struct UiRec {
   char title[40], big[24], small[48], button[16];
   int pct;                                       // a progress bar (0..100), -1 for none
   uint32_t lastTouch;
+  uint32_t holdAt; int holdStep;                 // Stop held since (0 = not held), and how far its ring has filled (0..10)
 };
 static UiRec uiRec;
 #define UI_REC_DIM_MS 20000
@@ -1122,7 +1011,7 @@ static void uiRecInfo(uint32_t ms, const char *title, const char *big, const cha
 }
 static void uiRecEnd() {
   if (uiRec.state == UI_RECS_OFF) return;
-  if (uiRec.dimmed && uiOut.brightness) uiOut.brightness(255);
+  if (uiRec.dimmed && uiOut.brightness) uiOut.brightness(uiFullLevel());
   memset(&uiRec, 0, sizeof(uiRec)); uiAll = true;
 }
 // ---- raise-to-wake (the sketch reads the accelerometer and calls uiRaise when a wrist has been lifted; see neddy_raise.h).
@@ -1136,54 +1025,98 @@ static void uiRaise(uint32_t ms) {
   if (uiScreenOffAuto) { uiScreenOff = false; uiScreenOffAuto = false; uiAll = true; did = true; }   // it went dark by itself: the raise wakes it
   if (uiDimmed) { uiDimmed = false; uiIdleSince = ms; uiLastActive = ms; did = true; }   // the idle face stays, bright, and its dimming wait starts again
   if (uiRec.state == UI_RECS_RUN && uiRec.dimmed) { uiRec.dimmed = false; uiRec.lastTouch = ms; did = true; }
-  if (did) { uiRaises++; if (uiOut.brightness) uiOut.brightness(255); }
+  if (did) { uiRaises++; if (uiOut.brightness) uiOut.brightness(uiFullLevel()); }
+}
+// The recording mode (chosen on the Record pages, kept for a double press of PWR): 0 voice note, 1 idea, 2 meeting, 3 dream.
+static int uiRecMode = 2;
+static const char *const UI_REC_NAMES[4] = { "VOICE NOTE", "IDEA", "MEETING", "DREAM" };
+static const int UI_REC_ICONS[4] = { UI_IC_MIC, UI_IC_BULB, UI_IC_PEOPLE, UI_IC_MOON };
+#define UI_REC_DOTS 60
+// The dots round the edge: each painted in its own small box, so nothing else is touched.
+static void uiEdgeDot(int i, int n, float inset, float rad, uint16_t col) {
+  float x, y; uiEdgePoint((float)i / n, inset, &x, &y);
+  uiShClear(); uiShAdd(UI_SH_DISC, x, y, rad, 0, 0, 0, col);
+  int h = (int)rad + 3; uiShPaint((int)x - h, (int)y - h, 2 * h + 2, 2 * h + 2);
 }
 static void uiRecBar(int y, int pct, uint16_t col) {
-  uiRoundPanel(60, y, 290, 22, 10, uiRgb(52, 74, 88), UI_BLACK);
-  int w = ((286 * (pct < 0 ? 0 : pct > 100 ? 100 : pct)) / 100) & ~1;
-  if (w >= 12) uiOut.fill(62, y + 2, w, 18, col);
+  const float w = 140;
+  float f = (pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100.0f;
+  uiShClear();
+  uiShAdd(UI_SH_SEG, UI_CX - w, y, UI_CX + w, y, 7, 0, uiRgb(52, 52, 64));
+  if (f > 0.01f) uiShAdd(UI_SH_SEG, UI_CX - w, y, UI_CX - w + 2 * w * f, y, 7, 0, col);
+  uiShPaint(UI_CX - (int)w - 10, y - 10, (int)(2 * w) + 20, 20);
 }
 static void uiRecTime(char *dst, size_t cap, uint32_t seconds) {
   snprintf(dst, cap, "%02u:%02u:%02u", (unsigned)(seconds / 3600), (unsigned)((seconds / 60) % 60), (unsigned)(seconds % 60));
 }
+// The Stop button while recording, and the button under a message: where they are (a tap there does it).
+#define UI_STOP_R 52
+#define UI_STOP_HOLD_MS 800                      // Stop is a hold (a brush of a sleeve mustn't end a meeting); PWR stops at once
+static int uiStopY() { return NEDDY_ROUND ? UI_CY + 124 : UI_CY + 128; }
+// The Stop button, with the ring that fills while it is held (`f` 0..1).
+static void uiDrawStop(float f) {
+  uiShClear();
+  uiShAdd(UI_SH_DISC, UI_CX, uiStopY(), UI_STOP_R, 0, 0, 0, UI_REC_RED);
+  uiShAdd(UI_SH_BOX, UI_CX, uiStopY(), 18, 18, 5, 0, UI_WHITE);
+  uiShAdd(UI_SH_RING, UI_CX, uiStopY(), UI_STOP_R + 10, 6, 0, 0, uiRgb(60, 20, 18));
+  if (f > 0.01f) uiShAdd(UI_SH_ARC, UI_CX, uiStopY(), UI_STOP_R + 10, 6, -90, -90 + 360 * (f > 1 ? 1 : f), UI_WHITE);
+  int h = UI_STOP_R + 16;
+  uiShPaint(UI_CX - h, uiStopY() - h, 2 * h, 2 * h);
+}
+static int uiRecBtnY() { return UI_CY + 112; }
 static void uiRecDraw() {
-  const uint16_t red = uiRgb(255, 84, 72), dark = uiRgb(60, 24, 24), teal = UI_TEAL;
+  const uint16_t red = UI_REC_RED;
   if (uiRec.state == UI_RECS_RUN) {
     if (uiRec.full) {
       uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
-      uiText(NFONT_MID, 70, 22, "REC", red);
-      uiRoundPanel(96, 340, 218, 100, 26, red, dark);
-      uiBg = dark; uiTextCentered(NFONT_TITLE, 340 + (100 - NFONT_TITLE.h) / 2, "Stop", UI_WHITE); uiBg = UI_BLACK;
-      uiTextCentered(NFONT_SMALL, 462, "Tap Stop, or press the PWR button", UI_DIM);
+      for (int i = 0; i < UI_REC_DOTS; i++) uiEdgeDot(i, UI_REC_DOTS, 22, 2.6f, uiRgb(110, 26, 22));
+      uiIcon(UI_REC_ICONS[uiRecMode & 3], UI_CX, UI_CY - 156, 50, red);
+      uiDrawStop(0);
+      uiTextCentered(NFONT_MID, uiStopY() + UI_STOP_R + (NEDDY_ROUND ? 10 : 18), "Hold to stop", UI_LABEL);
     }
-    uiRing(42, 36, 14, 14, (uiRec.elapsed & 1) ? uiRgb(120, 40, 36) : red);          // the mark blinks each second
+    // the travelling dot: one bright dot moves a step round the edge each second
+    uint32_t e = uiRec.elapsed;
+    uiEdgeDot((int)((e + UI_REC_DOTS - 1) % UI_REC_DOTS), UI_REC_DOTS, 22, 2.6f, uiRgb(110, 26, 22));
+    uiEdgeDot((int)(e % UI_REC_DOTS), UI_REC_DOTS, 22, 5.0f, red);
+    char label[24]; snprintf(label, sizeof(label), "REC  %s", UI_REC_NAMES[uiRecMode & 3]);
+    uiFillE(UI_CX - 170, UI_CY - 112, 340, NFONT_MID.h + 2, UI_BLACK);
+    uiTrackedCentered(NFONT_MID, UI_CX + 10, UI_CY - 112, label, UI_LABEL, 2);
+    {                                                         // the REC dot beside it blinks each second
+      int lw = uiTrackedWidth(NFONT_MID, label, 2);
+      uiShClear(); uiShAdd(UI_SH_DISC, UI_CX + 10 - lw / 2 - 16, UI_CY - 112 + NFONT_MID.h / 2, 7, 0, 0, 0, (e & 1) ? uiRgb(110, 26, 22) : red);
+      uiShPaintAll();
+    }
     char t[16]; uiRecTime(t, sizeof(t), uiRec.elapsed);
-    const NeddyFont &f = uiTextWidth(NFONT_TEMP, t) <= 380 ? NFONT_TEMP : NFONT_BIG;
-    uiOut.fill(0, 96, UI_W, 110, UI_BLACK);
-    uiTextCentered(f, 100 + (100 - f.h) / 2, t, UI_WHITE);
+    const NeddyFont &f = uiTextWidth(NFONT_TEMP, t) <= 2 * uiHalfAt(UI_CY - 30, 26) ? NFONT_TEMP : NFONT_BIG;
+    uiFillE(0, UI_CY - 80, UI_W, 112, UI_BLACK);
+    uiTextCentered(f, UI_CY - 80 + (108 - f.h) / 2, t, UI_WHITE);
     char left[40];
     uint32_t m = uiRec.left / 60;
-    if (m >= 60) snprintf(left, sizeof(left), "%u h %u min left on the watch", (unsigned)(m / 60), (unsigned)(m % 60));
-    else snprintf(left, sizeof(left), "%u min left on the watch", (unsigned)m);
-    uiOut.fill(0, 226, UI_W, 36, UI_BLACK);
-    uiTextCentered(NFONT_BODY, 226, left, UI_GREY);
-    uiRecBar(282, uiRec.usedPct, uiRec.usedPct >= 85 ? UI_AMBER : teal);
+    if (m >= 60) snprintf(left, sizeof(left), "%u h %u min left", (unsigned)(m / 60), (unsigned)(m % 60));
+    else snprintf(left, sizeof(left), "%u min left", (unsigned)m);
+    uiFillE(UI_CX - 170, UI_CY + 28, 340, NFONT_MID.h + 2, UI_BLACK);
+    uiTextCentered(NFONT_MID, UI_CY + 28, left, uiRec.usedPct >= 85 ? UI_AMBER : UI_GREY);
   } else if (uiRec.state == UI_RECS_INFO) {
     uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
-    uiTextCentered(NFONT_MID, 70, uiRec.title, UI_WHITE);
+    char fit[48]; uiFit(fit, sizeof(fit), NFONT_MID, uiRec.title, 2 * uiHalfAt(UI_CY - 150, 30));
+    uiTextCentered(NFONT_MID, UI_CY - 150, fit, UI_WHITE);
     if (uiRec.big[0]) {                                       // "42 minutes": the number in the big digits, the rest (the unit) small under it
       char num[24], *unit = nullptr;
       strncpy(num, uiRec.big, sizeof(num)); num[sizeof(num) - 1] = 0;
       for (char *c = num; *c; c++) if (*c == ' ') { *c = 0; unit = c + 1; break; }
-      uiTextCentered(NFONT_BIG, 130, num, teal);
-      if (unit && *unit) uiTextCentered(NFONT_MID, 206, unit, UI_GREY);
+      uiTextCentered(NFONT_BIG, UI_CY - 106, num, uiAcc());
+      if (unit && *unit) uiTextCentered(NFONT_MID, UI_CY - 34, unit, UI_GREY);
     }
-    char fit[48]; uiFit(fit, sizeof(fit), NFONT_BODY, uiRec.small, 360);
-    uiTextCentered(NFONT_BODY, 250, fit, UI_GREY);
-    if (uiRec.pct >= 0) uiRecBar(318, uiRec.pct, teal);
+    uiFit(fit, sizeof(fit), NFONT_BODY, uiRec.small, 2 * uiHalfAt(UI_CY + 30, 30));
+    uiTextCentered(NFONT_BODY, UI_CY + 8, fit, UI_GREY);
+    if (uiRec.pct >= 0) uiRecBar(UI_CY + 66, uiRec.pct, uiAcc());
     if (uiRec.button[0]) {
-      uiRoundPanel(96, 380, 218, 90, 26, uiRgb(52, 74, 88), uiRgb(20, 28, 36));
-      uiBg = uiRgb(20, 28, 36); uiTextCentered(NFONT_MID, 380 + (90 - NFONT_MID.h) / 2, uiRec.button, UI_WHITE); uiBg = UI_BLACK;
+      const uint16_t fill = uiBlend(UI_BLACK, uiAcc(), 0.30f);
+      uiShClear();
+      uiShAdd(UI_SH_BOX, UI_CX, uiRecBtnY(), 100, 40, 40, 0, fill);
+      uiShAdd(UI_SH_BOXRING, UI_CX, uiRecBtnY(), 100, 40, 40, 3, uiAcc());
+      uiShPaintAll();
+      uiBg = fill; uiTextCentered(NFONT_MID, uiRecBtnY() - NFONT_MID.h / 2, uiRec.button, UI_WHITE); uiBg = UI_BLACK;
     }
   }
   uiRec.full = false; uiRec.dirty = false;
@@ -1211,25 +1144,52 @@ static int uiDrawQr(const char *text, int y, int scale) {
   }
   return y + side;
 }
+// The QR code's dot size: as big as fits `maxSide` px, in even numbers (8 on the 2.06, usually 6 on the round screen).
+static int uiQrScale(const char *text, int maxSide) {
+  if (!qrEncode(uiQr, text)) return 6;
+  int s = (maxSide / (uiQr.size + 8)) & ~1;              // even: an odd dot size makes odd windows, which the screen shears
+  return s > 8 ? 8 : s < 4 ? 4 : s;
+}
 static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const char *url) {
   uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
   uiBg = UI_BLACK;
   char fit[48];
+#if NEDDY_ROUND
+  // The circle: a short title at the top, the code in the middle, one or two short lines under it.
+  if (stage == UI_SETUP_JOIN || stage == UI_SETUP_BLE || stage == UI_SETUP_PAGE) {
+    int sc = uiQrScale(qrText, 290), side = (uiQr.size + 8) * sc, top = (UI_CY - side / 2 - 8) & ~1;
+    uiTextCentered(NFONT_MID, top - 40, stage == UI_SETUP_PAGE ? "Finish on your phone" : "Set up Wi-Fi", UI_WHITE);
+    int b = uiDrawQr(qrText, top, sc);
+    if (stage == UI_SETUP_JOIN) {
+      uiTextCentered(NFONT_MID, b + 8, "Scan with your camera", uiAcc());
+      uiTextCentered(NFONT_MID, b + 40, "Tap for Bluetooth", UI_LABEL);
+    } else if (stage == UI_SETUP_BLE) {
+      uiTextCentered(NFONT_MID, b + 8, "Scan with your phone", uiAcc());
+      uiTextCentered(NFONT_MID, b + 40, "iPhone? Tap here", UI_LABEL);
+    } else {
+      uiFit(fit, sizeof(fit), NFONT_MID, "Tap 'Sign in' on your phone", 2 * uiHalfAt(b + 30, 24));
+      uiTextCentered(NFONT_MID, b + 8, fit, UI_WHITE);
+      uiFit(fit, sizeof(fit), NFONT_MID, url ? url : "", 2 * uiHalfAt(b + 64, 30));
+      uiTextCentered(NFONT_MID, b + 40, fit, uiAcc());
+    }
+    return;
+  }
+#endif
   uiFit(fit, sizeof(fit), NFONT_BODY, ssid ? ssid : "", 360);
   if (stage == UI_SETUP_JOIN) {
     uiTextCentered(NFONT_TITLE, 16, "Set up Wi-Fi", UI_WHITE);
     int b = uiDrawQr(qrText, 74, 8);
-    uiTextCentered(NFONT_BODY, b + 12, "Scan with your camera", UI_TEAL);
+    uiTextCentered(NFONT_BODY, b + 12, "Scan with your camera", uiAcc());
     uiFit(fit, sizeof(fit), NFONT_SMALL, ssid ? ssid : "", 340);
     uiTextCentered(NFONT_SMALL, b + 56, fit, UI_GREY);
     uiTextCentered(NFONT_SMALL, b + 80, "Tap the screen to use Bluetooth", UI_DIM);
   } else if (stage == UI_SETUP_BLE) {                       // Bluetooth setup: the code opens a page in the phone's browser (Chrome on Android)
     uiTextCentered(NFONT_TITLE, 8, "Set up Wi-Fi", UI_WHITE);
     int b = uiDrawQr(qrText, 56, 8);
-    uiTextCentered(NFONT_SMALL, b + 6, "Scan with your phone's camera", UI_TEAL);
+    uiTextCentered(NFONT_SMALL, b + 6, "Scan with your phone's camera", uiAcc());
     uiTextCentered(NFONT_SMALL, b + 28, "iPhone? Tap this screen", UI_DIM);
   } else if (stage == UI_SETUP_BLE_PHONE) {
-    uiTextCentered(NFONT_TITLE, 140, "Connected", UI_TEAL);
+    uiTextCentered(NFONT_TITLE, 140, "Connected", uiAcc());
     uiTextCentered(NFONT_BODY, 210, "Now pick your Wi-Fi", UI_WHITE);
     uiTextCentered(NFONT_MID, 256, "on your phone", UI_GREY);
   } else if (stage == UI_SETUP_PAGE) {
@@ -1237,13 +1197,13 @@ static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const
     int b = uiDrawQr(qrText, 74, 8);
     uiTextCentered(NFONT_MID, b + 8, "Tap 'Sign in' on your phone", UI_WHITE);
     uiTextCentered(NFONT_MID, b + 38, "or scan this, or go to", UI_GREY);
-    uiTextCentered(NFONT_BODY, b + 68, url ? url : "", UI_TEAL);
+    uiTextCentered(NFONT_BODY, b + 68, url ? url : "", uiAcc());
   } else if (stage == UI_SETUP_TRYING) {
     uiTextCentered(NFONT_TITLE, 150, "Connecting...", UI_WHITE);
-    uiTextCentered(NFONT_BODY, 220, fit, UI_TEAL);
+    uiTextCentered(NFONT_BODY, 220, fit, uiAcc());
     uiTextCentered(NFONT_MID, 280, "This takes a few seconds", UI_GREY);
   } else if (stage == UI_SETUP_DONE) {
-    uiTextCentered(NFONT_TITLE, 150, "Wi-Fi is set up", UI_TEAL);
+    uiTextCentered(NFONT_TITLE, 150, "Wi-Fi is set up", uiAcc());
     uiTextCentered(NFONT_BODY, 220, fit, UI_WHITE);
   } else {
     uiTextCentered(NFONT_TITLE, 130, "Couldn't connect", UI_AMBER);
@@ -1254,9 +1214,11 @@ static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const
 
 // A small line at the bottom of the setup screens: what the phone has asked the watch for so far (so a stuck setup can be read from a photo).
 static void uiSetupDiag(const char *line) {
-  uiOut.fill(0, 468, UI_W, 24, UI_BLACK);
+  const int y = NEDDY_ROUND ? UI_H - 64 : 470;
+  uiOut.fill(0, (y - 2) & ~1, UI_W, 24, UI_BLACK);
   uiBg = UI_BLACK;
-  uiTextCentered(NFONT_SMALL, 470, line, UI_DIM);
+  char fit[80]; uiFit(fit, sizeof(fit), NFONT_SMALL, line, 2 * uiHalfAt(y + 18, 16));
+  uiTextCentered(NFONT_SMALL, y, fit, UI_DIM);
 }
 
 // A finger on a recording screen: any touch wakes it; a tap on the big button does what it says.
@@ -1266,12 +1228,23 @@ static void uiRecTouch(uint32_t ms, bool down, int x, int y) {
   if (down && !was) {
     x0 = x; y0 = y; at = ms; uiRec.lastTouch = ms;
     uiRec.ignoreTouch = uiRec.dimmed;                               // the touch that wakes the screen only wakes it
-    if (uiRec.dimmed) { uiRec.dimmed = false; if (uiOut.brightness) uiOut.brightness(255); }
+    if (uiRec.dimmed) { uiRec.dimmed = false; if (uiOut.brightness) uiOut.brightness(uiFullLevel()); }
+    int sx = x - UI_CX, sy = y - uiStopY();
+    if (!uiRec.ignoreTouch && uiRec.state == UI_RECS_RUN && sx * sx + sy * sy <= (UI_STOP_R + 22) * (UI_STOP_R + 22)) { uiRec.holdAt = ms ? ms : 1; uiRec.holdStep = 0; }
+  } else if (down && uiRec.holdAt && uiRec.state == UI_RECS_RUN) {     // holding Stop: the ring fills; held long enough, it stops
+    int dx = lx - x0, dy = ly - y0;
+    if (dx * dx + dy * dy > UI_SLOP * UI_SLOP) { uiRec.holdAt = 0; uiDrawStop(0); }
+    else {
+      int step = (int)((ms - uiRec.holdAt) * 10 / UI_STOP_HOLD_MS);
+      if (step != uiRec.holdStep) { uiRec.holdStep = step; uiDrawStop(step / 10.0f); }
+      if (ms - uiRec.holdAt >= UI_STOP_HOLD_MS) { uiRec.holdAt = 0; if (uiOut.record) uiOut.record(UI_REC_STOP); }
+    }
+  } else if (!down && was && uiRec.holdAt) {                          // let go too soon: it carries on recording
+    uiRec.holdAt = 0; if (uiRec.state == UI_RECS_RUN) uiDrawStop(0);
   } else if (!down && was) {
     int dx = lx - x0, dy = ly - y0; if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
     if (!uiRec.ignoreTouch && dx < UI_SLOP && dy < UI_SLOP && ms - at < UI_TAP_MS && uiOut.record) {
-      if (uiRec.state == UI_RECS_RUN && x0 >= 72 && x0 < 338 && y0 >= 324 && y0 < 456) uiOut.record(UI_REC_STOP);
-      else if (uiRec.state == UI_RECS_INFO && uiRec.button[0] && x0 >= 72 && x0 < 338 && y0 >= 364 && y0 < 486) uiOut.record(UI_REC_OK);
+      if (uiRec.state == UI_RECS_INFO && uiRec.button[0] && x0 >= UI_CX - 120 && x0 < UI_CX + 120 && y0 >= uiRecBtnY() - 56 && y0 < uiRecBtnY() + 56) uiOut.record(UI_REC_OK);
     }
   }
   if (down) uiRec.lastTouch = ms;
@@ -1287,14 +1260,24 @@ static int uiTchX0 = 0, uiTchY0 = 0, uiTchX = 0, uiTchY = 0, uiTchMove = 0;
 static bool uiHitNeddy(int x, int y) {
   return x >= uiStageX - UI_HIT_MARGIN && x < uiStageX + uiStageW + UI_HIT_MARGIN && y >= uiStageY - UI_HIT_MARGIN && y < uiStageY + uiStageH + UI_HIT_MARGIN;
 }
-static bool uiHitCard(int x, int y) { return uiCard.on && x >= 14 && x < 396 && y >= 10 && y < 346; }
+static bool uiHitCard(int x, int y) {
+#if NEDDY_ROUND
+  (void)x; (void)y; return uiCard.on;                  // on the round screen a card fills the screen (Neddy steps aside)
+#else
+  return uiCard.on && x >= 14 && x < 396 && y >= 10 && y < 346;
+#endif
+}
 static void uiReact(uint32_t ms) { uiReactUntil = ms + 1000; }
 static void uiLook(uint32_t ms, int x, int y) { uiLookX = x; uiLookY = y; uiLookUntil = ms + 600; }
 // The sketch calls this when talking ended (the button, the time limit), so a hold or hands-free talk lets go.
 static void uiTouchTalkEnded() { uiTouchTalk = false; uiTchLatched = false; }
 
+#include "neddy_shell.h"
+
 static void uiTouch(uint32_t ms, bool down, int x, int y) {
+  if (uiOffNoticeAt && down) { uiOffNoticeAt = 0; uiActivity(ms); uiAll = true; }   // touched during "Screen off": stays on
   if (uiRec.state != UI_RECS_OFF) { uiRecTouch(ms, down, x, y); return; }
+  if (uiMenuOn() || uiSt.was) { uiShellTouch(ms, down, x, y); uiTchWas = down; return; }   // the launcher and its pages have their own gestures
   if (down) { uiActivity(ms); if (uiCard.on && uiCard.kind == UI_CARD_MENU) uiCard.since = ms; }
   if (down && !uiTchWas) {                           // a finger just touched
     uiTchDownAt = ms; uiTchX0 = uiTchX = x; uiTchY0 = uiTchY = y; uiTchMove = 0;
@@ -1321,11 +1304,10 @@ static void uiTouch(uint32_t ms, bool down, int x, int y) {
       if (adx >= UI_SWIPE && adx * 2 > ady * 3 && held < 800) {
         if (uiCard.on && uiCard.kind == UI_CARD_MENU) { /* the menu isn't a card to flip through */ }
         else if (dx > 0) uiCardBack(ms); else uiCardForward(ms);
-      } else if (dy < 0 && ady >= 90 && ady * 2 > adx * 3 && uiTchY0 >= 420 && held < 900) {
+      } else if (dy < 0 && ady >= 90 && ady * 2 > adx * 3 && uiTchY0 >= UI_H - 82 && held < 900) {
         uiMenuOpen(ms);                            // a swipe up from the bottom edge opens the menu
       } else if (uiTchMove < UI_SLOP && held < UI_TAP_MS) {
-        if (uiCard.on && uiCard.kind == UI_CARD_MENU) { uiMenuTap(ms, uiTchX0, uiTchY0); uiTchLastTap = 0; }
-        else if (uiHitCard(uiTchX0, uiTchY0)) { uiClearCard(); uiTchLastTap = 0; }
+        if (uiHitCard(uiTchX0, uiTchY0)) { uiClearCard(); uiTchLastTap = 0; }
         else if (uiTchOnNeddy) {
           if (uiTchLastTap && ms - uiTchLastTap < UI_DOUBLE_MS) { uiTchLatched = true; uiTouchTalk = true; uiTchLastTap = 0; }
           else { uiReact(ms); uiTchLastTap = ms; }
@@ -1408,7 +1390,7 @@ static void uiDrawBatteryAt(int y) {
     snprintf(t, sizeof(t), "No battery %02x %02x", uiBatRaw[0], uiBatRaw[1]);
   }
   const uint16_t green = uiRgb(96, 214, 140), red = uiRgb(255, 84, 72);
-  uint16_t col = uiIdle.chg ? UI_TEAL : (pct <= 15 ? red : (pct <= 30 ? UI_AMBER : green));
+  uint16_t col = uiIdle.chg ? uiAcc() : (pct <= 15 ? red : (pct <= 30 ? UI_AMBER : green));
   if (!known) col = UI_DIM;
   int tw = uiTextWidth(NFONT_MID, t);
   int x = ((UI_W - (bw + 4 + 14 + tw)) / 2) & ~1;
@@ -1439,7 +1421,7 @@ static void uiThickLine(float x0, float y0, float x1, float y1, int th, uint16_t
 // Face 1: an analog dial. Hands and ticks only: it is redrawn once a minute.
 static void uiDrawAnalog(int top, int bottom, int h, int mi, int wd, int Mo, int D, int dx, int dy) {
   float R = (bottom - top) * 0.5f - 6.0f;
-  if (R > 190.0f) R = 190.0f;
+  if (R > (NEDDY_ROUND ? 222.0f : 190.0f)) R = NEDDY_ROUND ? 222.0f : 190.0f;
   float cx = UI_W * 0.5f + dx, cy = top + (bottom - top) * 0.5f + dy;
   for (int i = 0; i < 60; i++) {
     float a = (i * 6 - 90) * 0.0174533f, ca = cosf(a), sa = sinf(a);
@@ -1454,9 +1436,16 @@ static void uiDrawAnalog(int top, int bottom, int h, int mi, int wd, int Mo, int
   uiRoundPanel(wx - 10, wy - 4, (dw + 20) & ~1, 30, 6, uiRgb(70, 76, 82), UI_BLACK);
   uiText(NFONT_SMALL, wx, wy, dl, UI_WHITE);
   float ah = ((h % 12) + mi / 60.0f) * 30.0f - 90.0f, am = mi * 6.0f - 90.0f;
-  uiThickLine(cx, cy, cx + R * 0.52f * cosf(ah * 0.0174533f), cy + R * 0.52f * sinf(ah * 0.0174533f), 10, UI_WHITE);
-  uiThickLine(cx, cy, cx + R * 0.80f * cosf(am * 0.0174533f), cy + R * 0.80f * sinf(am * 0.0174533f), 6, UI_WHITE);
-  uiOut.fill(((int)cx - 8) & ~1, ((int)cy - 8) & ~1, 16, 16, uiRgb(255, 120, 40));
+  // The hands: smooth, round-ended lines, painted in the box they cover; the hub in the accent colour.
+  uiShClear();
+  uiShAdd(UI_SH_SEG, cx, cy, cx + R * 0.52f * cosf(ah * 0.0174533f), cy + R * 0.52f * sinf(ah * 0.0174533f), 5, 0, UI_WHITE);
+  uiShAdd(UI_SH_SEG, cx, cy, cx + R * 0.80f * cosf(am * 0.0174533f), cy + R * 0.80f * sinf(am * 0.0174533f), 3, 0, UI_WHITE);
+  uiShAdd(UI_SH_DISC, cx, cy, 7, 0, 0, 0, uiAcc());
+  // Painted in small squares along each hand (not one big box), so the date window and the label around them aren't wiped.
+  for (int hand = 0; hand < 2; hand++) {
+    float a = (hand ? am : ah) * 0.0174533f, len = R * (hand ? 0.80f : 0.52f);
+    for (float t = 0; t <= len + 8; t += 16) uiShPaint((int)(cx + t * cosf(a)) - 12, (int)(cy + t * sinf(a)) - 12, 24, 24);
+  }
   uiDrawBatteryAt((int)(cy + R * 0.50f));
 }
 
@@ -1466,40 +1455,102 @@ static void uiNeonDigit(int x, int y, int d, uint16_t on, uint16_t off) {
   const int w = 64, hgt = 128, t = 12;
   const int r[7][4] = { { t, 0, w - 2 * t, t }, { w - t, t, t, hgt / 2 - t - t / 2 }, { w - t, hgt / 2 + t / 2, t, hgt / 2 - t - t / 2 }, { t, hgt - t, w - 2 * t, t },
                         { 0, hgt / 2 + t / 2, t, hgt / 2 - t - t / 2 }, { 0, t, t, hgt / 2 - t - t / 2 }, { t, hgt / 2 - t / 2, w - 2 * t, t } };
-  for (int i = 0; i < 7; i++) uiOut.fill((x + r[i][0]) & ~1, (y + r[i][1]) & ~1, r[i][2] & ~1, r[i][3] & ~1, (d >= 0 && (seg[d] >> i) & 1) ? on : off);
+  if (d < 0) return;                                 // a blank leading digit shows nothing (all ghosts would read as "8")
+  for (int i = 0; i < 7; i++) uiOut.fill((x + r[i][0]) & ~1, (y + r[i][1]) & ~1, r[i][2] & ~1, r[i][3] & ~1, ((seg[d] >> i) & 1) ? on : off);
 }
 static void uiDrawNeon(int top, int h, int mi, int wd, int Mo, int D, int dx, int dy) {
-  const uint16_t on = uiRgb(255, 150, 40), off = uiRgb(44, 26, 12);
+  const uint16_t on = uiAcc(), off = uiBlend(UI_BLACK, uiAcc(), 0.09f);
   int h12 = h % 12 == 0 ? 12 : h % 12;
-  int x0 = (46 + dx) & ~1, y0 = (top + 56 + dy) & ~1;
+  int x0 = ((UI_W - 318) / 2 + (h12 < 10 ? -38 : 0) + dx) & ~1, y0 = (top + (NEDDY_ROUND ? 28 : 56) + dy) & ~1;
   uiNeonDigit(x0, y0, h12 >= 10 ? h12 / 10 : -1, on, off);
   uiNeonDigit(x0 + 76, y0, h12 % 10, on, off);
   uiOut.fill(x0 + 76 + 64 + 6, y0 + 36, 14, 14, on); uiOut.fill(x0 + 76 + 64 + 6, y0 + 78, 14, 14, on);
   uiNeonDigit(x0 + 178, y0, mi / 10, on, off);
   uiNeonDigit(x0 + 254, y0, mi % 10, on, off);
   char ap[4]; snprintf(ap, sizeof(ap), "%s", h >= 12 ? "PM" : "AM");
-  uiText(NFONT_TITLE, (x0 + 254 + 64 - uiTextWidth(NFONT_TITLE, ap)) & ~1, y0 + 128 + 10, ap, UI_GREY);
-  char line[40]; snprintf(line, sizeof(line), "%s, %s %d", uiDays[wd], uiMonths[Mo - 1], D);
+  char line[40];
+  snprintf(line, sizeof(line), "%s  %s, %s %d", ap, uiDays[wd], uiMonths[Mo - 1], D);   // AM/PM in the date line (no room beside the digits)
   uiTextCentered(NFONT_BODY, y0 + 128 + 14, line, UI_GREY);
   if (uiIdle.showW && uiIdle.haveW) {
     char tp[40]; snprintf(tp, sizeof(tp), "%d%c  %s", uiIdle.wt, (char)127, uiIdle.ws);
-    char fit[40]; uiFit(fit, sizeof(fit), NFONT_SMALL, tp, 340);
-    uiTextCentered(NFONT_SMALL, y0 + 128 + 14 + NFONT_BODY.h + 12, fit, UI_DIM);
+    int wy = y0 + 128 + 14 + NFONT_BODY.h + 8;
+    char fit[40]; uiFit(fit, sizeof(fit), NFONT_MID, tp, 2 * uiHalfAt(wy + NFONT_MID.h, 30));
+    uiTextCentered(NFONT_MID, wy, fit, UI_GREY);
   }
 }
 
 // The whole idle face above Neddy. The clock drifts a few pixels now and then so no pixel stays lit (the screen is AMOLED).
+// The battery at the top of the round screen: a small battery and its percent, where the circle is narrow anyway.
+static void uiDrawTopBattery() {
+  if (!uiIdle.showB || uiIdle.bat < 0) return;
+  char t[8]; snprintf(t, sizeof(t), "%d%%", uiIdle.bat > 100 ? 100 : uiIdle.bat);
+  int tw = uiTextWidth(NFONT_SMALL, t), w = 34 + 8 + tw, x = UI_CX - w / 2;
+  uiShClear(); uiBatteryAdd(x + 17, 30, 34, uiIdle.bat, uiIdle.chg, UI_LABEL); uiShPaint(x - 2, 18, 40, 24);
+  uiText(NFONT_SMALL, x + 42, 30 - NFONT_SMALL.h / 2, t, uiIdle.chg ? uiRgb(104, 222, 146) : UI_LABEL);
+}
 static void uiDrawIdle(uint32_t ms) {
   int top, bottom;
   uiTextAreas(&top, &bottom);
+#if NEDDY_ROUND
+  if (uiFace == 1) { top = 4; bottom = UI_H - 4; }          // the dial fills the circle (Neddy steps aside)
+  uiOut.fill(0, uiFace == 1 ? 0 : 14, UI_W, (uiFace == 1 ? UI_H : bottom - 14), UI_BLACK);
+#else
   uiOut.fill(0, top, UI_W, bottom - top, UI_BLACK);
+#endif
   int64_t local = uiUtcNow(ms) + (int64_t)uiIdle.off * 60;
   int Y, Mo, D, h, mi, wd;
   uiCivil(local, &Y, &Mo, &D, &h, &mi, &wd);
   uiIdleMinute = (int)(local / 60);
   int dx = (((int)(local / 300)) % 5 - 2) * 2, dy = (((int)(local / 420)) % 3 - 1) * 2;
   if (uiFace == 1) { uiDrawAnalog(top, bottom, h, mi, wd, Mo, D, dx, dy); return; }
+#if NEDDY_ROUND
+  if (uiFace == 2) { uiDrawTopBattery(); uiDrawNeon(top, h, mi, wd, Mo, D, dx, dy); return; }
+  {                                                            // the round info face: battery at the top, clock, date, weather in one line, the next meeting
+    uiDrawTopBattery();
+    char tm[10], ap[4], line[48];
+    uiClockText(tm, ap, h, mi);
+    int tw = uiTextWidth(NFONT_TEMP, tm), aw = uiTextWidth(NFONT_TITLE, ap);
+    int x = (UI_W - (tw + 8 + aw)) / 2 + dx, y = 50 + dy;
+    uiText(NFONT_TEMP, x, y, tm, UI_WHITE);
+    uiText(NFONT_TITLE, x + tw + 8, y + NFONT_TEMP.h - NFONT_TITLE.h - 14, ap, UI_GREY);
+    snprintf(line, sizeof(line), "%s, %s %d", uiDays[wd], uiMonths[Mo - 1], D);
+    uiTextCentered(NFONT_BODY, y + NFONT_TEMP.h, line, UI_GREY);
+    y = (y + NFONT_TEMP.h + NFONT_BODY.h + 8) & ~1;
+    if (uiIdle.showW && uiIdle.haveW) {
+      char tp[44], fit[44];
+      snprintf(tp, sizeof(tp), "%d%c %s", uiIdle.wt, (char)127, uiIdle.ws);
+      uiFit(fit, sizeof(fit), NFONT_MID, tp, 2 * uiHalfAt(y + 20, 40) - 58);
+      int rw = 48 + 10 + uiTextWidth(NFONT_MID, fit), x0 = ((UI_W - rw) / 2 + dx) & ~1;
+      uiRenderIconSmall(uiIdle.wi, UI_BLACK, 48);
+      uiOut.blit(x0, y, 48, 48, uiIconBuf);
+      uiText(NFONT_MID, x0 + 58, y + (48 - NFONT_MID.h) / 2, fit, UI_WHITE);
+      y += 54;
+    }
+    if (uiIdle.showM && (uiIdle.haveM || uiIdle.mc) && y + 2 * NFONT_MID.h <= bottom) {
+      if (uiIdle.haveM) {
+        char t2[34];
+        uiFit(t2, sizeof(t2), NFONT_MID, uiIdle.mt, 2 * uiHalfAt(y + NFONT_MID.h, 40));
+        uiTextCentered(NFONT_MID, y, t2, UI_WHITE);
+        int64_t now = uiUtcNow(ms), until = (int64_t)uiIdle.ms - now;
+        char when[24], hh[8], aa[4];
+        int Y2, M2, D2, h2, m2, w2;
+        uiCivil((int64_t)uiIdle.ms + (int64_t)uiIdle.off * 60, &Y2, &M2, &D2, &h2, &m2, &w2);
+        uiClockText(hh, aa, h2, m2);
+        if (now >= (int64_t)uiIdle.ms) snprintf(when, sizeof(when), "now");
+        else if (until < 3600) snprintf(when, sizeof(when), "in %d min", (int)((until + 59) / 60));
+        else if (until < 86400) snprintf(when, sizeof(when), "in %d h %d min", (int)(until / 3600), (int)((until % 3600) / 60));
+        else snprintf(when, sizeof(when), "tomorrow");
+        snprintf(line, sizeof(line), "%s  %s %s", when, hh, aa);
+        uiTextCentered(NFONT_MID, y + NFONT_MID.h + 2, line, uiAcc());
+      } else {
+        uiTextCentered(NFONT_MID, y + 4, "No more meetings", UI_GREY);
+      }
+    }
+    return;
+  }
+#else
   if (uiFace == 2) { uiDrawNeon(top, h, mi, wd, Mo, D, dx, dy); uiDrawBattery(bottom); return; }
+#endif
   char tm[10], ap[4], line[48];
   uiClockText(tm, ap, h, mi);
   int tw = uiTextWidth(NFONT_TEMP, tm), aw = uiTextWidth(NFONT_TITLE, ap);
@@ -1538,7 +1589,7 @@ static void uiDrawIdle(uint32_t ms) {
       else if (until < 86400) snprintf(when, sizeof(when), "in %d h %d min", (int)(until / 3600), (int)((until % 3600) / 60));
       else snprintf(when, sizeof(when), "tomorrow");
       snprintf(line, sizeof(line), "%s  %s %s", when, hh, aa);
-      uiTextCentered(NFONT_MID, y + dy + NFONT_BODY.h + 2, line, UI_TEAL);
+      uiTextCentered(NFONT_MID, y + dy + NFONT_BODY.h + 2, line, uiAcc());
     } else {
       uiTextCentered(NFONT_MID, y + dy + 14, "No more meetings", UI_GREY);
     }
@@ -1556,6 +1607,11 @@ static void uiIdleTick(uint32_t ms) {
       snprintf(b, sizeof(b), "g%d a%d m%d k%d i%d d%d%d q%d b%d %02x %02x f%d r%d", uiIdle.have ? 1 : 0, uiIdle.after, uiMode, uiCard.on ? 1 : 0, uiIdleOn ? 1 : 0, uiIdle.dim ? 1 : 0, uiDimmed ? 1 : 0, (int)((ms - uiLastActive) / 1000), uiIdle.bat, uiBatRaw[0], uiBatRaw[1], uiFpsNow, (int)uiRenderMs);
       if (strcmp(b, uiIdleDbg) != 0) { strcpy(uiIdleDbg, b); uiDiagDirty = true; }
     }
+  }
+  if (uiIdle.offAfter > 0 && !uiScreenOff && uiMode == UI_READY && !uiCard.on && ms - uiLastActive >= (uint32_t)uiIdle.offAfter * 1000UL) {
+    uiScreenOff = true; uiScreenOffAuto = true;            // quiet long enough: dark until a touch, a press, words or a raised wrist
+    if (uiOut.brightness) uiOut.brightness(0);
+    return;
   }
   if (!uiIdleOn) {
     if (uiIdle.have && uiIdle.after > 0 && uiMode == UI_READY && !uiCard.on && ms - uiLastActive >= (uint32_t)uiIdle.after * 1000UL) {
@@ -1582,15 +1638,29 @@ static void uiIdleTick(uint32_t ms) {
 static void uiBasePose(UiPose *p) {
   p->breath = 0; p->sway = 0; p->eyeDx = 0; p->eyeDy = 0; p->eye = EYE_HAPPY;
   p->glow = uiModeColour();
-  if (uiSmall) { p->scale = 0.4f; p->footX = UI_W / 2.0f; p->footY = UI_H - 14.0f; }   // small, tucked at the bottom middle
-  else { p->scale = 1.0f; p->footX = UI_W / 2.0f; p->footY = 14 + NEDDY_BODY_H; }
+  p->footX = UI_W / 2.0f;
+  if (uiShellHome()) { p->scale = 0.5f; p->footY = UI_CY + (float)UI_L_NEDDY_FOOT; return; }   // the launcher: above the arc of icons
+#if NEDDY_ROUND
+  if (uiSmall) { p->scale = 0.36f; p->footY = UI_H - 26.0f; }             // small, at the bottom of the circle
+  else { p->scale = 0.76f; p->footY = 288.0f; }                          // big, high enough that the words below fit the circle
+#else
+  if (uiSmall) { p->scale = 0.4f; p->footY = UI_H - 14.0f; }              // small, tucked at the bottom middle
+  else { p->scale = 1.0f; p->footY = 14 + NEDDY_BODY_H; }
+#endif
 }
 
 static void uiTextAreas(int *top, int *bottom) {
+#if NEDDY_ROUND
+  if (uiSmall) { *top = 56; *bottom = uiStageY - 4; }
+  else { *top = uiStageY + uiStageH + 2; *bottom = uiShowDiag ? UI_H - 66 : UI_H - 30; }
+#else
   if (uiSmall) { *top = 12; *bottom = uiStageY - 4; }                      // words fill the top, he waits below
   else { *top = uiStageY + uiStageH + 2; *bottom = uiShowDiag ? 450 : 496; }
+#endif
   *top &= ~1; *bottom &= ~1;
 }
+// How wide a line of words may be (the circle is narrower near the top).
+#define UI_WORDS_W (NEDDY_ROUND ? 330 : 354)
 
 static int uiLevelY() {
   int top, bottom;
@@ -1605,7 +1675,8 @@ static void uiDrawText() {
   uiTextAreas(&top, &bottom);
   uiOut.fill(0, top, UI_W, bottom - top, UI_BLACK);
   uint16_t col = uiModeColour();
-  uiTextCentered(NFONT_TITLE, top + 2, uiModeLabel(), col);
+  const NeddyFont &lf = uiTextWidth(NFONT_TITLE, uiModeLabel()) <= 2 * uiHalfAt(top + 24, 20) ? NFONT_TITLE : NFONT_MID;
+  uiTextCentered(lf, top + 2 + (NFONT_TITLE.h - lf.h) / 2, uiModeLabel(), col);
   int y = uiLevelY();
   if (uiMode == UI_LISTEN) {
     // a rounded level bar
@@ -1616,12 +1687,12 @@ static void uiDrawText() {
     if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 14, col);
     return;
   }
-  if (uiHeard[0]) y = uiParagraph(NFONT_MID, y, uiHeard, UI_GREY, 354, 2, NFONT_MID.h + 2) + 6;
+  if (uiHeard[0]) y = uiParagraph(NFONT_MID, y, uiHeard, UI_GREY, UI_WORDS_W, 2, NFONT_MID.h + 2) + 6;
   if (uiWords[0]) {
     int step = NFONT_BODY.h + 4;
     int lines = (bottom - y) / step;
     if (lines > 9) lines = 9;
-    if (lines > 0) uiParagraph(NFONT_BODY, y, uiWords, UI_WHITE, 354, lines, step);
+    if (lines > 0) uiParagraph(NFONT_BODY, y, uiWords, UI_WHITE, UI_WORDS_W, lines, step);
   } else if (!uiSmall && uiName[0]) {
     uiTextCentered(NFONT_MID, y, uiName, UI_GREY);
   }
@@ -1710,10 +1781,21 @@ static void uiDrawStage(const UiPose &p) {
 }
 
 // The menu's fifth tile and the volume screen reach down to where Neddy stands, so he steps out of the way while they are showing.
-static bool uiStageHidden() { return uiCard.on && uiCard.kind == UI_CARD_MENU && (uiMenuVol || uiMenuN > 4); }
+// He steps aside for the launcher's pages; on the round screen also for a card (it fills the circle) and the analog dial.
+static bool uiStageHidden() {
+  if (uiMenuOn()) return uiShl != UI_SHL_HOME;
+#if NEDDY_ROUND
+  if (uiCard.on) return true;
+  if (uiIdleOn && uiFace == 1) return true;
+#endif
+  return false;
+}
 
 static void uiTick(uint32_t ms) {
   uiNowMs = ms; uiLookupNow = ms;
+  uiPwrTick(ms);
+  uiBootTick(ms);
+  if (uiOffNoticeAt) { uiOffNoticeTick(ms); return; }   // "Screen off" for a second, then dark
   if (uiScreenOff) return;
   if (uiRec.state != UI_RECS_OFF) {                 // the recorder owns the screen; nothing else is drawn or woken
     uiLastActive = ms;
@@ -1725,7 +1807,7 @@ static void uiTick(uint32_t ms) {
   // Speaking does NOT end it: he usually says "let me check" first, and the look-up only starts after that.
   if (uiLookupOn && (uiMode == UI_LISTEN || uiMode == UI_LINK || ms - uiLookupSince > 45000)) uiLookupOn = false;
   if (uiLookupOn) uiActivity(ms);                   // a look-up in progress is activity: the idle face doesn't take over meanwhile
-  if (uiCard.on && ms - uiCard.since >= uiCardMs()) uiClearCard();
+  if (uiCard.on && ms - uiCard.since >= uiCardMs()) { bool face = uiCard.thenFace; uiClearCard(); if (face) uiShowFaceNow(ms); }
   uiIdleTick(ms);
   bool wantSmall = uiCard.on || uiIdleOn || ((uiWords[0] || uiHeard[0]) && uiMode != UI_LISTEN && uiMode != UI_LINK);
   if (wantSmall != uiSmall) { uiSmall = wantSmall; uiAll = true; }

@@ -11,6 +11,7 @@ import {
   ListChecks,
   Mic,
   MicOff,
+  Moon,
   Pencil,
   RotateCcw,
   Sparkles,
@@ -70,8 +71,8 @@ export interface DumpItemView {
 export interface MeetingView {
   id: string;
   title: string;
-  /** A brain dump is sorted into things to add, not minuted. */
-  kind?: "meeting" | "dump";
+  /** A brain dump is sorted into things to add, not minuted. A voice note and a dream (from the watch) are kept as their words. */
+  kind?: "meeting" | "dump" | "note" | "dream";
   dump?: DumpItemView[];
   status: MeetingStatus;
   startedAt: string;
@@ -1121,7 +1122,7 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
       aria-label={
         live
           ? `${meeting.title}, recording now. Open the recorder`
-          : `Open ${meeting.title}${meeting.kind === "dump" ? ", brain dump" : ""}, ${meetingLine(meeting)}, ${unsent ? "still sending from this device" : statusLabel(meeting.status)}`
+          : `Open ${meeting.title}${meeting.kind && meeting.kind !== "meeting" ? `, ${kindWord(meeting.kind)}` : ""}, ${meetingLine(meeting)}, ${unsent ? "still sending from this device" : statusLabel(meeting.status)}`
       }
       onPress={live ? rec.expand : () => open({ type: "meeting", id: meeting.id })}
       style={({ pressed }) => ({
@@ -1149,6 +1150,10 @@ function MeetingRow({ meeting }: { meeting: MeetingView }) {
       >
         {meeting.kind === "dump" ? (
           <ListChecks size={20} color={colors.mutedStrong} />
+        ) : meeting.kind === "note" ? (
+          <Mic size={20} color={colors.mutedStrong} />
+        ) : meeting.kind === "dream" ? (
+          <Moon size={20} color={colors.mutedStrong} />
         ) : (
           <AudioLines size={20} color={colors.mutedStrong} />
         )}
@@ -1259,13 +1264,35 @@ function Bullet({ children }: { children: ReactNode }) {
     </View>
   );
 }
+/** What kind of recording it is, in words. */
+export function kindWord(kind: MeetingView["kind"]) {
+  return kind === "dump"
+    ? "brain dump"
+    : kind === "note"
+      ? "voice note"
+      : kind === "dream"
+        ? "dream"
+        : "meeting";
+}
+/** A voice note or a dream: kept as its words, with no notes written. */
+const wordsOnly = (kind: MeetingView["kind"]) => kind === "note" || kind === "dream";
+
 /** What the meeting page says has just happened, for the status line. */
 function meetingNews(meeting: MeetingRead | null | undefined) {
   if (!meeting) return "";
   const dump = meeting.kind === "dump";
-  if (meeting.status === "done") return dump ? "Your list is ready" : "The notes are ready";
+  if (meeting.status === "done")
+    return dump
+      ? "Your list is ready"
+      : wordsOnly(meeting.kind)
+        ? "The words are ready"
+        : "The notes are ready";
   if (meeting.status === "failed")
-    return dump ? "It couldn’t be sorted" : "It couldn’t be written up";
+    return dump
+      ? "It couldn’t be sorted"
+      : wordsOnly(meeting.kind)
+        ? "It couldn’t be written down"
+        : "It couldn’t be written up";
   if (meeting.status === "transcribing") return "Writing down every word";
   if (meeting.status === "summarizing") return "Writing the notes";
   return "";
@@ -1755,7 +1782,9 @@ export function MeetingSheet({ id }: { id: string }) {
                   ? "Writing down every word…"
                   : meeting.kind === "dump"
                     ? "Sorting what you said…"
-                    : "Writing the summary and action items…"}
+                    : wordsOnly(meeting.kind)
+                      ? "Naming it…"
+                      : "Writing the summary and action items…"}
               </Text>
             </View>
             <Text style={s.muted}>
@@ -1768,7 +1797,11 @@ export function MeetingSheet({ id }: { id: string }) {
           <Card style={{ gap: 10, backgroundColor: colors.errorBg }}>
             <Text style={[s.text, { color: colors.danger }]}>
               {meeting.error ||
-                (meeting.kind === "dump" ? "It couldn’t be sorted." : "It couldn’t be written up.")}
+                (meeting.kind === "dump"
+                  ? "It couldn’t be sorted."
+                  : wordsOnly(meeting.kind)
+                    ? "It couldn’t be written down."
+                    : "It couldn’t be written up.")}
             </Text>
             <Button
               small
@@ -1876,9 +1909,7 @@ export function MeetingSheet({ id }: { id: string }) {
                 icon={Sparkles}
                 onPress={() => {
                   close();
-                  draft(
-                    `About the ${meeting.kind === "dump" ? "brain dump" : "meeting"} “${meeting.title}”: `,
-                  );
+                  draft(`About the ${kindWord(meeting.kind)} “${meeting.title}”: `);
                 }}
               >
                 Ask about it
@@ -2083,7 +2114,9 @@ export function MeetingSheet({ id }: { id: string }) {
                     ? "Delete this meeting for good? The audio still on this device goes too, and that may be the only copy."
                     : meeting.kind === "dump"
                       ? "Delete this brain dump for good? Its words and audio go too. Anything you haven’t added is lost; what you’ve added stays."
-                      : "Delete this meeting for good? Its notes, words and audio go too."}
+                      : wordsOnly(meeting.kind)
+                        ? `Delete this ${kindWord(meeting.kind)} for good? Its words and audio go too.`
+                        : "Delete this meeting for good? Its notes, words and audio go too."}
                 </Text>
                 <View style={[s.row, { gap: 8 }]}>
                   <Button danger busy={busy === "delete"} onPress={() => void remove()}>
@@ -2112,7 +2145,7 @@ export function MeetingSheet({ id }: { id: string }) {
                   focusLater("keep-meeting");
                 }}
               >
-                {meeting.kind === "dump" ? "Delete brain dump" : "Delete meeting"}
+                {`Delete ${kindWord(meeting.kind)}`}
               </Button>
             )}
           </View>
