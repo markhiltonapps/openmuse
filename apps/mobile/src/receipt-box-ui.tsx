@@ -4,13 +4,16 @@ import {
   Camera,
   ChevronRight,
   Ellipsis,
+  Mail,
   Mic,
+  ReceiptText,
   Search,
   WifiOff,
   X,
 } from "lucide-react-native";
 import {
   type ReactNode,
+  type Ref,
   useCallback,
   useContext,
   useEffect,
@@ -46,6 +49,7 @@ import {
   dismissNotes,
   drainWaiting,
   loadBox,
+  type ReceiptNudge,
   useAction,
   useBox,
 } from "./receipt-box-data";
@@ -63,6 +67,7 @@ import {
   type Receipt,
   returnByText,
   type SnapAnswer,
+  shortDate,
 } from "./receipt-box-logic";
 import {
   amberFill,
@@ -157,6 +162,69 @@ export function ReceiptBoxSheet({ start }: { start?: ReceiptBoxStart }) {
   const { height: windowHeight } = useWindowDimensions();
   const today = localToday();
   const wide = width >= 800;
+  // "Add the receipt for Marlow's?" from a tapped notice: shown at the top until it's answered. It is
+  // answered "done" only once a photo arrives, so a cancelled camera leaves the question where it was.
+  const [nudge, setNudge] = useState<ReceiptNudge>();
+  const nudgeSnap = useRef<string | undefined>(undefined);
+  const nudgeFocus = useRef<View>(null);
+  const listSnapFocus = useRef<View>(null);
+  const focusSoon = (target: { current: View | null }) =>
+    // After RN-web's focus trap has run (CLAUDE.md: focus traps and tooltips).
+    setTimeout(() => (target.current as unknown as HTMLElement | null)?.focus?.(), 50);
+  useEffect(() => {
+    if (!start?.nudge) return;
+    let live = true;
+    boxApi.nudge(api, start.nudge).then(
+      ({ nudge }) => {
+        if (!live || (nudge.status !== "asked" && nudge.status !== "waiting")) return;
+        setNudge(nudge);
+        say(`Add the receipt for ${nudge.merchant}?`);
+        focusSoon(nudgeFocus);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, start?.nudge, say]);
+  const answerNudge = useCallback(
+    (how: "done" | "dismissed" | "later" | "stop") => {
+      if (!nudge) return;
+      if (how === "done") {
+        // Snap: the camera opens from this tap; the question closes when a photo arrives.
+        nudgeSnap.current = nudge.id;
+        snapRef.current();
+        return;
+      }
+      setNudge(undefined);
+      focusSoon(listSnapFocus);
+      if (how === "stop") {
+        say(
+          "Okay, no more receipt questions for 30 days. Turn them back on in Plans & bookings, or say “Turn receipts back on.”",
+        );
+        void api.request("/api/proactive", { pause: "receipts" }).catch(() => undefined);
+        void boxApi.closeNudge(api, nudge.id, "dismissed").catch(() => undefined);
+        return;
+      }
+      say(
+        how === "dismissed"
+          ? "Okay, no receipt for that one."
+          : (nudge.asks ?? 1) < 2
+            ? "Okay, I’ll ask again in a few hours."
+            : "Okay, it stays in your updates. I won’t ask about it again.",
+      );
+      void boxApi.closeNudge(api, nudge.id, how).catch(() => undefined);
+    },
+    [api, nudge, say],
+  );
+  /** A photo arrived: the question it was snapped for is answered. */
+  const photoArrived = useCallback(() => {
+    const id = nudgeSnap.current;
+    if (!id) return;
+    nudgeSnap.current = undefined;
+    setNudge(undefined);
+    void boxApi.closeNudge(api, id, "done").catch(() => undefined);
+  }, [api]);
 
   useEffect(() => {
     alive.current = true;
@@ -295,13 +363,14 @@ export function ReceiptBoxSheet({ start }: { start?: ReceiptBoxStart }) {
 
   const begin = useCallback(
     (file: File) => {
+      photoArrived();
       const key = newKey();
       const preview = Platform.OS === "web" ? URL.createObjectURL(file) : undefined;
       setQueue((now) => [...now, { key, kind: "reading", file, preview, tries: 0 }]);
       setView("flow");
       void read(key, file, 0);
     },
-    [read],
+    [read, photoArrived],
   );
   const beginNative = useCallback(() => {
     const key = newKey();
@@ -311,6 +380,7 @@ export function ReceiptBoxSheet({ start }: { start?: ReceiptBoxStart }) {
       (answer) => {
         if (!alive.current) return;
         if (!answer) return drop(key);
+        photoArrived();
         apply(key, answer, undefined, 0);
       },
       (problem: unknown) =>
@@ -325,7 +395,7 @@ export function ReceiptBoxSheet({ start }: { start?: ReceiptBoxStart }) {
           tries: 0,
         }),
     );
-  }, [api, apply, drop, put]);
+  }, [api, apply, drop, put, photoArrived]);
 
   /** Snap: straight from a tap (the camera or chooser must open before anything is awaited). */
   const snap = useCallback(() => {
@@ -337,6 +407,8 @@ export function ReceiptBoxSheet({ start }: { start?: ReceiptBoxStart }) {
     }
     void pickReceiptPhoto(true).then((file) => file && alive.current && begin(file));
   }, [begin, beginNative]);
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
   /** Choose a photo already taken, without the camera. */
   const choose = useCallback(
     (key: string) => {
@@ -675,6 +747,10 @@ export function ReceiptBoxSheet({ start }: { start?: ReceiptBoxStart }) {
       onOpen={openReceipt}
       onCheckAll={() => checkAll()}
       onSnap={snap}
+      nudge={nudge}
+      onNudge={answerNudge}
+      nudgeFocus={nudgeFocus}
+      snapFocus={listSnapFocus}
       menu={menu}
       setMenu={setMenu}
       offerNote={offerNote}
@@ -839,6 +915,10 @@ function BoxList({
   onOpen,
   onCheckAll,
   onSnap,
+  nudge,
+  onNudge,
+  nudgeFocus,
+  snapFocus,
   menu,
   setMenu,
   offerNote,
@@ -865,6 +945,11 @@ function BoxList({
   onOpen: (receipt: Receipt) => void;
   onCheckAll: () => void;
   onSnap: () => void;
+  nudge?: ReceiptNudge;
+  /** Snap the receipt (the camera opens), No receipt, Ask me later, or stop these questions. */
+  onNudge: (how: "done" | "dismissed" | "later" | "stop") => void;
+  nudgeFocus: Ref<View>;
+  snapFocus: Ref<View>;
   menu: boolean;
   setMenu: (open: boolean) => void;
   offerNote: string;
@@ -967,6 +1052,7 @@ function BoxList({
         </Pressable>
       )}
       {!!listNote && <Text style={[s.muted, { color: colors.text }]}>{listNote}</Text>}
+      {nudge && <NudgeCard nudge={nudge} today={today} onAnswer={onNudge} focus={nudgeFocus} />}
 
       {summary?.autoFile.offer && !offerNote && <AutoFileOffer api={api} onAnswered={onOffer} />}
       {!!offerNote && <AutoFileNote on={offerNote === "on"} />}
@@ -1022,8 +1108,9 @@ function BoxList({
         </Pressable>
       )}
 
-      {summary?.available !== false && (
+      {summary?.available !== false && !nudge && (
         <TealButton
+          pressRef={snapFocus}
           id="snap-list"
           label="Snap a receipt"
           icon={Camera}
@@ -1155,6 +1242,12 @@ function BoxList({
       <View style={{ gap: 6 }}>
         <Text style={[s.small, { fontSize: 14, fontWeight: "700" }]}>You can also say</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {nudge && (
+            <Phrase
+              text={`No receipt for ${nudge.merchant}`}
+              onPress={() => onSay(`No receipt for ${nudge.merchant}`)}
+            />
+          )}
           <Phrase text="File this receipt" onPress={() => onSay("File this receipt")} />
           <Phrase
             text="What’s waiting to check?"
@@ -1257,7 +1350,7 @@ function ReceiptRow({
               : "transparent",
       })}
     >
-      <ReceiptTile size={40} tint={check} />
+      <ReceiptTile size={40} tint={check} icon={receipt.source === "email" ? Mail : undefined} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Text
           numberOfLines={check ? 2 : 1}
@@ -1561,6 +1654,98 @@ function Phrase({ text, onPress }: { text: string; onPress: () => void }) {
     >
       <Mic size={14} color={colors.blueDark} />
       <Text style={{ color: colors.text, fontSize: 15, fontWeight: "600" }}>{`“${text}”`}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * "Add the receipt for Marlow's?" (receipt-nudges.ts): a restaurant charge on their card, or a stay at
+ * a place to eat, asked about once. Snap it opens the camera from the tap (the question closes when a
+ * photo arrives); No receipt closes it; Ask me later asks once more in a few hours.
+ */
+function NudgeCard({
+  nudge,
+  today,
+  onAnswer,
+  focus,
+}: {
+  nudge: ReceiptNudge;
+  today: string;
+  onAnswer: (how: "done" | "dismissed" | "later" | "stop") => void;
+  focus: Ref<View>;
+}) {
+  const when = shortDate(nudge.day, today);
+  const line =
+    nudge.source === "card" && nudge.amount !== undefined
+      ? `${moneyText(nudge.amount, nudge.currency)} on your card, ${when}.`
+      : `You were there ${when} (from your location while the app was open).`;
+  return (
+    <View
+      style={{
+        gap: 12,
+        padding: 16,
+        borderRadius: 23,
+        backgroundColor: colors.sky,
+        borderWidth: 1,
+        borderColor: colors.blue,
+      }}
+    >
+      <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+        <View style={{ paddingTop: 2 }}>
+          <ReceiptText size={17} color={colors.blueDark} />
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text role="heading" aria-level={3} style={s.heading}>
+            Add the receipt for {nudge.merchant}?
+          </Text>
+          <Text style={[s.muted, { color: colors.text }]}>{line}</Text>
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <TealButton
+          pressRef={focus}
+          id="snap-nudge"
+          label="Snap it"
+          icon={Camera}
+          height={48}
+          onPress={() => onAnswer("done")}
+          style={{ flexGrow: 1, paddingHorizontal: 16 }}
+        />
+        <OutlineButton
+          onPress={() => onAnswer("dismissed")}
+          style={{ minHeight: 48, paddingHorizontal: 14 }}
+        >
+          No receipt
+        </OutlineButton>
+      </View>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          columnGap: 16,
+          marginTop: -6,
+          marginBottom: -10,
+        }}
+      >
+        {(nudge.asks ?? 1) < 2 && (
+          <TextAction label="Ask me later" onPress={() => onAnswer("later")} />
+        )}
+        <TextAction label="Stop asking about receipts" onPress={() => onAnswer("stop")} />
+      </View>
+    </View>
+  );
+}
+
+/** A quiet text button, still 44px tall to tap. */
+function TextAction({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      role="button"
+      aria-label={label}
+      onPress={onPress}
+      style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8, marginLeft: -8 }}
+    >
+      <Text style={{ color: colors.blueText, fontSize: 14, fontWeight: "600" }}>{label}</Text>
     </Pressable>
   );
 }

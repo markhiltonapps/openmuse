@@ -21,6 +21,7 @@ export const AREAS = [
   "calendar",
   "chief",
   "weekly",
+  "receipts",
 ] as const;
 export type Area = (typeof AREAS)[number];
 export const AREA_NAMES: Record<Area, string> = {
@@ -33,6 +34,7 @@ export const AREA_NAMES: Record<Area, string> = {
   calendar: "Calendar heads-ups",
   chief: "The daily check",
   weekly: "Your weekly recap",
+  receipts: "Receipts after eating out",
 };
 
 export interface Moment {
@@ -401,6 +403,7 @@ export const SCREEN_AREAS = [
   "plans",
   "promises",
   "waiting",
+  "receipts",
 ] as const satisfies readonly Area[];
 export const proactiveChange = z.object({
   on: z.boolean().optional(),

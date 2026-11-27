@@ -42,7 +42,9 @@ export interface Receipt {
   note: string;
   unsure: string[];
   fileId: string;
-  source: "photo" | "chat" | "call";
+  source: "photo" | "chat" | "call" | "email";
+  /** Where an emailed receipt came from (it has no photo, only the email kept as a text file). */
+  email?: { app: string; from: string; subject: string };
   autoFiled: boolean;
   edited: boolean;
   duplicateOf?: string;

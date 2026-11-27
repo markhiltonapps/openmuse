@@ -1207,12 +1207,16 @@ export class ConversationAgent extends AbstractAgent {
     if (receiptBox?.available)
       tools.push(
         defineTool({
-          ...receiptToolSpec(receiptBox, this.owner, { onCall }),
+          ...receiptToolSpec(receiptBox, this.owner, {
+            onCall,
+            nudges: this.service.receiptNudges,
+          }),
           execute: async (args: unknown) => {
             try {
-              return await receiptToolSpec(receiptBox, this.owner, { onCall }).execute(
-                args as never,
-              );
+              return await receiptToolSpec(receiptBox, this.owner, {
+                onCall,
+                nudges: this.service.receiptNudges,
+              }).execute(args as never);
             } catch (error) {
               return { error: error instanceof Error ? error.message : "Could not do that" };
             }

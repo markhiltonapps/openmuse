@@ -2341,6 +2341,90 @@ const SHOTS = [
       },
     },
   },
+  {
+    // "Add the receipt for Marlow's Tavern?": the Receipt box opened from the notice after a
+    // restaurant charge on the card, with one filed receipt below.
+    id: "receipt-prompts",
+    start: "home",
+    go: async (p) => {
+      const local = (offsetDays) => {
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+      const nudge = {
+        id: "card:help-1",
+        source: "card",
+        merchant: "Marlow’s Tavern",
+        amount: 48.2,
+        currency: "USD",
+        day: local(-1),
+        status: "asked",
+      };
+      const filed = {
+        id: "help-filed",
+        status: "filed",
+        merchant: "Thai Spice",
+        date: local(-3),
+        total: 32.4,
+        candidates: [],
+        tax: 2.4,
+        currency: "USD",
+        category: "Dining",
+        paidLast4: null,
+        keepFor: [],
+        returnDays: null,
+        returnBy: null,
+        returnState: "open",
+        returnPolicy: null,
+        warranty: false,
+        note: "",
+        unsure: [],
+        fileId: "help-filed-file",
+        source: "email",
+        email: { app: "gmail", from: "DoorDash", subject: "Order Confirmation from Thai Spice" },
+        autoFiled: true,
+        edited: false,
+        createdAt: new Date().toISOString(),
+        filedAt: new Date().toISOString(),
+      };
+      await p.route(/\/api\/receipt-box(\/[^?]*)?(\?.*)?$/, (route) => {
+        const path = new URL(route.request().url()).pathname.replace(/^\/api\/receipt-box\/?/, "");
+        if (path.startsWith("nudges/")) return route.fulfill({ json: { nudge } });
+        if (route.request().method() === "GET" && path === "")
+          return route.fulfill({
+            json: {
+              available: true,
+              receipts: [filed],
+              toCheck: 0,
+              filedCount: 1,
+              filedThisMonth: 1,
+              monthTotal: 32.4,
+              closingSoon: [],
+              autoFile: { on: false, offer: false },
+            },
+          });
+        return route.fulfill({ json: { receipt: filed, photoUrl: null } });
+      });
+      await p.goto(`${APP}?receipt=${encodeURIComponent(nudge.id)}`);
+      await p.getByRole("button", { name: "Snap it", exact: true }).waitFor({ timeout: 30000 });
+      await p.waitForTimeout(1200);
+    },
+    marks: {
+      1: {
+        find: (p) => p.getByRole("heading", { name: /Add the receipt for/ }),
+        side: "top-right",
+      },
+      2: {
+        find: (p) => p.getByRole("button", { name: "Snap it", exact: true }),
+        side: "inside-right",
+      },
+      3: {
+        find: (p) => p.getByRole("button", { name: "No receipt", exact: true }),
+        side: "top-right",
+      },
+    },
+  },
 ];
 
 /**

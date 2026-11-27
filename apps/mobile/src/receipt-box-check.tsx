@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   FileQuestion,
+  Mail,
   Pencil,
   Search,
   Undo2,
@@ -425,10 +426,13 @@ function Photo({
   url,
   gone,
   onOpen,
+  email,
 }: {
   url: string | null | undefined;
   gone: boolean;
   onOpen: () => void;
+  /** An emailed receipt: no photo, so say where it came from. */
+  email?: boolean;
 }) {
   return (
     <View style={{ width: 112, height: 150 }}>
@@ -451,6 +455,11 @@ function Photo({
             accessibilityLabel="Photo of the receipt"
             style={{ width: "100%", height: "100%" }}
           />
+        ) : email ? (
+          <View style={{ alignItems: "center", gap: 6, padding: 8 }}>
+            <Mail size={30} color={colors.text} />
+            <Text style={[s.small, { textAlign: "center" }]}>From an email</Text>
+          </View>
         ) : (
           <ReceiptTile size={48} />
         )}
@@ -620,7 +629,12 @@ export function CheckIt({
       </Text>
       {header}
       <View style={{ flexDirection: "row", gap: 16, alignItems: "flex-start" }}>
-        <Photo url={photoUrl} gone={gone} onOpen={() => photoUrl && openPhoto(photoUrl)} />
+        <Photo
+          url={photoUrl}
+          gone={gone}
+          email={r.source === "email"}
+          onOpen={() => photoUrl && openPhoto(photoUrl)}
+        />
         <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
           <EditableLine
             label={r.merchant ? `Store: ${r.merchant}` : "Store: not read"}

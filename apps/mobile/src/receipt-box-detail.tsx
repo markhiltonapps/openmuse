@@ -2,6 +2,7 @@ import {
   Bell,
   Download,
   Ellipsis,
+  Mail,
   Pencil,
   Search,
   Share2,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Image, Platform, Pressable, Text, View } from "react-native";
+import type { Artifact } from "../../../packages/domain/src";
 import type { MuseApi } from "./api";
 import { DeleteConfirm, openPhoto } from "./receipt-box-check";
 import { boxApi, useAction } from "./receipt-box-data";
@@ -31,6 +33,7 @@ import {
 import { CategoryDot, OutlineButton, ReceiptTile } from "./receipt-box-parts";
 import { colors, ErrorNotice, s } from "./ui";
 import { isInstalled, isIos } from "./web-app";
+import { useWorkspace } from "./workspace";
 
 /**
  * One filed receipt: its photo, the facts, the return date with what to do about it, a warranty
@@ -299,7 +302,11 @@ export function ReceiptDetail({
         />
       ) : (
         <>
-          <PhotoBox url={photoUrl} />
+          {receipt.source === "email" ? (
+            <EmailBox api={api} email={receipt.email} fileId={receipt.fileId} />
+          ) : (
+            <PhotoBox url={photoUrl} />
+          )}
           <View
             style={{
               flexDirection: "row",
@@ -448,6 +455,55 @@ function Tile({ icon: Icon }: { icon: typeof Bell }) {
       }}
     >
       <Icon size={24} color="#FFFFFF" />
+    </View>
+  );
+}
+
+/** An emailed receipt has no photo: where it came from instead, and the email itself (kept in Files). */
+function EmailBox({
+  api,
+  email,
+  fileId,
+}: {
+  api: MuseApi;
+  email?: Receipt["email"];
+  fileId: string;
+}) {
+  const { open } = useWorkspace();
+  const [problem, setProblem] = useState("");
+  const show = () => {
+    setProblem("");
+    api.request<Artifact>(`/api/files/${encodeURIComponent(fileId)}`).then(
+      (file) => open({ type: "file", file }),
+      () => setProblem("Couldn’t open the email. It may have been deleted from Files."),
+    );
+  };
+  return (
+    <View style={{ borderRadius: 22, backgroundColor: colors.lavender, padding: 16, gap: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
+        <ReceiptTile size={44} icon={Mail} edge />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text
+            style={{
+              color: colors.mutedStrong,
+              fontSize: 12,
+              fontWeight: "600",
+              letterSpacing: 0.6,
+              textTransform: "uppercase",
+            }}
+          >
+            From an email
+          </Text>
+          {!!email?.subject && <Text style={s.heading}>{email.subject}</Text>}
+          {!!email?.from && <Text style={s.muted}>{email.from}</Text>}
+        </View>
+      </View>
+      <View style={{ alignSelf: "flex-start", marginLeft: 58 }}>
+        <OutlineButton icon={Mail} onPress={show}>
+          Open the email
+        </OutlineButton>
+      </View>
+      {!!problem && <Text style={[s.muted, { color: colors.text }]}>{problem}</Text>}
     </View>
   );
 }

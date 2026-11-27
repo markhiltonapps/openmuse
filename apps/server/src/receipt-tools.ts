@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type BoxReceipt, KEEP_FOR, type ReceiptBox, type ReceiptSnap } from "./receipt-box.ts";
+import type { ReceiptNudges } from "./receipt-nudges.ts";
 import { RECEIPT_CATEGORIES } from "./receipt-reader.ts";
 
 export const receiptToolInstructions =
@@ -65,16 +66,17 @@ function snapResult(snap: ReceiptSnap) {
 export function receiptToolSpec(
   box: ReceiptBox,
   owner: string,
-  options: { onCall?: boolean } = {},
+  options: { onCall?: boolean; nudges?: ReceiptNudges } = {},
 ) {
   /** A card exists in the chat for these; on a call the agent says it aloud instead. */
   const shown = options.onCall ? {} : { shown: "On their screen." };
   return {
     name: "receipt_box",
     description:
-      "The person's Receipt box (personal receipts). do: read (photo file id: read it and put it in To check), fix (change store, date, total, category, keepFor, returnBy or note), file (file a checked receipt), unfile (take it back to To check), to_check (what's waiting), find (search by text, merchant, category, month YYYY-MM, keepFor, status).",
+      "The person's Receipt box (personal receipts). do: read (photo file id: read it and put it in To check), fix (change store, date, total, category, keepFor, returnBy or note), file (file a checked receipt), unfile (take it back to To check), to_check (what's waiting), find (search by text, merchant, category, month YYYY-MM, keepFor, status), question (the “Add the receipt for …?” asked after eating out: answer none when they have no receipt or don't want it, later to be asked again in a few hours, or leave answer out to see what is open; merchant picks one).",
     parameters: z.object({
-      do: z.enum(["read", "fix", "file", "unfile", "to_check", "find"]),
+      do: z.enum(["read", "fix", "file", "unfile", "to_check", "find", "question"]),
+      answer: z.enum(["none", "later"]).optional().describe("For question"),
       fileId: z.string().max(200).optional().describe("For read: the photo's file id"),
       id: z
         .string()
@@ -108,7 +110,8 @@ export function receiptToolSpec(
       status: z.enum(["to-check", "filed"]).optional(),
     }),
     execute: async (args: {
-      do: "read" | "fix" | "file" | "unfile" | "to_check" | "find";
+      do: "read" | "fix" | "file" | "unfile" | "to_check" | "find" | "question";
+      answer?: "none" | "later";
       fileId?: string;
       id?: string;
       text?: string;
@@ -134,6 +137,40 @@ export function receiptToolSpec(
         )[0];
       const target = async () => args.id ?? (await latest())?.id;
       switch (args.do) {
+        case "question": {
+          const nudges = options.nudges;
+          if (!nudges) return { error: "There’s no receipt question open." };
+          const open = await nudges.open(owner);
+          const wanted = args.merchant?.toLowerCase();
+          const one = wanted
+            ? open.find((n) => n.merchant.toLowerCase().includes(wanted))
+            : open[0];
+          if (!args.answer)
+            return {
+              open: open
+                .slice(0, 5)
+                .map((n) => ({ merchant: n.merchant, day: n.day, amount: n.amount })),
+              ...(open.length
+                ? {
+                    note: "To add one, they snap the receipt from the notice or the Receipt box, or send a photo in the chat.",
+                  }
+                : { none: true }),
+            };
+          if (!one) return { error: "There’s no receipt question open for that." };
+          const closed = await nudges.close(
+            owner,
+            one.id,
+            args.answer === "none" ? "dismissed" : "later",
+          );
+          return args.answer === "none"
+            ? { done: `Won’t ask about ${one.merchant} again.` }
+            : {
+                done:
+                  closed?.status === "waiting"
+                    ? `Will ask about ${one.merchant} again in about three hours.`
+                    : `It stays in their updates; it won’t be asked a third time.`,
+              };
+        }
         case "read": {
           if (!args.fileId) return { error: "I need the receipt photo to read." };
           const snap = await box.snapFile(owner, args.fileId, options.onCall ? "call" : "chat");

@@ -52,7 +52,8 @@ export type Detail =
   /**
    * The Receipt box (receipt-box-ui.tsx). `photo` is a picture just taken, to read; `native` asks the
    * phone app's picker; `camera: "blocked"` shows the camera-is-off card; `view: "check"` starts at
-   * what is waiting to check; `id` opens one receipt.
+   * what is waiting to check; `id` opens one receipt; `nudge` shows an "Add the receipt?" question
+   * (after eating out) at the top.
    */
   | {
       type: "receipt-box";
@@ -61,6 +62,7 @@ export type Detail =
       camera?: "blocked";
       view?: "check" | "list";
       id?: string;
+      nudge?: string;
     }
   | { type: "menu" };
 export interface WorkspaceContextValue {

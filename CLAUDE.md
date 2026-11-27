@@ -840,4 +840,10 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   email only to the person's own addresses runs without review (`self-send.ts`, routine jobs only; anyone else on to/cc/bcc
   still asks), and a new run puts away that routine's older runs still waiting. Recurring work that stops for the same OK
   every day is friction, not safety: decide once where a rule can, and keep only one card per routine.
+- **Receipt prompts (owner, 2026-11-27):** "Add the receipt?" comes from a card charge (Brex, by business code 5811-5814, never
+  by name) or a 20-minute stay at a place to eat (app open only), through the proactive judge (area "receipts"), once per meal.
+  A question answered by a camera tap closes only when a photo really arrives; a cancel must leave it. "Later" re-asks under a
+  new notice key (the bell keeps one entry per key). Emailed receipts are chosen by the sender's real address, never by what the
+  email says, and read with `hideText` first. A button that has to fit beside another at 390 px: measure the row (card
+  padding included) before choosing the label; "Snap the receipt" + "No receipt" didn't fit by 10 px.
 

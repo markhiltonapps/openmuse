@@ -1,5 +1,5 @@
 import { Check, type LucideIcon, Receipt as ReceiptIcon } from "lucide-react-native";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { ActivityIndicator, Pressable, Text, View, type ViewStyle } from "react-native";
 import { GlossFill, OnGloss } from "./gloss";
 import { categoryColor } from "./receipt-box-logic";
@@ -32,6 +32,7 @@ export function TealButton({
   height = 52,
   accessibilityLabel,
   style,
+  pressRef,
 }: {
   label: string;
   icon?: LucideIcon;
@@ -42,10 +43,13 @@ export function TealButton({
   height?: number;
   accessibilityLabel?: string;
   style?: ViewStyle;
+  /** For moving focus to it (a question that just appeared). */
+  pressRef?: Ref<View>;
 }) {
   const off = !!(disabled || busy);
   return (
     <Pressable
+      ref={pressRef}
       role="button"
       aria-label={accessibilityLabel ?? label}
       aria-disabled={off}
@@ -177,7 +181,19 @@ export function CategoryDot({ category, size = 9 }: { category: string; size?: n
 }
 
 /** A receipt's little tile: a paper icon on a soft square (its photo shows in the detail). */
-export function ReceiptTile({ size = 40, tint }: { size?: number; tint?: boolean }) {
+export function ReceiptTile({
+  size = 40,
+  tint,
+  icon: Icon = ReceiptIcon,
+  edge,
+}: {
+  size?: number;
+  tint?: boolean;
+  /** A stronger outline, for a tile on a tinted box (it nearly vanishes there in dark mode). */
+  edge?: boolean;
+  /** Another drawing (a mail icon for a receipt that came by email). */
+  icon?: LucideIcon;
+}) {
   return (
     <View
       aria-hidden
@@ -189,10 +205,10 @@ export function ReceiptTile({ size = 40, tint }: { size?: number; tint?: boolean
         justifyContent: "center",
         backgroundColor: tint ? colors.orange : colors.subtle,
         borderWidth: 1,
-        borderColor: colors.line,
+        borderColor: edge ? colors.edge : colors.line,
       }}
     >
-      <ReceiptIcon size={size * 0.5} color={tint ? amberInk : colors.mutedStrong} />
+      <Icon size={size * 0.5} color={tint ? amberInk : colors.mutedStrong} />
     </View>
   );
 }

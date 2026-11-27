@@ -9,8 +9,11 @@ import {
   daysBetween,
   type LookAtReceipt,
   RECEIPT_CATEGORIES,
+  type ReadResult,
   readReceipt,
+  readReceiptText,
 } from "./receipt-reader.ts";
+import { hideText } from "./redaction.ts";
 import type { ReminderService } from "./reminders.ts";
 
 /** The Receipt box: personal receipts the person photographs, checks and files (docs/RECEIPT-BOX-PLAN.md). */
@@ -56,7 +59,9 @@ export interface BoxReceipt {
   /** Fields the reader wasn't sure of, shown marked on the Check it card. */
   unsure: string[];
   fileId: string;
-  source: "photo" | "chat" | "call";
+  source: "photo" | "chat" | "call" | "email";
+  /** For a receipt that arrived by email: who sent it and its subject (the email is kept as a text file). */
+  email?: { app: string; from: string; subject: string };
   autoFiled: boolean;
   /** Set when the person changed anything, so a "good" check isn't counted. */
   edited: boolean;
@@ -198,6 +203,49 @@ export class ReceiptBox {
     );
   }
 
+  /**
+   * A receipt that arrived by email (owner, 2026-11-27): read from its words, the email kept as a
+   * text file, and filed straight away when everything was read clearly (anything unsure waits in
+   * To check). Each email once; undefined when it isn't a receipt or was seen before.
+   */
+  async fromEmail(
+    owner: string,
+    email: { app: string; messageId: string; from: string; subject: string; body: string },
+    ask: (prompt: string) => Promise<string>,
+  ): Promise<ReceiptSnap | undefined> {
+    const key = `${email.app}:${email.messageId}`;
+    if (await this.db.get(owner, "receipt-emails", key)) return undefined;
+    // Counted before it is marked, so an email turned away by the hourly cap is read on a later sweep.
+    this.claimRead(owner);
+    await this.db.put(owner, "receipt-emails", { id: key, at: new Date(this.now()).toISOString() });
+    const today = await this.today(owner);
+    let result: ReadResult;
+    try {
+      // Card and account numbers are hidden before the model reads it, as everywhere else.
+      result = await readReceiptText(
+        ask,
+        { from: email.from, subject: hideText(email.subject), text: hideText(email.body) },
+        { today },
+      );
+    } catch {
+      return undefined;
+    }
+    if (!result.read.isReceipt || result.read.multipleReceipts) return undefined;
+    const name = `Receipt email - ${email.subject || email.from}`
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .slice(0, 80);
+    const file = await this.files.import(
+      owner,
+      `${name.trim()}.txt`,
+      new TextEncoder().encode(`From: ${email.from}\nSubject: ${email.subject}\n\n${email.body}`),
+      "receipt-box",
+    );
+    return this.process(owner, file.id, file.mimeType, new Uint8Array(), "email", true, {
+      result,
+      email: { app: email.app, from: email.from, subject: email.subject },
+    });
+  }
+
   private async process(
     owner: string,
     fileId: string,
@@ -205,12 +253,14 @@ export class ReceiptBox {
     bytes: Uint8Array,
     source: BoxReceipt["source"],
     ours: boolean,
+    /** Already read (an email), and where it came from. */
+    given?: { result: ReadResult; email: NonNullable<BoxReceipt["email"]> },
   ): Promise<ReceiptSnap> {
     const look = this.look(owner) as LookAtReceipt;
     const today = await this.today(owner);
     let result: Awaited<ReturnType<typeof readReceipt>>;
     try {
-      result = await readReceipt(look, { bytes, mimeType }, { today });
+      result = given?.result ?? (await readReceipt(look, { bytes, mimeType }, { today }));
     } catch {
       // The photo is kept so "Try again" or "Save the photo anyway" has something to work with.
       return { outcome: "unreadable", fileId };
@@ -251,6 +301,7 @@ export class ReceiptBox {
       unsure: unclear,
       fileId,
       source,
+      ...(given ? { email: given.email } : {}),
       autoFiled: false,
       edited: false,
       createdAt: new Date(this.now()).toISOString(),
@@ -262,8 +313,9 @@ export class ReceiptBox {
       return { outcome: "duplicate", receipt };
     }
     // Auto-filing only when everything was read clearly; anything unsure always stops at Check it.
+    // Emailed receipts file on their own (owner, 2026-11-27); photos only once auto-filing is on.
     const sure =
-      settings.autoFile &&
+      (settings.autoFile || source === "email") &&
       unclear.length === 0 &&
       reconciled.status === "sure" &&
       receipt.merchant &&
@@ -307,6 +359,8 @@ export class ReceiptBox {
   }
   /** A fresh signed link to the photo (links expire, so one is made each time it's opened). */
   async photoUrl(owner: string, receipt: BoxReceipt) {
+    // An emailed receipt has no photo; its email is kept in Files as text.
+    if (receipt.source === "email") return null;
     const file = await this.files.get(owner, receipt.fileId).catch(() => null);
     return file ? this.files.signed(owner, file).url : null;
   }

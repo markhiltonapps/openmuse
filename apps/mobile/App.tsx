@@ -101,6 +101,7 @@ import { UpdateToasts } from "./src/update-toasts";
 import {
   listenForCheckIns,
   listenForMeetingLinks,
+  listenForReceiptLinks,
   listenForReviewLinks,
   listenForTaskLinks,
   registerServiceWorker,
@@ -305,6 +306,8 @@ function WorkspaceApp({ token }: { token: string }) {
   const [reviewLink, setReviewLink] = useState("");
   // A meeting's notes are ready: the notification opens the meeting.
   useEffect(() => listenForMeetingLinks((id) => setDetail({ type: "meeting", id })), []);
+  // "Add the receipt?" after eating out: the notification opens the Receipt box with the question.
+  useEffect(() => listenForReceiptLinks((nudge) => setDetail({ type: "receipt-box", nudge })), []);
   useEffect(() => listenForReviewLinks(setReviewLink), []);
   useEffect(() => {
     if (!reviewLink || !workspace) return;

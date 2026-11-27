@@ -187,7 +187,23 @@ export interface ReceiptChange {
   note?: string;
 }
 
+/** "Add the receipt?" after eating out (receipt-nudges.ts on the server). */
+export interface ReceiptNudge {
+  id: string;
+  source: "card" | "visit";
+  merchant: string;
+  amount?: number;
+  currency?: string;
+  day: string;
+  status: "waiting" | "asked" | "done" | "dismissed";
+  asks?: number;
+}
+
 export const boxApi = {
+  nudge: (api: MuseApi, nudgeId: string) =>
+    api.request<{ nudge: ReceiptNudge }>(`${base}/nudges/${id(nudgeId)}`),
+  closeNudge: (api: MuseApi, nudgeId: string, how: "done" | "dismissed" | "later") =>
+    api.request<{ nudge: ReceiptNudge }>(`${base}/nudges/${id(nudgeId)}`, { how }),
   /** One receipt with a fresh link to its photo (links expire, so one is asked for each time). */
   one: (api: MuseApi, receiptId: string) =>
     api.request<{ receipt: Receipt; photoUrl: string | null }>(`${base}/${id(receiptId)}`),

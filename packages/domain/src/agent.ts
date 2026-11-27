@@ -188,6 +188,8 @@ export interface AgentNotification {
   rehearsalId?: string;
   /** Set on a heads-up from the calendar: opens the chat, where its card is. */
   headsUpId?: string;
+  /** Set on "Add the receipt?" after eating out: opens the Receipt box ready to snap it. */
+  receiptNudgeId?: string;
   title: string;
   body: string;
   createdAt: string;

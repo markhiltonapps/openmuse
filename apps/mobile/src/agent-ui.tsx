@@ -3716,19 +3716,24 @@ const UPDATE_PLACES: { id: UpdatesDisplay; label: string; detail: string }[] = [
 ];
 /** What an update opens when tapped, for its label: "Opens this job". */
 export function updateOpens(
-  item: Pick<AgentNotification, "taskId" | "meetingId" | "rehearsalId" | "checkInId" | "actionId">,
+  item: Pick<
+    AgentNotification,
+    "taskId" | "meetingId" | "rehearsalId" | "checkInId" | "actionId" | "receiptNudgeId"
+  >,
 ) {
-  return item.taskId
-    ? "Opens this job"
-    : item.meetingId
-      ? "Opens the notes"
-      : item.rehearsalId
-        ? "Opens the scorecard"
-        : item.checkInId
-          ? "Opens the chat"
-          : item.actionId
-            ? "Opens the approval"
-            : "Opens Updates";
+  return item.receiptNudgeId
+    ? "Opens the Receipt box to snap it"
+    : item.taskId
+      ? "Opens this job"
+      : item.meetingId
+        ? "Opens the notes"
+        : item.rehearsalId
+          ? "Opens the scorecard"
+          : item.checkInId
+            ? "Opens the chat"
+            : item.actionId
+              ? "Opens the approval"
+              : "Opens Updates";
 }
 /**
  * Marks an update read and opens what it's about: the Updates list and Home's Recent card share
@@ -3740,14 +3745,15 @@ export function useOpenUpdate() {
   return async function openUpdate(
     item: Pick<
       AgentNotification,
-      "id" | "taskId" | "meetingId" | "rehearsalId" | "checkInId" | "actionId"
+      "id" | "taskId" | "meetingId" | "rehearsalId" | "checkInId" | "actionId" | "receiptNudgeId"
     >,
     /** Where a plain update (about nothing in particular) goes; the Updates list stays put. */
     otherwise?: () => void,
   ) {
     await mutate(`/notifications/${item.id}/read`, {});
-    const { taskId, meetingId, rehearsalId, checkInId, actionId } = item;
-    if (taskId) open({ type: "task", taskId });
+    const { taskId, meetingId, rehearsalId, checkInId, actionId, receiptNudgeId } = item;
+    if (receiptNudgeId) open({ type: "receipt-box", nudge: receiptNudgeId });
+    else if (taskId) open({ type: "task", taskId });
     else if (meetingId) open({ type: "meeting", id: meetingId });
     else if (rehearsalId)
       open({ type: "rehearsalScore", id: rehearsalId, ask: { who: "", about: "", goal: "" } });
@@ -3845,21 +3851,23 @@ export function NotificationsSheet() {
             </Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
             <Button small onPress={() => void read(item)}>
-              {item.taskId
-                ? "Open job"
-                : item.rehearsalId
-                  ? "See how it went"
-                  : item.meetingId
-                    ? "Open the notes"
-                    : item.checkInId
-                      ? "Answer in chat"
-                      : item.actionId
-                        ? "Review"
-                        : item.read
-                          ? "Read"
-                          : item.reminderId
-                            ? "Done"
-                            : "Mark read"}
+              {item.receiptNudgeId
+                ? "Snap the receipt"
+                : item.taskId
+                  ? "Open job"
+                  : item.rehearsalId
+                    ? "See how it went"
+                    : item.meetingId
+                      ? "Open the notes"
+                      : item.checkInId
+                        ? "Answer in chat"
+                        : item.actionId
+                          ? "Review"
+                          : item.read
+                            ? "Read"
+                            : item.reminderId
+                              ? "Done"
+                              : "Mark read"}
             </Button>
           </Card>
         ))}

@@ -105,6 +105,7 @@ import { Proactive, proactiveChange } from "./proactive.ts";
 import { PushService } from "./push.ts";
 import { WeeklyRecap } from "./recap.ts";
 import { ReceiptBox } from "./receipt-box.ts";
+import { ReceiptNudges } from "./receipt-nudges.ts";
 import { RecipeKitchen, writeRecipes } from "./recipe-writer.ts";
 import { hideText } from "./redaction.ts";
 import {
@@ -518,7 +519,10 @@ export async function createApp(
   const emailViews = new EmailViews(db);
   agent.emailViews = emailViews;
   // Capture everywhere: a booking, delivery, trip or bill in any email Neddy reads is tracked.
-  emailViews.onRead = (owner, emails) => agent.captureFromEmails(owner, emails);
+  emailViews.onRead = (owner, emails) => {
+    void agent.receiptNudges?.fromEmails(owner, emails).catch(() => undefined);
+    return agent.captureFromEmails(owner, emails);
+  };
   agent.persona.accountName = async (owner) => (await accounts.get(owner))?.name;
   // Live voice's brain: the same chat agent and tools answer what the voice hands over.
   const canLookUp = config.agentBackend !== "agui";
@@ -1211,6 +1215,47 @@ export async function createApp(
         .filter(({ value }) => value.id === "identity")
         .map(({ owner }) => owner),
   );
+  // "Add the receipt?" after eating out, and meal and ride receipt emails filed (owner, 2026-11-27).
+  const receiptNudges = new ReceiptNudges(db, {
+    proactive,
+    notify: (owner, note) =>
+      agent.notify(owner, note.title, note.body, undefined, note.key, {
+        receiptNudgeId: note.nudgeId,
+      }),
+    timeZone: (owner) => agent.timeZone(owner),
+    receipts: (owner) => receiptBox.list(owner),
+    apps,
+    owners: async () =>
+      (await db.scan<{ id: string }>("agent-settings"))
+        .filter(({ value }) => value.id === "identity")
+        .map(({ owner }) => owner),
+    fileEmail: (owner, email) => {
+      const plan = agent.modelFor("simple");
+      if (config.agentBackend !== "model" || !plan.model) return Promise.resolve(undefined);
+      return receiptBox.fromEmail(owner, email, (prompt) =>
+        agent.complete({
+          ...plan,
+          stronger: agent.modelFor("chat"),
+          system: "You read receipts from emails and reply with only JSON.",
+          prompt,
+          onUsage: usage.sink(owner, "receipts"),
+        }),
+      );
+    },
+    placeToEat: async (spot, accuracy) => {
+      const nearby = agent.nearby;
+      // Too rough a fix can't tell one place from the one next door.
+      if (!nearby || (accuracy ?? 0) > 60) return undefined;
+      for (const what of ["restaurant", "coffee"] as const) {
+        const found = await nearby.find(spot, { what, miles: 0.03 });
+        const place = found?.places.find((place) => place.meters <= 50);
+        if (place) return { name: place.name };
+      }
+      return undefined;
+    },
+  });
+  agent.receiptNudges = receiptNudges;
+  whereabouts.onReport((event) => receiptNudges.seen(event));
   const approvals = new ApprovalRules(db);
   agent.approvals = approvals;
   agent.logins = logins;
@@ -1978,6 +2023,28 @@ export async function createApp(
   app.post("/api/receipt-box/auto-file", async (c) => {
     const { on } = z.object({ on: z.boolean() }).parse(await c.req.json());
     return c.json(await receiptBox.setAutoFile(c.get("owner"), on));
+  });
+  // "Add the receipt?" (receipt-nudges.ts): the question a tapped notification opens, and its answer.
+  app.get("/api/receipt-box/nudges/:id", async (c) => {
+    const nudge = await receiptNudges.get(c.get("owner"), c.req.param("id"));
+    if (!nudge) throw new AppError("That question has gone.", 404);
+    return c.json({ nudge });
+  });
+  app.post("/api/receipt-box/nudges/:id", async (c) => {
+    const body = z
+      .object({
+        how: z.enum(["done", "dismissed", "later"]),
+        receiptId: z.string().max(100).optional(),
+      })
+      .parse(await c.req.json());
+    const nudge = await receiptNudges.close(
+      c.get("owner"),
+      c.req.param("id"),
+      body.how,
+      body.receiptId,
+    );
+    if (!nudge) throw new AppError("That question has gone.", 404);
+    return c.json({ nudge });
   });
   app.get("/api/receipt-box/:id", async (c) => {
     const owner = c.get("owner");

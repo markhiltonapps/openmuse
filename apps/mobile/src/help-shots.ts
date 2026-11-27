@@ -41,6 +41,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   "place-reminders": { width: 720, height: 2769 },
   privacy: { width: 720, height: 500 },
   receipt: { width: 720, height: 1558 },
+  "receipt-prompts": { width: 720, height: 1558 },
   receipts: { width: 720, height: 2252 },
   recordertrouble: { width: 720, height: 1558 },
   rehearse: { width: 720, height: 1558 },

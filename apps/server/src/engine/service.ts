@@ -80,6 +80,7 @@ import type { Forgetting } from "../privacy.ts";
 import { chiefSystemPrompt, type Proactive } from "../proactive.ts";
 import type { WeeklyRecap } from "../recap.ts";
 import type { ReceiptBox } from "../receipt-box.ts";
+import type { ReceiptNudges } from "../receipt-nudges.ts";
 import { Receipts } from "../receipts.ts";
 import type { RecipeKitchen } from "../recipe-writer.ts";
 import { hideText } from "../redaction.ts";
@@ -295,6 +296,12 @@ export class AgentService {
         .catch((error) => backgroundFailure("commitments", error));
       await this.runDailyChecks().catch((error) => backgroundFailure("daily check", error));
       await this.weeklyRecap?.due().catch((error) => backgroundFailure("weekly recap", error));
+      await this.receiptNudges
+        ?.tick()
+        .catch((error) => backgroundFailure("receipt questions", error));
+      await this.receiptNudges
+        ?.sweepEmail((data) => emailsIn(data, "gmail"))
+        .catch((error) => backgroundFailure("receipt emails", error));
       await this.checkIns
         ?.due((owner) => this.removed(owner))
         .catch((error) => backgroundFailure("meal check-ins", error));
@@ -1632,6 +1639,8 @@ export class AgentService {
   travel?: Travel;
   /** Once a week, what Neddy did for the person (recap.ts). */
   weeklyRecap?: WeeklyRecap;
+  /** "Add the receipt?" after eating out, and receipt emails filed (receipt-nudges.ts). */
+  receiptNudges?: ReceiptNudges;
   /** Walking and driving directions from map data (directions.ts); set on the live server. */
   directions?: Directions;
   proactive?: Proactive;
@@ -1864,7 +1873,13 @@ export class AgentService {
     key?: string,
     extra: Pick<
       AgentNotification,
-      "reminderId" | "checkInId" | "actionId" | "meetingId" | "headsUpId" | "rehearsalId"
+      | "reminderId"
+      | "checkInId"
+      | "actionId"
+      | "meetingId"
+      | "headsUpId"
+      | "rehearsalId"
+      | "receiptNudgeId"
     > = {},
     /** False saves the bell entry without a phone notification. */
     push = true,
@@ -1897,7 +1912,9 @@ export class AgentService {
                   ? { url: `/?review=${encodeURIComponent(extra.actionId)}` }
                   : extra.meetingId
                     ? { url: `/?meeting=${encodeURIComponent(extra.meetingId)}` }
-                    : {}),
+                    : extra.receiptNudgeId
+                      ? { url: `/?receipt=${encodeURIComponent(extra.receiptNudgeId)}` }
+                      : {}),
         })
         .catch((error) => backgroundFailure("push notification", error));
     return inserted;
