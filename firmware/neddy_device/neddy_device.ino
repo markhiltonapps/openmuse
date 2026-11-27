@@ -934,7 +934,14 @@ static bool audioInit() {
   step("mic chip");
   es7210Init();  // the microphone chip; a problem is shown on screen, not fatal
   step("play buffer");
-  playBuffer = xStreamBufferCreate(48 * 1024, 2);
+  // Neddy's voice waits here before it plays. It lives in the big slow memory (PSRAM), not the chip's own 320 KB: a secure connection
+  // needs ~50 KB of that, and on the round 1.75C (wider screen buffers) only 49 KB was left, so every request to Neddy failed with
+  // "SSL - Memory allocation failed". Sound is 32 KB a second, far within what PSRAM can feed. (Falls back to the chip's memory.)
+  static StaticStreamBuffer_t playBufferInfo;
+  const size_t playBytes = 48 * 1024;
+  uint8_t *playStore = (uint8_t *)heap_caps_malloc(playBytes + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (playStore) playBuffer = xStreamBufferCreateStatic(playBytes, 2, playStore, &playBufferInfo);
+  if (!playBuffer) playBuffer = xStreamBufferCreate(playBytes, 2);
   return playBuffer != NULL;
 }
 

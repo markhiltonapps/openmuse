@@ -157,3 +157,7 @@ What happened, in order:
 Open: why the Bluetooth server isn't created on the 1.75C (memory or the BLE library in core 3.3.11); the watch went to Wi-Fi setup because the owner's
 settings.h has no Wi-Fi in it (he confirmed), which is the shipping flow: Bluetooth setup first, now falling to the QR hotspot setup. The six checks on the round watch are
 still to do. Help unchanged: no screen people see changed (only the crash note on the start screen, which is for building the watch).
+- Next on the round watch: Wi-Fi typed into settings.h (no Bluetooth setup) joined, then "Can't reach Neddy (code -1)". The screen now says
+  why: "SSL - Memory allocation failed (…, 49 KB free)". The 1.75C's wider screen buffers use ~3.7 KB more of the chip's own memory
+  (globals 144,468 vs 140,748 bytes) and a secure connection needs ~50 KB. Fix: Neddy's 48 KB voice buffer now lives in PSRAM
+  (xStreamBufferCreateStatic with PSRAM storage, falling back to the old one). Frees ~48 KB of fast memory on both watches.
