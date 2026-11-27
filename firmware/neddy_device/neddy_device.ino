@@ -251,21 +251,31 @@ static const char *resetName(int r) {
 // Where the watch last was (start-up step or part of the main loop), kept in memory that a crash or watchdog restart doesn't clear.
 // The next "Starting" screen says it, so a board that crashes before it can say anything over USB still shows where (a photo is enough).
 #define STEP_MAGIC 0x4E454444u
+// Only whole 32-bit words go into this memory (a number for the step, not its text), so writing it is always safe on this chip.
 static RTC_NOINIT_ATTR uint32_t stepMagic;
-static RTC_NOINIT_ATTR char stepAt[24];
-static String lastStop;   // "CRASH at speaker chip" when the last start ended in a crash; "" otherwise
+static RTC_NOINIT_ATTR uint32_t stepCode;
+static String lastStop;   // "Crashed at: speaker chip" when the last start ended in a crash; "" otherwise
+static const char *const STEP_NAMES[] = {
+  "screen", "settings", "audio port", "chip bus", "speaker chip", "mic chip", "play buffer", "play task", "touch", "recorder",
+  "main loop", "recording", "sleep check", "Wi-Fi", "pairing", "connect", "connection", "touch read", "battery", "status",
+  "PWR button", "motion chip", "recorder tick", "buttons", "drawing", "mic power",
+};
+static uint32_t stepHash(const char *t) {   // FNV-1a: the same name always gives the same number
+  uint32_t h = 2166136261u;
+  while (*t) { h ^= (uint8_t)*t++; h *= 16777619u; }
+  return h;
+}
 static inline void step(const char *where) {
-  strncpy(stepAt, where, sizeof(stepAt) - 1);
-  stepAt[sizeof(stepAt) - 1] = 0;
+  stepCode = stepHash(where);
   stepMagic = STEP_MAGIC;
 }
 static void readLastStop(int why) {
   bool crashed = why == ESP_RST_PANIC || why == ESP_RST_INT_WDT || why == ESP_RST_TASK_WDT || why == ESP_RST_WDT || why == ESP_RST_BROWNOUT;
   if (crashed && stepMagic == STEP_MAGIC) {
-    stepAt[sizeof(stepAt) - 1] = 0;
-    for (size_t i = 0; stepAt[i]; i++) if (stepAt[i] < 32 || stepAt[i] > 126) stepAt[i] = '?';
+    const char *name = "an unknown step";
+    for (const char *n : STEP_NAMES) if (stepHash(n) == stepCode) name = n;
     const char *what = why == ESP_RST_PANIC ? "Crashed" : (why == ESP_RST_BROWNOUT ? "Lost power" : "Froze");
-    lastStop = String(what) + " at: " + stepAt;
+    lastStop = String(what) + " at: " + name;
   }
   stepMagic = 0;
 }
