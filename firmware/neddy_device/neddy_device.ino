@@ -36,6 +36,7 @@
 #endif
 #include "esp_check.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
@@ -630,17 +631,33 @@ static int jsonInt(const String &body, const char *key, int none) {
   return body.substring(at, end).toInt();
 }
 
+// Why the last request didn't get an answer, in words for the screen ("" when it did): the server's name didn't look up,
+// or the secure connection's own error, with the watch's free memory (a secure connection needs about 40 KB).
+static String netWhy;
 static String httpPost(const String &path, const String &body, int &status) {
+  netWhy = "";
+  IPAddress ip;
+  if (!WiFi.hostByName(NEDDY_SERVER, ip)) {
+    status = -1;
+    netWhy = "The server's name didn't look up on this Wi-Fi.";
+    return "";
+  }
   WiFiClientSecure client;
   client.setInsecure();  // Early testing: the connection is encrypted but the server's identity isn't checked yet.
   HTTPClient http;
   http.setTimeout(10000);
   if (!http.begin(client, serverUrl + path)) {
     status = -1;
+    netWhy = "The request couldn't be set up.";
     return "";
   }
   http.addHeader("Content-Type", "application/json");
   status = http.POST(body);
+  if (status <= 0) {
+    char e[64] = { 0 };
+    client.lastError(e, sizeof(e));
+    netWhy = String(e[0] ? e : "no secure connection") + " (" + ip.toString() + ", " + (int)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024) + " KB free)";
+  }
   String answer = status > 0 ? http.getString() : String("");
   http.end();
   return answer;
@@ -2035,7 +2052,7 @@ static bool pairWithNeddy() {
     if (status != 201 || code.length() != 6 || pollToken.length() == 0) {
       LOGF("[pair] couldn't get a code (status %d): %s\n", status, answer.c_str());
       screenProblem("Can't reach Neddy",
-                    String("Checking again in a few seconds. (code ") + status + ")");
+                    String("Checking again in a few seconds. (code ") + status + ") " + netWhy);
       delay(6000);
       if (WiFi.status() != WL_CONNECTED) return false;
       continue;
