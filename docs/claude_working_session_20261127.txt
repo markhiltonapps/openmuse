@@ -171,3 +171,9 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   Next: a 15-20 s PWR hold while plugged in; else reset the power chip by unplugging the battery in the case (owner sends photos first).
   To do once it runs: set the AXP2101 so USB power always switches the watch on and a long hold can't switch it off by accident
   (registers to be read from the datasheet and shown raw on the board first); never tell people to "hold PWR 10 s" on this board.
+- (Nov 28, evening) The round watch runs again: the owner's settings.h had been replaced by an old copy with no NEDDY_BOARD line (2.06 build,
+  black screen) and placeholder Wi-Fi. A full settings.h with NEDDY_BOARD 175 brought it back; a meeting recording started.
+- "Hold to stop" on the round recording screen was cut into pieces: the ring of dots runs under it and each dot paints its own black box.
+  The ring now leaves a gap behind the label (only on the recording screen, only on the round watch). ui_sim has a new frame with the moving
+  dot passing the label (r1d); checked by eye on the round render. touch_test 147/147 both boards, 0 odd windows.
+- Owner (Nov 28): a tap starts a recording too easily (pockets). Asked how starting should work before building it (new UI: Design review).

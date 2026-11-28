@@ -196,6 +196,8 @@ int main(int argc, char **argv) {
   uiIdleOn = false; uiClearCard(); uiIdle.have = false; uiSetMode(UI_READY); uiAll = true; uiRecAvailable = true; uiFace = 0; uiRecMode = 3;
   uiRecRun(800200, 2530, 4680, 35); uiTick(800300); save(dir, "r1_recording");
   uiRecRun(800400, 2531, 4679, 35); uiTick(800500); save(dir, "r1b_recording_next_second");
+  for (uint32_t e = 2546; e <= 2554; e++) { uiRecRun(800500 + e, e, 4680 - (e - 2530), 35); uiTick(800600 + e); }   // the bright dot passes under "Hold to stop"
+  save(dir, "r1d_recording_dot_at_label");
   for (int k = 1; k <= 2; k++) { uiDrawStop(k * 0.5f); char nm[40]; snprintf(nm, sizeof nm, "r1c_stop_hold_%d", k * 50); save(dir, nm); }   // the hold's ring
   uiDrawStop(0);
   uiRecInfo(800500, "Sending to Neddy", "42 minutes", "Joining Wi-Fi, please wait", 0, ""); uiTick(800550); save(dir, "r2a_joining_wifi");

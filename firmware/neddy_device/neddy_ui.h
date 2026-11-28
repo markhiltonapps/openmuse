@@ -1034,8 +1034,17 @@ static const char *const UI_REC_NAMES[4] = { "VOICE NOTE", "IDEA", "MEETING", "D
 static const int UI_REC_ICONS[4] = { UI_IC_MIC, UI_IC_BULB, UI_IC_PEOPLE, UI_IC_MOON };
 #define UI_REC_DOTS 60
 // The dots round the edge: each painted in its own small box, so nothing else is touched.
+// Where "Hold to stop" sits under the Stop button. On the round watch it reaches the ring of dots, and each dot paints its own black
+// box, which cut pieces out of the words (owner's photo, 2026-11-28): the ring leaves a gap there instead.
+static int uiStopLabelY();
+static bool uiDotHitsLabel(float x, float y, float rad) {
+  if (!NEDDY_ROUND || uiRec.state != UI_RECS_RUN) return false;   // only on the recording screen, where the label is
+  int top = uiStopLabelY(), half = uiTextWidth(NFONT_MID, "Hold to stop") / 2 + 12;
+  return y + rad + 3 >= top - 4 && x >= UI_CX - half && x <= UI_CX + half;
+}
 static void uiEdgeDot(int i, int n, float inset, float rad, uint16_t col) {
   float x, y; uiEdgePoint((float)i / n, inset, &x, &y);
+  if (uiDotHitsLabel(x, y, rad)) return;
   uiShClear(); uiShAdd(UI_SH_DISC, x, y, rad, 0, 0, 0, col);
   int h = (int)rad + 3; uiShPaint((int)x - h, (int)y - h, 2 * h + 2, 2 * h + 2);
 }
@@ -1065,6 +1074,7 @@ static void uiDrawStop(float f) {
   uiShPaint(UI_CX - h, uiStopY() - h, 2 * h, 2 * h);
 }
 static int uiRecBtnY() { return UI_CY + 112; }
+static int uiStopLabelY() { return uiStopY() + UI_STOP_R + (NEDDY_ROUND ? 10 : 18); }
 static void uiRecDraw() {
   const uint16_t red = UI_REC_RED;
   if (uiRec.state == UI_RECS_RUN) {
@@ -1073,7 +1083,7 @@ static void uiRecDraw() {
       for (int i = 0; i < UI_REC_DOTS; i++) uiEdgeDot(i, UI_REC_DOTS, 22, 2.6f, uiRgb(110, 26, 22));
       uiIcon(UI_REC_ICONS[uiRecMode & 3], UI_CX, UI_CY - 156, 50, red);
       uiDrawStop(0);
-      uiTextCentered(NFONT_MID, uiStopY() + UI_STOP_R + (NEDDY_ROUND ? 10 : 18), "Hold to stop", UI_LABEL);
+      uiTextCentered(NFONT_MID, uiStopLabelY(), "Hold to stop", UI_LABEL);
     }
     // the travelling dot: one bright dot moves a step round the edge each second
     uint32_t e = uiRec.elapsed;
