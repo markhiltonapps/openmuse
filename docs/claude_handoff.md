@@ -13,8 +13,18 @@ Paste this as the first message of a new session on **markhiltonapps/openmuse**,
   and weather card". Nothing is waiting locally.
 - The work right now is firmware for the round **Waveshare ESP32-S3-Touch-AMOLED-1.75C** watch (`firmware/neddy_device`).
 - The owner's build stopped because his `settings.h` was an old copy without `#define NEDDY_BOARD 175`. He was given the full
-  file to paste. The values are below. **Next step: wait for his build result.** That means either error lines or a photo of
-  the watch.
+  file to paste. The values are below.
+- His next build (Arduino core esp32 3.3.11) **compiled with no code errors**, then stopped with "Sketch too big: 4,385,615
+  bytes (139%), maximum 3,145,728". The scenes (about 2 MB of JPEG frames) pushed the program past the 3 MB limit of the
+  **Huge APP** partition scheme he had selected.
+  - **Fix: Tools > Partition Scheme > "Custom"**, with Flash Size 32MB kept. The build already uses the sketch's own
+    `partitions.csv`, which has a 6 MB app partition plus "rec". The size check, however, reads the menu's limit: Custom allows
+    16 MB, while Huge APP allows only 3 MB.
+  - The comment at the top of `neddy_device.ino` (around line 13) says Partition Scheme "is then ignored". That's wrong and
+    needs fixing.
+  - Consider an `#error` when `ARDUINO_PARTITION_huge_app` is defined, telling him to pick Custom.
+  - Help and the setup notes should name the Custom choice.
+  - **Next step: wait for his build with Custom selected.** That means either error lines or a photo of the watch.
 
 ### The owner's settings.h (round watch)
 ```cpp
