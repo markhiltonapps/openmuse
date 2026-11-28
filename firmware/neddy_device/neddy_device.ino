@@ -75,6 +75,7 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, PIN_LCD_RESET, 0 /* rotation */, BOAR
 #include "neddy_ui.h"
 #include "neddy_setup_page.h"
 #include "neddy_raise.h"
+#include "neddy_audio.h"               // the volume curve, bass cut and limiter for the small speaker
 
 // 1 = Neddy moves all the time (breathing, floating, glancing). 0 = still, except his eyes (and blinking).
 #ifndef NEDDY_MOTION
@@ -786,7 +787,7 @@ static void applyVolume(int v) {
   if (v == speakerVolume) return;
   speakerVolume = v;
   if (codecHandle) {
-    esp_err_t e = es8311_voice_volume_set(codecHandle, v, NULL);
+    esp_err_t e = es8311_voice_volume_reg_set(codecHandle, (uint8_t)audioVolumeReg(v));   // 100 = the chip's clean full level, never above (neddy_audio.h)
     LOGF("[audio] volume %d (%s)\n", v, e == ESP_OK ? "ok" : "failed");
   }
 }
@@ -805,7 +806,7 @@ static esp_err_t codecInit() {
   ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(handle, clk.mclk_frequency, clk.sample_frequency),
                       "codec", "sample rate failed");
   ESP_RETURN_ON_ERROR(es8311_microphone_config(handle, false), "codec", "microphone failed");
-  ESP_RETURN_ON_ERROR(es8311_voice_volume_set(handle, speakerVolume, NULL), "codec", "volume failed");
+  ESP_RETURN_ON_ERROR(es8311_voice_volume_reg_set(handle, (uint8_t)audioVolumeReg(speakerVolume)), "codec", "volume failed");
   ESP_RETURN_ON_ERROR(es8311_microphone_gain_set(handle, (es8311_mic_gain_t)MIC_GAIN), "codec",
                       "microphone gain failed");
   return ESP_OK;
@@ -967,7 +968,9 @@ static void playBeep() {
 
 // Plays what the server sends (mono 16 kHz) on both speaker channels, and keeps the speaker fed with
 // silence in between so it never repeats old sound.
+static AudioShaper shaper;   // the bass cut and limiter (neddy_audio.h), used only by playTask
 static void playTask(void *) {
+  audioInit(shaper, (float)SAMPLE_RATE);
   static int16_t mono[320];
   static int16_t stereo[640];
   static uint8_t scratch[512];
@@ -977,6 +980,7 @@ static void playTask(void *) {
     if (flushPlayback) {
       flushPlayback = false;
       haveCarry = false;
+      audioReset(shaper);
       while (xStreamBufferReceive(playBuffer, scratch, sizeof(scratch), 0) > 0) {
       }
       continue;
@@ -1003,7 +1007,7 @@ static void playTask(void *) {
     }
     size_t samples = got / 2;
     for (size_t i = 0; i < samples; i++) {
-      int16_t v = PLAY_ANSWERS ? mono[i] : 0;  // words only: the same amount of data goes out, but silent
+      int16_t v = PLAY_ANSWERS ? audioShape(shaper, mono[i]) : 0;  // words only: the same amount of data goes out, but silent
       stereo[2 * i] = v;
       stereo[2 * i + 1] = v;
     }

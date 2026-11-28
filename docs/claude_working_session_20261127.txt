@@ -194,3 +194,13 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   watches ("big button (PWR on the 2.06)"). Copy review: signed off (round 2). Tests: help/device-idle/voice-brain 30/30, touch 155/155
   both boards, typecheck clean, Biome clean. Owner's answers: notches yes (and his labelled photo in Help, cleaned up), double press stays
   "record", auto-rotate ON by default with a switch to turn it off.
+- (Nov 28) Pushed 7e01b3b..32037ad on "push it" (no call running: the watch's last call ended 01:25, pushed 01:30).
+- Watch sound (owner: "above 80 it gets really garbled and choppy"; agreed to the fix): the ES8311 driver mapped volume 100 to register 0xFF,
+  about +32 dB of digital gain over the chip's clean 0 dB (0xBF, reached at ~75%), so a full-level voice clipped. Now neddy_audio.h:
+  100 = 0xBF, each step down 0.5 dB (the chip's own step), 0 mutes; a second-order bass cut at 300 Hz (SPEAKER_BASS_CUT_HZ) and a 6 dB lift
+  (SPEAKER_BOOST_DB) through a peak limiter (instant attack, 60 ms release, ceiling ~1 dB under full scale) in playTask, reset on a flush.
+  Driver: es8311_voice_volume_reg_set added (NOTICE.txt says so). A saved 100 now plays the loudest clean level; the default stays 85
+  (~1.5 dB under the old clean maximum after the lift). Tests: firmware/tools/audio_test.cpp 17/17 (volume curve, no clipping on full-scale
+  sine and square, quiet notes lifted, 100 Hz >12 dB below 2 kHz, limiter lets go within 0.3 s, reset is silent); stub syntax check 175 and
+  206 clean. Help (devices) says 100 is the loudest clear level. Not checked: how loud is comfortable and whether the speaker's amplifier
+  itself distorts at 100 with the lift; that needs the owner's ear. If 100 still crackles, lower SPEAKER_BOOST_DB in settings.h.

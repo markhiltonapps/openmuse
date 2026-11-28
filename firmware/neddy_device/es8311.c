@@ -375,6 +375,13 @@ esp_err_t es8311_voice_volume_set(es8311_handle_t dev, int volume, int *volume_s
     return es8311_write_reg(dev, ES8311_DAC_REG32, reg32);
 }
 
+// Neddy: writes the output volume register directly (0xBF = 0 dB, each step 0.5 dB). The 0-100 mapping above goes up to
+// 0xFF (+32 dB of digital gain), which clips a full-level voice; the watch uses neddy_audio.h's audioVolumeReg instead.
+esp_err_t es8311_voice_volume_reg_set(es8311_handle_t dev, uint8_t reg)
+{
+    return es8311_write_reg(dev, ES8311_DAC_REG32, reg);
+}
+
 esp_err_t es8311_voice_volume_get(es8311_handle_t dev, int *volume)
 {
     uint8_t reg32;

@@ -126,6 +126,9 @@ esp_err_t es8311_voice_volume_set(es8311_handle_t dev, int volume, int *volume_s
  */
 esp_err_t es8311_voice_volume_get(es8311_handle_t dev, int *volume);
 
+/** Neddy: sets the output volume register directly (0xBF = 0 dB, 0.5 dB steps, 0 = mute). */
+esp_err_t es8311_voice_volume_reg_set(es8311_handle_t dev, uint8_t reg);
+
 /**
  * @brief Print out ES8311 register content
  *

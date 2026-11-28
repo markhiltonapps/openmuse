@@ -2,3 +2,4 @@ es8311.c, es8311.h and es8311_reg.h are the ES8311 audio chip driver from Wavesh
 ESP32-S3-Touch-AMOLED-2.06 examples (github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.06,
 examples/arduino/examples/08_ES8311), originally from Espressif Systems. Apache License 2.0;
 copyright Espressif Systems (Shanghai) CO LTD. The licence text is in that repository's LICENSE file.
+Changed for Neddy: es8311_voice_volume_reg_set added (writes the volume register directly, so 100% is the chip's clean 0 dB).

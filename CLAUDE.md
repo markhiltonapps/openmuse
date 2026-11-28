@@ -864,3 +864,6 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   the power chip (never tell anyone to hold it long). Words people read or hear say "small button" / "big button", and name the 2.06's
   PWR/BOOT the first time in each place (`BTN_*` in neddy_board.h; Help; devices.ts). With a full battery, unplugging USB doesn't restart
   the watch: restart with Settings > Restart (or the battery plug when the case is open).
+- **A volume of 100 must be clean (2026-11-28):** the vendored ES8311 driver mapped 100% to register 0xFF (+32 dB digital gain over
+  0 dB at 0xBF), so anything past ~75% clipped and the owner heard crackle above 80. Check what a vendor's "volume" maps to before
+  shipping it: 100 should be the chip's clean full level, with any extra loudness from a limiter (neddy_audio.h, audio_test.cpp).
