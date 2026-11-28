@@ -284,6 +284,10 @@ static uint32_t stepHash(const char *t) {   // FNV-1a: the same name always give
 static inline void step(const char *where) {
   stepCode = stepHash(where);
   stepMagic = STEP_MAGIC;
+#if DEBUG_SERIAL
+  static int told = 0;                     // with messages on: each step's name, for the first 120 (the loop repeats them)
+  if (told < 120) { told++; Serial.printf("[step] %s\n", where); }
+#endif
 }
 static void readLastStop(int why) {
   bool crashed = why == ESP_RST_PANIC || why == ESP_RST_INT_WDT || why == ESP_RST_TASK_WDT || why == ESP_RST_WDT || why == ESP_RST_BROWNOUT;
@@ -2107,6 +2111,9 @@ static bool pairWithNeddy() {
 void setup() {
   Serial.begin(115200);
   delay(300);
+#if DEBUG_SERIAL
+  { unsigned long t0 = millis(); while (!Serial && millis() - t0 < 10000) delay(20); }   // messages on: wait up to 10 s for the Serial Monitor, so nothing from the start is lost
+#endif
   LOGLN("\nNeddy device " FIRMWARE_VERSION);
   LOGLN("[build] 2026-11-13 all-day sleep: Wi-Fi off and light sleep once the screen has been dark a minute");
   uiSaver = batterySaver;
