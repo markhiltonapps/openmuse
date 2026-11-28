@@ -3,6 +3,13 @@
 Paste this as the first message of a new session on **markhiltonapps/openmuse**, branch
 `claude/deploy-openmuse-repo-oza7s9`, or tell the new session: "Read docs/claude_handoff.md and carry on."
 
+## Session setup
+- **Repository:** GitHub `markhiltonapps/openmuse` (https://github.com/markhiltonapps/openmuse). The new session must be
+  connected to it.
+- **Branch:** `claude/deploy-openmuse-repo-oza7s9`. Check it out and work only on it. A push to it deploys to Railway at once.
+- **Railway:** project `9df05b6f-68ff-4f24-ac6d-62b6883e54db`, api service `4955f326-6b44-46ce-8a9a-a6ed82472296`, at
+  `api-production-e97a3.up.railway.app`.
+
 ## Read first, in this order
 1. `CLAUDE.md`: the rules and the lessons learned. The watch lessons are at the end.
 2. `docs/claude_working_session_20261127.txt`: the latest notes. The 2026-11-28 work is at the end of that file.
