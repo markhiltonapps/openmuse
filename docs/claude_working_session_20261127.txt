@@ -166,3 +166,8 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   was never sent by any tap since the redesign. uiRecInfo now takes the button's action; "Send now" and "Try again" pass UI_REC_RETRY.
   touch_test 147/147 on both boards (new checks for both buttons), ui_sim 0 odd windows, stub syntax check clean for 175 and 206.
   The waiting 1-minute recording is real (it needs the header's magic number), most likely an accidental Record tap during today's testing.
+- (Nov 28, later) Unplugging no longer restarts the round watch: with a full battery it keeps running. The owner held PWR ~8-10 s to restart it and
+  the power chip switched it fully off; since then neither PWR (1-4 s), USB power nor BOOT+USB gives a chime (no power to the ESP32).
+  Next: a 15-20 s PWR hold while plugged in; else reset the power chip by unplugging the battery in the case (owner sends photos first).
+  To do once it runs: set the AXP2101 so USB power always switches the watch on and a long hold can't switch it off by accident
+  (registers to be read from the datasheet and shown raw on the board first); never tell people to "hold PWR 10 s" on this board.
