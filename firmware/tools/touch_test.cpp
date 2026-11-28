@@ -9,9 +9,9 @@ static uint16_t fb[UI_W * UI_H];
 static void simBlit(int x, int y, int w, int h, uint16_t *px) {
   for (int r = 0; r < h; r++) for (int c = 0; c < w; c++) if (x + c >= 0 && x + c < UI_W && y + r >= 0 && y + r < UI_H) fb[(y + r) * UI_W + x + c] = px[r * w + c];
 }
-static long fillsAbove = 0;   // fills that start above the diagnostic band (y < 450)
+static long fillsAbove = 0;   // fills that start above the diagnostic band (y < UI_DIAG_Y)
 static void simFill(int x, int y, int w, int h, uint16_t col) {
-  if (y < 450) fillsAbove++;
+  if (y < UI_DIAG_Y - 2) fillsAbove++;
   for (int r = 0; r < h; r++) for (int c = 0; c < w; c++) if (x + c >= 0 && x + c < UI_W && y + r >= 0 && y + r < UI_H) fb[(y + r) * UI_W + x + c] = col;
 }
 static int failures = 0, checks = 0;

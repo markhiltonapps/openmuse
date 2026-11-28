@@ -26,8 +26,8 @@
 #define BTN_TALK_CAP "Small button"
 #define BTN_MENU "big button"
 #define BTN_MENU_CAP "Big button"
-#define BTN_TALK_ANGLE 120         // where the buttons are on the case, degrees clockwise from 12 with the watch upright
-#define BTN_MENU_ANGLE 30          // (small at about 4 o'clock, big at about 1 o'clock); the screen's marks point at these
+#define BTN_TALK_ANGLE 130         // where the buttons are on the case, degrees clockwise from 12 with the watch upright
+#define BTN_MENU_ANGLE 50          // (small at about 4 o'clock, big at about 1:30), measured from the owner's photo (2026-11-28); the screen's marks point at these
 #define BOARD_LABEL "1.75C round"
 #define BOARD_W 466
 #define BOARD_H 466

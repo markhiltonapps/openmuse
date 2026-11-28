@@ -638,18 +638,20 @@ static void raiseLoop() {
 }
 
 // ---------------------------------------------------------------- auto-rotate (round watch)
-// The picture turns a quarter at a time to stay upright (neddy_frame.h decides from gravity). The motion chip is read only while the screen is lit;
+// The picture flips between upright and upside down to stay readable (neddy_frame.h decides from gravity; no quarter turns). The motion chip is read only while the screen is lit;
 // each time the screen wakes the picture starts upright (a watch on a wrist is looked at upright), and it never turns under a finger.
 // Which of the chip's axes points along the screen is NOT yet checked on the real board: NEDDY_ROTATE_DEBUG shows the readings (see the top of
 // this file). Each NEDDY_ROT_* names the chip axis (0 x, 1 y, 2 z) that points to the screen's right / down, and its sign (+1 or -1).
+// 2026-11-28: the first guess (right = chip x, down = chip y) showed the picture a quarter turn clockwise on the owner's round watch held
+// upright, so the chip's x runs along the screen's up-down line: down = chip x, right = chip y. Auto-rotate now only flips upright/upside down.
 #ifndef NEDDY_ROT_RIGHT_AXIS
-#define NEDDY_ROT_RIGHT_AXIS 0
+#define NEDDY_ROT_RIGHT_AXIS 1
 #endif
 #ifndef NEDDY_ROT_RIGHT_SIGN
-#define NEDDY_ROT_RIGHT_SIGN 1
+#define NEDDY_ROT_RIGHT_SIGN -1
 #endif
 #ifndef NEDDY_ROT_DOWN_AXIS
-#define NEDDY_ROT_DOWN_AXIS 1
+#define NEDDY_ROT_DOWN_AXIS 0
 #endif
 #ifndef NEDDY_ROT_DOWN_SIGN
 #define NEDDY_ROT_DOWN_SIGN -1

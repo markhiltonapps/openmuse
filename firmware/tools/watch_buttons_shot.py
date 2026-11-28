@@ -21,7 +21,7 @@ BLUE = (20, 115, 200)                       # the numbers' blue (scripts/help-sh
 S = 2                                       # drawn at twice the size, then scaled down (smooth edges)
 W, H = 720, 600
 CX, CY, R_CASE, R_SCREEN = 300, 300, 232, 196
-BIG, SMALL, USB = 30, 120, 180              # degrees clockwise from 12
+BIG, SMALL, USB = 50, 130, 180              # degrees clockwise from 12 (measured from the owner's photo, 2026-11-28)
 
 def font(size, bold=True):
     names = ('Inter-SemiBold.otf',) if bold else ('Inter-Regular.otf',)

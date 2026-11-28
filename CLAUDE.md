@@ -880,3 +880,7 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **The Arduino core owns some names (2026-11-28):** a local `PI` in neddy_frame.h broke the owner's build (Arduino.h
   defines `PI`, `HIGH`, `constrain`, `radians`... as macros) while every PC test passed. Before handing over firmware, run
   `sh firmware/tools/arduino_names_check.sh` (the PC tests with the core's macros forced in), and prefix local constants.
+- **Round watch turns and labels (owner, 2026-11-28):** auto-rotate flips only upright/upside down (no quarter turns, the owner's
+  call after the first build showed a quarter turn when held normally). Label angles come from a photo of the real case measured
+  from the screen's centre (buttons at ~50 and ~130 degrees), not from eyeballing a render. The PC round build is `-DNEDDY_ROUND=1`;
+  `-DNEDDY_BOARD=175` quietly builds the rectangular watch. Readout lines on a round screen must sit where the circle is wide (y 404).

@@ -146,18 +146,23 @@ int main() {
     CHECK(k == 0, "arm hanging down (the glass upright, gravity across it): no turn");
     for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, -990, 60, -80);
     CHECK(k == 0, "lying on your side, watch in front of your face: no turn");
-    for (int i = 0; i < 20; i++, t += 33) k = frOrientFeed(o, k, t, 800, 0, 400);   // held turned in the hand, glass tilted back, 660 ms
-    CHECK(k == 3, "held turned with the glass tilted back toward you for half a second: a quarter turn");
-    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 100, 80, 990);
-    CHECK(k == 3, "laid flat: keeps the turn it had");
-    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 700, 700, 100);
-    CHECK(k == 3, "halfway between two sides: no change");
-    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 0, 1800, 0);
-    CHECK(k == 3, "shaken (far from 1 g): no change");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 800, 0, 400);   // held sideways, glass tilted back toward you
+    CHECK(k == 0, "held sideways: no quarter turn, only upright or upside down (owner, 2026-11-28)");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, -900, 0, 400);
+    CHECK(k == 0, "held sideways the other way: still no quarter turn");
     for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 0, -900, 400);
     CHECK(k == 2, "upside down: half a turn");
-    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, -900, 0, 400);
-    CHECK(k == 1, "gravity to the left: three quarters the other way");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 100, 80, 990);
+    CHECK(k == 2, "laid flat: keeps the turn it had");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 700, 700, 100);
+    CHECK(k == 2, "halfway between: no change");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 0, 1800, 0);
+    CHECK(k == 2, "shaken (far from 1 g): no change");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 900, 0, 400);
+    CHECK(k == 2, "sideways while upside down: stays upside down");
+    for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 0, 900, 400);
+    CHECK(k == 0, "back upright");
+    k = 1;
     for (int i = 0; i < 40; i++, t += 33) k = frOrientFeed(o, k, t, 0, 900, 400);
     CHECK(k == 0, "back upright");
   }

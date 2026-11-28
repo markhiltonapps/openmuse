@@ -1738,13 +1738,16 @@ static void uiDrawLevelOnly() {
   if (fw > 0) uiOut.fill(bx + 2, by + 2, fw, 14, uiModeColour());
 }
 
+// Where the two small lines of numbers start: on the round watch high enough that the circle doesn't cut them off (the bottom of a
+// round screen is only ~100 px wide at the old place, and the owner's photos showed half-letters).
+#define UI_DIAG_Y (NEDDY_ROUND ? 404 : 452)
 static void uiDrawDiag() {
   if (!uiShowDiag) return;
-  uiOut.fill(0, 452, UI_W, 50, UI_BLACK);
+  uiOut.fill(0, UI_DIAG_Y, UI_W, UI_H - UI_DIAG_Y, UI_BLACK);
   const char *line1 = uiImuDbg[0] ? uiImuDbg : uiDiag1;      // the motion chip's reading (raise-to-wake test builds) takes the first line
-  if (line1[0]) uiTextCentered(NFONT_SMALL, 456, line1, UI_DIM);
-  if (uiIdleDbg[0]) uiTextCentered(NFONT_SMALL, 474, uiIdleDbg, UI_DIM);
-  else if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, 474, uiDiag2, UI_DIM);
+  if (line1[0]) uiTextCentered(NFONT_SMALL, UI_DIAG_Y + 4, line1, UI_DIM);
+  if (uiIdleDbg[0]) uiTextCentered(NFONT_SMALL, UI_DIAG_Y + 22, uiIdleDbg, UI_DIM);
+  else if (uiDiag2[0]) uiTextCentered(NFONT_SMALL, UI_DIAG_Y + 22, uiDiag2, UI_DIM);
 }
 
 // Which eye picture, and where he looks, right now.
@@ -1827,8 +1830,8 @@ static bool uiStageHidden() {
 // ---- the button marks and auto-rotate (round watch; see neddy_frame.h)
 #if NEDDY_ROUND
 #ifndef BTN_TALK_ANGLE
-#define BTN_TALK_ANGLE 120
-#define BTN_MENU_ANGLE 30
+#define BTN_TALK_ANGLE 130
+#define BTN_MENU_ANGLE 50
 #endif
 enum { UI_MK_NONE, UI_MK_TALK, UI_MK_MENU, UI_MK_BACK, UI_MK_STOP };
 static const char *const UI_MK_WORDS[5] = { "", "TALK", "MENU", "BACK", "STOP" };

@@ -3,7 +3,7 @@
 //
 // Everything the UI draws is in "upright" (logical) coordinates. This layer:
 //   - turns each window by quarter turns (frRot 0..3, clockwise) before it goes to the screen, so the picture stays
-//     right side up when the watch is held sideways or upside down (the screen is square, 466 x 466, so every window
+//     right side up when the watch is held upside down (a half turn; quarter turns are never chosen, 2026-11-28) (the screen is square, 466 x 466, so every window
 //     stays on even numbers, as the AMOLED chip wants);
 //   - lays the button marks on top of whatever is drawn under them (a short glowing arc on the rim next to each of the
 //     watch's two buttons, with a small word: TALK, MENU, BACK, STOP), so no screen can wipe them out by drawing;
@@ -295,10 +295,11 @@ static int frOrientFeed(FrOrient &o, int cur, uint32_t ms, int downX, int downY,
   long across2 = (long)downX * downX + (long)downY * downY;
   if (across2 < (long)FR_TILT_MG * FR_TILT_MG) { o.cand = -1; return cur; }              // flat enough: keep what it is
   if (abs(face) < FR_FACE_MG) { o.cand = -1; return cur; }                               // the glass stands upright: nobody is looking at it this way
+  // Only upright or upside down (owner, 2026-11-28): a quarter turn is never chosen, so a watch held sideways keeps what it was.
   int ax = abs(downX), ay = abs(downY), q;
   if (ay * 10 >= ax * 17) q = downY > 0 ? 0 : 2;              // clearly along the up-down line (within 30 degrees)
-  else if (ax * 10 >= ay * 17) q = downX > 0 ? 3 : 1;         // clearly along the side-to-side line
-  else { o.cand = -1; return cur; }                           // in between: keep what it is
+  else { o.cand = -1; return cur; }                           // sideways or in between: keep what it is
+  if (cur & 1) q = 0;                                         // (never left on a quarter turn)
   if (q == cur) { o.cand = -1; return cur; }
   if (o.cand != q) { o.cand = q; o.since = ms; return cur; }
   if (ms - o.since >= FR_SETTLE_MS) { o.cand = -1; return q; }

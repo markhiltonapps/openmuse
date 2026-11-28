@@ -249,3 +249,14 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   arduino_names_check.sh compiles every PC test with the core's macros forced in (tools/arduino_macros.h); it
   fails on the old code and passes now. frame_test 38/38, ui_sim 0 odd windows. Zip rebuilt (still no settings.h).
   The owner's settings.h problem is solved (his build got past the NEDDY_BOARD check).
+- Owner's photos of the round watch (2026-11-28): the picture showed a quarter turn when held normally, and the
+  MENU/TALK labels sat short of the real buttons. Changes: auto-rotate now only flips upright/upside down
+  (frOrientFeed never picks a quarter turn; a watch left on one goes back upright); the chip axes are swapped to
+  down = chip x, right = chip y (deduced from the photo: picture turned a quarter clockwise with the watch upright;
+  unconfirmed until the owner tries it); labels moved to 50 and 130 degrees (measured from the photo: buttons at
+  ~50 and ~130 in the screen's frame); the two readout lines now sit at y 404 on the round screen (at 452 the circle
+  cut them to half-letters). Help picture watch-buttons retaken; Help text, devices.ts and voice-brain wording say
+  "flips when upside down". Tests: frame_test 40/40, touch 159/159 both boards, round ui_sim 0 under a mark /
+  0 odd windows, Arduino-names check 7/7, help/devices/voice-brain 29 pass. Note: ui_sim's round build needs
+  -DNEDDY_ROUND=1 (-DNEDDY_BOARD=175 builds the rectangular one).
+- Animations: art only (8 poses, 8 loops); playback on the watch not built yet.
