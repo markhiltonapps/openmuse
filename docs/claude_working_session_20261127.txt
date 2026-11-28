@@ -244,3 +244,8 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   firmware/art/scenes/ (not committed yet); previews made with firmware/tools/scene_preview.py. At 12 fps and 224x300 JPEG each scene is
   ~370 KB (8 scenes ~3 MB, fits the program space). The rain loop is being redone from a padded start frame (the umbrella left the frame).
   Next: TJpgDec on the watch, scenes on the recording screen and weather card (owner to confirm the cold/hot cut-offs), Design review.
+- Owner's build of b99297b stopped in neddy_frame.h: a local constant named PI clashed with the Arduino core's PI
+  macro (the PC tests never include Arduino.h, so they passed). Renamed it FR_PI. New check: firmware/tools/
+  arduino_names_check.sh compiles every PC test with the core's macros forced in (tools/arduino_macros.h); it
+  fails on the old code and passes now. frame_test 38/38, ui_sim 0 odd windows. Zip rebuilt (still no settings.h).
+  The owner's settings.h problem is solved (his build got past the NEDDY_BOARD check).

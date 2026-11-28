@@ -137,8 +137,8 @@ static inline float frClamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 #define FR_WORD_MAX 96              // the widest word, in pixels
 #define FR_TRACK 1                  // extra space between letters (small capitals read better a little apart)
 static void frBuildMark(FrMark &m, int fontH, const uint8_t *adv, const uint32_t *off, const uint8_t *bits) {
-  const float C = FR_SIZE / 2.0f, PI = 3.14159265f;
-  float th = (float)frScreenAngle(m.angle, frRot) * PI / 180.0f;
+  const float C = FR_SIZE / 2.0f, FR_PI = 3.14159265f;
+  float th = (float)frScreenAngle(m.angle, frRot) * FR_PI / 180.0f;
   // The arc: a short thick piece of the rim with rounded ends.
   float half = FR_ARC_LEN / 2.0f / FR_RIM_R;                 // half its length, in radians
   float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
@@ -160,8 +160,8 @@ static void frBuildMark(FrMark &m, int fontH, const uint8_t *adv, const uint32_t
       float px = ax + xx + 0.5f - C, py = ay + yy + 0.5f - C;
       float r = sqrtf(px * px + py * py);
       float dphi = atan2f(px, -py) - th;                      // clockwise from 12, relative to the button
-      while (dphi > PI) dphi -= 2 * PI;
-      while (dphi < -PI) dphi += 2 * PI;
+      while (dphi > FR_PI) dphi -= 2 * FR_PI;
+      while (dphi < -FR_PI) dphi += 2 * FR_PI;
       float s = fabsf(dphi) * FR_RIM_R - FR_ARC_LEN / 2.0f;   // past the arc's end, along the rim
       float dr = r - FR_RIM_R;
       float d = s > 0 ? sqrtf(s * s + dr * dr) - FR_ARC_T / 2.0f : fabsf(dr) - FR_ARC_T / 2.0f;
@@ -186,7 +186,7 @@ static void frBuildMark(FrMark &m, int fontH, const uint8_t *adv, const uint32_t
   // Then bent along the rim.
   float rOut = FR_RIM_R - FR_ARC_T / 2.0f - 2.0f, rIn = rOut - fontH, rMid = (rOut + rIn) / 2.0f;
   float span = tw / rMid;                                     // how much of the rim it takes, radians
-  float deg = th * 180.0f / PI;
+  float deg = th * 180.0f / FR_PI;
   bool top = deg < 90.0f || deg >= 270.0f;                    // on the top half it reads clockwise; on the bottom half, the other way
   int side = (deg > 0.5f && deg < 90.0f) || (deg > 180.0f && deg < 270.0f) ? 1 : (deg > 90.0f && deg < 180.0f) || deg > 270.0f ? -1 : 0;
   float mid = th + side * span * 0.3f;                        // leaning toward 3 or 9 o'clock
@@ -208,8 +208,8 @@ static void frBuildMark(FrMark &m, int fontH, const uint8_t *adv, const uint32_t
       float px = tx + xx + 0.5f - C, py = ty + yy + 0.5f - C;
       float r = sqrtf(px * px + py * py);
       float dphi = atan2f(px, -py) - mid;
-      while (dphi > PI) dphi -= 2 * PI;
-      while (dphi < -PI) dphi += 2 * PI;
+      while (dphi > FR_PI) dphi -= 2 * FR_PI;
+      while (dphi < -FR_PI) dphi += 2 * FR_PI;
       // where this point falls in the flat word (u along, v down from the letters' tops), read with a little smoothing
       float u = tw / 2.0f + (top ? dphi : -dphi) * rMid - 0.5f;
       float v = (top ? rOut - r : r - rIn) - 0.5f;
@@ -230,15 +230,15 @@ static void frBuildMark(FrMark &m, int fontH, const uint8_t *adv, const uint32_t
 // True when a point in the picture is close to a mark (anything drawn round the rim there, like the recording screen's
 // ring of dots, should leave a gap for it).
 static inline bool frNearMark(float lx, float ly) {
-  const float C = FR_SIZE / 2.0f, PI = 3.14159265f;
+  const float C = FR_SIZE / 2.0f, FR_PI = 3.14159265f;
   float px = lx - C, py = ly - C;
   if (px * px + py * py < 150.0f * 150.0f) return false;
   float phi = atan2f(px, -py);
   for (int i = 0; i < FR_MARKS; i++) {
     if (!frMarks[i].on) continue;
     float d = phi - frMarks[i].spanMid;
-    while (d > PI) d -= 2 * PI;
-    while (d < -PI) d += 2 * PI;
+    while (d > FR_PI) d -= 2 * FR_PI;
+    while (d < -FR_PI) d += 2 * FR_PI;
     if (fabsf(d) <= frMarks[i].spanHalf) return true;
   }
   return false;

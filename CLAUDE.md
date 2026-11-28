@@ -877,3 +877,6 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   forward: a time that went backwards read as weeks of quiet and switched the simulated screen off.
 - **settings.h is the owner's (2026-11-28):** it isn't in the zip, and an old copy came back twice and built the wrong watch (black screen).
   The build now stops when NEDDY_BOARD is missing; tell the owner to keep a copy outside the sketch folder.
+- **The Arduino core owns some names (2026-11-28):** a local `PI` in neddy_frame.h broke the owner's build (Arduino.h
+  defines `PI`, `HIGH`, `constrain`, `radians`... as macros) while every PC test passed. Before handing over firmware, run
+  `sh firmware/tools/arduino_names_check.sh` (the PC tests with the core's macros forced in), and prefix local constants.
