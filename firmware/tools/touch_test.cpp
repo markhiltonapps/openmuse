@@ -319,19 +319,35 @@ int main() {
   CHECK(uiMenuOn() && uiShl == UI_SHL_HOME, "PWR on a settings page goes back to the launcher");
   uiPwrPress(now);
   CHECK(!uiCard.on, "and again closes it");
-  // Record: the microphone icon; swipe between the four modes; tap the circle (or press PWR) to start.
+  // Record: the microphone icon; swipe between the four modes; HOLD the circle a second to start (a tap or PWR never starts one).
   uiRecAvailable = true; uiRecMode = 2; recAsked = 0;
   uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60);
   CHECK(uiShl == UI_SHL_REC && uiShlPage == 2, "the microphone opens Record on the mode used last (Meeting)");
   finger(UI_CX + 100, UI_CY - 160, 200, UI_CX - 100, UI_CY - 160);
   CHECK(uiShlPage == 3, "a swipe shows Dream");
   finger(UI_CX, uiRecCircleY(), 60);
-  CHECK(recAsked == 1 && uiRecMode == 3 && !uiCard.on, "a tap on the circle starts a Dream recording");
+  CHECK(recAsked == 0 && uiMenuOn() && uiShl == UI_SHL_REC, "a tap on the circle starts nothing (a pocket can't start a recording)");
+  CHECK(uiRecHintUntil > 0, "but HOLD TO START lights up, so the tap isn't met with nothing");
+  pause(800);
+  CHECK(uiRecHintUntil == 0 && uiMenuOn(), "and goes back after a moment");
+  finger(UI_CX, uiRecCircleY(), 600);
+  CHECK(recAsked == 0 && uiMenuOn(), "nor does letting go after half a second");
+  finger(UI_CX, uiRecCircleY(), 1100);
+  CHECK(recAsked == 1 && uiRecMode == 3 && !uiCard.on, "holding the circle a full second starts a Dream recording");
   uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60);
   CHECK(uiShlPage == 3, "Record opens on the mode used last");
   finger(UI_CX - 100, UI_CY - 160, 200, UI_CX + 100, UI_CY - 160); finger(UI_CX - 100, UI_CY - 160, 200, UI_CX + 100, UI_CY - 160);
+  CHECK(uiShlPage == 1, "two swipes back show Idea");
   uiPwrPress(now);
-  CHECK(recAsked == 2 && uiRecMode == 1, "PWR on the Idea page starts an Idea recording");
+  CHECK(recAsked == 1 && uiMenuOn() && uiShl == UI_SHL_HOME, "PWR on the Record page goes back, never starts a recording");
+  uiShellGo(UI_SHL_REC, 1); finger(UI_CX + 40, uiRecCircleY() + 20, 1100);
+  CHECK(recAsked == 2 && uiRecMode == 1, "holding anywhere on the circle starts an Idea recording");
+  uiMenuOpen(now); uiShellGo(UI_SHL_REC, 0);
+  finger(UI_CX, uiRecCircleY(), 1100, UI_CX + 20, uiRecCircleY() + 6);
+  CHECK(recAsked == 3 && uiRecMode == 0, "a thumb that drifts a little (20 px) while holding still starts it");
+  uiMenuOpen(now); uiShellGo(UI_SHL_REC, 2);
+  finger(UI_CX + 100, uiRecCircleY(), 1100, UI_CX - 100, uiRecCircleY());
+  CHECK(recAsked == 3 && uiShlPage == 3, "a slow swipe that starts on the circle turns the page, it doesn't start a recording");
   uiRecAvailable = false; recAsked = 0;
   uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60); finger(UI_CX, uiRecCircleY(), 60);
   CHECK(recAsked == 0, "without recording storage nothing starts");
@@ -458,7 +474,7 @@ int main() {
   uiOut.brightness = [](int l) { level = l; };
   uiIdle.have = true; uiIdle.after = 10; uiClearCard(); uiSetMode(UI_READY); uiActivity(now); pause(300);
   uiRecAvailable = true;
-  uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60); finger(UI_CX, uiRecCircleY(), 60);
+  uiMenuOpen(now); icon(UI_L_RECORD, &tx, &ty); finger(tx, ty, 60); finger(UI_CX, uiRecCircleY(), 1100);
   CHECK(recWhat == UI_REC_START && !uiCard.on, "Record asks the sketch to start recording");
   uiRecRun(now, 1, 6000, 3); pause(100);
   CHECK(uiRec.state == UI_RECS_RUN, "the recording screen is up");

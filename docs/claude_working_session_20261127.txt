@@ -177,3 +177,14 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   The ring now leaves a gap behind the label (only on the recording screen, only on the round watch). ui_sim has a new frame with the moving
   dot passing the label (r1d); checked by eye on the round render. touch_test 147/147 both boards, 0 odd windows.
 - Owner (Nov 28): a tap starts a recording too easily (pockets). Asked how starting should work before building it (new UI: Design review).
+- Hold to start (owner's choices, Nov 28): the Record page starts a recording only on a ~1 s hold of the circle (a white ring fills,
+  painted in thin bands along the ring so the words inside stay); a tap or an early let-go starts nothing and lights "HOLD TO START" in
+  the accent colour for 0.7 s; a swipe that starts on the circle still turns the page; PWR on the Record page only goes back; voice still
+  starts at once. Top label "PRESS PWR" -> "< SWIPE >", "TAP TO START" -> "HOLD TO START" (moved up 8 px). The recording screen's dot gap
+  behind "Hold to stop" widened (28 px padding) so the moving dot never reads as a bullet.
+  Design review: visual, copy and usability all signed off (round 2 for usability: its blocker was Help claiming a pocket can't start
+  one while a double press of PWR still does; Help now says so plainly). Open for the owner: the double-press default (reviewers
+  recommend "nothing"), auto-rotate, and the Disney-level animation plan.
+  Checks: touch_test 155/155 both boards (new: tap starts nothing, half hold nothing, full hold starts, PWR goes back, slow swipe turns
+  the page, 20 px drift still starts, tap hint lights and fades), ui_sim 0 odd windows (new frames n2h/n2r/n3h/n2t), rec 19/19, raise
+  18/18, help tests 7/7, Biome clean, stub syntax check 175 and 206. Help: watch-screens Record step rewritten; picture retaken.

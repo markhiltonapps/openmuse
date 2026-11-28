@@ -3,12 +3,13 @@
 //   The launcher (a double click of BOOT, or PWR): Neddy in the middle, the battery at the top and seven icons along the bottom
 //     arc: weather, watch face, next meeting, record, settings, info, screen off. Tap Neddy or press PWR to close it; hold Neddy
 //     to talk, as everywhere.
-//   Record: swipe between Voice note, Idea, Meeting and Dream; tap the circle or press PWR to start. Each is filed differently
+//   Record: swipe between Voice note, Idea, Meeting and Dream; HOLD the circle about a second (a ring fills) to start: a tap, a
+//     pocket or a press of PWR never starts one (owner, 2026-11-28). Asking Neddy by voice starts at once. Each is filed differently
 //     in the Neddy app (written down word for word, a sorted list, a write-up, a dream journal entry).
 //   Settings: one setting a page, swiped sideways: brightness, volume, dim after, screen off after, colour, battery saver,
 //     raise to wake, animation and what a double press of PWR does. Every one can also be changed by asking Neddy.
 //   Info: swiped up and down: battery, firmware and recording room; Wi-Fi, memory and the board; a Restart button.
-// PWR goes back a step (or starts the recording on the Record pages). Nothing here is left on screen more than 20 s untouched.
+// PWR goes back a step (on the Record pages too: it never starts a recording). Nothing here is left on screen more than 20 s untouched.
 //
 // Included by neddy_ui.h (after the cards and the touch state it uses); drawn with neddy_draw.h, so it works on both screens.
 #pragma once
@@ -65,6 +66,8 @@ static void uiDrawLauncher() {
 
 // ---- the Record pages: one mode each
 static int uiRecCircleY() { return UI_CY + 14; }
+#define UI_REC_GO_DY 76                          // "HOLD TO START" under the type's name (from the circle's centre)
+static uint32_t uiRecHintUntil = 0;              // a tap (or a let-go too soon) lights "HOLD TO START" up until then, so a tap isn't met with nothing
 #define UI_REC_RING 154
 static void uiDrawRecPage() {
   const int mode = uiShlPage & 3;
@@ -119,15 +122,15 @@ static void uiDrawRecPage() {
   uiShClear();
   uiPageDotsAdd(4, mode, false);
   uiShPaintAll();
-  // Inside the ring: "PRESS PWR" over the icon (like the reference), the mode's name, and a red dot with "TAP TO START" under it.
+  // Inside the ring: "< SWIPE >" over the icon (the other types are a swipe away), the mode's name, and a red dot with "HOLD TO START".
   const int rc = uiRecCircleY();
-  uiTrackedCentered(NFONT_MID, UI_CX, rc - 128, uiRecAvailable ? "PRESS PWR" : "UNAVAILABLE", UI_LABEL, 2);
+  uiTrackedCentered(NFONT_MID, UI_CX, rc - 128, uiRecAvailable ? "< SWIPE >" : "UNAVAILABLE", UI_LABEL, 2);
   uiTrackedCentered(NFONT_TITLE, UI_CX, rc + 26, UI_REC_NAMES[mode], UI_WHITE, 3);
   if (uiRecAvailable) {
-    const char *go = "TAP TO START";
+    const char *go = "HOLD TO START";
     int w = uiTrackedWidth(NFONT_MID, go, 1);
-    uiTrackedCentered(NFONT_MID, UI_CX + 12, rc + 84, go, UI_LABEL, 1);
-    uiShClear(); uiShAdd(UI_SH_DISC, UI_CX + 12 - w / 2 - 16, rc + 84 + NFONT_MID.h / 2, 7, 0, 0, 0, red); uiShPaintAll();
+    uiTrackedCentered(NFONT_MID, UI_CX + 12, rc + UI_REC_GO_DY, go, uiRecHintUntil && uiNowMs < uiRecHintUntil ? uiAcc() : UI_LABEL, 1);
+    uiShClear(); uiShAdd(UI_SH_DISC, UI_CX + 12 - w / 2 - 16, rc + UI_REC_GO_DY + NFONT_MID.h / 2, 7, 0, 0, 0, red); uiShPaintAll();
   }
 }
 
@@ -325,8 +328,7 @@ static void uiStartRecording(int mode) {
 }
 static void uiShellPwr(uint32_t ms) {
   if (uiShl == UI_SHL_HOME) uiClearCard();
-  else if (uiShl == UI_SHL_REC) uiStartRecording(uiShlPage);
-  else uiShellGo(UI_SHL_HOME, 0);
+  else uiShellGo(UI_SHL_HOME, 0);                  // (on the Record pages too: a side button pressed in a pocket never starts a recording)
   (void)ms;
 }
 // PWR: a single press opens the launcher (or goes back, or starts the recording); with a double-press action set, the single press
@@ -503,17 +505,41 @@ static void uiLauncherTap(uint32_t ms, int x, int y) {
   if (uiOnLauncherNeddy(x, y)) uiClearCard();      // tap Neddy: close
 }
 
+// Holding the Record circle: a white ring fills round it for a second, then the recording starts. Painted in thin bands along the
+// ring only (each painted box is cleared first), so the icon and words inside are left alone. Let go early, or move: nothing starts.
+#define UI_REC_START_HOLD_MS 1000
+static void uiDrawRecHold(float f) {
+  if (f <= 0) { uiAll = true; return; }                           // back to the page as it was (the full redraw puts back the ring)
+  const float cy = uiRecCircleY(), R = UI_REC_RING, ro = R + 7, ri = R - 7;
+  uiShClear();
+  uiShAdd(UI_SH_RING, UI_CX, cy, R, 2.5f, 0, 0, uiShlPage == 3 ? uiRgb(255, 140, 70) : UI_REC_RED);
+  uiShAdd(UI_SH_ARC, UI_CX, cy, R, 7, -90, -90 + 360 * (f > 1 ? 1 : f), UI_WHITE);
+  {                                                               // the red dot before HOLD TO START sits near the ring: keep it whole
+    int w = uiTrackedWidth(NFONT_MID, "HOLD TO START", 1);
+    uiShAdd(UI_SH_DISC, UI_CX + 12 - w / 2 - 16, cy + UI_REC_GO_DY + NFONT_MID.h / 2, 7, 0, 0, 0, UI_REC_RED);
+  }
+  for (int y = (int)(cy - ro) & ~1; y < cy + ro; y += 8) {
+    float d0 = fabsf(y - cy), d1 = fabsf(y + 8 - cy), near = (y <= cy && y + 8 >= cy) ? 0 : (d0 < d1 ? d0 : d1), far = d0 > d1 ? d0 : d1;
+    if (near >= ro) continue;
+    float xo = sqrtf(ro * ro - near * near) + 2, xi = far < ri ? sqrtf(ri * ri - far * far) - 2 : 0;
+    if (xi > 2) { uiShPaint((int)(UI_CX - xo), y, (int)(xo - xi) + 2, 8); uiShPaint((int)(UI_CX + xi) - 2, y, (int)(xo - xi) + 4, 8); }
+    else uiShPaint((int)(UI_CX - xo), y, (int)(2 * xo), 8);
+  }
+}
+
 // The finger on the launcher and its pages. Swipes turn pages (sideways for Record and Settings, up and down for Info); a finger
 // that starts on a slider moves it instead; a hold on Neddy in the launcher talks, as on his own screen.
-static struct { bool was, drag, hold, ignore, restart; int x0, y0, x, y, step; uint32_t at; } uiSt;
+static struct { bool was, drag, hold, ignore, restart, recHold; int x0, y0, x, y, step; uint32_t at; } uiSt;
 #define UI_RESTART_HOLD_MS 1000
 static bool uiOnRestart(int x, int y) { return uiShl == UI_SHL_INFO && uiShlPage == 2 && abs(x - UI_CX) < 160 && abs(y - (UI_CY + 10)) < 60; }
 static void uiShellTouch(uint32_t ms, bool down, int x, int y) {
+  if (uiRecHintUntil && ms >= uiRecHintUntil) { uiRecHintUntil = 0; if (uiShl == UI_SHL_REC) uiAll = true; }   // the lit "HOLD TO START" goes back
   if (down) { uiCard.since = ms; uiActivity(ms); }
   if (down && !uiSt.was) {
     uiSt.x0 = uiSt.x = x; uiSt.y0 = uiSt.y = y; uiSt.at = ms; uiSt.hold = false; uiSt.ignore = false;
     uiSt.drag = uiOnSlider(x, y);
     uiSt.restart = uiOnRestart(x, y); uiSt.step = 0;
+    uiSt.recHold = uiShl == UI_SHL_REC && uiRecAvailable && uiNear(x, y, UI_CX, uiRecCircleY(), UI_REC_RING);
     if (uiSt.drag) uiSliderSet(x, y, false);
     if (uiTchLatched) { uiTchLatched = false; uiTouchTalk = false; uiSt.ignore = true; }   // any touch ends hands-free talking
   } else if (down) {
@@ -526,6 +552,13 @@ static void uiShellTouch(uint32_t ms, bool down, int x, int y) {
         if (step != uiSt.step) { uiSt.step = step; uiDrawRestart(step >= 10 ? 1.0f : step / 10.0f); }
         if (ms - uiSt.at >= UI_RESTART_HOLD_MS) { uiSt.restart = false; uiSt.ignore = true; if (uiOut.action) uiOut.action(UI_ACT_RESTART); }
       }
+    } else if (uiSt.recHold) {                                      // hold the Record circle: the ring fills; a full second starts it
+      if (abs(x - uiSt.x0) > UI_SLOP || abs(y - uiSt.y0) > UI_SLOP) { uiSt.recHold = false; if (uiSt.step) uiDrawRecHold(0); }   // a swipe
+      else {
+        int step = (int)((ms - uiSt.at) * 10 / UI_REC_START_HOLD_MS);
+        if (step != uiSt.step) { uiSt.step = step; uiDrawRecHold(step >= 10 ? 1.0f : step / 10.0f); }
+        if (ms - uiSt.at >= UI_REC_START_HOLD_MS) { uiSt.recHold = false; uiSt.ignore = true; uiStartRecording(uiShlPage); }
+      }
     } else if (uiShl == UI_SHL_HOME && !uiSt.hold && !uiSt.ignore && uiOnLauncherNeddy(uiSt.x0, uiSt.y0) &&
              abs(x - uiSt.x0) < UI_SLOP && abs(y - uiSt.y0) < UI_SLOP && ms - uiSt.at >= UI_HOLD_MS) {
       uiSt.hold = true; uiClearCard(); uiTouchTalk = true;         // hold Neddy: talk (the launcher gets out of the way)
@@ -534,6 +567,7 @@ static void uiShellTouch(uint32_t ms, bool down, int x, int y) {
     if (uiSt.drag) uiSliderSet(uiSt.x, uiSt.y, true);
     else if (uiSt.hold) uiTouchTalk = false;
     else if (uiSt.restart) { uiSt.restart = false; uiDrawRestart(0); }   // let go too soon: nothing happens
+    else if (uiSt.recHold) { uiSt.recHold = false; uiRecHintUntil = ms + 700; uiAll = true; }   // let go too soon (or a tap): nothing starts; "HOLD TO START" lights up
     else if (!uiSt.ignore) {
       int dx = uiSt.x - uiSt.x0, dy = uiSt.y - uiSt.y0, adx = abs(dx), ady = abs(dy);
       if (adx >= UI_SWIPE && adx * 2 > ady * 3 && (uiShl == UI_SHL_REC || uiShl == UI_SHL_SET)) {
@@ -544,7 +578,6 @@ static void uiShellTouch(uint32_t ms, bool down, int x, int y) {
         if (p >= 0 && p < UI_INFO_N) uiShellGo(uiShl, p);
       } else if (adx < UI_SLOP && ady < UI_SLOP && ms - uiSt.at < UI_TAP_MS) {
         if (uiShl == UI_SHL_HOME) uiLauncherTap(ms, uiSt.x0, uiSt.y0);
-        else if (uiShl == UI_SHL_REC) { if (uiNear(uiSt.x0, uiSt.y0, UI_CX, uiRecCircleY(), UI_REC_RING)) uiStartRecording(uiShlPage); }
         else if (uiShl == UI_SHL_SET) uiSettingsTap(uiSt.x0, uiSt.y0);
       }
     }

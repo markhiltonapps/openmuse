@@ -166,6 +166,15 @@ int main(int argc, char **argv) {
   uiMenuOpen(500000); uiTick(500100); save(dir, "m1_launcher");
   // the Record pages: Voice note, Idea, Meeting, Dream
   for (int m = 0; m < 4; m++) { uiShellGo(UI_SHL_REC, m); uiTick(500200 + m); char nm[40]; snprintf(nm, sizeof nm, "n%d_record_%d", m, m); save(dir, nm); }
+  // holding the circle to start: the ring half filled on Meeting, most of the way on Dream, and the page after letting go (drawn
+  // directly, like Restart below, so the clock the later frames use isn't moved)
+  uiShellGo(UI_SHL_REC, 2); uiTick(500204); uiDrawRecHold(0.5f); save(dir, "n2h_record_hold_half");
+  uiDrawRecHold(0); uiTick(500205); save(dir, "n2r_record_let_go");
+  uiShellGo(UI_SHL_REC, 3); uiTick(500206); uiDrawRecHold(0.8f); save(dir, "n3h_dream_hold_late");
+  uiDrawRecHold(0); uiTick(500207);
+  uiShellGo(UI_SHL_REC, 2); uiRecHintUntil = 500210 + 700; uiAll = true; uiTick(500210); save(dir, "n2t_record_tap_hint");   // a tap: HOLD TO START lights up
+  uiRecHintUntil = 0; uiAll = true; uiTick(500211);
+
   // Settings, one a page
   uiBright = 70; uiVolume = 90; uiIdle.dim = true; uiIdle.dimAfter = 120; uiIdle.offAfter = 300;
   for (int pg = 0; pg < UI_PG_N; pg++) { uiShellGo(UI_SHL_SET, pg); uiTick(500300 + pg); char nm[40]; snprintf(nm, sizeof nm, "p%d_setting", pg); save(dir, nm); }

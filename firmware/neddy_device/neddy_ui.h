@@ -1039,7 +1039,7 @@ static const int UI_REC_ICONS[4] = { UI_IC_MIC, UI_IC_BULB, UI_IC_PEOPLE, UI_IC_
 static int uiStopLabelY();
 static bool uiDotHitsLabel(float x, float y, float rad) {
   if (!NEDDY_ROUND || uiRec.state != UI_RECS_RUN) return false;   // only on the recording screen, where the label is
-  int top = uiStopLabelY(), half = uiTextWidth(NFONT_MID, "Hold to stop") / 2 + 12;
+  int top = uiStopLabelY(), half = uiTextWidth(NFONT_MID, "Hold to stop") / 2 + 28;   // (28: a dot never sits beside it like a bullet)
   return y + rad + 3 >= top - 4 && x >= UI_CX - half && x <= UI_CX + half;
 }
 static void uiEdgeDot(int i, int n, float inset, float rad, uint16_t col) {
