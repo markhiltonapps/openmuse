@@ -161,3 +161,8 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   why: "SSL - Memory allocation failed (…, 49 KB free)". The 1.75C's wider screen buffers use ~3.7 KB more of the chip's own memory
   (globals 144,468 vs 140,748 bytes) and a secure connection needs ~50 KB. Fix: Neddy's 48 KB voice buffer now lives in PSRAM
   (xStreamBufferCreateStatic with PSRAM storage, falling back to the old one). Frees ~48 KB of fast memory on both watches.
+- (Nov 28) The round watch now runs: Wi-Fi from settings.h, paired, the watch face shows the time, weather, next meeting and 100% battery.
+- Bug: "A recording is waiting … Send now" only closed the screen. The info screen's button always answered UI_REC_OK; UI_REC_RETRY (send)
+  was never sent by any tap since the redesign. uiRecInfo now takes the button's action; "Send now" and "Try again" pass UI_REC_RETRY.
+  touch_test 147/147 on both boards (new checks for both buttons), ui_sim 0 odd windows, stub syntax check clean for 175 and 206.
+  The waiting 1-minute recording is real (it needs the header's magic number), most likely an accidental Record tap during today's testing.

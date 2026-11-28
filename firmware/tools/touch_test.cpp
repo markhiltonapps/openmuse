@@ -489,6 +489,12 @@ int main() {
   uiRecInfo(now, "Not sent", "", "No Wi-Fi. It will send later.", -1, "OK");
   pause(100); recWhat = 0; finger(UI_CX, uiRecBtnY(), 60);
   CHECK(recWhat == UI_REC_OK, "its button answers OK");
+  uiRecInfo(now, "A recording is waiting", "1 minute", "Send it before a new one", -1, "Send now", UI_REC_RETRY);
+  pause(100); recWhat = 0; finger(UI_CX, uiRecBtnY(), 60);
+  CHECK(recWhat == UI_REC_RETRY, "Send now asks to send (not just close)");
+  uiRecInfo(now, "Couldn't send (it's safe)", "", "No answer", -1, "Try again", UI_REC_RETRY);
+  pause(100); recWhat = 0; finger(UI_CX, uiRecBtnY(), 60);
+  CHECK(recWhat == UI_REC_RETRY, "Try again asks to send again");
   uiRecEnd(); pause(100);
   CHECK(uiRec.state == UI_RECS_OFF && !uiScreenOff, "ending the recorder gives the screen back");
   uiRecAvailable = false; uiIdle.have = false;

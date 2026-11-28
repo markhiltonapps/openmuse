@@ -992,6 +992,7 @@ struct UiRec {
   bool full, dirty, dimmed, ignoreTouch;
   uint32_t elapsed, left; int usedPct;
   char title[40], big[24], small[48], button[16];
+  int action;                                    // what its button asks for: UI_REC_OK (close) or UI_REC_RETRY (send it)
   int pct;                                       // a progress bar (0..100), -1 for none
   uint32_t lastTouch;
   uint32_t holdAt; int holdStep;                 // Stop held since (0 = not held), and how far its ring has filled (0..10)
@@ -1003,9 +1004,9 @@ static void uiRecRun(uint32_t ms, uint32_t elapsed, uint32_t left, int usedPct) 
   if (uiRec.elapsed != elapsed || uiRec.left != left || uiRec.usedPct != usedPct) uiRec.dirty = true;
   uiRec.elapsed = elapsed; uiRec.left = left; uiRec.usedPct = usedPct;
 }
-static void uiRecInfo(uint32_t ms, const char *title, const char *big, const char *small, int pct, const char *button) {
+static void uiRecInfo(uint32_t ms, const char *title, const char *big, const char *small, int pct, const char *button, int action = UI_REC_OK) {
   if (uiRec.state != UI_RECS_INFO) { bool was = uiRec.dimmed; memset(&uiRec, 0, sizeof(uiRec)); uiRec.state = UI_RECS_INFO; uiRec.dimmed = was; }
-  uiRec.full = true; uiRec.lastTouch = ms; uiRec.pct = pct;
+  uiRec.full = true; uiRec.lastTouch = ms; uiRec.pct = pct; uiRec.action = action;
   uiCopyTrim(uiRec.title, sizeof(uiRec.title), title); uiCopyTrim(uiRec.big, sizeof(uiRec.big), big);
   uiCopyTrim(uiRec.small, sizeof(uiRec.small), small); uiCopyTrim(uiRec.button, sizeof(uiRec.button), button);
 }
@@ -1244,7 +1245,7 @@ static void uiRecTouch(uint32_t ms, bool down, int x, int y) {
   } else if (!down && was) {
     int dx = lx - x0, dy = ly - y0; if (dx < 0) dx = -dx; if (dy < 0) dy = -dy;
     if (!uiRec.ignoreTouch && dx < UI_SLOP && dy < UI_SLOP && ms - at < UI_TAP_MS && uiOut.record) {
-      if (uiRec.state == UI_RECS_INFO && uiRec.button[0] && x0 >= UI_CX - 120 && x0 < UI_CX + 120 && y0 >= uiRecBtnY() - 56 && y0 < uiRecBtnY() + 56) uiOut.record(UI_REC_OK);
+      if (uiRec.state == UI_RECS_INFO && uiRec.button[0] && x0 >= UI_CX - 120 && x0 < UI_CX + 120 && y0 >= uiRecBtnY() - 56 && y0 < uiRecBtnY() + 56) uiOut.record(uiRec.action ? uiRec.action : UI_REC_OK);
     }
   }
   if (down) uiRec.lastTouch = ms;

@@ -1311,7 +1311,7 @@ static void recBeginSend() {
 }
 static void recShowWaiting() {
   char big[16]; recMinutesText(big, sizeof(big), recFound.ms);
-  uiRecInfo(millis(), "A recording is waiting", big, "Send it before a new one", -1, "Send now");
+  uiRecInfo(millis(), "A recording is waiting", big, "Send it before a new one", -1, "Send now", UI_REC_RETRY);
 }
 
 static void recBegin() {
@@ -1395,7 +1395,7 @@ static void recSendFail(const char *why, int code = 0) {
     recState = RS_FAIL; recAutoAt = millis() + 600000UL;
     char reason[48];
     snprintf(reason, sizeof(reason), "%s %d, mem %uk", why, code, (unsigned)(ESP.getMaxAllocHeap() / 1024));   // what went wrong, readable in a photo
-    uiRecInfo(millis(), "Couldn't send (it's safe)", "", reason, -1, "Try again");
+    uiRecInfo(millis(), "Couldn't send (it's safe)", "", reason, -1, "Try again", UI_REC_RETRY);
   }
 }
 static void recSendStep() {
