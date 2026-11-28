@@ -48,6 +48,9 @@ struct UiOut {
   void (*action)(int what);                // optional: Info > Actions (UI_ACT_* in neddy_shell.h)
 };
 static UiOut uiOut;
+#if NEDDY_ROUND
+#include "neddy_frame.h"      // the round screen's last step: turning the picture and the button marks
+#endif
 
 static constexpr uint16_t uiRgb(int r, int g, int b) { return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)); }
 static constexpr uint16_t UI_BLACK = 0;
@@ -420,8 +423,9 @@ struct UiIdle {
   bool raise;                     // raise-to-wake is on (the person's setting; the sketch reads the accelerometer only when it is)
   int dimAfter;                   // seconds of quiet before the idle face dims; 0 = the usual (a minute after the idle face came)
   int offAfter;                   // seconds of quiet before the screen goes dark by itself; 0 = never (the battery saver's own 45 s still apply)
+  bool rotate;                    // auto-rotate (round watch): the picture turns to stay upright; on until the person turns it off
 };
-static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false, 0, false };
+static UiIdle uiIdle = { false, 0, 0, 0, 10, true, true, true, false, 0, 0, 0, 0, "", false, false, "", 0, 0, true, -1, false, 0, false, false, 0, 0, true };
 static uint8_t uiBatRaw[2] = { 0, 0 };   // the power chip's two status bytes, for the test line
 static bool uiIdleOn = false, uiDimmed = false;
 static uint32_t uiLastActive = 0, uiIdleSince = 0;
@@ -514,7 +518,7 @@ static const char *uiModeLabel() {
     case UI_THINK: return "Thinking...";
     case UI_SPEAK: return "Neddy";
     case UI_LINK: return "Connecting to Neddy...";
-    default: return NEDDY_ROUND ? "Hold the small button to talk" : "Hold BOOT to talk";   // (round: the case has no labels)
+    default: return NEDDY_ROUND ? "Hold to talk" : "Hold BOOT to talk";   // (round: the case has no labels; a TALK mark on the rim points at the small button)
   }
 }
 
@@ -867,7 +871,7 @@ static void uiDrawList() {
 
 // ---- what the menu (neddy_shell.h) and the sketch share
 enum { UI_REC_START = 1, UI_REC_STOP = 2, UI_REC_OK = 3, UI_REC_RETRY = 4 };   // what the recording screens ask the sketch for
-static int uiFpsLevel = 1;                       // animation speed: 0 saver, 1 normal, 2 smooth
+static int uiFpsLevel = 2;                       // animation speed: 0 saver, 1 normal, 2 smooth (the default, owner 2026-11-28)
 static int uiFace = 0;                           // the watch face: 0 info (clock, weather, meeting), 1 analog, 2 neon digital
 static int uiVolume = 85;                        // the speaker volume, 0 to 100 (the sketch keeps it in step with the audio chip and the server)
 // A ring made of even-aligned spans (the screen wants even windows).
@@ -1051,6 +1055,9 @@ static const int UI_REC_ICONS[4] = { UI_IC_MIC, UI_IC_BULB, UI_IC_PEOPLE, UI_IC_
 // box, which cut pieces out of the words (owner's photo, 2026-11-28): the ring leaves a gap there instead.
 static int uiStopLabelY();
 static bool uiDotHitsLabel(float x, float y, float rad) {
+#if NEDDY_ROUND
+  if (frNearMark(x, y)) return true;                                  // a button mark on the rim (BACK, STOP): any ring of dots leaves it room
+#endif
   if (!NEDDY_ROUND || uiRec.state != UI_RECS_RUN) return false;   // only on the recording screen, where the label is
   int top = uiStopLabelY(), half = uiTextWidth(NFONT_MID, "Hold to stop") / 2 + 28;   // (28: a dot never sits beside it like a bullet)
   return y + rad + 3 >= top - 4 && x >= UI_CX - half && x <= UI_CX + half;
@@ -1174,7 +1181,9 @@ static int uiQrScale(const char *text, int maxSide) {
   int s = (maxSide / (uiQr.size + 8)) & ~1;              // even: an odd dot size makes odd windows, which the screen shears
   return s > 8 ? 8 : s < 4 ? 4 : s;
 }
+static void uiMarksOff();   // (below, with the button marks)
 static void uiSetupScreen(int stage, const char *ssid, const char *qrText, const char *url) {
+  uiMarksOff();               // a set-up screen has no button marks
   uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
   uiBg = UI_BLACK;
   char fit[48];
@@ -1815,12 +1824,68 @@ static bool uiStageHidden() {
   return false;
 }
 
+// ---- the button marks and auto-rotate (round watch; see neddy_frame.h)
+#if NEDDY_ROUND
+#ifndef BTN_TALK_ANGLE
+#define BTN_TALK_ANGLE 120
+#define BTN_MENU_ANGLE 30
+#endif
+enum { UI_MK_NONE, UI_MK_TALK, UI_MK_MENU, UI_MK_BACK, UI_MK_STOP };
+static const char *const UI_MK_WORDS[5] = { "", "TALK", "MENU", "BACK", "STOP" };
+static int uiMarkKey = -1;
+// What each button does on this screen, if it is worth saying: the small button talks; the big one opens the menu, goes back or stops a recording.
+// The watch face, cards and the screens that explain a problem show no marks (the face stays clean; a problem screen says what to press in words).
+static void uiMarksFor(int *small, int *big) {
+  *small = UI_MK_NONE; *big = UI_MK_NONE;
+  if (uiScreenOff || uiOffNoticeAt) return;
+  if (uiRec.state == UI_RECS_RUN) { *big = UI_MK_STOP; return; }
+  if (uiRec.state != UI_RECS_OFF) return;
+  if (uiMenuOn()) { *big = UI_MK_BACK; return; }
+  if (uiCard.on || uiIdleOn) return;
+  if (uiMode == UI_READY) { *small = UI_MK_TALK; *big = UI_MK_MENU; }
+  else if (uiMode == UI_LISTEN) *small = UI_MK_TALK;
+}
+// Rebuilds the marks when what they say, the picture's turn or the colour changes. True when the whole screen must be drawn again.
+static bool uiMarksUpdate() {
+  int s, b;
+  uiMarksFor(&s, &b);
+  int key = s | (b << 4) | (frRot << 8) | ((uiAccentIdx & 3) << 10) | ((uiMode == UI_LISTEN) << 12);
+  if (key == uiMarkKey) return false;
+  bool turned = uiMarkKey < 0 || ((uiMarkKey >> 8) & 3) != frRot;
+  uiMarkKey = key;
+  if (!frReady) return turned;
+  FrMark &ms = frMarks[0], &mb = frMarks[1];
+  ms.on = s != UI_MK_NONE; ms.angle = BTN_TALK_ANGLE; ms.colour = uiMode == UI_LISTEN ? UI_CORAL : uiAcc();
+  ms.wordColour = 0;
+  mb.on = b != UI_MK_NONE; mb.angle = BTN_MENU_ANGLE; mb.colour = uiRgb(214, 216, 222);
+  mb.wordColour = b == UI_MK_STOP ? UI_CORAL : 0;          // STOP: a white line like the hold ring (a button, not progress), the word in the recording's coral
+  snprintf(ms.word, sizeof(ms.word), "%s", UI_MK_WORDS[s]);
+  snprintf(mb.word, sizeof(mb.word), "%s", UI_MK_WORDS[b]);
+  if (ms.on) frBuildMark(ms, NFONT_SMALL.h, NFONT_SMALL.adv, NFONT_SMALL.off, NFONT_SMALL.bits);
+  if (mb.on) frBuildMark(mb, NFONT_SMALL.h, NFONT_SMALL.adv, NFONT_SMALL.off, NFONT_SMALL.bits);
+  return true;
+}
+// Something drew over the whole screen outside the UI (a problem or set-up screen): the marks go, and come back with the UI.
+static void uiMarksOff() { for (int i = 0; i < FR_MARKS; i++) frMarks[i].on = false; uiMarkKey = -1; }
+// Turns the picture (0..3 quarter turns, clockwise) and draws everything again the new way up.
+static void uiTurn(int k) {
+  if ((k & 3) == frRot) return;
+  frRot = k & 3;
+  uiAll = true;
+  if (uiRec.state != UI_RECS_OFF) uiRec.full = true;
+}
+#else
+static bool uiMarksUpdate() { return false; }
+static void uiMarksOff() {}
+#endif
+
 static void uiTick(uint32_t ms) {
   uiNowMs = ms; uiLookupNow = ms;
   uiPwrTick(ms);
   uiBootTick(ms);
   if (uiOffNoticeAt) { uiOffNoticeTick(ms); return; }   // "Screen off" for a second, then dark
   if (uiScreenOff) return;
+  if (uiMarksUpdate()) { uiAll = true; if (uiRec.state != UI_RECS_OFF) uiRec.full = true; }   // the marks changed: draw it all again with them
   if (uiRec.state != UI_RECS_OFF) {                 // the recorder owns the screen; nothing else is drawn or woken
     uiLastActive = ms;
     if (uiRec.state == UI_RECS_RUN && !uiRec.dimmed && ms - uiRec.lastTouch > UI_REC_DIM_MS) { uiRec.dimmed = true; if (uiOut.brightness) uiOut.brightness(40); }

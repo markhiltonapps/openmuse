@@ -62,6 +62,7 @@ export async function idleInfo(deps: IdleDeps, owner: string, device: Device) {
     fps: settings.animation === "saver" ? 0 : settings.animation === "smooth" ? 2 : 1,
     face: settings.face === "analog" ? 1 : settings.face === "neon" ? 2 : 0,
     rw: settings.raiseToWake ? 1 : 0,
+    ar: settings.autoRotate ? 1 : 0,
     vol: settings.volume,
     bs: settings.batterySaver ? 1 : 0,
     nap: settings.sleepWhenIdle ? 1 : 0,

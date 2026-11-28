@@ -46,6 +46,11 @@ static double now() { return std::chrono::duration<double, std::milli>(std::chro
 int main(int argc, char **argv) {
   const char *dir = argc > 1 ? argv[1] : ".";
   uiOut.blit = simBlit; uiOut.fill = simFill;
+#if NEDDY_ROUND
+  frHwBlit = simBlit; frHwFill = simFill;                // the round watch's last step: turning and the button marks (neddy_frame.h)
+  frInit([](size_t n) -> void * { return malloc(n); });
+  uiOut.blit = frBlit; uiOut.fill = frFill;
+#endif
   uiSetDiag("Wi-Fi -47 dBm  mic ok  drops 0  start 1", "answer 0.9 s  sent 4820 ms  peak 4605");
   uiSetName("Phone");
   uint32_t t = 1000;
@@ -214,6 +219,63 @@ int main(int argc, char **argv) {
   uiRecInfo(800650, "Sending to Neddy", "42 minutes", "Finishing up... please wait", 100, ""); uiTick(800700); save(dir, "r2b_finishing");
   uiRecInfo(800800, "Sent", "42 minutes", "Your meeting is in Neddy", -1, "OK"); uiTick(800900); save(dir, "r3_sent");
   uiRecEnd(); uiRecAvailable = false;
+#if NEDDY_ROUND
+  // Auto-rotate: the same screen turned a quarter, half and three quarters; the marks stay next to the real buttons (small at 4, big at 1 o'clock).
+  uiClearCard(); uiIdleOn = false; uiSetMode(UI_READY); uiSetWords(""); uiAll = true; uiTick(810000);
+  for (int k = 1; k <= 3; k++) { uiTurn(k); uiTick(810000 + k); char nm[40]; snprintf(nm, sizeof nm, "t%d_turned_%d", k, k * 90); save(dir, nm); }
+  uiTurn(0); uiTick(810010); save(dir, "t0_upright_again");
+  // The busier screens, turned too, and a count of anything drawn under a mark (it must be 0): the launcher, Settings, a Record page,
+  // and the recording screen, each at a quarter, half and three-quarter turn.
+  {
+    long under = 0;
+    static uint32_t clk = 830000;                      // the watch's clock only moves forward (backwards reads as weeks of quiet)
+    auto hidden = [&](const char *what) {              // draws the screen again without the marks and counts content where a mark sits
+      bool was[FR_MARKS];
+      for (int i = 0; i < FR_MARKS; i++) was[i] = frMarks[i].on;
+      frHideMarks = true;
+      uiAll = true; if (uiRec.state != UI_RECS_OFF) uiRec.full = true;
+      uiTick(clk += 10);
+      long n = 0;
+      for (int i = 0; i < FR_MARKS; i++) {
+        if (!was[i]) continue;
+        const FrLayer *ls[2] = { &frMarks[i].arc, &frMarks[i].text };
+        for (int j = 0; j < 2; j++) {
+          const FrLayer &l = *ls[j];
+          for (int y = 0; y < l.h; y++) for (int x = 0; x < l.w; x++) {
+            if (l.a[y * l.w + x] < 40) continue;
+            int gx, gy; frToGlass(frRot, l.x + x, l.y + y, &gx, &gy);
+            uint16_t c = fb[gy * UI_W + gx];
+            if (((c >> 11) & 31) + ((c >> 5) & 63) / 2 + (c & 31) > 6) n++;   // not black
+          }
+        }
+      }
+      frHideMarks = false;
+      if (n) printf("UNDER A MARK: %s has %ld content pixels under a mark\n", what, n);
+      under += n;
+      uiAll = true; if (uiRec.state != UI_RECS_OFF) uiRec.full = true;
+      uiTick(clk += 10);
+    };
+    struct Shot { const char *name; int kind; };
+    const Shot shots[] = { { "launcher", 0 }, { "settings", 1 }, { "record", 2 }, { "recording", 3 } };
+    for (const Shot &sh : shots) {
+      for (int k = 0; k <= 3; k++) {
+        uiTurn(k);
+        uiRecEnd(); uiClearCard(); uiIdleOn = false; uiSetMode(UI_READY);
+        uiActivity(clk += 10);
+        if (sh.kind == 0) uiMenuOpen(clk);
+        else if (sh.kind == 1) { uiMenuOpen(clk); uiShellGo(UI_SHL_SET, 0); }
+        else if (sh.kind == 2) { uiMenuOpen(clk); uiShellGo(UI_SHL_REC, 2); }
+        else { uiRecAvailable = true; uiRecMode = 2; uiRecRun(clk += 10, 2530, 4680, 35); }
+        uiAll = true; uiTick(clk += 10);
+        char nm[48]; snprintf(nm, sizeof nm, "u%d_%s_turn%d", sh.kind, sh.name, k);
+        save(dir, nm);
+        hidden(nm);
+      }
+    }
+    uiRecEnd(); uiClearCard(); uiTurn(0); uiTick(clk += 10);
+    printf("content under a mark: %ld\n", under);
+  }
+#endif
   // Wi-Fi setup screens
   uiSetupScreen(UI_SETUP_JOIN, "Neddy-1A2B", "WIFI:T:WPA;S:Neddy-1A2B;P:k7m2q9xd;;", "192.168.4.1"); save(dir, "w1_setup_join");
   uiSetupScreen(UI_SETUP_PAGE, "Neddy-1A2B", "http://192.168.4.1/", "192.168.4.1"); uiSetupDiag("reached watch: page 1  checks 3  other 2"); save(dir, "w2_setup_page");

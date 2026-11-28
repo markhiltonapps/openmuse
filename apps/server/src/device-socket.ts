@@ -325,6 +325,7 @@ export class DeviceBridge {
         if (event.key === "accent" && WATCH_ACCENTS[value]) save({ accent: WATCH_ACCENTS[value] });
         if (event.key === "batterySaver") save({ batterySaver: value !== 0 });
         if (event.key === "raiseToWake") save({ raiseToWake: value !== 0 });
+        if (event.key === "autoRotate") save({ autoRotate: value !== 0 });
         if (event.key === "doublePress" && DOUBLE_PRESS[value])
           save({ doublePress: DOUBLE_PRESS[value] });
       }

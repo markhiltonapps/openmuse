@@ -15,7 +15,9 @@
 // (the menu) (owner, 2026-11-28), so it says "small button" / "big button". The 2.06 keeps the board's names.
 
 #ifndef NEDDY_BOARD
-#define NEDDY_BOARD 206
+// An old settings.h without the board line used to build for the 2.06 without a word, which on the round watch is a
+// black screen (it happened twice, 2026-11-27 and 11-28). Now the build stops and says what to add.
+#error "settings.h doesn't say which watch this is. Add this line near the top of settings.h: #define NEDDY_BOARD 175 (the round 1.75C) or #define NEDDY_BOARD 206 (the rectangular 2.06)."
 #endif
 
 #if NEDDY_BOARD == 175
@@ -24,6 +26,8 @@
 #define BTN_TALK_CAP "Small button"
 #define BTN_MENU "big button"
 #define BTN_MENU_CAP "Big button"
+#define BTN_TALK_ANGLE 120         // where the buttons are on the case, degrees clockwise from 12 with the watch upright
+#define BTN_MENU_ANGLE 30          // (small at about 4 o'clock, big at about 1 o'clock); the screen's marks point at these
 #define BOARD_LABEL "1.75C round"
 #define BOARD_W 466
 #define BOARD_H 466

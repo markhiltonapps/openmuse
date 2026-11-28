@@ -867,3 +867,13 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
 - **A volume of 100 must be clean (2026-11-28):** the vendored ES8311 driver mapped 100% to register 0xFF (+32 dB digital gain over
   0 dB at 0xBF), so anything past ~75% clipped and the owner heard crackle above 80. Check what a vendor's "volume" maps to before
   shipping it: 100 should be the chip's clean full level, with any extra loudness from a limiter (neddy_audio.h, audio_test.cpp).
+- **One press, two reports (2026-11-28):** on the round watch the big button reaches its own pin AND the power chip, which keeps its own
+  note of each press, so a single press read as a double press and started a recording. When one physical input has two paths, pick one
+  as the authority once it has spoken (`uiPwrAccept`) and test the doubled report, not just a clean one.
+- **Marks and auto-rotate on the round watch (2026-11-28):** anything that must stay on screen whatever is drawn (the button marks) belongs
+  in the output layer (`neddy_frame.h`), composited onto every window, not in each screen's drawing. Rotation needs the glass leaning
+  toward a face, not just gravity across it (an arm hanging down and lying on your side are the common cases). Check a layout under every
+  turn with a count, not by eye (`ui_sim`'s "content under a mark", like the odd-window count). In a PC simulation the clock must only move
+  forward: a time that went backwards read as weeks of quiet and switched the simulated screen off.
+- **settings.h is the owner's (2026-11-28):** it isn't in the zip, and an old copy came back twice and built the wrong watch (black screen).
+  The build now stops when NEDDY_BOARD is missing; tell the owner to keep a copy outside the sketch folder.

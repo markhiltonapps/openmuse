@@ -204,3 +204,43 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   sine and square, quiet notes lifted, 100 Hz >12 dB below 2 kHz, limiter lets go within 0.3 s, reset is silent); stub syntax check 175 and
   206 clean. Help (devices) says 100 is the loudest clear level. Not checked: how loud is comfortable and whether the speaker's amplifier
   itself distorts at 100 with the lift; that needs the owner's ear. If 100 still crackles, lower SPEAKER_BOOST_DB in settings.h.
+- (Nov 28) Black screen after the sound-fix upload: the owner's settings.h had been replaced by an old copy without NEDDY_BOARD (a 2.06
+  build). Sent a complete settings.h (board 175, DEBUG_SERIAL 0, Wi-Fi left for him to type). neddy_board.h now stops the build with
+  "settings.h doesn't say which watch this is…" when the line is missing (tested on a copy). The screen test ruled the board out first.
+- Big button started a recording on a single press (owner): on the round watch one press reaches GPIO3 AND the power chip's key flags
+  (0x49), so it arrived twice within ~50 ms and read as a double press (set to record). uiPwrAccept (neddy_shell.h): once the pin has
+  reported a press it is the only source; a chip report within 600 ms of a pin report is the same press. touch_test 159/159 both boards.
+  Committed alone (1c1674a) and pushed on "push it"; the zip sent to the owner was HEAD + only this fix.
+- Button marks and auto-rotate (owner's yes to notches, labelled Help picture, auto-rotate on by default with a switch):
+  neddy_frame.h is the round screen's last step: every window is turned by quarter turns (frRot) before it reaches the panel, and
+  "marks" are laid on top so no screen can wipe them: a 6 px rim arc next to each physical button (big ~1 o'clock = 30 deg, small
+  ~4 o'clock = 120 deg; BTN_*_ANGLE in neddy_board.h) with a word bent along the rim (TALK accent/coral, MENU/BACK grey, STOP white
+  arc + coral word). Marks only where a button matters (uiMarksFor: talk screen, listening, menu/settings/record pages, recording);
+  none on the face, cards, set-up or problem screens (clearScreen and uiSetupScreen turn them off). Masks live in PSRAM (frInit with
+  heap_caps_malloc SPIRAM); a 4 KB turning buffer is the only internal RAM. Any ring of edge dots leaves a gap at a mark (frNearMark),
+  and the curved top title steps 8 deg aside from a mark near the top. Touch is turned back to upright in touchRead.
+  Auto-rotate (frOrientFeed): a clear tilt (>= 650 mg across the glass, within ~30 deg of a side) with the glass leaning back toward a
+  face (>= 250 mg through it), held still 500 ms; flat, shaking, diagonal or an upright glass (arm hanging, lying on your side) keep
+  the turn. The sketch reads the motion chip only while the screen is lit, starts upright at every wake, never turns under a finger or
+  while talking/thinking/answering. Setting: autoRotate (devices.ts, default ON), idle fact "ar", watch Settings page AUTO-ROTATE
+  (round only), device.setting "autoRotate", manage_devices auto_rotate. Animation default is now "smooth" (server + firmware).
+  The talk label on the round watch is "Hold to talk" (the TALK mark points at the button).
+  UNVERIFIED ON THE BOARD: which chip axes point along the screen. NEDDY_ROTATE_DEBUG is 1 in this build: the bottom line shows
+  "rot<k> r<right> d<down> f<face>" in tenths of a g. Owner's first-run checks: watch upright and tilted back -> d about +9, f clearly
+  non-zero, rot0; arm hanging down -> no turn; lying on your side -> no turn; held with the big button pointing down and tilted back ->
+  turns. If the turn is wrong, NEDDY_ROT_RIGHT_AXIS/SIGN and NEDDY_ROT_DOWN_AXIS/SIGN in settings.h fix it; then set the debug to 0.
+  Design review: copy signed off (round 1, nits applied: long-hold warning in Help, wording), usability signed off (round 2: the upright
+  glass rule, freeze while talking), visual signed off (round 2: title gap, every busy screen rendered at every turn with a new
+  "content under a mark" count in ui_sim, which prints 0). Left for later (reviewers' nits): show TALK for a few seconds after a wake and
+  on cards; a one-time "auto-rotate" note; a wider "near a mark" margin for the launcher icons at 180/270; "Hold to stop" a few px in
+  at 90/270.
+  Tests: frame_test 38/38, touch_test 159/159 (175 and 206), ui_sim 0 odd windows and 0 under a mark, rec 19/19, raise 18/18, audio
+  17/17, stub syntax 175/206 clean, help/device-idle/voice-brain 30/30, typecheck clean, Biome clean on changed files.
+  Website: unchanged (the site doesn't mention the watch yet; it is in early testing).
+  Help: new topic "watch-buttons" with a labelled picture drawn around the real home screen (firmware/tools/watch_buttons_shot.py);
+  "watch-screens" text and picture updated; devices volume sentence reworded.
+- Animation pilot (owner added 1000 Higgsfield credits): 8 poses made with nano_banana_2 from Neddy's real picture (reporter, cold, hot,
+  rain, sunny, dream, note, idea) and 8 seamless 4 s loops with seedance_2_5 (start image = end image), ~130 credits so far. Source art in
+  firmware/art/scenes/ (not committed yet); previews made with firmware/tools/scene_preview.py. At 12 fps and 224x300 JPEG each scene is
+  ~370 KB (8 scenes ~3 MB, fits the program space). The rain loop is being redone from a padded start frame (the umbrella left the frame).
+  Next: TJpgDec on the watch, scenes on the recording screen and weather card (owner to confirm the cold/hot cut-offs), Design review.

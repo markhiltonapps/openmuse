@@ -88,9 +88,10 @@ test("the idle facts: the time and offset, the weather in brief, the next meetin
     sw: 1,
     sm: 1,
     sb: 1,
-    fps: 1,
+    fps: 2,
     face: 0,
     rw: 0,
+    ar: 1,
     vol: 85,
     bs: 1,
     nap: 1,
@@ -214,7 +215,7 @@ test("the home screen defaults to ten seconds and the battery can be hidden by v
   const asked = (await tool.execute({ do: "settings", name: "my watch" })) as { message?: string };
   assert.match(
     asked.message ?? "",
-    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level.*animation is normal; the watch face is info/,
+    /after 10 seconds of quiet it shows the clock, the weather, the next meeting, the battery level.*animation is smooth; the watch face is info/,
   );
   const hidden = (await tool.execute({ do: "settings", show_battery: false })) as {
     message?: string;
@@ -260,6 +261,22 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   const third = (await devices.list("o"))[0];
   assert.ok(third);
   assert.equal((await idleInfo(deps, "o", third)).rw, 0);
+  // Auto-rotate: on until they ask, and "stop it turning" turns it off and reaches the watch.
+  assert.equal((await idleInfo(deps, "o", third)).ar, 1, "auto-rotate is on for a new watch");
+  const rotating = (await tool.execute({ do: "settings" })) as { message?: string };
+  assert.match(rotating.message ?? "", /auto-rotate is on \(the round watch's picture turns/);
+  const still = (await tool.execute({ do: "settings", auto_rotate: false })) as {
+    message?: string;
+  };
+  assert.match(still.message ?? "", /auto-rotate is off/);
+  const turned = (await devices.list("o"))[0];
+  assert.ok(turned);
+  assert.equal(
+    (await idleInfo(deps, "o", turned)).ar,
+    0,
+    "the watch is told to keep its picture still",
+  );
+  await devices.setSettings("o", turned.id, { autoRotate: true });
   // Speaker volume: 85 until the person asks, then what they chose (0 to 100, never outside it).
   assert.equal((await idleInfo(deps, "o", third)).vol, 85);
   const quieter = (await tool.execute({ do: "settings", volume: 45 })) as { message?: string };
@@ -372,7 +389,7 @@ test("the chat changes a device's idle screen by what's said", async () => {
   assert.equal(set.changed, true);
   assert.match(
     set.message ?? "",
-    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright; Neddy's animation is normal; the watch face is info/,
+    /after 60 seconds of quiet it shows the clock, the next meeting, the battery level, and stays bright; Neddy's animation is smooth; the watch face is info/,
   );
   const [device] = await devices.list("o");
   assert.deepEqual(settingsOf(device as never), {
@@ -382,9 +399,10 @@ test("the chat changes a device's idle screen by what's said", async () => {
     showWeather: false,
     showMeeting: true,
     showBattery: true,
-    animation: "normal",
+    animation: "smooth",
     face: "info",
     raiseToWake: false,
+    autoRotate: true,
     volume: 85,
     batterySaver: true,
     sleepWhenIdle: true,
@@ -499,6 +517,7 @@ test("a device is sent its idle facts when it connects and when its settings cha
     ["screenOffAfter", 300],
     ["accent", 3],
     ["raiseToWake", 1],
+    ["autoRotate", 0],
     ["doublePress", 2],
   ] as const)
     ws.send(JSON.stringify({ type: "device.setting", key, value }));
@@ -518,9 +537,10 @@ test("a device is sent its idle facts when it connects and when its settings cha
       kept.screenOffAfter,
       kept.accent,
       kept.raiseToWake,
+      kept.autoRotate,
       kept.doublePress,
     ],
-    [70, true, 120, 300, "pink", true, "none"],
+    [70, true, 120, 300, "pink", true, false, "none"],
   );
   ws.send(JSON.stringify({ type: "device.setting", key: "dimAfter", value: 0 }));
   await until(

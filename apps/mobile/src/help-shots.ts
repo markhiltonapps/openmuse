@@ -53,6 +53,7 @@ export const HELP_SHOTS: Record<string, { width: number; height: number }> = {
   "speaks-first": { width: 720, height: 3138 },
   travel: { width: 720, height: 2769 },
   urgent: { width: 720, height: 1558 },
+  "watch-buttons": { width: 720, height: 600 },
   "watch-screens": { width: 720, height: 720 },
   watchdescribe: { width: 720, height: 2308 },
   "weather-here": { width: 720, height: 1292 },

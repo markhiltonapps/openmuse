@@ -441,7 +441,15 @@ static void uiPageDotsAdd(int n, int at, bool vertical) {
 // A title along the top: curved under the bezel on the round screen, straight on the rectangle.
 static void uiTopTitle(const char *s, uint16_t col) {
 #if NEDDY_ROUND
-  uiArcText(NFONT_MID, s, UI_CX, UI_CY, UI_W * 0.5f - 36, -90, true, col, 6);
+  // A button mark near the top (BACK, by the big button at about 1 o'clock) would read as the title's next word: the title steps aside.
+  float centre = -90;
+  for (int i = 0; i < FR_MARKS; i++) {
+    if (!frMarks[i].on) continue;
+    int a = frScreenAngle(frMarks[i].angle, frRot);
+    if (a > 0 && a <= 60) centre -= 8;
+    else if (a >= 300) centre += 8;
+  }
+  uiArcText(NFONT_MID, s, UI_CX, UI_CY, UI_W * 0.5f - 36, centre, true, col, 6);
 #else
   uiTrackedCentered(NFONT_MID, UI_CX, 22, s, col, 6);
 #endif

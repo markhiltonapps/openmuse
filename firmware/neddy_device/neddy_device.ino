@@ -123,9 +123,19 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, PIN_LCD_RESET, 0 /* rotation */, BOAR
 #define NEDDY_RAISE_DEBUG 0
 #endif
 
+// 1 = while auto-rotate is being tried out, show what the motion chip reads on the first line at the bottom ("rot1 r+9 d-1 f+2": the turn,
+// then gravity toward the screen's right, down and through the glass, in tenths of a g). Upright, d should read about +9 or +10; held with the
+// big button pointing at the floor, r should be positive. If not, change NEDDY_ROT_* in settings.h (see the motion chip notes below).
+#ifndef NEDDY_ROTATE_DEBUG
+#define NEDDY_ROTATE_DEBUG 1
+#endif
+
 static void outBlit(int x, int y, int w, int h, uint16_t *px) { gfx->draw16bitRGBBitmap(x, y, px, w, h); }
 static void outFill(int x, int y, int w, int h, uint16_t colour) { gfx->fillRect(x, y, w, h, colour); }
-static void clearScreen() { gfx->fillScreen(0); }
+static bool uiActive = false;   // true while Neddy's own screen (neddy_ui.h) owns the display
+static bool fingerDown = false;   // a finger is on the glass now (auto-rotate never turns the picture under it)
+static void uiMarksOff();
+static void clearScreen() { uiMarksOff(); gfx->fillScreen(0); }   // (a screen drawn outside the UI: the button marks go until the UI is back)
 
 enum Mode { M_BOOT, M_WIFI, M_PAIR, M_LINK, M_READY, M_LISTEN, M_THINK, M_SPEAK, M_PROBLEM };
 static Mode mode = M_BOOT;
@@ -165,9 +175,9 @@ static unsigned long long napAsleepUs = 0, napSinceUs = 0;   // how long it real
 static int napRefused = 0, lastNapPct = -1, lastNapRefused = 0;
 // Settings changed on the watch while Wi-Fi was off: sent to Neddy once it is back (or the next idle push would undo them).
 #define PEND_NONE (-32768)
-static int pendSetting[11] = { PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE };
+static int pendSetting[12] = { PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE, PEND_NONE };
 static unsigned long settingLocalAt = 0;   // when the person last changed a setting on the watch (an older echo from the server is ignored for a few seconds)
-static bool settingsPending() { for (int k = 1; k <= 10; k++) if (pendSetting[k] != PEND_NONE) return true; return false; }
+static bool settingsPending() { for (int k = 1; k <= 11; k++) if (pendSetting[k] != PEND_NONE) return true; return false; }
 static const char *settingKey(int which) {
   switch (which) {
     case UI_SET_ANIM: return "animation";
@@ -180,6 +190,7 @@ static const char *settingKey(int which) {
     case UI_SET_SAVER: return "batterySaver";
     case UI_SET_RAISE: return "raiseToWake";
     case UI_SET_DOUBLE: return "doublePress";
+    case UI_SET_ROTATE: return "autoRotate";
   }
   return nullptr;
 }
@@ -577,7 +588,7 @@ static void raiseLoop() {
   static bool wasNeeded = false;
   static int seen = 0, g[3] = { 0, 0, 0 };
   uint32_t now = millis();
-  if (!uiIdle.raise) {                                            // switched off: the chip stops measuring
+  if (!uiIdle.raise && !(NEDDY_ROUND && uiIdle.rotate)) {        // nothing needs it: the chip stops measuring
     if (imuOn) { imuWrite(0x08, 0x00); imuOn = false; wasNeeded = false; }
     if (NEDDY_RAISE_DEBUG) snprintf(uiImuDbg, sizeof(uiImuDbg), "raise to wake: off");
     return;
@@ -591,6 +602,7 @@ static void raiseLoop() {
     }
     lastGood = now;
   }
+  if (!uiIdle.raise) { wasNeeded = false; return; }               // (on only for auto-rotate: rotateLoop reads it)
   if (!(uiWantsRaise() || NEDDY_RAISE_DEBUG != 0)) { wasNeeded = false; return; }
   if (!wasNeeded) { raiseReset(raiseDet); wasNeeded = true; }
   if (now - lastPoll >= 33) {
@@ -624,6 +636,54 @@ static void raiseLoop() {
     uiDiagDirty = true;
   }
 }
+
+// ---------------------------------------------------------------- auto-rotate (round watch)
+// The picture turns a quarter at a time to stay upright (neddy_frame.h decides from gravity). The motion chip is read only while the screen is lit;
+// each time the screen wakes the picture starts upright (a watch on a wrist is looked at upright), and it never turns under a finger.
+// Which of the chip's axes points along the screen is NOT yet checked on the real board: NEDDY_ROTATE_DEBUG shows the readings (see the top of
+// this file). Each NEDDY_ROT_* names the chip axis (0 x, 1 y, 2 z) that points to the screen's right / down, and its sign (+1 or -1).
+#ifndef NEDDY_ROT_RIGHT_AXIS
+#define NEDDY_ROT_RIGHT_AXIS 0
+#endif
+#ifndef NEDDY_ROT_RIGHT_SIGN
+#define NEDDY_ROT_RIGHT_SIGN 1
+#endif
+#ifndef NEDDY_ROT_DOWN_AXIS
+#define NEDDY_ROT_DOWN_AXIS 1
+#endif
+#ifndef NEDDY_ROT_DOWN_SIGN
+#define NEDDY_ROT_DOWN_SIGN -1
+#endif
+#if NEDDY_ROUND
+static FrOrient orient;
+static void rotateLoop() {
+  static uint32_t lastPoll = 0, lastNote = 0;
+  static bool wasAwake = false;
+  uint32_t now = millis();
+  bool awake = uiActive && !uiScreenOff && !uiDimmed;
+  if (!uiIdle.rotate) { if (frRot) uiTurn(0); wasAwake = awake; if (NEDDY_ROTATE_DEBUG && uiImuDbg[0] != 'a') { snprintf(uiImuDbg, sizeof(uiImuDbg), "auto-rotate: off"); uiDiagDirty = true; } return; }
+  if (!awake) { wasAwake = false; return; }
+  if (!wasAwake) { wasAwake = true; frOrientReset(orient); if (frRot) uiTurn(0); }
+  if (!imuOn) { if (NEDDY_ROTATE_DEBUG && now - lastNote >= 1000) { lastNote = now; snprintf(uiImuDbg, sizeof(uiImuDbg), "rot: motion chip not found"); uiDiagDirty = true; } return; }
+  if (now - lastPoll < 50) return;
+  lastPoll = now;
+  int g[3];
+  if (!imuSample(g, imuBig)) return;
+  // The chip reads "up" (it feels the push against gravity), so gravity's direction is the opposite.
+  int right = -NEDDY_ROT_RIGHT_SIGN * g[NEDDY_ROT_RIGHT_AXIS], down = -NEDDY_ROT_DOWN_SIGN * g[NEDDY_ROT_DOWN_AXIS], face = g[NEDDY_IMU_UP_AXIS];
+  if (!fingerDown && uiMode == UI_READY) {                       // never under a finger, nor while talking, thinking or answering
+    int k = frOrientFeed(orient, frRot, now, right, down, face);
+    if (k != frRot) { LOGF("[rotate] turn %d -> %d (right %d, down %d, face %d mg)\n", frRot, k, right, down, face); uiTurn(k); }
+  }
+  if (NEDDY_ROTATE_DEBUG && now - lastNote >= 400) {
+    lastNote = now;
+    snprintf(uiImuDbg, sizeof(uiImuDbg), "rot%d r%+d d%+d f%+d", frRot, right / 100, down / 100, face / 100);
+    uiDiagDirty = true;
+  }
+}
+#else
+static void rotateLoop() {}
+#endif
 
 static int jsonInt(const String &body, const char *key, int none) {
   String find = String("\"") + key + "\":";
@@ -670,7 +730,6 @@ static String httpPost(const String &path, const String &body, int &status) {
 }
 
 // ---------------------------------------------------------------- screens
-static bool uiActive = false;   // true while Neddy's own screen (neddy_ui.h) owns the display
 static String heard;            // what Neddy understood you said (small, grey)
 static unsigned long dLoop = 0, dWs = 0, dIdle = 0, dStart = 0, lastDiag = 0;
 static long dSentMs = 0, dPeak = 0;
@@ -1119,6 +1178,9 @@ static int touchRead(int *x, int *y) {
   if (py >= UI_H) py = UI_H - 1;
   if (TOUCH_FLIP_X) px = UI_W - 1 - px;
   if (TOUCH_FLIP_Y) py = UI_H - 1 - py;
+#if NEDDY_ROUND
+  { int ux, uy; frToUpright(frRot, px, py, &ux, &uy); px = ux; py = uy; }   // the picture may be turned (auto-rotate): the UI wants upright coordinates
+#endif
   *x = px;
   *y = py;
   return 1;
@@ -1147,6 +1209,7 @@ static void touchLoop() {
     }
   }
   touchWasDown = (r == 1);
+  fingerDown = (r == 1);
 }
 
 static void startTalking() {
@@ -1367,6 +1430,7 @@ static void recFinish(const char *why) {
 static void recLoop() {
   touchLoop();
   pwrLoop();                                         // the PWR button stops the recording too (a second way, besides the Stop button)
+  rotateLoop();
   raiseLoop();                                       // a dimmed recording screen brightens when the wrist is raised (if the person turned that on)
   if (recState != RS_REC) return;                    // Stop was just tapped
   static int16_t stereo[640];
@@ -1514,7 +1578,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
       wsFailures = 0;
       static String info = String("{\"type\":\"device.info\",\"firmware\":\"") + FIRMWARE_VERSION + "\"}";
       ws.sendTXT(info.c_str());
-      for (int k = 1; k <= 10; k++) {
+      for (int k = 1; k <= 11; k++) {
         if (pendSetting[k] == PEND_NONE || !settingKey(k)) continue;
         String m = String("{\"type\":\"device.setting\",\"key\":\"") + settingKey(k) + "\",\"value\":" + pendSetting[k] + "}";
         ws.sendTXT(m.c_str()); pendSetting[k] = PEND_NONE;
@@ -1604,6 +1668,7 @@ static void onSocket(WStype_t type, uint8_t *payload, size_t length) {
         if (fresh) {
           uiIdle.dim = jsonInt(text, "dim", 1) != 0;
           uiIdle.raise = jsonInt(text, "rw", 0) != 0;
+          uiIdle.rotate = jsonInt(text, "ar", 1) != 0;
           uiIdle.dimAfter = jsonInt(text, "da", 0);
           uiIdle.offAfter = jsonInt(text, "oa", uiIdle.offAfter);
           { int b = jsonInt(text, "br", -1); if (b >= 10 && b <= 100 && b != uiBright) { uiBright = b; if (!uiDimmed && !uiScreenOff && uiOut.brightness) uiOut.brightness(uiFullLevel()); } }
@@ -2132,8 +2197,18 @@ void setup() {
   pinMode(PIN_PWR_KEY, INPUT);   // PWR button: high while pressed
 
   if (!gfx->begin()) LOGLN("[screen] gfx->begin() failed");
+#if NEDDY_ROUND
+  // Everything goes through the last step that turns the picture and lays the button marks on top (neddy_frame.h). The marks'
+  // masks live in the big PSRAM so the small fast memory stays free for secure connections; without it there are simply no marks.
+  frHwBlit = outBlit;
+  frHwFill = outFill;
+  if (!frInit([](size_t n) -> void * { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); })) LOGLN("[screen] no memory for the button marks");
+  uiOut.blit = frBlit;
+  uiOut.fill = frFill;
+#else
   uiOut.blit = outBlit;
   uiOut.fill = outFill;
+#endif
   uiMicros = []() -> uint32_t { return (uint32_t)micros(); };
   // The idle face dims the screen with the display chip's own brightness command (0x51).
   uiOut.brightness = [](int level) {
@@ -2161,14 +2236,14 @@ void setup() {
     if (wsUp) {
       String m = String("{\"type\":\"device.setting\",\"key\":\"") + key + "\",\"value\":" + value + "}";
       ws.sendTXT(m.c_str());
-    } else if (which >= 1 && which <= 10) pendSetting[which] = value;   // not connected (asleep with Wi-Fi off): kept and sent once Neddy is back
+    } else if (which >= 1 && which <= 11) pendSetting[which] = value;   // not connected (asleep with Wi-Fi off): kept and sent once Neddy is back
   };
   uiOut.action = [](int what) { if (what == UI_ACT_RESTART) { screenBoot("Restarting"); delay(400); ESP.restart(); } };
   strncpy(uiInfo.fw, FIRMWARE_VERSION, sizeof(uiInfo.fw) - 1);
   uiInfo.board = BOARD_LABEL;
   uiOut.record = recAction;
   uiMotion = NEDDY_MOTION != 0;
-  uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0 || NEDDY_RAISE_DEBUG != 0;
+  uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0 || NEDDY_RAISE_DEBUG != 0 || (NEDDY_ROUND && NEDDY_ROTATE_DEBUG != 0);
   screenBoot("Starting");
 
   step("settings");
@@ -2399,6 +2474,7 @@ void loop() {
   pwrLoop();
   doLoop();
   step("motion chip");
+  rotateLoop();
   raiseLoop();
   step("recorder tick");
   recTick();

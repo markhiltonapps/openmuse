@@ -15,7 +15,7 @@
 #pragma once
 
 enum { UI_SET_ANIM = 1, UI_SET_FACE = 2, UI_SET_VOLUME = 3, UI_SET_BRIGHT = 4, UI_SET_DIM = 5, UI_SET_OFF = 6, UI_SET_ACCENT = 7,
-       UI_SET_SAVER = 8, UI_SET_RAISE = 9, UI_SET_DOUBLE = 10 };
+       UI_SET_SAVER = 8, UI_SET_RAISE = 9, UI_SET_DOUBLE = 10, UI_SET_ROTATE = 11 };
 enum { UI_ACT_RESTART = 1 };
 enum { UI_SHL_HOME, UI_SHL_REC, UI_SHL_SET, UI_SHL_INFO };
 static int uiShl = UI_SHL_HOME, uiShlPage = 0;
@@ -135,7 +135,11 @@ static void uiDrawRecPage() {
 }
 
 // ---- Settings: one a page
-enum { UI_PG_BRIGHT, UI_PG_VOLUME, UI_PG_DIM, UI_PG_OFF, UI_PG_COLOUR, UI_PG_SAVER, UI_PG_RAISE, UI_PG_ANIM, UI_PG_DOUBLE, UI_PG_N };
+#if NEDDY_ROUND
+enum { UI_PG_BRIGHT, UI_PG_VOLUME, UI_PG_DIM, UI_PG_OFF, UI_PG_COLOUR, UI_PG_SAVER, UI_PG_RAISE, UI_PG_ROTATE, UI_PG_ANIM, UI_PG_DOUBLE, UI_PG_N };
+#else
+enum { UI_PG_BRIGHT, UI_PG_VOLUME, UI_PG_DIM, UI_PG_OFF, UI_PG_COLOUR, UI_PG_SAVER, UI_PG_RAISE, UI_PG_ANIM, UI_PG_DOUBLE, UI_PG_N, UI_PG_ROTATE = 99 };   // (the rectangle doesn't turn)
+#endif
 static const int UI_DIM_STEPS[6] = { 0, 15, 30, 60, 120, 300 };       // seconds; 0 = never dims
 static const int UI_OFF_STEPS[6] = { 0, 60, 120, 300, 600, 1800 };    // seconds; 0 = never goes dark by itself
 static int uiDimNow() { return !uiIdle.dim ? 0 : (uiIdle.dimAfter > 0 ? uiIdle.dimAfter : 60); }
@@ -226,7 +230,11 @@ static void uiDrawChoices(int n, int chosen, const int *icons, const uint16_t *c
   }
   uiShPaint(UI_CX - 200, (int)y - 52, 400, 104);
 }
+#if NEDDY_ROUND
+static const char *const UI_PG_TITLES[UI_PG_N] = { "BRIGHTNESS", "VOLUME", "DIM AFTER", "SCREEN OFF AFTER", "COLOR", "BATTERY SAVER", "RAISE TO WAKE", "AUTO-ROTATE", "ANIMATION", "DOUBLE PRESS" };
+#else
 static const char *const UI_PG_TITLES[UI_PG_N] = { "BRIGHTNESS", "VOLUME", "DIM AFTER", "SCREEN OFF AFTER", "COLOR", "BATTERY SAVER", "RAISE TO WAKE", "ANIMATION", "DOUBLE PRESS" };
+#endif
 static void uiDrawSettingValue() {
   char t[24];
   switch (uiShlPage) {
@@ -242,6 +250,7 @@ static void uiDrawSettingValue() {
     case UI_PG_COLOUR: uiDrawChoices(4, uiAccentIdx, nullptr, UI_ACCENTS, UI_ACCENT_NAMES[uiAccentIdx & 3], uiAcc()); break;
     case UI_PG_SAVER: uiDrawToggle(uiSaver, uiSaver ? "Wi-Fi rests between messages" : "faster answers"); break;
     case UI_PG_RAISE: uiDrawToggle(uiIdle.raise, uiIdle.raise ? "lift your wrist to brighten" : ""); break;
+    case UI_PG_ROTATE: uiDrawToggle(uiIdle.rotate, uiIdle.rotate ? "stays upright when you turn it" : "always this way up"); break;
     case UI_PG_ANIM: {
       static const int icons[3] = { UI_IC_BARS1, UI_IC_BARS2, UI_IC_BARS3 };
       uiDrawChoices(3, uiFpsLevel, icons, nullptr, uiFpsLevel == 0 ? "Saver" : uiFpsLevel == 2 ? "Smooth" : "Normal", uiAcc());
@@ -428,9 +437,10 @@ static void uiSettingsTap(int x, int y) {
     if (p == UI_PG_DIM) { uiIdle.dim = steps[i] > 0; uiIdle.dimAfter = steps[i]; uiSetting(UI_SET_DIM, steps[i]); }
     else { uiIdle.offAfter = steps[i]; uiSetting(UI_SET_OFF, steps[i]); }
     uiDrawSettingValue();
-  } else if (p == UI_PG_SAVER || p == UI_PG_RAISE) {
+  } else if (p == UI_PG_SAVER || p == UI_PG_RAISE || p == UI_PG_ROTATE) {
     if (fabsf((float)(y - (UI_CY + 10))) > 120) return;
     if (p == UI_PG_SAVER) { uiSaver = !uiSaver; uiSetting(UI_SET_SAVER, uiSaver ? 1 : 0); }
+    else if (p == UI_PG_ROTATE) { uiIdle.rotate = !uiIdle.rotate; uiSetting(UI_SET_ROTATE, uiIdle.rotate ? 1 : 0); }
     else { uiIdle.raise = !uiIdle.raise; uiSetting(UI_SET_RAISE, uiIdle.raise ? 1 : 0); }
     uiDrawSettingValue();
   } else if (p == UI_PG_COLOUR || p == UI_PG_ANIM || p == UI_PG_DOUBLE) {
