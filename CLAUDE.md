@@ -884,3 +884,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   call after the first build showed a quarter turn when held normally). Label angles come from a photo of the real case measured
   from the screen's centre (buttons at ~50 and ~130 degrees), not from eyeballing a render. The PC round build is `-DNEDDY_ROUND=1`;
   `-DNEDDY_BOARD=175` quietly builds the rectangular watch. Readout lines on a round screen must sit where the circle is wide (y 404).
+- **Scenes on the watch (2026-11-28):** Neddy's clips are JPEG frames in flash (`make_scenes.py` → neddy_scenes.h), decoded one at a
+  time by TJpgDec (neddy_jpg.*, scFrame) into PSRAM; the UI only asks for a frame (`uiOut.scene`) and keeps its drawn picture when
+  there is none (the PC tests). A decoration must never cost words: the weather card drops its scene when the sky would be cut,
+  and for storms or any warning (a melting Neddy beside a heat warning reads as a joke). One Neddy per screen. Anything that reads
+  the microphone caps the decode rate (8 fps while recording). Check frames per second in ui_sim (`-DSIM_SCENES`), not by eye.

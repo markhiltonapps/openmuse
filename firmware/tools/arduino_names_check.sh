@@ -11,4 +11,12 @@ for f in tools/*.cpp; do
     echo "FAIL $f"; head -8 /tmp/arduino_names.err; fail=1
   fi
 done
+# The screen with Neddy's scenes, on both watches (the scenes header is big: this takes a few seconds).
+for flags in "-DSIM_SCENES" "-DSIM_SCENES -DNEDDY_ROUND=1"; do
+  if g++ -std=c++17 -fsyntax-only -include tools/arduino_macros.h $flags -Ineddy_device tools/ui_sim.cpp 2>/tmp/arduino_names.err; then
+    echo "ok   tools/ui_sim.cpp $flags"
+  else
+    echo "FAIL tools/ui_sim.cpp $flags"; head -8 /tmp/arduino_names.err; fail=1
+  fi
+done
 exit $fail

@@ -260,3 +260,32 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   0 odd windows, Arduino-names check 7/7, help/devices/voice-brain 29 pass. Note: ui_sim's round build needs
   -DNEDDY_ROUND=1 (-DNEDDY_BOARD=175 builds the rectangular one).
 - Animations: art only (8 poses, 8 loops); playback on the watch not built yet.
+- Animation playback on the watch (owner: "start the animation playback", 2026-11-28):
+  * Art: the rain loop redone (umbrella stays in frame); firmware/tools/make_scenes.py turns the 8 loops into neddy_scenes.h:
+    104x138 baseline JPEG frames (4:4:4, q86) at 12 fps, cropped to where Neddy moves, edges faded to the screen's true black,
+    386 frames, 2.06 MB in program flash (app partition 6 MB).
+  * Decoder: TJpgDec R0.03 vendored as neddy_jpg.c/.h/_cnf.h (names prefixed njd_/NJD_, credit in NOTICE.txt); neddy_scene.h's
+    scFrame decodes one frame on demand. Its memory (12 KB working space + 28 KB picture) comes from PSRAM (scAlloc), so secure
+    connections keep the chip's own memory. PC: 0.2 ms a frame; on the watch expected ~10-20 ms (unmeasured).
+  * Recording screen: Neddy acts out the mode above "REC <MODE>" (voice note: notepad, idea: bulb, meeting: microphone,
+    dream: nightcap). New layout from the centre: scene CY-197, label CY-59, time in BIG (was TEMP) at CY-33, time left at CY+36,
+    Stop at CY+130 on both watches. At most 8 fps here (reading the microphone is never kept waiting; the I2S buffer holds ~90 ms)
+    and still while the screen is dimmed.
+  * Weather card: umbrella for rain, woolly hat for snow or 32F and below, fan from 95F, sunglasses for sun/mostly sunny.
+    Storms, any warning, and a sky that would be cut beside the taller scene keep the drawn picture ("a scene never costs words",
+    reviewers' blocker). On the 2.06 the scene's black melts into the panel (each channel takes the brighter), and the small live
+    Neddy under the card steps aside while it plays. The 32F/95F cut-offs were proposed earlier and not answered: used as proposed.
+  * Speed follows Settings > Animation: Smooth 12 fps, Normal 8, Saver keeps the first frame still. Any full redraw ends a scene
+    and its screen starts it again.
+  * Also fixed: "Hold to stop"'s background cut the bottom of Stop's ring on the round watch (label now drawn first, 2 px lower).
+  * Tests: scene_test 33/33 (every frame decodes, corners black, loops join, wrap); ui_sim with -DSIM_SCENES checks frames per
+    second (rec 8, Smooth 12, Normal 8, Saver 0, none after the card goes, none for storms/warnings/cut skies) on both watches,
+    0 odd windows, 0 under a mark; touch 159/159 both boards; frame 40/40; Arduino-names check 10/10 (now also builds ui_sim with
+    scenes on both boards); help 7/7. The Help picture's four screens are byte-identical, so no retake. Not compiled with the real
+    Arduino core here (blocked in the sandbox): the owner's first build is the real check, and the decode time on the real chip is
+    unknown until then.
+  * Design review round 1: all three found the cut sky ("Chance showers and th..."), visual and usability the two Neddys on the 2.06;
+    all fixed. Deferred nits: "Chance of" wording from the server; "Room for 1 h 18 min" instead of "left"; a bigger recording
+    time; the sunglasses visor reads dark at this size and the Idea clip draws Neddy smaller (next art pass).
+    Round 2: visual, usability and copy all signed off (the Help weather line now names storms, warnings and long forecasts).
+  * Help: watch-screens says what each recording shows and how the weather card dresses him; website unchanged (no watch there yet).

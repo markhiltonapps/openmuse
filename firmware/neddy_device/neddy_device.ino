@@ -73,6 +73,7 @@ Arduino_GFX *gfx = new Arduino_CO5300(bus, PIN_LCD_RESET, 0 /* rotation */, BOAR
 
 // ---------------------------------------------------------------- the screen (the drawing is in neddy_ui.h)
 #include "neddy_ui.h"
+#include "neddy_scene.h"     // Neddy's animated scenes (recording, weather): JPEG frames in flash, decoded one at a time
 #include "neddy_setup_page.h"
 #include "neddy_raise.h"
 #include "neddy_audio.h"               // the volume curve, bass cut and limiter for the small speaker
@@ -2244,6 +2245,10 @@ void setup() {
   strncpy(uiInfo.fw, FIRMWARE_VERSION, sizeof(uiInfo.fw) - 1);
   uiInfo.board = BOARD_LABEL;
   uiOut.record = recAction;
+  // Neddy's scenes: the decoder's memory (40 KB) lives in the big PSRAM, like the button marks, so the chip's own memory stays free
+  // for secure connections. Without PSRAM the allocation fails and the screens keep their drawn pictures.
+  scAlloc = [](size_t n) -> void * { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); };
+  uiOut.scene = scFrame;
   uiMotion = NEDDY_MOTION != 0;
   uiShowDiag = NEDDY_DIAG != 0 || NEDDY_IDLE_DEBUG != 0 || NEDDY_RAISE_DEBUG != 0 || (NEDDY_ROUND && NEDDY_ROTATE_DEBUG != 0);
   screenBoot("Starting");

@@ -3,3 +3,7 @@ ESP32-S3-Touch-AMOLED-2.06 examples (github.com/waveshareteam/ESP32-S3-Touch-AMO
 examples/arduino/examples/08_ES8311), originally from Espressif Systems. Apache License 2.0;
 copyright Espressif Systems (Shanghai) CO LTD. The licence text is in that repository's LICENSE file.
 Changed for Neddy: es8311_voice_volume_reg_set added (writes the volume register directly, so 100% is the chip's clean 0 dB).
+
+neddy_jpg.c, neddy_jpg.h and neddy_jpg_cnf.h are ChaN's TJpgDec R0.03 (http://elm-chan.org/fsw/tjpgd/), (C) ChaN, 2021.
+Free to use, modify and redistribute, with no warranty; the copyright notice is kept in neddy_jpg.c. Changed for Neddy: names
+prefixed (njd_, NJD_) so they can't meet the ESP32 ROM's copy, and the settings (RGB565 output, fast decoding, no scaling).

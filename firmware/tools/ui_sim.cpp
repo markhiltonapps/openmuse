@@ -1,11 +1,17 @@
 // A test of the watch's screen on a computer: builds neddy_ui.h as it is, draws scenes into a picture of the
 // screen, and writes them as .ppm files. Build and run:
 //   g++ -O2 -std=c++17 -I firmware/neddy_device firmware/tools/ui_sim.cpp -o /tmp/ui_sim && /tmp/ui_sim /tmp/frames
+// With Neddy's animated scenes (the watch's own decoder), add -DSIM_SCENES and link neddy_jpg.c:
+//   gcc -O2 -c firmware/neddy_device/neddy_jpg.c -o /tmp/njpg.o && g++ -O2 -std=c++17 -DSIM_SCENES -I firmware/neddy_device \
+//     firmware/tools/ui_sim.cpp /tmp/njpg.o -o /tmp/ui_sim   (add -DNEDDY_ROUND=1 for the round watch)
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include "neddy_ui.h"
+#ifdef SIM_SCENES
+#include "neddy_scene.h"
+#endif
 
 static uint16_t fb[UI_W * UI_H];
 static long blits = 0, blitPixels = 0, oddWindows = 0;
@@ -46,6 +52,9 @@ static double now() { return std::chrono::duration<double, std::milli>(std::chro
 int main(int argc, char **argv) {
   const char *dir = argc > 1 ? argv[1] : ".";
   uiOut.blit = simBlit; uiOut.fill = simFill;
+#ifdef SIM_SCENES
+  uiOut.scene = scFrame;
+#endif
 #if NEDDY_ROUND
   frHwBlit = simBlit; frHwFill = simFill;                // the round watch's last step: turning and the button marks (neddy_frame.h)
   frInit([](size_t n) -> void * { return malloc(n); });
@@ -274,6 +283,63 @@ int main(int argc, char **argv) {
     }
     uiRecEnd(); uiClearCard(); uiTurn(0); uiTick(clk += 10);
     printf("content under a mark: %ld\n", under);
+  }
+#endif
+#ifdef SIM_SCENES
+  // 16. Neddy's scenes: the recording screen in each mode, and the weather cards that get one; they move (frames go out as time passes).
+  {
+    uiFpsLevel = 2;                                          // Smooth, the default (an earlier part of this test chose Normal)
+    static const char *const modes[4] = { "note", "idea", "meeting", "dream" };
+    for (int m = 0; m < 4; m++) {
+      uiRecEnd(); uiClearCard(); uiIdleOn = false; uiSetMode(UI_READY); uiRecAvailable = true; uiRecMode = m;
+      uiRecRun(900000 + m * 10000, 2530, 4680, m == 3 ? 90 : 35); uiTick(900000 + m * 10000 + 5);
+      int before = uiSceneFrames;
+      for (int k = 1; k <= 40; k++) uiTick(900000 + m * 10000 + 5 + k * 25);   // a second of ticks
+      char nm[48]; snprintf(nm, sizeof nm, "z%d_recording_%s", m, modes[m]); save(dir, nm);
+      int got = uiSceneFrames - before;
+      if (got < 6 || got > 9) printf("SCENE CHECK FAILED: recording %s showed %d frames in a second (the recorder plays at 8)\n", modes[m], got);
+    }
+    uiRecEnd(); uiRecAvailable = false;
+    // `scene`: whether the card should get one. Storms and warnings keep the drawn picture, and so does a sky that would have to be
+    // cut to fit beside the taller scene (a scene never costs words).
+    struct W { const char *name, *place, *sky, *alert; int temp, feels, icon, hi, lo, rain; bool scene; };
+    const W ws[] = {
+      { "rain", "Chicago", "Light rain", "", 41, 34, UI_ICON_RAIN, 45, 36, 80, true },
+      { "storm_alert", "Houston", "Chance showers and thunderstorms", "Flood Watch", 78, UI_NONE, UI_ICON_STORM, 84, 72, 70, false },
+      { "long_sky_feels", "Tampa", "Slight chance rain showers then sunny", "", 88, 97, UI_ICON_SUN_RAIN, 91, 77, 20, false },
+      { "long_sky_alone", "Tampa", "Slight chance rain showers then sunny", "", 88, UI_NONE, UI_ICON_SUN_RAIN, 91, 77, 20, true },
+      { "cold", "Fargo", "Snow", "", -12, -25, UI_ICON_SNOW, -4, -18, 90, true },
+      { "hot_warning", "Phoenix", "Sunny", "Excessive Heat Warning", 109, 112, UI_ICON_SUN, 114, 88, 0, false },
+      { "hot", "Phoenix", "Sunny", "", 101, UI_NONE, UI_ICON_SUN, 104, 82, 0, true },
+      { "sunny", "San Diego", "Sunny", "", 74, UI_NONE, UI_ICON_SUN, 77, 62, 0, true },
+      { "cloudy_no_scene", "Seattle", "Cloudy", "", 55, UI_NONE, UI_ICON_CLOUD, 58, 49, 20, false },
+    };
+    uint32_t tw = 960000;
+    for (const W &w : ws) {
+      uiSetMode(UI_READY); uiSetWords("");
+      uiShowWeather(tw, w.place, w.temp, w.feels, w.sky, w.icon, w.hi, w.lo, w.rain, w.alert); uiTick(tw);
+      int before = uiSceneFrames;
+      for (int k = 1; k <= 40; k++) uiTick(tw + k * 25);
+      char nm[48]; snprintf(nm, sizeof nm, "z_weather_%s", w.name); save(dir, nm);
+      int got = uiSceneFrames - before;
+      bool wants = w.scene;
+      if (wants && (got < 10 || got > 13)) printf("SCENE CHECK FAILED: weather %s showed %d frames in a second (Smooth plays at 12)\n", w.name, got);
+      if (!wants && got) printf("SCENE CHECK FAILED: weather %s has no scene but showed %d frames\n", w.name, got);
+      tw += 10000;
+    }
+    // Normal plays at 8; the battery saver keeps it still; a cleared card stops it.
+    uiFpsLevel = 1; uiShowWeather(tw, "Chicago", 41, 34, "Light rain", UI_ICON_RAIN, 45, 36, 80, ""); uiTick(tw);
+    { int b = uiSceneFrames; for (int k = 1; k <= 40; k++) uiTick(tw + k * 25); int got = uiSceneFrames - b;
+      if (got < 6 || got > 9) printf("SCENE CHECK FAILED: Normal showed %d frames in a second (should be 8)\n", got); }
+    tw += 10000; uiFpsLevel = 0; uiShowWeather(tw, "Chicago", 41, 34, "Light rain", UI_ICON_RAIN, 45, 36, 80, ""); uiTick(tw);
+    { int b = uiSceneFrames; for (int k = 1; k <= 40; k++) uiTick(tw + k * 25); int got = uiSceneFrames - b;
+      if (got) printf("SCENE CHECK FAILED: the battery saver showed %d frames (should keep the first, still)\n", got); }
+    tw += 10000; uiFpsLevel = 2; uiShowWeather(tw, "Chicago", 41, 34, "Light rain", UI_ICON_RAIN, 45, 36, 80, ""); uiTick(tw);
+    uiClearCard(); uiTick(tw + 10);
+    { int b = uiSceneFrames; for (int k = 1; k <= 40; k++) uiTick(tw + 10 + k * 25); int got = uiSceneFrames - b;
+      if (got) printf("SCENE CHECK FAILED: %d frames after the card went\n", got); }
+    uiTick(tw + 2000);
+    printf("scene frames shown: %d\n", uiSceneFrames);
   }
 #endif
   // Wi-Fi setup screens

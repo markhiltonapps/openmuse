@@ -46,6 +46,8 @@ struct UiOut {
   void (*setting)(int which, int value);   // optional: the person changed a setting on the watch (1 = animation speed, 2 = face)
   void (*record)(int action);              // optional: the recording screen or menu asked for something (UI_REC_* below)
   void (*action)(int what);                // optional: Info > Actions (UI_ACT_* in neddy_shell.h)
+  uint16_t *(*scene)(int clip, uint32_t ms);   // optional: a frame of one of Neddy's animated scenes (scFrame in neddy_scene.h), UI_SC_W x UI_SC_H,
+                                               // or nullptr; without it the screens show the drawn pictures they always had
 };
 static UiOut uiOut;
 #if NEDDY_ROUND
@@ -684,6 +686,56 @@ static void uiRoundPanel(int x, int y, int w, int h, int R, uint16_t border, uin
 
 static void uiNumDeg(char *out, int v) { snprintf(out, 12, "%d%c", v, (char)127); }
 
+// ---- Neddy's animated scenes: small looping clips of him (dressed for the weather, or doing what a recording is for), decoded a
+// frame at a time by the sketch (uiOut.scene). A scene belongs to the screen that started it; any full redraw ends it, and that
+// screen starts it again as it draws.
+#define UI_SC_W 104
+#define UI_SC_H 138
+enum { UI_SC_REPORTER, UI_SC_NOTE, UI_SC_IDEA, UI_SC_DREAM, UI_SC_RAIN, UI_SC_COLD, UI_SC_HOT, UI_SC_SUNNY };   // neddy_scenes.h's order
+enum { UI_SCO_NONE, UI_SCO_REC, UI_SCO_CARD };
+struct UiScene { int owner, clip, x, y; bool canvas; uint16_t bg; uint32_t start, lastAt; int key; };
+static UiScene uiSc = { UI_SCO_NONE, -1, 0, 0, false, 0, 0, 0, -1 };
+static float uiSceneMs = 0;                      // how long one frame takes to decode and send (smoothed), when the sketch can time it
+static int uiSceneFrames = 0;                    // frames shown (the PC test counts them)
+// Decodes and sends one frame. On a panel that isn't black (the 2.06's cards) the scene's black becomes the panel: each colour
+// channel takes the brighter of the two, so the soft dark edges melt into the panel instead of showing a dark box.
+static bool uiScenePut(uint32_t frameMs) {
+  uint16_t *px = uiOut.scene ? uiOut.scene(uiSc.clip, frameMs) : nullptr;
+  if (!px) return false;
+  if (uiSc.bg) {
+    const uint16_t r0 = uiSc.bg & 0xF800, g0 = uiSc.bg & 0x07E0, b0 = uiSc.bg & 0x001F;
+    for (int i = 0; i < UI_SC_W * UI_SC_H; i++) {
+      uint16_t c = px[i], r = c & 0xF800, g = c & 0x07E0, b = c & 0x001F;
+      px[i] = (uint16_t)((r > r0 ? r : r0) | (g > g0 ? g : g0) | (b > b0 ? b : b0));
+    }
+  }
+  uiOut.blit(uiSc.x, uiSc.y, UI_SC_W, UI_SC_H, px);
+  uiSceneFrames++;
+  return true;
+}
+// Starts a scene with its top-left corner at (x, y) and shows its first frame at once. False when there is nothing to show (no
+// decoder, or it failed): the screen draws its old picture there instead. `canvas`: (x, y) is on the round watch's card canvas.
+static bool uiSceneAt(int owner, int clip, int x, int y, uint16_t bg, bool canvas, uint32_t ms) {
+  uiSc.owner = owner; uiSc.clip = clip; uiSc.x = x & ~1; uiSc.y = y & ~1; uiSc.canvas = canvas; uiSc.bg = bg;
+  uiSc.start = ms; uiSc.lastAt = ms; uiSc.key = 0;
+  if (!uiScenePut(500 / 12)) { uiSc.owner = UI_SCO_NONE; return false; }
+  return true;
+}
+// Which scene a weather card gets: rain (the umbrella), cold for snow or freezing, hot from 95 F, sunglasses for sun. Anything else
+// (cloud, fog, wind, night) keeps the drawn picture, and so do storms (the drawn lightning says "storm"; an umbrella would say only
+// rain) and any warning (a melting Neddy beside "Excessive Heat Warning" would read as a joke about it). The card's temperature is
+// always Fahrenheit (device-card.ts).
+static int uiWeatherScene() {
+  int i = uiCard.icon, t = uiCard.temp;
+  if (uiCard.alert[0] || i == UI_ICON_STORM) return -1;
+  if (i == UI_ICON_RAIN || i == UI_ICON_SUN_RAIN) return UI_SC_RAIN;
+  if (i == UI_ICON_SNOW || t <= 32) return UI_SC_COLD;
+  if (t >= 95) return UI_SC_HOT;
+  if (i == UI_ICON_SUN || i == UI_ICON_SUN_CLOUD) return UI_SC_SUNNY;
+  return -1;
+}
+static void uiFit(char *dst, size_t cap, const NeddyFont &f, const char *src, int maxw);
+
 static void uiDrawWeather() {
   const int PX = 14, PY = 10, PW = 382, PH = 336;
   const uint16_t panel = NEDDY_ROUND ? UI_BLACK : uiRgb(20, 28, 36), border = uiRgb(52, 74, 88);
@@ -695,22 +747,39 @@ static void uiDrawWeather() {
   for (const char *p = uiCard.place; *p && n < 30; p++) buf[n++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 32) : *p;
   buf[n] = 0;
   uiTextCentered(NFONT_MID, 16, buf, uiAcc());
-  // the picture on the left, the temperature on the right
-  uiRenderIcon(uiCard.icon, panel);
-  uiOut.blit(34, 48, UI_ICON, UI_ICON, uiIconBuf);
+  // the picture on the left (Neddy dressed for it, moving, when there is a scene for this weather), the temperature on the right
+  // The scene is taller than the drawn picture and leaves the sky one line when "Feels like" needs the other: it is used only when
+  // the sky still fits whole, so a scene never costs words.
+  int sc = uiWeatherScene();
+  if (sc >= 0 && (uiCard.alert[0] || uiCard.feels != UI_NONE)) {
+    int st[2], ln[2];
+    if (uiWrap(NFONT_BODY, uiCard.sky, 340, st, ln, 2) > 1) sc = -1;
+  }
+  bool moving = sc >= 0 && uiSceneAt(UI_SCO_CARD, sc, 38, 44, panel, NEDDY_ROUND, uiNowMs);
+  int picTop = moving ? 44 : 48, picH = moving ? UI_SC_H : UI_ICON;
+  if (!moving) {
+    uiRenderIcon(uiCard.icon, panel);
+    uiOut.blit(34, 48, UI_ICON, UI_ICON, uiIconBuf);
+  }
   uiNumDeg(buf, uiCard.temp);
   int tw = uiTextWidth(NFONT_TEMP, buf);
-  uiText(NFONT_TEMP, 272 - tw / 2, 48 + (UI_ICON - NFONT_TEMP.h) / 2, buf, UI_WHITE);
-  // what it's like: the sky, then a warning (or what it feels like), centred in the room between
+  uiText(NFONT_TEMP, 272 - tw / 2, picTop + (picH - NFONT_TEMP.h) / 2, buf, UI_WHITE);
+  // what it's like: the sky, then a warning (or what it feels like), centred in the room between (the taller scene leaves less:
+  // the sky gets one line when a warning needs the second, cut short with a "." rather than broken off)
+  const int roomTop = moving ? 44 + UI_SC_H + 4 : 164, room = 258 - roomTop;
   int start[2], len[2];
   int lines = uiWrap(NFONT_BODY, uiCard.sky, 340, start, len, 2);
   bool extra = uiCard.alert[0] || uiCard.feels != UI_NONE;
+  int maxLines = (room - (extra ? 28 : 0)) / 32;
+  if (maxLines < 1) maxLines = 1;
+  bool cut = lines > maxLines;
+  if (cut) lines = maxLines;
   int contentH = lines * 32 + (extra ? 28 : 0);
-  int y = 164 + (94 - contentH) / 2;
+  int y = roomTop + (room - contentH) / 2;
   char line[48];
   for (int i = 0; i < lines; i++) {
-    int l = len[i] < 47 ? len[i] : 47;
-    memcpy(line, uiCard.sky + start[i], l); line[l] = 0;
+    if (cut && i == lines - 1) uiFit(line, sizeof(line), NFONT_BODY, uiCard.sky + start[i], 340);
+    else { int l = len[i] < 47 ? len[i] : 47; memcpy(line, uiCard.sky + start[i], l); line[l] = 0; }
     uiTextCentered(NFONT_BODY, y, line, UI_WHITE);
     y += 32;
   }
@@ -902,6 +971,24 @@ static void uiCanvasEnd() { uiOut.fill = uiRawFill; uiOut.blit = uiRawBlit; uiCe
 static void uiCanvasBegin() {}
 static void uiCanvasEnd() {}
 #endif
+// The next frame of the scene that is playing, when one is due. Smooth plays the clips at their own 12 frames a second, Normal at 8,
+// the battery saver keeps the first frame still. `maxFps` caps it (the recorder: 8, so reading the microphone is never kept
+// waiting long), and a frame may take a third of the time at most.
+static void uiSceneDraw(uint32_t ms, int maxFps) {
+  if (uiSc.owner == UI_SCO_NONE || uiFpsLevel == 0) return;
+  int fps = uiFpsLevel == 2 ? 12 : 8;
+  if (fps > maxFps) fps = maxFps;
+  int key = (int)((uint64_t)(ms - uiSc.start) * fps / 1000);
+  if (key == uiSc.key) return;
+  if (uiSceneMs > 0 && ms - uiSc.lastAt < (uint32_t)(uiSceneMs * 3)) return;
+  uint32_t t0 = uiMicros ? uiMicros() : 0;
+  if (uiSc.canvas) uiCanvasBegin();
+  bool ok = uiScenePut((uint32_t)(((uint64_t)key * 1000 + 500) / fps));   // the middle of the frame that is due: the clip keeps its own speed
+  if (uiSc.canvas) uiCanvasEnd();
+  if (!ok) { uiSc.owner = UI_SCO_NONE; return; }
+  uiSc.key = key; uiSc.lastAt = ms;
+  if (uiMicros) { float d = (uiMicros() - t0) / 1000.0f; uiSceneMs = uiSceneMs > 0 ? uiSceneMs * 0.8f + d * 0.2f : d; }
+}
 static void uiDrawCard() {
   const int PX = 14, PY = 10, PW = 382, PH = 336;
   if (uiCard.kind == UI_CARD_MENU) { uiShellDraw(); return; }
@@ -1082,7 +1169,14 @@ static void uiRecTime(char *dst, size_t cap, uint32_t seconds) {
 // The Stop button while recording, and the button under a message: where they are (a tap there does it).
 #define UI_STOP_R 52
 #define UI_STOP_HOLD_MS 800                      // Stop is a hold (a brush of a sleeve mustn't end a meeting); PWR stops at once
-static int uiStopY() { return NEDDY_ROUND ? UI_CY + 124 : UI_CY + 128; }
+static int uiStopY() { return UI_CY + 130; }
+// The recording screen, top to bottom (from the middle, the same on both watches): Neddy doing what the recording is for (a scene,
+// 138 high), "REC  MEETING", the time, the time left, then Stop.
+#define UI_REC_SCENE_Y (UI_CY - 197)
+#define UI_REC_LABEL_Y (UI_CY - 59)
+#define UI_REC_TIME_Y (UI_CY - 33)
+#define UI_REC_LEFT_Y (UI_CY + 36)
+static const int UI_REC_SCENES[4] = { UI_SC_NOTE, UI_SC_IDEA, UI_SC_REPORTER, UI_SC_DREAM };
 // The Stop button, with the ring that fills while it is held (`f` 0..1).
 static void uiDrawStop(float f) {
   uiShClear();
@@ -1094,39 +1188,39 @@ static void uiDrawStop(float f) {
   uiShPaint(UI_CX - h, uiStopY() - h, 2 * h, 2 * h);
 }
 static int uiRecBtnY() { return UI_CY + 112; }
-static int uiStopLabelY() { return uiStopY() + UI_STOP_R + (NEDDY_ROUND ? 10 : 18); }
+static int uiStopLabelY() { return uiStopY() + UI_STOP_R + (NEDDY_ROUND ? 12 : 18); }   // (its letters start below Stop's painted box, so neither cuts the other)
 static void uiRecDraw() {
   const uint16_t red = UI_REC_RED;
   if (uiRec.state == UI_RECS_RUN) {
     if (uiRec.full) {
       uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
       for (int i = 0; i < UI_REC_DOTS; i++) uiEdgeDot(i, UI_REC_DOTS, 22, 2.6f, uiRgb(110, 26, 22));
-      uiIcon(UI_REC_ICONS[uiRecMode & 3], UI_CX, UI_CY - 156, 50, red);
+      if (!uiSceneAt(UI_SCO_REC, UI_REC_SCENES[uiRecMode & 3], UI_CX - UI_SC_W / 2, UI_REC_SCENE_Y, 0, false, uiNowMs))
+        uiIcon(UI_REC_ICONS[uiRecMode & 3], UI_CX, UI_REC_SCENE_Y + UI_SC_H / 2, 50, red);   // no scenes (the PC tests): the drawn picture
+      uiTextCentered(NFONT_MID, uiStopLabelY(), "Hold to stop", UI_LABEL);   // first: its background mustn't cut the bottom of Stop's ring
       uiDrawStop(0);
-      uiTextCentered(NFONT_MID, uiStopLabelY(), "Hold to stop", UI_LABEL);
     }
     // the travelling dot: one bright dot moves a step round the edge each second
     uint32_t e = uiRec.elapsed;
     uiEdgeDot((int)((e + UI_REC_DOTS - 1) % UI_REC_DOTS), UI_REC_DOTS, 22, 2.6f, uiRgb(110, 26, 22));
     uiEdgeDot((int)(e % UI_REC_DOTS), UI_REC_DOTS, 22, 5.0f, red);
     char label[24]; snprintf(label, sizeof(label), "REC  %s", UI_REC_NAMES[uiRecMode & 3]);
-    uiFillE(UI_CX - 170, UI_CY - 112, 340, NFONT_MID.h + 2, UI_BLACK);
-    uiTrackedCentered(NFONT_MID, UI_CX + 10, UI_CY - 112, label, UI_LABEL, 2);
+    uiFillE(UI_CX - 170, UI_REC_LABEL_Y, 340, NFONT_MID.h + 2, UI_BLACK);
+    uiTrackedCentered(NFONT_MID, UI_CX + 10, UI_REC_LABEL_Y, label, UI_LABEL, 2);
     {                                                         // the REC dot beside it blinks each second
       int lw = uiTrackedWidth(NFONT_MID, label, 2);
-      uiShClear(); uiShAdd(UI_SH_DISC, UI_CX + 10 - lw / 2 - 16, UI_CY - 112 + NFONT_MID.h / 2, 7, 0, 0, 0, (e & 1) ? uiRgb(110, 26, 22) : red);
+      uiShClear(); uiShAdd(UI_SH_DISC, UI_CX + 10 - lw / 2 - 16, UI_REC_LABEL_Y + NFONT_MID.h / 2, 7, 0, 0, 0, (e & 1) ? uiRgb(110, 26, 22) : red);
       uiShPaintAll();
     }
     char t[16]; uiRecTime(t, sizeof(t), uiRec.elapsed);
-    const NeddyFont &f = uiTextWidth(NFONT_TEMP, t) <= 2 * uiHalfAt(UI_CY - 30, 26) ? NFONT_TEMP : NFONT_BIG;
-    uiFillE(0, UI_CY - 80, UI_W, 112, UI_BLACK);
-    uiTextCentered(f, UI_CY - 80 + (108 - f.h) / 2, t, UI_WHITE);
+    uiFillE(0, UI_REC_TIME_Y, UI_W, NFONT_BIG.h + 1, UI_BLACK);
+    uiTextCentered(NFONT_BIG, UI_REC_TIME_Y, t, UI_WHITE);
     char left[40];
     uint32_t m = uiRec.left / 60;
     if (m >= 60) snprintf(left, sizeof(left), "%u h %u min left", (unsigned)(m / 60), (unsigned)(m % 60));
     else snprintf(left, sizeof(left), "%u min left", (unsigned)m);
-    uiFillE(UI_CX - 170, UI_CY + 28, 340, NFONT_MID.h + 2, UI_BLACK);
-    uiTextCentered(NFONT_MID, UI_CY + 28, left, uiRec.usedPct >= 85 ? UI_AMBER : UI_GREY);
+    uiFillE(UI_CX - 170, UI_REC_LEFT_Y, 340, NFONT_MID.h + 2, UI_BLACK);
+    uiTextCentered(NFONT_MID, UI_REC_LEFT_Y, left, uiRec.usedPct >= 85 ? UI_AMBER : UI_GREY);
   } else if (uiRec.state == UI_RECS_INFO) {
     uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
     char fit[48]; uiFit(fit, sizeof(fit), NFONT_MID, uiRec.title, 2 * uiHalfAt(UI_CY - 150, 30));
@@ -1820,6 +1914,7 @@ static void uiDrawStage(const UiPose &p) {
 // He steps aside for the launcher's pages; on the round screen also for a card (it fills the circle) and the analog dial.
 static bool uiStageHidden() {
   if (uiMenuOn()) return uiShl != UI_SHL_HOME;
+  if (uiCard.on && uiSc.owner == UI_SCO_CARD) return true;   // the card's own scene is him: the small one below steps aside (2.06)
 #if NEDDY_ROUND
   if (uiCard.on) return true;
   if (uiIdleOn && uiFace == 1) return true;
@@ -1893,6 +1988,7 @@ static void uiTick(uint32_t ms) {
     uiLastActive = ms;
     if (uiRec.state == UI_RECS_RUN && !uiRec.dimmed && ms - uiRec.lastTouch > UI_REC_DIM_MS) { uiRec.dimmed = true; if (uiOut.brightness) uiOut.brightness(40); }
     if (uiRec.full || uiRec.dirty) uiRecDraw();
+    if (uiSc.owner == UI_SCO_REC && uiRec.state == UI_RECS_RUN && !uiRec.dimmed) uiSceneDraw(ms, 8);   // (dimmed: he rests, saving power)
     return;
   }
   // The look-up ends when the server says so (it does before the answer is read), when he is spoken to again, or after 45 s whatever happens.
@@ -1907,6 +2003,7 @@ static void uiTick(uint32_t ms) {
   uiPoseNow(ms, &p);
   if (uiAll) {
     uiOut.fill(0, 0, UI_W, UI_H, UI_BLACK);
+    uiSc.owner = UI_SCO_NONE;                                  // a scene belongs to what was on screen; its screen starts it again as it draws
     UiPose nominal; uiBasePose(&nominal);
     uiStageRect(nominal, &uiStageX, &uiStageY, &uiStageW, &uiStageH);
     uiDrawText();
@@ -1922,6 +2019,10 @@ static void uiTick(uint32_t ms) {
   if (uiDiagDirty) {
     if (uiShowDiag && !uiCard.on && !uiIdleOn && uiMode != UI_LISTEN && ms - uiLastDiag >= 900) { uiDrawDiag(); uiDiagDirty = false; uiLastDiag = ms; }
     else if (!uiShowDiag || uiCard.on || uiIdleOn) uiDiagDirty = false;
+  }
+  if (uiSc.owner == UI_SCO_CARD) {                          // the weather card's scene plays while the card is up
+    if (uiCard.on && uiCard.kind == UI_CARD_WEATHER) uiSceneDraw(ms, 12);
+    else uiSc.owner = UI_SCO_NONE;
   }
   bool draw = false;
   if (p.eye != uiLastEye) draw = true;                       // eyes changed (blink, listening level...)
