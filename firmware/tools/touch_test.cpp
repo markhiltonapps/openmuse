@@ -515,6 +515,36 @@ int main() {
   CHECK(uiRec.state == UI_RECS_OFF && !uiScreenOff, "ending the recorder gives the screen back");
   uiRecAvailable = false; uiIdle.have = false;
 
+  {
+    // One press of the big button, reported twice (its pin and the power chip's own note): counted once, so it opens the menu and never
+    // reads as a double press (which starts a recording). Owner, 2026-11-28: "pressing the big button still starts recording immediately".
+    static int starts = 0;
+    uiOut.record = [](int a) { if (a == UI_REC_START) starts++; };
+    auto press = [](uint32_t ms, int src) { if (uiPwrAccept(ms, src)) uiPwrPress(ms); };
+    uiPwrPinSeen = false; uiPwrLastSrc = -1; uiPwrLastAt = 0; uiPwrFirst = 0;
+    uiClearCard(); uiRec.state = UI_RECS_OFF; uiRecAvailable = true; uiDoublePress = 0;
+    int before = starts;
+    uint32_t t = 900000;
+    press(t, UI_PWR_CHIP); press(t + 60, UI_PWR_PIN);                // the chip's note first, then the pin: one press
+    uiPwrTick(t + 500);
+    CHECK(uiMenuOn() && starts == before, "one big-button press reported twice opens the menu and starts no recording");
+    uiClearCard();
+    t += 5000;
+    press(t, UI_PWR_PIN); press(t + 80, UI_PWR_CHIP);                // the pin first: from now on the pin is the only source
+    uiPwrTick(t + 500);
+    CHECK(uiMenuOn() && starts == before, "pin first, then the chip's note: still one press");
+    uiClearCard();
+    t += 5000;
+    press(t, UI_PWR_PIN); press(t + 40, UI_PWR_CHIP); press(t + 220, UI_PWR_PIN); press(t + 260, UI_PWR_CHIP);   // two real presses, each reported twice
+    CHECK(starts == before + 1, "a real double press still starts a recording (once)");
+    uiRecEnd(); uiClearCard();
+    // A board whose button reaches only the power chip: its notes are the presses.
+    uiPwrPinSeen = false; uiPwrLastSrc = -1; uiPwrFirst = 0; uiDoublePress = 2;
+    t += 5000;
+    press(t, UI_PWR_CHIP);
+    CHECK(uiMenuOn(), "on a board where only the power chip sees the button, its note opens the menu");
+    uiClearCard(); uiDoublePress = 0;
+  }
   printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }

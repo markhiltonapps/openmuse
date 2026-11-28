@@ -392,7 +392,8 @@ static bool pmuByte(uint8_t reg, uint8_t &value) {
 static void recPwr();   // (in the recorder section below)
 static void pmuWrite(uint8_t reg, uint8_t value);   // (just below)
 // What a short press of PWR does.
-static void pwrShortPress() {
+static void pwrShortPress(int src) {
+  if (!uiPwrAccept(millis(), src)) { LOGF("[pwr] the same press again (from the %s): counted once\n", src == UI_PWR_PIN ? "pin" : "power chip"); return; }
   if (uiRec.state != UI_RECS_OFF) recPwr();   // on a recording screen the button leaves it (never while recording or sending)
   else uiPwrPress(millis());                  // the launcher, a step back, a recording, or (pressed twice) the double-press action
 }
@@ -428,13 +429,13 @@ static void pwrLoop() {
     LOGF("[dbg] alive, PWR pin=%d\n", digitalRead(PIN_PWR_KEY));
   }
 #endif
-  if (pmuKeyShort()) pwrShortPress();
+  if (pmuKeyShort()) pwrShortPress(UI_PWR_CHIP);
   bool raw = digitalRead(PIN_PWR_KEY) == HIGH;
   if (raw != was && millis() - changed > 30) {
     LOGF("[pwr] PWR pin is now %d\n", raw ? 1 : 0);
     changed = millis();
     if (raw) downAt = millis();
-    else if (millis() - downAt < 1200) pwrShortPress();
+    else if (millis() - downAt < 1200) pwrShortPress(UI_PWR_PIN);
     was = raw;
   }
 }

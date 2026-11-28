@@ -347,6 +347,20 @@ static void uiPwrPress(uint32_t ms) {
   uiPwrFirst = ms ? ms : 1;
 }
 static void uiPwrTick(uint32_t ms) { if (uiPwrFirst && ms - uiPwrFirst >= UI_PWR_DOUBLE_MS) { uiPwrFirst = 0; uiPwrSingle(ms); } }
+// One press, two reports: on the round watch the big button reaches its own pin AND the power chip, which keeps its own note of each
+// press, so a single press arrived twice and counted as a double press (it started a recording; owner, 2026-11-28). Once the pin has
+// reported a press it is the only source; a power-chip report within 600 ms of a pin report, either way round, is the same press.
+enum { UI_PWR_PIN = 0, UI_PWR_CHIP = 1 };
+static bool uiPwrPinSeen = false;
+static uint32_t uiPwrLastAt = 0;
+static int uiPwrLastSrc = -1;
+static bool uiPwrAccept(uint32_t ms, int src) {
+  if (src == UI_PWR_CHIP && uiPwrPinSeen) return false;
+  bool twin = uiPwrLastSrc >= 0 && uiPwrLastSrc != src && ms - uiPwrLastAt < 600;
+  if (src == UI_PWR_PIN) uiPwrPinSeen = true;
+  uiPwrLastAt = ms; uiPwrLastSrc = src;
+  return !twin;
+}
 
 // ---- BOOT: hold to talk, starting after a quarter second so a tap never starts a talk; a double click opens the launcher
 // (as on the reference watch; owner, 2026-11-27). PWR opens it too.
