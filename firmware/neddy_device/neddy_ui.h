@@ -17,6 +17,19 @@
 #ifndef NEDDY_ROUND
 #define NEDDY_ROUND 0
 #endif
+#ifndef BTN_TALK                                   // the buttons' names on screen (neddy_board.h; here for the PC tests, which skip it)
+#if NEDDY_ROUND
+#define BTN_TALK "small button"
+#define BTN_TALK_CAP "Small button"
+#define BTN_MENU "big button"
+#define BTN_MENU_CAP "Big button"
+#else
+#define BTN_TALK "BOOT button"
+#define BTN_TALK_CAP "BOOT"
+#define BTN_MENU "PWR button"
+#define BTN_MENU_CAP "PWR"
+#endif
+#endif
 #if NEDDY_ROUND
 #define UI_W 466
 #define UI_H 466
@@ -501,7 +514,7 @@ static const char *uiModeLabel() {
     case UI_THINK: return "Thinking...";
     case UI_SPEAK: return "Neddy";
     case UI_LINK: return "Connecting to Neddy...";
-    default: return "Hold BOOT to talk";
+    default: return NEDDY_ROUND ? "Hold the small button to talk" : "Hold BOOT to talk";   // (round: the case has no labels)
   }
 }
 

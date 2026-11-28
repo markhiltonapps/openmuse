@@ -188,3 +188,9 @@ still to do. Help unchanged: no screen people see changed (only the crash note o
   Checks: touch_test 155/155 both boards (new: tap starts nothing, half hold nothing, full hold starts, PWR goes back, slow swipe turns
   the page, 20 px drift still starts, tap hint lights and fades), ui_sim 0 odd windows (new frames n2h/n2r/n3h/n2t), rec 19/19, raise
   18/18, help tests 7/7, Biome clean, stub syntax check 175 and 206. Help: watch-screens Record step rewritten; picture retaken.
+- Buttons named by size (owner, Nov 28: the round case has no labels; small = BOOT at ~4 o'clock, big = PWR at ~1 o'clock). Round watch:
+  "Hold the small button to talk", "The big button opens the menu", problem screens say "the small button"; the 2.06 keeps BOOT/PWR
+  (BTN_* in neddy_board.h, a fallback in neddy_ui.h for the PC tests). Help (devices, watch-screens) and the agent's tool text name both
+  watches ("big button (PWR on the 2.06)"). Copy review: signed off (round 2). Tests: help/device-idle/voice-brain 30/30, touch 155/155
+  both boards, typecheck clean, Biome clean. Owner's answers: notches yes (and his labelled photo in Help, cleaned up), double press stays
+  "record", auto-rotate ON by default with a switch to turn it off.

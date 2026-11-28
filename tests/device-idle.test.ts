@@ -282,7 +282,7 @@ test("raise to wake is off until asked, and by voice it goes on and off and reac
   })) as { message?: string };
   assert.match(
     looks.message ?? "",
-    /brightness is 60 percent; the colour is blue; the screen goes dark after 5 minutes of quiet; a double press of PWR starts hands-free talk/,
+    /brightness is 60 percent; the colour is blue; the screen goes dark after 5 minutes of quiet; a double press of the big button \(PWR on the 2\.06\) starts hands-free talk/,
   );
   const fifth = (await devices.list("o"))[0];
   assert.ok(fifth);
@@ -669,7 +669,10 @@ test("by voice, the watch starts a recording or turns its screen off; a watch th
   // Not connected yet: nothing is promised, and they're told how to start it on the watch.
   const offline = await run({ do: "record", mode: "meeting" });
   assert.match(String(offline.error), /isn't connected/);
-  assert.match(String(offline.error), /PWR, then Record/);
+  assert.match(
+    String(offline.error),
+    /big button \(PWR on the 2\.06\), tap Record and hold the circle/,
+  );
 
   const ws = new WebSocket(
     `ws://127.0.0.1:${(server.address() as AddressInfo).port}/api/device/audio`,

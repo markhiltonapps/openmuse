@@ -2313,7 +2313,7 @@ static bool linkTurn() {
     }
     if (!joinWifi()) {
       screenProblem("Can't join Wi-Fi",
-                    String("I'll keep trying. Network: ") + wifiSsid + ". To pick a different Wi-Fi, hold the BOOT button for 3 seconds.");
+                    String("I'll keep trying. Network: ") + wifiSsid + ". To pick a different Wi-Fi, hold the " BTN_TALK " for 3 seconds.");
       mode = M_PROBLEM;
       unsigned long until = millis() + 10000, heldAt = 0;
       while (millis() < until) {               // a long press on BOOT forgets this Wi-Fi, and the setup starts next turn
@@ -2355,7 +2355,7 @@ static bool linkTurn() {
   // A key that doesn't work any more (removed in the app): the connection never opens.
   if (!wsUp && wsFailures >= 12) {
     wsFailures = 0;
-    screenProblem("Neddy won't let me in", "I may have been removed from your devices. Unplug me, hold BOOT while plugging back in, keep holding for two seconds, then pair again.");
+    screenProblem("Neddy won't let me in", "I may have been removed from your devices. Unplug me, hold the " BTN_TALK " while plugging back in, keep holding for two seconds, then pair again.");
     mode = M_PROBLEM;
     delay(15000);
     mode = M_BOOT;

@@ -11,12 +11,19 @@
 // motion chip's axes (raise-to-wake). The screen's test line shows both.
 #pragma once
 
+// What the buttons are called on screen. The round watch's case has no labels: the small button is BOOT (talk) and the big one is PWR
+// (the menu) (owner, 2026-11-28), so it says "small button" / "big button". The 2.06 keeps the board's names.
+
 #ifndef NEDDY_BOARD
 #define NEDDY_BOARD 206
 #endif
 
 #if NEDDY_BOARD == 175
 #define NEDDY_ROUND 1
+#define BTN_TALK "small button"
+#define BTN_TALK_CAP "Small button"
+#define BTN_MENU "big button"
+#define BTN_MENU_CAP "Big button"
 #define BOARD_LABEL "1.75C round"
 #define BOARD_W 466
 #define BOARD_H 466
@@ -44,6 +51,10 @@
 #define PIN_SPEAKER_AMP 46
 #else
 #define NEDDY_ROUND 0
+#define BTN_TALK "BOOT button"
+#define BTN_TALK_CAP "BOOT"
+#define BTN_MENU "PWR button"
+#define BTN_MENU_CAP "PWR"
 #define BOARD_LABEL "2.06"
 #define BOARD_W 410
 #define BOARD_H 502

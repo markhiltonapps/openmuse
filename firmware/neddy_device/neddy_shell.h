@@ -252,7 +252,7 @@ static void uiDrawSettingValue() {
       uiDrawChoices(3, uiDoublePress, icons, nullptr, uiDoublePress == 0 ? "Record" : uiDoublePress == 1 ? "Talk" : "Nothing", uiAcc());
       // With a double-press action, a single press waits a moment to see whether a second comes: say so.
       uiFillE(UI_CX - 200, UI_CY + 120, 400, 2 * NFONT_MID.h + 4, UI_BLACK);
-      if (uiDoublePress != 2) { uiTextCentered(NFONT_MID, UI_CY + 120, "PWR opens the menu", UI_LABEL); uiTextCentered(NFONT_MID, UI_CY + 120 + NFONT_MID.h, "a moment later", UI_LABEL); }
+      if (uiDoublePress != 2) { uiTextCentered(NFONT_MID, UI_CY + 120, NEDDY_ROUND ? "The big button opens the menu" : "PWR opens the menu", UI_LABEL); uiTextCentered(NFONT_MID, UI_CY + 120 + NFONT_MID.h, "a moment later", UI_LABEL); }
       break;
     }
   }

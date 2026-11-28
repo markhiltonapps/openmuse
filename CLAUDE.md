@@ -859,3 +859,8 @@ voice and chat (`get_help`). Any change people can see or ask for updates it in 
   own settings.h lacks falls back to a default silently: "Using library board_config" in the build log means a 2.06 build. A library call that
   can return nothing (BLEDevice::createServer) must be checked, with a fallback, not used blind. Rule out the board with the maker's own example
   (firmware/screen_test) before chasing our code.
+- **The round watch's buttons have no labels (owner, 2026-11-28):** the small button (lower, about 4 o'clock) is BOOT: hold to talk,
+  double-click for the menu; the big button (upper, about 1 o'clock) is PWR: the menu, and a ~6 s hold switches the watch OFF through
+  the power chip (never tell anyone to hold it long). Words people read or hear say "small button" / "big button", and name the 2.06's
+  PWR/BOOT the first time in each place (`BTN_*` in neddy_board.h; Help; devices.ts). With a full battery, unplugging USB doesn't restart
+  the watch: restart with Settings > Restart (or the battery plug when the case is open).
